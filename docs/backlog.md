@@ -146,6 +146,8 @@ nenhuma extensão instalada.
 - **F28** — Classificação automática de categoria pela descrição
 - **F29** — Capacitor para publicar nas lojas
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
+- **DÍVIDA** — Tipo `Healthz` escrito à mão em `web/src/api.ts` (contra `.claude/rules/typescript.md`). Sai quando o OpenAPI e o cliente TS gerado existirem; a primeira fatia com rota real cria os dois.
+- **DÍVIDA** — Remover a tabela `health_check` e o `/healthz` que lê dela por migration nova, quando a F1 trouxer uma tabela real para o endpoint tocar.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
