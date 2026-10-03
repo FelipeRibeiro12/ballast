@@ -1,0 +1,2 @@
+- [Bootstrap do monorepo](project_bootstrap.md) — onde as coisas ficam, armadilhas e dívidas do bootstrap (2026-10-03)
+- [Memória vs ADR](feedback_memoria_vs_adr.md) — decisão de registro vai para docs/adr-NNN.md; memória guarda onde e armadilhas
