@@ -15,6 +15,10 @@ O lint do Go roda na máquina e no CI. Se as versões divergem, o lint reprova s
 
 A v2.14.0 é a primeira que linta Go 1.27. Abaixo dela o lint falha com erro confuso sobre carregar pacote. `go install @latest` faz a versão divergir entre máquina e CI.
 
+## Consequência
+
+A regra vale para qualquer ferramenta de build: versão fixada e igual na máquina e no CI. É o motivo do `packageManager` no `web/package.json`.
+
 ## Alternativas descartadas
 
 - **`go install`** — a versão instalada depende do dia em que foi rodado.
