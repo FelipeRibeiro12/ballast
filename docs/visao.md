@@ -94,6 +94,9 @@ Isso é o núcleo. Sem ele, nada mais faz sentido.
 | Análise em Python | Só depois do MVP, somente leitura | 007 |
 | Importação de extrato | OFX primeiro, com revisão obrigatória | 008 |
 | Carteiras de cripto | Observar endereço; nunca custodiar nem assinar | 009 |
+| Lint do web | oxlint do template, não ESLint | 010 |
+| Lint do Go | golangci-lint por brew, fixado em v2.14.0 | 011 |
+| Pipeline | Dois workflows: `ci.yml` e `seguranca.yml` | 012 |
 
 ## O desenho
 

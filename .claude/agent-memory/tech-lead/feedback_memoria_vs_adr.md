@@ -8,4 +8,4 @@ metadata:
 Memória de agente guarda **onde as coisas estão e armadilhas encontradas**. Decisão de registro (escolha de ferramenta, política, tradeoff) vai para `docs/adr-NNN.md`, não para a memória.
 
 **Why:** a memória é versionada, mas só o ADR é o lugar onde decisão é lida e questionada. Decisão escondida em memória some da vista de quem revisa.
-**How to apply:** ao tomar uma decisão de arquitetura ou de ferramenta, abrir o ADR (skill `/adr`) e deixar na memória só o ponteiro. Em [[project-bootstrap]], a seção "Decisões" ainda tem itens que deveriam migrar para ADR (oxlint no lugar de ESLint, golangci-lint fixado por brew, separação ci.yml/seguranca.yml): migrar quando o usuário pedir os ADRs.
+**How to apply:** ao tomar uma decisão de arquitetura ou de ferramenta, abrir o ADR (skill `/adr`, que o modelo não invoca: o tech-lead escreve o arquivo seguindo o formato dela) e deixar na memória só o ponteiro. O `docs` não escreve ADR. Já migradas: oxlint, golangci-lint fixado e separação de workflows (ADR-010 a 012); ver [[project-bootstrap]].

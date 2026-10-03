@@ -8,9 +8,8 @@ metadata:
 Estado em 2026-10-03: commits locais, sem push (o usuário faz o push e a branch protection): `fe6d717` config inicial, `0f44fa9` api e web, `b6f3d47` fix (127.0.0.1, ci, pt-BR), `333acbb` docs (CLAUDE.md + docs/), `59c1957` .claude (settings, hook, rules), depois a memória dos agentes e o título da página. api/ em Go 1.27.1 só stdlib, web/ React 19 + Vite 8, compose Postgres 17.
 
 Decisões:
-- Lint do web é **oxlint**, `react/exhaustive-deps` em `error`. Não trocar por ESLint.
-- `golangci-lint` v2.14.0+ só por **brew**, nunca `go install` (versão diverge do CI; v2.14.0 é a primeira que linta Go 1.27). CI fixa `version: v2.14.0`.
-- `ci.yml` = lint, teste, build, push só na main + pull_request. `seguranca.yml` = gitleaks, govulncheck, pnpm audit, CodeQL. Não misturar.
+- Lint do web, golangci-lint e separação dos workflows: ver ADR-010 a 012.
+- Gatilho do `ci.yml`: push só na main + `pull_request` (senão roda duas vezes em PR).
 - API escuta em `127.0.0.1` por padrão (`HOST`); container/produção precisa de `HOST=0.0.0.0` explícito.
 - PWA é a F9 do backlog (vite-plugin-pwa só entra nela, `devOptions.enabled: false`, porque service worker cacheia asset no dev). Numeração atual: Cartão F10, cotação F14, MFA F20, Python F27.
 - `web/package.json` tem `packageManager: pnpm@12.8.1` e o lockfile tem `packageManagerDependencies` (pnpm 12 exige). `pnpm/action-setup@v4` precisa de `package_json_file: web/package.json`.
