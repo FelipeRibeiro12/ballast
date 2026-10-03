@@ -22,7 +22,9 @@ Preencha em `.env` as quatro chaves obrigatórias:
 - `POSTGRES_USER`: usuário do banco (ex.: `postgres`)
 - `POSTGRES_PASSWORD`: senha (sem aspas, `$` ou `#`)
 - `POSTGRES_DB`: nome do banco (ex.: `ballast`)
-- `DATABASE_URL`: string de conexão (ex.: `postgres://postgres:suasenha@localhost:5432/ballast`)
+- `DATABASE_URL`: string de conexão (ex.: `postgres://postgres:suasenha@localhost:5432/ballast`); caracteres especiais na senha (`@`, `/`, `:`) quebram a URL — use apenas letras e números
+
+As chaves `SESSION_SECRET` e `COINGECKO_API_URL` não são usadas ainda e podem ficar vazias. `HOST` e `PORT` já têm valor no `.env.example`.
 
 A chave `.env` real nunca entra no repositório.
 

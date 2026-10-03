@@ -17,6 +17,8 @@ A interface nativa trata `numeric` sem passar por `interface{}`, que é o tipo o
 
 ## Consequência
 
+O pgx lê `numeric` nativamente como `pgtype.Numeric`. Ler direto em `shopspring/decimal` exige um codec de terceiros (`pgx-shopspring-decimal`), que é dependência nova e precisa de aprovação na fatia de cripto (F14 em diante). Até lá a promessa vale só para o tipo nativo.
+
 O código de acesso a dados fica acoplado ao pgx e não troca de banco por configuração. Isso é aceito: o banco já é decisão fechada no ADR-003.
 
 ## Alternativas descartadas
