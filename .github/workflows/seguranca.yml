@@ -24,7 +24,7 @@ permissions:
 jobs:
   segredo:
     name: varredura de segredo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,7 +35,7 @@ jobs:
 
   dependencia-go:
     name: dependências (api)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: api
@@ -50,7 +50,7 @@ jobs:
 
   dependencia-web:
     name: dependências (web)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: web
@@ -71,7 +71,7 @@ jobs:
 
   sast:
     name: análise estática
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write

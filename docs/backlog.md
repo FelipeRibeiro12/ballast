@@ -146,6 +146,7 @@ nenhuma extensão instalada.
 - **F28** — Classificação automática de categoria pela descrição
 - **F29** — Capacitor para publicar nas lojas
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
+- **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
 
