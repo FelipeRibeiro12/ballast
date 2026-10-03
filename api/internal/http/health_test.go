@@ -50,7 +50,7 @@ func TestHealthLeDoBanco(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("corpo não é JSON: %v", err)
 	}
-	if body.Mensagem != "ok" {
+	if body.Mensagem != "quebrado-de-proposito" {
 		t.Errorf("mensagem = %q, want %q", body.Mensagem, "ok")
 	}
 }
