@@ -19,6 +19,8 @@ paths:
                 properties:
                   mensagem:
                     type: string
+                  versao:
+                    type: string
         "503":
           description: Banco indisponível
           content:
