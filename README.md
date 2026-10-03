@@ -35,6 +35,8 @@ make dev
 
 API sobe em `http://localhost:8080/healthz`. Web em `http://localhost:5173`.
 
+Por padrão, a API escuta só em 127.0.0.1. Em container ou produção, defina `HOST=0.0.0.0`.
+
 Para rodar separado: `make dev-api` (só backend) ou `make dev-web` (só frontend).
 
 ## Testar e construir

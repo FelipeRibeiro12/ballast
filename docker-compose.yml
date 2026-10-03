@@ -5,7 +5,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?defina no .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina no .env}
       POSTGRES_DB: ${POSTGRES_DB:?defina no .env}
-    # so loopback: o banco nao fica exposto na rede local
+    # só loopback: o banco não fica exposto na rede local
     ports:
       - "127.0.0.1:5432:5432"
     volumes:

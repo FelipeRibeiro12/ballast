@@ -27,7 +27,7 @@ func run() error {
 	}
 
 	srv := &http.Server{
-		Addr:    ":" + port,
+		Addr:    listenAddr(os.Getenv("HOST"), port),
 		Handler: apihttp.NewRouter(),
 		// Sem ReadHeaderTimeout o servidor fica exposto a Slowloris.
 		ReadHeaderTimeout: 5 * time.Second,
