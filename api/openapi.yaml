@@ -14,7 +14,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [mensagem, versao]
+                required: [mensagem]
                 additionalProperties: false
                 properties:
                   mensagem:
