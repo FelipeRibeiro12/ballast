@@ -1,3 +1,8 @@
+# Em make, a atribuição do arquivo vence o ambiente; no CI não há .env, então o
+# ambiente do workflow segue valendo. Formato KEY=valor sem aspas, sem $ e sem #.
+-include .env
+export
+
 .PHONY: setup dev dev-api dev-web build build-api build-web test test-api test-web lint lint-api lint-web db-up db-down migrate
 
 setup:
