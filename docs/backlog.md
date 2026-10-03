@@ -11,10 +11,17 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 Repositório, CI verde, `GET /healthz` tocando o banco, tela que mostra o
 resultado. Nada de domínio. Use `/bootstrap` e depois `/sdlc-skeleton`.
 
+### F0.5 — Contrato OpenAPI e cliente gerado
+Spec OpenAPI do `/healthz` e das rotas que a F1 vai expor, geração do cliente
+TS no build do web, e troca do tipo `Healthz` escrito à mão pelo gerado.
+Cumpre o que o ADR-002 exige e fecha a dívida do tipo à mão. Numerada 0.5 para
+não renumerar as fatias seguintes.
+
 ### F1 — Cadastro e login
 Usuário, senha com argon2id, sessão com expiração, logout invalidando no
 servidor. Toda rota daqui para frente escopada por `usuario_id`.
-**MFA fica para a F20** — mas a coluna já existe no modelo.
+**MFA fica para a F20**: `mfa_segredo` existe no modelo-alvo
+(`dados.md`), não na migration desta fatia.
 
 ### F2 — Contas
 Criar, listar, arquivar. Tipos `corrente`, `poupanca`, `dinheiro`.
@@ -148,6 +155,7 @@ nenhuma extensão instalada.
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
 - **DÍVIDA** — Tipo `Healthz` escrito à mão em `web/src/api.ts` (contra `.claude/rules/typescript.md`). Sai quando o OpenAPI e o cliente TS gerado existirem; a primeira fatia com rota real cria os dois.
 - **DÍVIDA** — Remover a tabela `health_check` e o `/healthz` que lê dela por migration nova, quando a F1 trouxer uma tabela real para o endpoint tocar.
+- **DÍVIDA** — O Makefile faz `-include .env` com `export`, então todo alvo (inclusive `make test` e `make lint`) herda o `.env` inteiro, contra o menor privilégio do `seguranca.md`. Registrada em 2026-10-03, sem correção agendada; destrava quando um alvo precisar de segredo que os outros não devem ver.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
