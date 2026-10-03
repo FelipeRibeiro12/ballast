@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	apihttp "github.com/FelipeRibeiro12/ballast/internal/http"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -26,15 +28,28 @@ func run() error {
 		port = "8080"
 	}
 
-	srv := &http.Server{
-		Addr:    listenAddr(os.Getenv("HOST"), port),
-		Handler: apihttp.NewRouter(),
-		// Sem ReadHeaderTimeout o servidor fica exposto a Slowloris.
-		ReadHeaderTimeout: 5 * time.Second,
+	// Não ecoa o valor: a URL carrega a senha do banco.
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		return errors.New("DATABASE_URL não definida")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		// O erro de parse do pgx não inclui a senha, mas não arrisco embrulhar a URL.
+		return fmt.Errorf("cria pool do banco: %w", err)
+	}
+	defer pool.Close()
+
+	srv := &http.Server{
+		Addr:    listenAddr(os.Getenv("HOST"), port),
+		Handler: apihttp.NewRouter(pool),
+		// Sem ReadHeaderTimeout o servidor fica exposto a Slowloris.
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 
 	errCh := make(chan error, 1)
 	go func() {

@@ -12,20 +12,31 @@ App de controle financeiro pessoal: fiat e cripto no mesmo lugar, com recorrênc
 
 ## Setup
 
-Copie o exemplo de variáveis:
+Copie o arquivo de variáveis de ambiente:
 
 ```bash
 cp .env.example .env
 ```
 
-Preencha em `.env`: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DATABASE_URL`, `SESSION_SECRET` e `COINGECKO_API_URL`. A senha não tem valor padrão propositalmente. Arquivo `.env` nunca é commitado.
+Preencha em `.env` as quatro chaves obrigatórias:
+- `POSTGRES_USER`: usuário do banco (ex.: `postgres`)
+- `POSTGRES_PASSWORD`: senha (sem aspas, `$` ou `#`)
+- `POSTGRES_DB`: nome do banco (ex.: `ballast`)
+- `DATABASE_URL`: string de conexão (ex.: `postgres://postgres:suasenha@localhost:5432/ballast`); caracteres especiais na senha (`@`, `/`, `:`) quebram a URL — use apenas letras e números
 
-Instale dependências e suba banco:
+As chaves `SESSION_SECRET` e `COINGECKO_API_URL` não são usadas ainda e podem ficar vazias. `HOST` e `PORT` já têm valor no `.env.example`.
+
+A chave `.env` real nunca entra no repositório.
+
+Instale dependências, suba o banco e aplique migrations:
 
 ```bash
 make setup
 make db-up
+make migrate
 ```
+
+Se `make migrate` falhar com "password authentication failed", o banco já existiu com outra senha. Limpe com `docker compose down -v` e repita `make db-up` e `make migrate`.
 
 ## Rodar
 
@@ -33,9 +44,9 @@ make db-up
 make dev
 ```
 
-API sobe em `http://localhost:8080/healthz`. Web em `http://localhost:5173`.
+API sobe em `http://localhost:8080/healthz`, web em `http://localhost:5173`. `/healthz` confirma que o banco está respondendo.
 
-Por padrão, a API escuta só em 127.0.0.1. Em container ou produção, defina `HOST=0.0.0.0`.
+Por padrão, a API escuta só em 127.0.0.1. Em container ou produção, defina `HOST=0.0.0.0` no `.env`.
 
 Para rodar separado: `make dev-api` (só backend) ou `make dev-web` (só frontend).
 

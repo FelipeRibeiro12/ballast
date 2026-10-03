@@ -10,6 +10,22 @@ permissions:
 jobs:
   api:
     runs-on: ubuntu-24.04
+    # senha descartável: o banco só existe dentro do job e não sai do runner
+    # (o contexto env não vale em services, então o valor se repete no DATABASE_URL)
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-descartavel
+          POSTGRES_DB: ballast_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ballast_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -23,9 +39,16 @@ jobs:
           # mesma versão do brew local; v2.14.0 é a primeira que linta Go 1.27
           version: v2.14.0
           working-directory: api
+      - name: migrate
+        run: go tool goose -dir migrations postgres "$DATABASE_URL" up
+        working-directory: api
+        env:
+          DATABASE_URL: postgres://ci:ci-descartavel@localhost:5432/ballast_ci?sslmode=disable
       - name: test
         run: go test -race ./...
         working-directory: api
+        env:
+          DATABASE_URL: postgres://ci:ci-descartavel@localhost:5432/ballast_ci?sslmode=disable
 
   web:
     runs-on: ubuntu-24.04
