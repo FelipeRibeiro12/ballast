@@ -168,6 +168,11 @@ Limite por IP e por rota na entrada da API (infra). É esta fatia que destrava
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
 - **DÍVIDA** — Remover a tabela `health_check` e o `/healthz` que lê dela por migration nova, quando a F1 trouxer uma tabela real para o endpoint tocar.
 - **DÍVIDA** — O Makefile faz `-include .env` com `export`, então todo alvo (inclusive `make test` e `make lint`) herda o `.env` inteiro, contra o menor privilégio do `seguranca.md`. Registrada em 2026-10-03, sem correção agendada; destrava quando um alvo precisar de segredo que os outros não devem ver.
+- **DÍVIDA** — Teste de aderência (`api/internal/http/openapi_test.go`): os status esperados por rota ficam numa tabela do teste, não vêm da spec; um status novo na spec de rota já coberta não é exercitado. Resolver na F1, quando houver mais de uma rota.
+- **DÍVIDA** — Gate do cliente TS não enxerga mudança de spec que o `openapi-typescript` não reflete nos tipos (`maxLength`, `description`, `example`), e passa sempre se `schema.d.ts` entrar no `.gitignore`. Aceito: o gate garante tipo em dia, não spec inteira propagada.
+- **DÍVIDA** — `openapi-typescript` 7.13 declara peer `typescript ^5` e o web usa 6; só aparece em `pnpm peers check`. Reavaliar quando sair versão com suporte ao 6.
+- **DÍVIDA** — `Healthz` deriva de `paths[...]` porque a spec não tem `components`. Trocar por `components['schemas']` quando a F1 criar os schemas.
+- **DÍVIDA** — `actionlint` não roda no CI nem localmente; o YAML dos workflows não é validado por ferramenta.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
