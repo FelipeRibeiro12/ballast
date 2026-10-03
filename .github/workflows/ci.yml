@@ -1,0 +1,46 @@
+name: ci
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+      - name: vet
+        run: go vet ./...
+        working-directory: api
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          # mesma versao do brew local; v2.14.0 e a primeira que linta Go 1.27
+          version: v2.14.0
+          working-directory: api
+      - name: test
+        run: go test -race ./...
+        working-directory: api
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          # a versao vem do packageManager; o package.json fica em web/, nao na raiz
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+bin/
+.env
+.env.*
+!.env.example
+coverage.out
+coverage/
+*.key
+*.pem
+.DS_Store
