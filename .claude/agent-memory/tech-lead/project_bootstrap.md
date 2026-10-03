@@ -23,7 +23,7 @@ Armadilhas:
 - `.claude/agent-memory/` é versionado (decisão do usuário em 2026-10-03): passa por revisão como qualquer arquivo. Não pôr segredo nem dado pessoal ali.
 - Comentários em português precisam de acento (preferência do usuário).
 
-Dívidas abertas: actions por SHA + Dependabot (registrada no backlog, "Mais adiante"); `govulncheck@latest` não reproduzível; só `ReadHeaderTimeout` no servidor (falta Read/Write/IdleTimeout quando houver rota real); `<title>` do `web/index.html` ainda "web"; tabela do `TestHealthHandler` com um caso só; workflows nunca rodaram no GitHub (pnpm 12.8.1 e Node 26 nas actions não confirmados).
+Dívidas abertas: actions por SHA + Dependabot (registrada no backlog, "Mais adiante"); `govulncheck@latest` não reproduzível; só `ReadHeaderTimeout` no servidor (falta Read/Write/IdleTimeout quando houver rota real); tabela do `TestHealthHandler` com um caso só; workflows nunca rodaram no GitHub (pnpm 12.8.1 e Node 26 nas actions não confirmados).
 
 **Why:** evita refazer investigação e perder dívida.
 **How to apply:** ao mexer em CI, lockfile, lint, backlog ou commits; ao abrir o `/sdlc-skeleton`.
