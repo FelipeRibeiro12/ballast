@@ -1,0 +1,32 @@
+openapi: 3.0.3
+info:
+  title: Ballast API
+  version: 0.1.0
+paths:
+  /healthz:
+    get:
+      summary: Verifica se a API alcança o banco
+      operationId: getHealth
+      responses:
+        "200":
+          description: API e banco respondendo
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mensagem]
+                additionalProperties: false
+                properties:
+                  mensagem:
+                    type: string
+        "503":
+          description: Banco indisponível
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [erro]
+                additionalProperties: false
+                properties:
+                  erro:
+                    type: string
