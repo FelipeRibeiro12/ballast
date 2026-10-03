@@ -28,3 +28,11 @@ Avisos dos runs, **vistos e dispensados** (não reabrir a cada run): "Node 20 de
 
 **Why:** evita refazer investigação e perder dívida.
 **How to apply:** ao mexer em CI, lockfile, lint, backlog ou commits; ao abrir o `/sdlc-skeleton`.
+
+## Skeleton (2026-10-03, branch feat/skeleton, 9 commits, ainda sem push)
+
+- Rota é `/healthz` (não `/health`). Lê `health_check` (descartável, ver dívida no backlog). pgx nativo (ADR-013), goose como `tool` no go.mod (ADR-014); `make migrate` usa `go tool goose`.
+- Makefile faz `-include .env`: `.env` não aceita aspas, `$` nem `#`. Volume do compose sobrevive a `db-down`; senha antiga dá "password authentication failed" → `docker compose down -v`.
+- Teste de integração: sem `DATABASE_URL` pula localmente, mas `t.Fatal` se `CI` definida. CI tem service `postgres:17` com senha descartável duplicada (service + URL), que o gitleaks pode flagrar.
+- Pendente: o CI vermelho só se prova depois do push (commit quebrado descartável no PR, depois reverter). QA local: `reports/qa/skeleton.md`, sem bloqueador.
+- Fatia fecha com `/pr` (usuário invoca); primeiro PR contra a main protegida.
