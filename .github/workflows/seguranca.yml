@@ -1,0 +1,95 @@
+# Gate de segurança no pipeline.
+# Copie para .github/workflows/seguranca.yml e ajuste a stack.
+#
+# Este arquivo é o item de maior retorno de todo o checklist: ele vale mesmo
+# quando ninguém está prestando atenção. Rule e revisão são pedidos; isto é
+# garantia.
+#
+# Descomente só os jobs da sua stack. Job que falha por configuração errada é
+# pior que job ausente: o time aprende a ignorar vermelho.
+
+name: seguranca
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Semanal: pega vulnerabilidade publicada depois do último PR
+    - cron: '0 9 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  segredo:
+    name: varredura de segredo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # histórico inteiro: segredo removido continua lá
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependencia-go:
+    name: dependências (api)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: api/go.mod
+          cache: true
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: govulncheck ./...
+
+  dependencia-web:
+    name: dependências (web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # Falha em alta e crítica. Comece com --audit-level=critical se já houver
+      # dívida, e aperte depois — mas registre o prazo no backlog.
+      - run: pnpm audit --prod --audit-level=high
+
+  sast:
+    name: análise estática
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+
+# Depois de ligar isto, falta o que o pipeline não faz sozinho:
+#
+#   Settings → Branches → Add rule na main:
+#     [x] Require a pull request before merging  → 1 approval
+#     [x] Require status checks to pass          → marque os jobs acima
+#     [x] Do not allow bypassing the above settings
+#
+# Sem branch protection, qualquer job acima é contornável com um push direto.
