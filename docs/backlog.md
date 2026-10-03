@@ -8,7 +8,7 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 ## MVP
 
 ### F0 — Walking skeleton
-Repositório, CI verde, `GET /health` tocando o banco, tela que mostra o
+Repositório, CI verde, `GET /healthz` tocando o banco, tela que mostra o
 resultado. Nada de domínio. Use `/bootstrap` e depois `/sdlc-skeleton`.
 
 ### F1 — Cadastro e login

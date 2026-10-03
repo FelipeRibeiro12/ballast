@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-api dev-web build build-api build-web test test-api test-web lint lint-api lint-web db-up db-down
+.PHONY: setup dev dev-api dev-web build build-api build-web test test-api test-web lint lint-api lint-web db-up db-down migrate
 
 setup:
 	pnpm --dir web install --frozen-lockfile
@@ -41,3 +41,7 @@ db-up:
 
 db-down:
 	docker compose down
+
+migrate:
+	@test -n "$$DATABASE_URL" || { echo "DATABASE_URL não definida (exporte ou use um .env local)"; exit 1; }
+	cd api && go tool goose -dir migrations postgres "$$DATABASE_URL" up
