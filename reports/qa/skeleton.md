@@ -167,3 +167,9 @@ O walking skeleton atende aos critérios:
 - Pré-merge: push e validar CI do GitHub Actions
 - Pós-merge: validar hospedagem (se aplicável)
 - Backlog: implementar funcionalidades de negócio conforme priorizadas
+
+## Prova do gate no GitHub (2026-10-03)
+
+PR descartável https://github.com/FelipeRibeiro12/ballast/pull/2, fechado sem merge. Um teste quebrado de propósito deixou o job `api` vermelho (`TestHealthLeDoBanco`, run 37137155641) e o estado do PR ficou `BLOCKED` pelo ruleset `main protegida`. O PR #1 (skeleton) passou em todos os checks, inclusive `varredura de segredo`: a senha descartável do `ci.yml` não foi sinalizada e nenhuma allowlist foi necessária.
+
+Observação: o ruleset exige os 7 checks, mas `required_approving_review_count` é 0, então aprovação humana não é exigida.
