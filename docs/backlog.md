@@ -173,6 +173,8 @@ Limite por IP e por rota na entrada da API (infra). É esta fatia que destrava
 - **DÍVIDA** — `openapi-typescript` 7.13 declara peer `typescript ^5` e o web usa 6; só aparece em `pnpm peers check`. Reavaliar quando sair versão com suporte ao 6.
 - **DÍVIDA** — `Healthz` deriva de `paths[...]` porque a spec não tem `components`. Trocar por `components['schemas']` quando a F1 criar os schemas.
 - **DÍVIDA** — `actionlint` não roda no CI nem localmente; o YAML dos workflows não é validado por ferramenta.
+- **DÍVIDA** — O teste de aderência só varre `api/internal/http/router.go`. Rota registrada em outro arquivo (ex.: `registraAuth(mux)`) escapa e o teste fica verde. Na F1, varrer todos os `.go` não-teste do pacote ou travar a convenção "toda rota é registrada em `router.go`". Critério de aceite da F1, junto com a tabela de status derivada da spec.
+- **DÍVIDA** — `pnpm build` do web lê `../api/openapi.yaml`; se a hospedagem do PWA usar `web/` como raiz, o build falha. Conferir ao escolher a hospedagem (ou deixar a geração só no CI).
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
