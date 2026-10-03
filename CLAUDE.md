@@ -17,7 +17,8 @@ dados em `docs/contracts/dados.md` — **leia antes de mexer em qualquer tabela.
 - React + Vite como PWA, mobile-first (ADR-004)
 - Monorepo: `api/` e `web/`
 - Module path do Go: `github.com/FelipeRibeiro12/ballast`
-- OpenAPI como fonte da verdade do contrato; cliente TS gerado no build
+- OpenAPI como fonte da verdade do contrato, em `api/openapi.yaml`; cliente TS
+  gerado no build. `docs/contracts/api.md` só aponta para ela
 
 Não troque nada disso sem pedir antes. Está justificado nos ADRs.
 

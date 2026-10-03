@@ -12,14 +12,23 @@ Repositório, CI verde, `GET /healthz` tocando o banco, tela que mostra o
 resultado. Nada de domínio. Use `/bootstrap` e depois `/sdlc-skeleton`.
 
 ### F0.5 — Contrato OpenAPI e cliente gerado
-Spec OpenAPI do `/healthz` e das rotas que a F1 vai expor, geração do cliente
-TS no build do web, e troca do tipo `Healthz` escrito à mão pelo gerado.
+Spec OpenAPI só do `/healthz` (`api/openapi.yaml`), geração do cliente TS no
+build do web, teste de aderência do handler à spec e gate no CI que falha
+quando o cliente commitado diverge do gerado. As rotas da F1 entram na spec
+junto com a implementação, na F1. Troca o tipo `Healthz` escrito à mão pelo
+gerado.
 Cumpre o que o ADR-002 exige e fecha a dívida do tipo à mão. Numerada 0.5 para
 não renumerar as fatias seguintes.
 
 ### F1 — Cadastro e login
 Usuário, senha com argon2id, sessão com expiração, logout invalidando no
 servidor. Toda rota daqui para frente escopada por `usuario_id`.
+Inclui limite de tentativa de login na aplicação, por conta e não só por IP,
+com atraso progressivo em vez de bloqueio (bloquear vira negação de serviço
+contra o usuário legítimo). Cadastro fechado por `REGISTRO_ABERTO=false`
+(padrão no `.env.example`, 404 quando desligado), usuário inicial por seed.
+Se não couber numa sessão com o limite de tentativa, separar o limite em fatia
+logo em seguida.
 **MFA fica para a F20**: `mfa_segredo` existe no modelo-alvo
 (`dados.md`), não na migration desta fatia.
 
@@ -146,6 +155,10 @@ Assinatura opcional de posse (SIWE). **Nunca** assinatura de transação.
 Teste obrigatório: o fluxo de digitar o endereço continua funcionando sem
 nenhuma extensão instalada.
 
+### F20.5 — Rate limit na borda
+Limite por IP e por rota na entrada da API (infra). É esta fatia que destrava
+`REGISTRO_ABERTO=true`: sem ela o endpoint de cadastro aberto não existe.
+
 ## Mais adiante
 
 - **F26** — Importação de PDF de fatura (melhor esforço, revisão obrigatória)
@@ -153,7 +166,6 @@ nenhuma extensão instalada.
 - **F28** — Classificação automática de categoria pela descrição
 - **F29** — Capacitor para publicar nas lojas
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
-- **DÍVIDA** — Tipo `Healthz` escrito à mão em `web/src/api.ts` (contra `.claude/rules/typescript.md`). Sai quando o OpenAPI e o cliente TS gerado existirem; a primeira fatia com rota real cria os dois.
 - **DÍVIDA** — Remover a tabela `health_check` e o `/healthz` que lê dela por migration nova, quando a F1 trouxer uma tabela real para o endpoint tocar.
 - **DÍVIDA** — O Makefile faz `-include .env` com `export`, então todo alvo (inclusive `make test` e `make lint`) herda o `.env` inteiro, contra o menor privilégio do `seguranca.md`. Registrada em 2026-10-03, sem correção agendada; destrava quando um alvo precisar de segredo que os outros não devem ver.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
