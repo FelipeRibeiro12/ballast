@@ -298,3 +298,58 @@ func TestLoginRegistraIncrementoE429NoLogSemSegredo(t *testing.T) {
 		}
 	}
 }
+
+// Reserva atômica: logins simultâneos para o mesmo e-mail contam um a um. Sem
+// ela, todos passam pela checagem antes de qualquer falha ser registrada e o
+// limite de 4 verificações vale por lote, não por tentativa.
+func TestLoginSimultaneoNaoVerificaMaisQueOLimite(t *testing.T) {
+	const tentativas = 20
+	const limite = falhasLivresMaisUma
+
+	for _, caso := range []struct {
+		nome   string
+		existe bool
+	}{{"e-mail existente", true}, {"e-mail inexistente", false}} {
+		t.Run(caso.nome, func(t *testing.T) {
+			a, _ := ambienteComRelogio(t) // relógio parado: o atraso não vence no meio do teste
+			email := emailUnico(t, a.pool)
+			if caso.existe {
+				a.cadastra(t, email)
+			}
+
+			codigos := make(chan int, tentativas)
+			largada := make(chan struct{})
+			var wg sync.WaitGroup
+			for range tentativas {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					<-largada
+					codigos <- a.tenta(email, senhaErrada).Code
+				}()
+			}
+			close(largada)
+			wg.Wait()
+			close(codigos)
+
+			contagem := map[int]int{}
+			for c := range codigos {
+				contagem[c]++
+			}
+			// 401 só sai depois de verificar a senha: é a contagem de verificações.
+			if contagem[http.StatusUnauthorized] != limite {
+				t.Errorf("401 = %d, want exatamente %d (as reservas concedidas); códigos: %v", contagem[http.StatusUnauthorized], limite, contagem)
+			}
+			if contagem[http.StatusUnauthorized]+contagem[http.StatusTooManyRequests] != tentativas {
+				t.Errorf("há resposta que não é 401 nem 429: %v", contagem)
+			}
+			n, _ := a.falhasGravadas(t, email)
+			if n != contagem[http.StatusUnauthorized] {
+				t.Errorf("falhas = %d, want %d (uma por reserva concedida)", n, contagem[http.StatusUnauthorized])
+			}
+		})
+	}
+}
+
+// 3 falhas livres mais a 4ª, que ainda é verificada e ativa o atraso.
+const falhasLivresMaisUma = 4

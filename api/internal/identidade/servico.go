@@ -93,10 +93,22 @@ func atrasoApos(falhas int) time.Duration {
 // contagem corrente, para o log.
 // ok=false cobre e-mail inexistente e senha errada sem distinguir. No
 // inexistente roda um argon2 fictício para o tempo não denunciar a conta.
+//
+// A tentativa é reservada (contada) antes do argon2, num único comando: é isso
+// que faz tentativas simultâneas contarem uma a uma. Se o banco falhar depois
+// da reserva, o contador já subiu e fica assim (fail-closed).
 func (s *Servico) Autentica(ctx context.Context, email, senha string) (id string, ok bool, espera time.Duration, falhas int, err error) {
-	espera, falhas, err = s.esperaRestante(ctx, email)
-	if err != nil || espera > 0 {
-		return "", false, espera, falhas, err
+	reservada, falhas, err := s.reservaTentativa(ctx, email)
+	if err != nil {
+		return "", false, 0, 0, err
+	}
+	if !reservada {
+		espera, falhas, err = s.esperaRestante(ctx, email)
+		if err != nil {
+			return "", false, 0, 0, err
+		}
+		// O atraso pode vencer entre a recusa e a leitura; recusado é recusado.
+		return "", false, max(espera, time.Millisecond), falhas, nil
 	}
 
 	var hash string
@@ -111,13 +123,41 @@ func (s *Servico) Autentica(ctx context.Context, email, senha string) (id string
 	}
 
 	if !ok {
-		falhas, err = s.registraFalha(ctx, email)
-		return "", false, 0, falhas, err
+		// Já contada na reserva: não incrementa de novo.
+		return "", false, 0, falhas, nil
 	}
 	if _, err = s.pool.Exec(ctx, "DELETE FROM tentativa_login WHERE email = $1", email); err != nil {
 		return "", false, 0, 0, err
 	}
 	return id, true, 0, 0, nil
+}
+
+// reservaTentativa é um único UPSERT: ou a linha está fora do atraso e o
+// incremento acontece (reservada=true), ou está dentro e nada muda, sem linha
+// no RETURNING. O WHERE repete atrasoApos em SQL; os testes de atraso cobrem
+// as duas pontas.
+//
+// A hora vem sempre do relógio da aplicação ($2), nunca de now() do banco:
+// ultima_falha_em e a comparação com o atraso usam a mesma fonte, e é ela que
+// o teste controla. Misturar as duas faria o atraso depender do desvio entre
+// os relógios.
+func (s *Servico) reservaTentativa(ctx context.Context, email string) (reservada bool, falhas int, err error) {
+	err = s.pool.QueryRow(ctx, `
+		INSERT INTO tentativa_login (email, falhas, ultima_falha_em) VALUES ($1, 1, $2)
+		ON CONFLICT (email) DO UPDATE
+		SET falhas = tentativa_login.falhas + 1, ultima_falha_em = EXCLUDED.ultima_falha_em
+		WHERE tentativa_login.falhas <= $3
+		   OR tentativa_login.ultima_falha_em
+		      + make_interval(secs => least(power(2, least(tentativa_login.falhas - $3, 10)), $4)) <= EXCLUDED.ultima_falha_em
+		RETURNING falhas`,
+		email, s.agora(), falhasSemAtraso, atrasoMaximo.Seconds()).Scan(&falhas)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, 0, nil
+	}
+	if err != nil {
+		return false, 0, err
+	}
+	return true, falhas, nil
 }
 
 func (s *Servico) esperaRestante(ctx context.Context, email string) (espera time.Duration, falhas int, err error) {
@@ -135,17 +175,6 @@ func (s *Servico) esperaRestante(ctx context.Context, email string) (espera time
 		return restante, falhas, nil
 	}
 	return 0, falhas, nil
-}
-
-// Um único UPSERT: o incremento acontece no banco, então duas falhas
-// simultâneas somam as duas.
-func (s *Servico) registraFalha(ctx context.Context, email string) (falhas int, err error) {
-	err = s.pool.QueryRow(ctx, `
-		INSERT INTO tentativa_login (email, falhas, ultima_falha_em) VALUES ($1, 1, $2)
-		ON CONFLICT (email) DO UPDATE
-		SET falhas = tentativa_login.falhas + 1, ultima_falha_em = EXCLUDED.ultima_falha_em
-		RETURNING falhas`, email, s.agora()).Scan(&falhas)
-	return falhas, err
 }
 
 // Sessão com prazo absoluto: não renova a cada uso, então um token roubado

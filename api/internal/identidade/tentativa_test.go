@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -27,38 +29,43 @@ func poolDeTeste(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// Falhas simultâneas na mesma chave não podem perder contagem: ler-e-gravar
-// deixaria duas requisições gravarem o mesmo valor.
-func TestRegistraFalhaSimultaneaSomaExatamente(t *testing.T) {
+// Reservas simultâneas na mesma chave: ler-e-gravar concederia todas. O UPSERT
+// condicional concede só as que cabem antes do atraso e conta cada uma.
+func TestReservaTentativaSimultaneaConcedeSoOLimite(t *testing.T) {
 	pool := poolDeTeste(t)
-	s := NovoServico(pool)
+	s := NovoServico(pool, ComRelogio(func() time.Time { return time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC) }))
 	email := "concorrencia-atomica@exemplo.test"
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), "DELETE FROM tentativa_login WHERE email = $1", email) })
 	_, _ = pool.Exec(context.Background(), "DELETE FROM tentativa_login WHERE email = $1", email)
 
 	const n = 40
 	var wg sync.WaitGroup
+	var concedidas atomic.Int32
 	erros := make(chan error, n)
 	for range n {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, err := s.registraFalha(context.Background(), email); err != nil {
+			ok, _, err := s.reservaTentativa(context.Background(), email)
+			if err != nil {
 				erros <- err
+			}
+			if ok {
+				concedidas.Add(1)
 			}
 		}()
 	}
 	wg.Wait()
 	close(erros)
 	for err := range erros {
-		t.Fatalf("registraFalha: %v", err)
+		t.Fatalf("reservaTentativa: %v", err)
 	}
 
 	var falhas int
 	if err := pool.QueryRow(context.Background(), "SELECT falhas FROM tentativa_login WHERE email = $1", email).Scan(&falhas); err != nil {
 		t.Fatalf("lê falhas: %v", err)
 	}
-	if falhas != n {
-		t.Errorf("falhas = %d, want %d", falhas, n)
+	if concedidas.Load() != falhasSemAtraso+1 || falhas != falhasSemAtraso+1 {
+		t.Errorf("concedidas = %d, falhas = %d, want %d nas duas", concedidas.Load(), falhas, falhasSemAtraso+1)
 	}
 }
