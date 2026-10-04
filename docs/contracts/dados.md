@@ -64,6 +64,12 @@ tentativa_login                          -- atraso progressivo por conta
 `tentativa_login` não tem `usuario_id` de propósito: a chave é o e-mail
 digitado, para o app não revelar se a conta existe (`docs/ameacas.md`).
 
+Migration `00002`: `mfa_segredo` ainda não existe (entra na F20). No banco,
+`email` tem CHECK de minúsculas e no máximo 254 caracteres (nas duas tabelas
+que o guardam), `nome` no máximo 100, `token_hash` exatamente 32 bytes,
+`falhas >= 0`, e `criado_em`/`criada_em` têm `DEFAULT now()`. `sessao.usuario_id`
+é `ON DELETE CASCADE` e tem índice. A aplicação normaliza o e-mail antes de gravar.
+
 Todo `id` é UUID v7, gerado na aplicação: o Postgres 17 não tem `uuidv7()`
 nativo (chega no 18). Sem default no banco.
 
