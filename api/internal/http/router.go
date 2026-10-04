@@ -12,5 +12,7 @@ func NewRouter(pool *pgxpool.Pool, ident Identidade, registroAberto bool) *http.
 	mux.HandleFunc("GET /healthz", HealthHandler(pool))
 	mux.HandleFunc("POST /auth/cadastro", cadastroHandler(ident, registroAberto))
 	mux.HandleFunc("POST /auth/login", loginHandler(ident))
+	mux.HandleFunc("GET /auth/eu", euHandler(ident))
+	mux.HandleFunc("POST /auth/logout", logoutHandler(ident))
 	return mux
 }

@@ -91,3 +91,28 @@ func (s *Servico) Perfil(ctx context.Context, usuarioID string) (email string, n
 	err = s.pool.QueryRow(ctx, "SELECT email, nome FROM usuario WHERE id = $1", usuarioID).Scan(&email, &nome)
 	return email, nome, err
 }
+
+// A busca é pelo hash do token: o banco nunca recebe o token em claro.
+func (s *Servico) UsuarioDaSessao(ctx context.Context, token string) (usuarioID string, ok bool, err error) {
+	err = s.pool.QueryRow(ctx,
+		"SELECT usuario_id FROM sessao WHERE token_hash = $1 AND revogada_em IS NULL AND expira_em > $2",
+		hashDoToken(token), time.Now()).Scan(&usuarioID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return usuarioID, true, nil
+}
+
+// O filtro revogada_em IS NULL preserva o instante do primeiro logout.
+func (s *Servico) RevogaSessao(ctx context.Context, token string) (bool, error) {
+	tag, err := s.pool.Exec(ctx,
+		"UPDATE sessao SET revogada_em = $2 WHERE token_hash = $1 AND revogada_em IS NULL",
+		hashDoToken(token), time.Now())
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}

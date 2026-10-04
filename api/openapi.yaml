@@ -104,6 +104,53 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
+  /auth/eu:
+    get:
+      summary: Devolve o usuário da sessão
+      operationId: getAuthEu
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Usuário da sessão
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usuario"
+        "401":
+          description: Sem cookie, ou token desconhecido, expirado ou revogado; todos iguais
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "500":
+          description: Falha interna
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+  /auth/logout:
+    post:
+      summary: Encerra a sessão
+      description: >
+        Marca a sessão como revogada no servidor e expira o cookie. Sem sessão
+        válida também responde 204. Não lê corpo.
+      operationId: postAuthLogout
+      responses:
+        "204":
+          description: Sessão encerrada, ou não havia sessão
+          headers:
+            Set-Cookie:
+              required: true
+              description: ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0
+              schema:
+                type: string
+        "500":
+          description: Falha interna; a sessão pode não ter sido revogada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
   /healthz:
     get:
       summary: Verifica se a API alcança o banco
@@ -132,6 +179,11 @@ paths:
                   erro:
                     type: string
 components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: ballast_sessao
   schemas:
     Erro:
       type: object

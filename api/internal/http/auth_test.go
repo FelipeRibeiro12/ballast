@@ -539,3 +539,224 @@ func TestLoginComBancoIndisponivelNaoVazaDetalhe(t *testing.T) {
 		t.Errorf("log vazio ou com a senha: %s", logBuf)
 	}
 }
+
+func getComCookie(h http.Handler, path string, c *http.Cookie) (*http.Request, *httptest.ResponseRecorder) {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	if c != nil {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return req, rec
+}
+
+func postComCookie(h http.Handler, path string, c *http.Cookie) (*http.Request, *httptest.ResponseRecorder) {
+	req := httptest.NewRequest(http.MethodPost, path, nil)
+	if c != nil {
+		req.AddCookie(c)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return req, rec
+}
+
+// Cadastra, loga e devolve o cookie de sessão.
+func (a *ambiente) sessao(t *testing.T) (usuarioResposta, *http.Cookie) {
+	t.Helper()
+	email := emailUnico(t, a.pool)
+	u := a.cadastra(t, email)
+	_, rec := postJSON(a.h, "/auth/login", map[string]string{"email": email, "senha": senhaDeTeste})
+	c := cookieDe(rec, "ballast_sessao")
+	if c == nil {
+		t.Fatalf("login de apoio sem cookie (status %d)", rec.Code)
+	}
+	return u, &http.Cookie{Name: c.Name, Value: c.Value}
+}
+
+func TestEuDevolveOUsuarioDaSessao(t *testing.T) {
+	a := novoAmbiente(t, true)
+	u, c := a.sessao(t)
+
+	_, rec := getComCookie(a.h, "/auth/eu", c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (corpo: %s)", rec.Code, rec.Body)
+	}
+	var got usuarioResposta
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if got.ID != u.ID || got.Email != u.Email || got.Nome == nil || *got.Nome != "Fulano" {
+		t.Errorf("resposta = %+v, want usuário %+v", got, u)
+	}
+	if strings.Contains(rec.Body.String(), "senha") {
+		t.Errorf("resposta menciona senha: %s", rec.Body)
+	}
+}
+
+func TestEuIgnoraIdentificadorVindoDoCliente(t *testing.T) {
+	a := novoAmbiente(t, true)
+	usuarioA, cookieA := a.sessao(t)
+	usuarioB, _ := a.sessao(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth/eu?id="+usuarioB.ID+"&usuario_id="+usuarioB.ID, nil)
+	req.AddCookie(cookieA)
+	req.Header.Set("X-Usuario-Id", usuarioB.ID)
+	rec := httptest.NewRecorder()
+	a.h.ServeHTTP(rec, req)
+
+	var got usuarioResposta
+	_ = json.Unmarshal(rec.Body.Bytes(), &got)
+	if got.ID != usuarioA.ID {
+		t.Errorf("id = %s, want o do dono da sessão (%s)", got.ID, usuarioA.ID)
+	}
+}
+
+func TestEuDevolve401IgualParaTodaSessaoInvalida(t *testing.T) {
+	a := novoAmbiente(t, true)
+	ctx := context.Background()
+
+	_, expirada := a.sessao(t)
+	if _, err := a.pool.Exec(ctx, "UPDATE sessao SET expira_em = now() - interval '1 second' WHERE token_hash = $1", hashParaTeste(expirada.Value)); err != nil {
+		t.Fatal(err)
+	}
+	_, revogada := a.sessao(t)
+	if _, err := a.pool.Exec(ctx, "UPDATE sessao SET revogada_em = now() WHERE token_hash = $1", hashParaTeste(revogada.Value)); err != nil {
+		t.Fatal(err)
+	}
+
+	casos := map[string]*http.Cookie{
+		"sem cookie":         nil,
+		"token desconhecido": {Name: "ballast_sessao", Value: base64.RawURLEncoding.EncodeToString(make([]byte, 32))},
+		"token lixo":         {Name: "ballast_sessao", Value: "%%%"},
+		"cookie vazio":       {Name: "ballast_sessao", Value: ""},
+		"sessão expirada":    expirada,
+		"sessão revogada":    revogada,
+	}
+	var referencia string
+	for nome, c := range casos {
+		t.Run(nome, func(t *testing.T) {
+			_, rec := getComCookie(a.h, "/auth/eu", c)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401", rec.Code)
+			}
+			if referencia == "" {
+				referencia = rec.Body.String()
+			}
+			if rec.Body.String() != referencia {
+				t.Errorf("corpo = %q, diferente dos outros 401 (%q)", rec.Body, referencia)
+			}
+		})
+	}
+}
+
+func hashParaTeste(token string) []byte {
+	h := sha256.Sum256([]byte(token))
+	return h[:]
+}
+
+func TestLogoutRevogaNoBancoEExpiraOCookie(t *testing.T) {
+	a := novoAmbiente(t, true)
+	u, c := a.sessao(t)
+	logBuf := capturaLog(t)
+
+	_, rec := postComCookie(a.h, "/auth/logout", c)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("204 com corpo: %q", rec.Body)
+	}
+	exp := cookieDe(rec, "ballast_sessao")
+	if exp == nil || exp.MaxAge >= 0 || exp.Value != "" || !exp.HttpOnly || !exp.Secure {
+		t.Errorf("cookie de expiração = %+v, want Max-Age=0, vazio, HttpOnly e Secure", exp)
+	}
+	if linha := rec.Header().Get("Set-Cookie"); !strings.Contains(linha, "Max-Age=0") {
+		t.Errorf("Set-Cookie = %q, want Max-Age=0", linha)
+	}
+
+	var revogada *time.Time
+	err := a.pool.QueryRow(context.Background(), "SELECT revogada_em FROM sessao WHERE usuario_id = $1", u.ID).Scan(&revogada)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revogada == nil {
+		t.Error("revogada_em continua nulo: o logout só apagou o cookie")
+	}
+
+	// O mesmo token, reapresentado depois, não vale mais.
+	if _, rec := getComCookie(a.h, "/auth/eu", c); rec.Code != http.StatusUnauthorized {
+		t.Errorf("eu após logout: status = %d, want 401", rec.Code)
+	}
+	if strings.Contains(logBuf.String(), c.Value) {
+		t.Error("log contém o token")
+	}
+	if !strings.Contains(logBuf.String(), "logout") {
+		t.Errorf("logout não registrado no log: %s", logBuf)
+	}
+}
+
+func TestLogoutEhIdempotenteESemSessaoTambemDa204(t *testing.T) {
+	a := novoAmbiente(t, true)
+	u, c := a.sessao(t)
+
+	postComCookie(a.h, "/auth/logout", c)
+	var primeira time.Time
+	if err := a.pool.QueryRow(context.Background(), "SELECT revogada_em FROM sessao WHERE usuario_id = $1", u.ID).Scan(&primeira); err != nil {
+		t.Fatal(err)
+	}
+
+	casos := map[string]*http.Cookie{
+		"de novo com o mesmo token": c,
+		"sem cookie":                nil,
+		"token desconhecido":        {Name: "ballast_sessao", Value: "nao-existe"},
+	}
+	for nome, cookie := range casos {
+		_, rec := postComCookie(a.h, "/auth/logout", cookie)
+		if rec.Code != http.StatusNoContent {
+			t.Errorf("%s: status = %d, want 204", nome, rec.Code)
+		}
+	}
+	var depois time.Time
+	if err := a.pool.QueryRow(context.Background(), "SELECT revogada_em FROM sessao WHERE usuario_id = $1", u.ID).Scan(&depois); err != nil {
+		t.Fatal(err)
+	}
+	if !depois.Equal(primeira) {
+		t.Error("segundo logout sobrescreveu revogada_em")
+	}
+}
+
+func TestLogoutNaoRevogaSessaoDeOutroUsuario(t *testing.T) {
+	a := novoAmbiente(t, true)
+	_, cookieA := a.sessao(t)
+	_, cookieB := a.sessao(t)
+
+	postComCookie(a.h, "/auth/logout", cookieA)
+
+	if _, rec := getComCookie(a.h, "/auth/eu", cookieB); rec.Code != http.StatusOK {
+		t.Errorf("logout de A derrubou a sessão de B: status = %d", rec.Code)
+	}
+}
+
+func TestEuELogoutComBancoIndisponivelDao500SemVazar(t *testing.T) {
+	pool := poolIndisponivel(t)
+	h := NewRouter(pool, identidade.NovoServico(pool), true)
+	c := &http.Cookie{Name: "ballast_sessao", Value: "qualquer"}
+	logBuf := capturaLog(t)
+
+	_, eu := getComCookie(h, "/auth/eu", c)
+	_, logout := postComCookie(h, "/auth/logout", c)
+
+	for nome, rec := range map[string]*httptest.ResponseRecorder{"eu": eu, "logout": logout} {
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("%s: status = %d, want 500", nome, rec.Code)
+		}
+		for _, proibido := range []string{"127.0.0.1", "dial", "connect", "postgres"} {
+			if strings.Contains(rec.Body.String(), proibido) {
+				t.Errorf("%s: corpo vaza %q", nome, proibido)
+			}
+		}
+	}
+	if strings.Contains(logBuf.String(), "qualquer") {
+		t.Error("log contém o token")
+	}
+}

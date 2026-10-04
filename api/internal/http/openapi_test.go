@@ -132,6 +132,34 @@ type casoDeResposta func(t *testing.T) (*http.Request, *httptest.ResponseRecorde
 
 func casosDeResposta() map[string]map[int]casoDeResposta {
 	return map[string]map[int]casoDeResposta{
+		"GET /auth/eu": {
+			http.StatusOK: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a := novoAmbiente(t, true)
+				_, c := a.sessao(t)
+				return getComCookie(a.h, "/auth/eu", c)
+			},
+			http.StatusUnauthorized: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a := novoAmbiente(t, true)
+				return getComCookie(a.h, "/auth/eu", nil)
+			},
+			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				pool := poolIndisponivel(t)
+				h := NewRouter(pool, identidade.NovoServico(pool), true)
+				return getComCookie(h, "/auth/eu", &http.Cookie{Name: "ballast_sessao", Value: "x"})
+			},
+		},
+		"POST /auth/logout": {
+			http.StatusNoContent: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a := novoAmbiente(t, true)
+				_, c := a.sessao(t)
+				return postComCookie(a.h, "/auth/logout", c)
+			},
+			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				pool := poolIndisponivel(t)
+				h := NewRouter(pool, identidade.NovoServico(pool), true)
+				return postComCookie(h, "/auth/logout", &http.Cookie{Name: "ballast_sessao", Value: "x"})
+			},
+		},
 		"POST /auth/login": {
 			http.StatusOK: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 				a, email := ambienteComUsuario(t)

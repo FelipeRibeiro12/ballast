@@ -24,6 +24,10 @@ type Identidade interface {
 	Autentica(ctx context.Context, email, senha string) (id string, ok bool, err error)
 	IniciaSessao(ctx context.Context, usuarioID string) (token string, expiraEm time.Time, err error)
 	Perfil(ctx context.Context, usuarioID string) (email string, nome *string, err error)
+	// ok=false quando o token é desconhecido, expirou ou foi revogado.
+	UsuarioDaSessao(ctx context.Context, token string) (usuarioID string, ok bool, err error)
+	// revogada=false quando não havia sessão ativa com esse token.
+	RevogaSessao(ctx context.Context, token string) (revogada bool, err error)
 }
 
 const (
