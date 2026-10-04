@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -75,7 +76,7 @@ func cadastroHandler(ident Identidade) http.HandlerFunc {
 		}
 		nome, nomeOK := normalizaNome(req.Nome)
 		if !nomeOK {
-			escreveErro(w, http.StatusBadRequest, "nome deve ter no máximo 100 caracteres")
+			escreveErro(w, http.StatusBadRequest, "nome deve ter no máximo 100 caracteres e não pode ter caracteres de controle")
 			return
 		}
 
@@ -128,10 +129,22 @@ func normalizaEmail(email string) string {
 }
 
 func emailValido(email string) bool {
-	return utf8.RuneCountInString(email) <= emailMaxCaracteres && formatoEmail.MatchString(email)
+	return utf8.RuneCountInString(email) <= emailMaxCaracteres && !temControle(email) && formatoEmail.MatchString(email)
 }
 
-// Nome vazio vira nulo; ok=false quando passa do limite.
+// Cc cobre NUL, DEL e o NEL (U+0085). Os separadores U+2028/2029 são Zl/Zp, não
+// Cc, mas quebram linha em log e em CSV como se fossem controle. O NUL em
+// especial o Postgres recusa em text, e isso virava 500.
+func temControle(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Cc, r) || r == '\u2028' || r == '\u2029' {
+			return true
+		}
+	}
+	return false
+}
+
+// Nome vazio vira nulo; ok=false quando passa do limite ou tem caractere de controle.
 func normalizaNome(nome *string) (*string, bool) {
 	if nome == nil {
 		return nil, true
@@ -140,7 +153,7 @@ func normalizaNome(nome *string) (*string, bool) {
 	if limpo == "" {
 		return nil, true
 	}
-	if utf8.RuneCountInString(limpo) > nomeMaxCaracteres {
+	if utf8.RuneCountInString(limpo) > nomeMaxCaracteres || temControle(limpo) {
 		return nil, false
 	}
 	return &limpo, true
