@@ -67,6 +67,16 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      # roda antes do build: o build também regenera o arquivo e esconderia a divergência
+      # status --porcelain cobre arquivo alterado e arquivo novo não rastreado
+      - name: cliente TS em dia com o OpenAPI
+        run: |
+          pnpm generate:api
+          if [ -n "$(git status --porcelain -- src/api)" ]; then
+            git diff -- src/api | head -n 60
+            echo "::error::src/api/schema.d.ts diverge de api/openapi.yaml. Rode 'pnpm --dir web generate:api' e commite o resultado."
+            exit 1
+          fi
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build

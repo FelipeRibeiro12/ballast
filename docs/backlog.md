@@ -11,10 +11,26 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 Repositório, CI verde, `GET /healthz` tocando o banco, tela que mostra o
 resultado. Nada de domínio. Use `/bootstrap` e depois `/sdlc-skeleton`.
 
+### F0.5 — Contrato OpenAPI e cliente gerado
+Spec OpenAPI só do `/healthz` (`api/openapi.yaml`), geração do cliente TS no
+build do web, teste de aderência do handler à spec e gate no CI que falha
+quando o cliente commitado diverge do gerado. As rotas da F1 entram na spec
+junto com a implementação, na F1. Troca o tipo `Healthz` escrito à mão pelo
+gerado.
+Cumpre o que o ADR-002 exige e fecha a dívida do tipo à mão. Numerada 0.5 para
+não renumerar as fatias seguintes.
+
 ### F1 — Cadastro e login
 Usuário, senha com argon2id, sessão com expiração, logout invalidando no
 servidor. Toda rota daqui para frente escopada por `usuario_id`.
-**MFA fica para a F20** — mas a coluna já existe no modelo.
+Inclui limite de tentativa de login na aplicação, por conta e não só por IP,
+com atraso progressivo em vez de bloqueio (bloquear vira negação de serviço
+contra o usuário legítimo). Cadastro fechado por `REGISTRO_ABERTO=false`
+(padrão no `.env.example`, 404 quando desligado), usuário inicial por seed.
+Se não couber numa sessão com o limite de tentativa, separar o limite em fatia
+logo em seguida.
+**MFA fica para a F20**: `mfa_segredo` existe no modelo-alvo
+(`dados.md`), não na migration desta fatia.
 
 ### F2 — Contas
 Criar, listar, arquivar. Tipos `corrente`, `poupanca`, `dinheiro`.
@@ -139,6 +155,10 @@ Assinatura opcional de posse (SIWE). **Nunca** assinatura de transação.
 Teste obrigatório: o fluxo de digitar o endereço continua funcionando sem
 nenhuma extensão instalada.
 
+### F20.5 — Rate limit na borda
+Limite por IP e por rota na entrada da API (infra). É esta fatia que destrava
+`REGISTRO_ABERTO=true`: sem ela o endpoint de cadastro aberto não existe.
+
 ## Mais adiante
 
 - **F26** — Importação de PDF de fatura (melhor esforço, revisão obrigatória)
@@ -146,8 +166,15 @@ nenhuma extensão instalada.
 - **F28** — Classificação automática de categoria pela descrição
 - **F29** — Capacitor para publicar nas lojas
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
-- **DÍVIDA** — Tipo `Healthz` escrito à mão em `web/src/api.ts` (contra `.claude/rules/typescript.md`). Sai quando o OpenAPI e o cliente TS gerado existirem; a primeira fatia com rota real cria os dois.
 - **DÍVIDA** — Remover a tabela `health_check` e o `/healthz` que lê dela por migration nova, quando a F1 trouxer uma tabela real para o endpoint tocar.
+- **DÍVIDA** — O Makefile faz `-include .env` com `export`, então todo alvo (inclusive `make test` e `make lint`) herda o `.env` inteiro, contra o menor privilégio do `seguranca.md`. Registrada em 2026-10-03, sem correção agendada; destrava quando um alvo precisar de segredo que os outros não devem ver.
+- **DÍVIDA** — Teste de aderência (`api/internal/http/openapi_test.go`): os status esperados por rota ficam numa tabela do teste, não vêm da spec; um status novo na spec de rota já coberta não é exercitado. Resolver na F1, quando houver mais de uma rota.
+- **DÍVIDA** — Gate do cliente TS não enxerga mudança de spec que o `openapi-typescript` não reflete nos tipos (`maxLength`, `description`, `example`), e passa sempre se `schema.d.ts` entrar no `.gitignore`. Aceito: o gate garante tipo em dia, não spec inteira propagada.
+- **DÍVIDA** — `openapi-typescript` 7.13 declara peer `typescript ^5` e o web usa 6; só aparece em `pnpm peers check`. Reavaliar quando sair versão com suporte ao 6.
+- **DÍVIDA** — `Healthz` deriva de `paths[...]` porque a spec não tem `components`. Trocar por `components['schemas']` quando a F1 criar os schemas.
+- **DÍVIDA** — `actionlint` não roda no CI nem localmente; o YAML dos workflows não é validado por ferramenta.
+- **DÍVIDA** — O teste de aderência só varre `api/internal/http/router.go`. Rota registrada em outro arquivo (ex.: `registraAuth(mux)`) escapa e o teste fica verde. Na F1, varrer todos os `.go` não-teste do pacote ou travar a convenção "toda rota é registrada em `router.go`". Critério de aceite da F1, junto com a tabela de status derivada da spec.
+- **DÍVIDA** — `pnpm build` do web lê `../api/openapi.yaml`; se a hospedagem do PWA usar `web/` como raiz, o build falha. Conferir ao escolher a hospedagem (ou deixar a geração só no CI).
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

@@ -1,5 +1,7 @@
-// Tipo escrito à mão; será substituído pelo gerado do OpenAPI quando existir.
-export type Healthz = { mensagem: string }
+import type { paths } from './api/schema'
+
+export type Healthz =
+  paths['/healthz']['get']['responses']['200']['content']['application/json']
 
 export class ApiError extends Error {}
 

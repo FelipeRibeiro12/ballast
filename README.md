@@ -60,6 +60,21 @@ make build   # binário da API e build de produção da web
 
 Comandos por pacote: `make test-api`, `make test-web`, `make build-api`, `make build-web`.
 
+## Contrato da API
+
+A spec OpenAPI está em `api/openapi.yaml`. Os tipos TypeScript são gerados para `web/src/api/schema.d.ts`.
+
+Quando você altera a spec:
+
+```bash
+pnpm --dir web generate:api
+git add api/openapi.yaml web/src/api/schema.d.ts
+```
+
+O `pnpm build` (web) já executa `generate:api` antes de compilar. O CI falha se o arquivo gerado divergir do commitado. O teste do Go (`api/internal/http/openapi_test.go`) valida que toda rota do router consta na spec, e vice-versa.
+
+Rota nova entra na spec no mesmo PR da implementação.
+
 ## Estrutura
 
 ```

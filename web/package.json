@@ -6,7 +6,8 @@
   "packageManager": "pnpm@12.8.1",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "generate:api": "openapi-typescript ../api/openapi.yaml -o src/api/schema.d.ts",
+    "build": "pnpm generate:api && tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -24,6 +25,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "jsdom": "^30.1.1",
+    "openapi-typescript": "^7.13.0",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",

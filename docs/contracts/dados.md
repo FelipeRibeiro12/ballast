@@ -6,6 +6,10 @@ deste arquivo no mesmo PR.
 Nomes de tabela e coluna em inglês no código; aqui em português por clareza de
 domínio. Ao implementar, traduza mantendo o conceito.
 
+Este documento descreve o modelo-alvo. As migrations constroem em direção a
+ele, e nem toda coluna aqui existe hoje. O estado atual é o schema: veja
+`goose status` e `api/migrations/`.
+
 ---
 
 ## A decisão central: competência × caixa
@@ -36,7 +40,7 @@ usuario
   email           text unique not null
   senha_hash      text not null          -- argon2id
   nome            text
-  mfa_segredo     text                   -- cifrado, nullable
+  mfa_segredo     text                   -- cifrado, nullable (F20)
   criado_em       timestamptz not null
 ```
 
