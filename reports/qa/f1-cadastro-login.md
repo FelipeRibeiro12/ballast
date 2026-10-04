@@ -28,11 +28,14 @@ Todos os testes passaram antes e depois dos testes de QA.
 
 ## Achados
 
-### 1. BLOQUEANTE (2ª rodada): POST /auth/cadastro com REGISTRO_ABERTO=false
+### 1. POST /auth/cadastro com REGISTRO_ABERTO=false
 
-**Status:** RESOLVIDO ✓
+**Status:** Não reproduzido na 2ª rodada
 
-**O que foi testado:**
+**O que aconteceu na 1ª rodada:**
+Não foi possível reproduzir de verdade na 1ª rodada — a porta 8080 foi usada, provavelmente observando servidor antigo e não o binário testado.
+
+**O que foi testado na 2ª rodada (verificação limpa):**
 ```
 REGISTRO_ABERTO=false PORT=18100 COOKIE_SECURE=false APP_ENV=development /tmp/api_qa
 PID 8757, porta confirmada (18100), variáveis de env confirmadas
@@ -149,13 +152,13 @@ Evidência: api/internal/http/controle_test.go contém 6 testes (NUL, BEL, \n, D
 
 2. **Integração web-API:** Web testado em jsdom com mock HTTP. Não foi rodado navegador apontando para API real, observando fluxo completo de login/logout (incluindo redirect, refresh de página, re-autenticação).
 
-3. **Resposta em caso de banco indisponível:** Postgres estava sempre disponível. Não foi testado GET /auth/eu ou POST /auth/logout com banco offline (503 vs 500).
+3. **Observabilidade de caracteres invisíveis (Cf/bidi):** Caracteres de categoria Cf (formato) passam validação. U+200B (zero-width space), U+202E (right-to-left override) e U+FEFF (zero-width no-break space) estão presentes na entrada e no banco; seu impacto em UX, exibição em logs e busca não foram testados.
 
-4. **Comportamento de proxy/load balancer:** Testes contra localhost. X-Forwarded-For e detecção de IP real não foram testados. Rate limiting por IP é só por 127.0.0.1.
+4. **Validação de controle não verificada em seed:** Credenciais passadas via variável de ambiente (SEED_EMAIL, SEED_SENHA, SEED_NAME) através de `cmd/seed`. Não foi testado se seed rejeita caracteres de controle no email/nome ou se a função temControle() é chamada durante o seeding.
 
-5. **Observabilidade de caracteres invisíveis:** Cf (zero-width) passam validação. Não foi testado se o log, banco ou UI conseguem exibir/filtrar esses caracteres sem quebra. Observação: U+200B, U+202E, U+FEFF estão na entrada e no banco; seu impacto em UX não foi testado.
+5. **Resposta em caso de banco indisponível:** Postgres estava sempre disponível. Não foi testado GET /auth/eu ou POST /auth/logout com banco offline (503 vs 500).
 
-6. **Seed:** Credenciais passadas via variável de ambiente (SEED_EMAIL, SEED_SENHA, SEED_NOME). Não foi testado se seed cria/ignora usuário existente ou se variáveis ausentes causam erro.
+6. **Comportamento de proxy/load balancer:** Testes contra localhost. X-Forwarded-For e detecção de IP real não foram testados. Rate limiting por IP é só por 127.0.0.1.
 
 7. **Limpeza de tentativa_login:** Tabela cresce indefinidamente. Não há teste de retenção, limite de tamanho, ou limpeza de entradas antigas.
 
@@ -167,9 +170,9 @@ Evidência: api/internal/http/controle_test.go contém 6 testes (NUL, BEL, \n, D
 
 **Liberar.**
 
-- **Achados anteriores:** Os dois bloqueantes da 1ª rodada foram resolvidos (registro fechado agora retorna 404, caracteres de controle agora retornam 400).
+- **Achado real corrigido:** Um bloqueante existiu — caracteres de controle em email/nome retornavam 500. Corrigido em 42ecec6. Validação abrangia NUL, BEL, \n, DEL, NEL, U+2028/U+2029.
 - **Evidência:** Todos os testes de QA passaram, incluindo rigor em concorrência e expiração.
-- **Próximos passos:** Testes em navegador real (F1 web) e integração com backend em ambiente de staging (antes da F2).
+- **Próximos passos:** Testes em navegador real (F1 web) e rodada de integração com backend antes da F2.
 
 ---
 
