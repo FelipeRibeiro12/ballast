@@ -150,6 +150,8 @@ nenhuma extensão instalada.
 ### F20.5 — Rate limit na borda
 Limite por IP e por rota na entrada da API (infra). É esta fatia que destrava
 `REGISTRO_ABERTO=true`: sem ela o endpoint de cadastro aberto não existe.
+Também precisa conter o crescimento de `tentativa_login` (uma linha por e-mail
+digitado, inclusive inexistente, sem limpeza hoje) e limpar sessões expiradas.
 
 ## Mais adiante
 
