@@ -23,3 +23,13 @@ Regras do usuário para o qa (2026-10-03):
 
 **Why:** suíte verde sem limites declarados vira confiança falsa; fronteira de papel é deliberada.
 **How to apply:** ao delegar ao qa e ao ver um agente travar.
+
+## Estado da F1 (2026-10-04, branch feat/f1-cadastro-login, sem push)
+
+Backend A+B, frontend, QA (2 rodadas + correção de narrativa), docs e security feitos. Achados de segurança: M1 (corrida do atraso) corrigido com reserva atômica (b932606); M2 (DoS pelo 429 por e-mail) pendente de o usuário aceitar o risco, com ADR em nome dele; M3/B3 viram requisito da F20.5 antes do primeiro deploy público. Falta: `/pr` (usuário invoca), reviewer, merge, fechar a F1 (tirar do backlog para o CHANGELOG).
+
+Armadilhas desta rodada:
+- QA (Haiku) reproduziu "bug" que não existia por usar a porta 8080 (servidor antigo); sempre exigir porta alta e o pid do próprio processo. Reler relatório do QA contra o código antes de aceitar achado.
+- `DATABASE_URL` não persiste entre chamadas de Bash: teste de integração pula em silêncio e parece verde.
+- Subagente já despejou o ambiente do shell no output uma vez (`export $(cat ...)`): proibir no prompt.
+- Em subagentes, `Write` do arquivo inteiro funcionou para o QA quando o relatório foi pedido uma vez só; travou ao tentar corrigir linhas pontuais.
