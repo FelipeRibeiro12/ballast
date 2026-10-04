@@ -18,13 +18,15 @@ Copie o arquivo de variáveis de ambiente:
 cp .env.example .env
 ```
 
-Preencha em `.env` as quatro chaves obrigatórias:
+Preencha em `.env`:
 - `POSTGRES_USER`: usuário do banco (ex.: `postgres`)
 - `POSTGRES_PASSWORD`: senha (sem aspas, `$` ou `#`)
 - `POSTGRES_DB`: nome do banco (ex.: `ballast`)
 - `DATABASE_URL`: string de conexão (ex.: `postgres://postgres:suasenha@localhost:5432/ballast`); caracteres especiais na senha (`@`, `/`, `:`) quebram a URL — use apenas letras e números
+- `SEED_EMAIL`, `SEED_SENHA`, `SEED_NOME`: dados do primeiro usuário (senha de 12 a 128 caracteres)
+- `APP_ENV=development` e `COOKIE_SECURE=false`: desenvolvimento local (Safari recusa cookie Secure sobre HTTP)
 
-As chaves `SESSION_SECRET` e `COINGECKO_API_URL` não são usadas ainda e podem ficar vazias. `HOST` e `PORT` já têm valor no `.env.example`.
+As demais chaves já têm valor no `.env.example`. `COINGECKO_API_URL` não é usada ainda.
 
 A chave `.env` real nunca entra no repositório.
 
@@ -40,15 +42,28 @@ Se `make migrate` falhar com "password authentication failed", o banco já exist
 
 ## Rodar
 
+Depois de `make setup` e `make migrate`, crie o primeiro usuário:
+
 ```bash
+make seed
 make dev
 ```
 
-API sobe em `http://localhost:8080/healthz`, web em `http://localhost:5173`. `/healthz` confirma que o banco está respondendo.
+Abra `http://localhost:5173` e entre com `SEED_EMAIL` e `SEED_SENHA`.
+
+A API sobe em `http://localhost:8080/healthz`, web em `http://localhost:5173`. `/healthz` confirma que o banco está respondendo.
 
 Por padrão, a API escuta só em 127.0.0.1. Em container ou produção, defina `HOST=0.0.0.0` no `.env`.
 
 Para rodar separado: `make dev-api` (só backend) ou `make dev-web` (só frontend).
+
+O proxy do Vite repassa `/auth` e `/healthz` para a API; mude o alvo com `API_PROXY_TARGET` (padrão `http://localhost:8080`).
+
+## Autenticação
+
+Rotas: `POST /auth/cadastro` (só com `REGISTRO_ABERTO=true`), `POST /auth/login`, `POST /auth/logout`, `GET /auth/eu`. O contrato está em `api/openapi.yaml`.
+
+Após três falhas consecutivas de senha no mesmo e-mail, a API responde 429 com `Retry-After` e o atraso dobra a cada falha, até 15 minutos. Não bloqueia a conta.
 
 ## Testar e construir
 
@@ -59,6 +74,8 @@ make build   # binário da API e build de produção da web
 ```
 
 Comandos por pacote: `make test-api`, `make test-web`, `make build-api`, `make build-web`.
+
+Os testes de integração do Go precisam de `DATABASE_URL` definida.
 
 ## Contrato da API
 
