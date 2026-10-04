@@ -3,7 +3,7 @@
 -include .env
 export
 
-.PHONY: setup dev dev-api dev-web build build-api build-web test test-api test-web lint lint-api lint-web db-up db-down migrate
+.PHONY: setup dev dev-api dev-web build build-api build-web test test-api test-web lint lint-api lint-web db-up db-down migrate seed
 
 setup:
 	pnpm --dir web install --frozen-lockfile
@@ -50,3 +50,7 @@ db-down:
 migrate:
 	@test -n "$$DATABASE_URL" || { echo "DATABASE_URL não definida (exporte ou use um .env local)"; exit 1; }
 	cd api && go tool goose -dir migrations postgres "$$DATABASE_URL" up
+
+# Cria o usuário inicial (SEED_EMAIL, SEED_SENHA, SEED_NOME no .env ou no ambiente); idempotente.
+seed:
+	cd api && go run ./cmd/seed
