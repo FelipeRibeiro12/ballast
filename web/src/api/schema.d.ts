@@ -35,7 +35,7 @@ export interface paths {
         put?: never;
         /**
          * Abre uma sessão
-         * @description A sessão vai no cookie ballast_sessao (HttpOnly, Secure, SameSite=Lax), válido por 7 dias absolutos, sem renovação. E-mail inexistente e senha errada dão a mesma resposta.
+         * @description A sessão vai no cookie ballast_sessao (HttpOnly, Secure, SameSite=Lax), válido por 7 dias absolutos, sem renovação. E-mail inexistente e senha errada dão a mesma resposta. A partir da 4ª falha consecutiva do mesmo e-mail digitado (exista conta ou não), o login recusa com 429 por 2^(falhas-3) segundos, no máximo 15 minutos, sem verificar a senha e sem contar a tentativa. O atraso nunca bloqueia a conta.
          */
         post: operations["postAuthLogin"];
         delete?: never;
@@ -243,6 +243,17 @@ export interface operations {
             /** @description Content-Type diferente de application/json */
             415: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Atraso progressivo em vigor para esse e-mail; resposta idêntica para e-mail com e sem conta */
+            429: {
+                headers: {
+                    /** @description Segundos inteiros, arredondados para cima, até a próxima tentativa ser verificada */
+                    "Retry-After": number;
                     [name: string]: unknown;
                 };
                 content: {

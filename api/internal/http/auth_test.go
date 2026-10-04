@@ -89,6 +89,9 @@ func emailUnico(t *testing.T, pool *pgxpool.Pool) string {
 			if _, err := pool.Exec(context.Background(), "DELETE FROM usuario WHERE email = $1", email); err != nil {
 				t.Errorf("limpa usuário de teste: %v", err)
 			}
+			if _, err := pool.Exec(context.Background(), "DELETE FROM tentativa_login WHERE email = $1", email); err != nil {
+				t.Errorf("limpa tentativas de teste: %v", err)
+			}
 		})
 	}
 	return email

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -20,8 +21,10 @@ import (
 type Identidade interface {
 	// criado=false quando o e-mail já existe. O e-mail chega normalizado.
 	Cadastra(ctx context.Context, email, senha string, nome *string) (id string, criado bool, err error)
-	// ok=false quando o e-mail não existe ou a senha não confere.
-	Autentica(ctx context.Context, email, senha string) (id string, ok bool, err error)
+	// ok=false quando o e-mail não existe ou a senha não confere. espera > 0
+	// quando a conta está no atraso: a senha nem foi verificada. falhas é a
+	// contagem corrente de falhas consecutivas, para o log.
+	Autentica(ctx context.Context, email, senha string) (id string, ok bool, espera time.Duration, falhas int, err error)
 	IniciaSessao(ctx context.Context, usuarioID string) (token string, expiraEm time.Time, err error)
 	Perfil(ctx context.Context, usuarioID string) (email string, nome *string, err error)
 	// ok=false quando o token é desconhecido, expirou ou foi revogado.
@@ -188,14 +191,23 @@ func loginHandler(ident Identidade, cookieSecure bool) http.HandlerFunc {
 			return
 		}
 
-		id, ok, err := ident.Autentica(r.Context(), email, req.Senha)
+		id, ok, espera, falhas, err := ident.Autentica(r.Context(), email, req.Senha)
 		if err != nil {
 			slog.Error("login: falha ao autenticar", "err", err, "ip", ipDe(r))
 			escreveErro(w, http.StatusInternalServerError, "erro interno")
 			return
 		}
+		if espera > 0 {
+			// Arredonda para cima: dizer 0 faria o cliente tentar de novo ainda dentro do atraso.
+			segundos := int((espera + time.Second - 1) / time.Second)
+			slog.Warn("login recusado: muitas tentativas", "email", mascaraEmail(email), "ip", ipDe(r),
+				"falhas", falhas, "retry_after", segundos)
+			w.Header().Set("Retry-After", strconv.Itoa(segundos))
+			escreveErro(w, http.StatusTooManyRequests, "muitas tentativas, tente mais tarde")
+			return
+		}
 		if !ok {
-			slog.Warn("login falhou", "email", mascaraEmail(email), "ip", ipDe(r))
+			slog.Warn("login falhou", "email", mascaraEmail(email), "ip", ipDe(r), "falhas", falhas)
 			escreveErro(w, http.StatusUnauthorized, erroCredenciais)
 			return
 		}

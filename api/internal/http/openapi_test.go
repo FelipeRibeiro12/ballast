@@ -172,6 +172,14 @@ func casosDeResposta() map[string]map[int]casoDeResposta {
 				a := novoAmbiente(t, true)
 				return postJSON(a.h, "/auth/login", map[string]string{"email": emailUnico(t, nil), "senha": senhaDeTeste})
 			},
+			http.StatusTooManyRequests: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a, email := ambienteComUsuario(t)
+				// Com o relógio real, o atraso de 2 s da 4ª falha ainda vale na 5ª tentativa.
+				for range 4 {
+					postJSON(a.h, "/auth/login", map[string]string{"email": email, "senha": "senha-errada-12345"})
+				}
+				return postJSON(a.h, "/auth/login", map[string]string{"email": email, "senha": "senha-errada-12345"})
+			},
 			http.StatusUnsupportedMediaType: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 				a := novoAmbiente(t, true)
 				req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader("email=x"))
@@ -350,5 +358,28 @@ func TestLoginDefineCookieDeSessaoComOsAtributosDeSeguranca(t *testing.T) {
 	}
 	if !strings.Contains(linhas[0], "Max-Age=") {
 		t.Errorf("Set-Cookie sem Max-Age explícito: %s", linhas[0])
+	}
+}
+
+// O validador de resposta do kin-openapi não exige cabeçalho declarado, então
+// a presença e o formato do Retry-After são conferidos aqui contra a spec.
+func TestLogin429DocumentaEEmiteORetryAfter(t *testing.T) {
+	spec := loadSpec(t)
+	resp := spec.Paths.Value("/auth/login").GetOperation(http.MethodPost).Responses.Value("429")
+	if resp == nil {
+		t.Fatal("a spec não declara o 429 em POST /auth/login")
+	}
+	cabecalho := resp.Value.Headers["Retry-After"]
+	if cabecalho == nil || !cabecalho.Value.Required {
+		t.Fatal("o 429 não declara o cabeçalho Retry-After como obrigatório")
+	}
+	if tipo := cabecalho.Value.Schema.Value.Type; tipo == nil || !tipo.Is("integer") {
+		t.Errorf("schema do Retry-After = %v, want integer", tipo)
+	}
+
+	_, rec := casosDeResposta()["POST /auth/login"][http.StatusTooManyRequests](t)
+	valor := rec.Header().Get("Retry-After")
+	if n, err := strconv.Atoi(valor); err != nil || n < 1 {
+		t.Errorf("Retry-After = %q, want inteiro de segundos >= 1", valor)
 	}
 }
