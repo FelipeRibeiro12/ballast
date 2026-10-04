@@ -26,7 +26,7 @@
 - Teste `TestRotasEstaoNaSpec` em `api/internal/http/openapi_test.go` (linhas 81-101) falha imediatamente
 - Mensagens de erro claras: `rota "GET /secret" registrada no router e ausente de openapi.yaml` ou `GET /undocumented consta em openapi.yaml e não está registrada no router`
 
-**Gravidade:** Bloqueante (detecta divergência ✅)
+**Resultado:** OK
 
 ---
 
@@ -47,7 +47,7 @@
 - Teste rodado: handler alterado para devolver `{}`
 - Resultado: falha com `property "mensagem" is missing`
 
-**Gravidade:** Bloqueante (detecta divergência ✅)
+**Resultado:** OK
 
 ---
 
@@ -128,7 +128,7 @@
 ### Segredos em arquivos novos: OK
 
 - Arquivos novos: `api/openapi.yaml`, `web/src/api/schema.d.ts`, `.github/workflows/ci.yml` (parcial), `api/go.mod` (parcial), `api/go.sum` (parcial), `web/package.json` (parcial)
-- String `senha` aparece uma vez em `api/internal/http/openapi_test.go:62` mas é credencial fake em teste
+- String `senha` aparece uma vez em `api/internal/http/openapi_test.go:108` mas é credencial fake em teste
 - Nenhum token, chave privada ou credencial real encontrado
 
 **Gravidade:** OK (sem segredos ✅)
@@ -159,7 +159,8 @@ A lacuna encontrada (validação automática de status codes adicionados à spec
 Nada disso é bloqueante para o lançamento. O risco é mitigável: novas respostas exigem mudança na spec + commit, e CI pode lembrar via revisão que `cases` precisa ser atualizada.
 
 **Artefatos:**
-- 6 commits de implementação, todos verdes
+- 4 commits de implementação (e29caf0, 61e5198, f781f2d, 65d974a), todos verdes
+- Prova do gate no CI real, feita pelo tech-lead com commits descartáveis já revertidos: a 1ª quebra (`required` sem a propriedade) fez o job `api` falhar e o `web` ficou verde, porque o tipo gerado não muda; a 2ª (com a propriedade `versao`) fez o job `web` falhar no passo "cliente TS em dia com o OpenAPI"
 - Teste de aderência: ~170 linhas em `api/internal/http/openapi_test.go`
 - Geração de tipos: integrada no script `build` do web
 - Gate do CI: bem colocado, roda antes do build
