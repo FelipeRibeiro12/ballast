@@ -44,6 +44,29 @@ usuario
   criado_em       timestamptz not null
 ```
 
+```
+sessao                                   -- ADR-015
+  id              uuid pk
+  usuario_id      uuid fk not null
+  token_hash      bytea unique not null  -- SHA-256 do token; o token só existe no cookie
+  criada_em       timestamptz not null
+  expira_em       timestamptz not null
+  revogada_em     timestamptz            -- logout e troca de senha
+```
+
+```
+tentativa_login                          -- atraso progressivo por conta
+  email           text pk                -- normalizado (minúsculas); vale também para e-mail inexistente
+  falhas          int not null           -- consecutivas; zera no login com sucesso
+  ultima_falha_em timestamptz not null
+```
+
+`tentativa_login` não tem `usuario_id` de propósito: a chave é o e-mail
+digitado, para o app não revelar se a conta existe (`docs/ameacas.md`).
+
+Todo `id` é UUID v7, gerado na aplicação: o Postgres 17 não tem `uuidv7()`
+nativo (chega no 18). Sem default no banco.
+
 **Toda tabela abaixo tem `usuario_id` e toda query é escopada por ele.** Sem
 exceção — é a fronteira de autorização do app inteiro.
 
