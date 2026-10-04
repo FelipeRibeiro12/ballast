@@ -167,6 +167,8 @@ Limite por IP e por rota na entrada da API (infra). É esta fatia que destrava
 - **DÍVIDA** — `actionlint` não roda no CI nem localmente; o YAML dos workflows não é validado por ferramenta.
 - **DÍVIDA** — O teste de aderência só varre `api/internal/http/router.go`. Rota registrada em outro arquivo (ex.: `registraAuth(mux)`) escapa e o teste fica verde. Na F1, varrer todos os `.go` não-teste do pacote ou travar a convenção "toda rota é registrada em `router.go`". Critério de aceite da F1, junto com a tabela de status derivada da spec.
 - **DÍVIDA** — `pnpm build` do web lê `../api/openapi.yaml`; se a hospedagem do PWA usar `web/` como raiz, o build falha. Conferir ao escolher a hospedagem (ou deixar a geração só no CI).
+- **DÍVIDA** — `COOKIE_SECURE=false` em desenvolvimento (Safari recusa cookie `Secure` sobre HTTP). Servir o dev sobre HTTPS com certificado local (mkcert) e aposentar a flag. A API já se recusa a subir com a flag falsa fora de `APP_ENV=development`.
+- **DÍVIDA** — Sessão expirada ou revogada fica na tabela `sessao` sem limpeza. Resolver quando o volume importar ou na F20.5.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
