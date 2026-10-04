@@ -28,7 +28,7 @@ func (s *Servico) Cadastra(ctx context.Context, email, senha string, nome *strin
 	if err != nil {
 		return "", false, err
 	}
-	id, err = novoUUID(time.Now())
+	id, err = novoUUID()
 	if err != nil {
 		return "", false, err
 	}
@@ -73,7 +73,7 @@ func (s *Servico) IniciaSessao(ctx context.Context, usuarioID string) (token str
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	id, err := novoUUID(time.Now())
+	id, err := novoUUID()
 	if err != nil {
 		return "", time.Time{}, err
 	}
