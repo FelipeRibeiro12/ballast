@@ -12,6 +12,7 @@ import (
 	"time"
 
 	apihttp "github.com/FelipeRibeiro12/ballast/internal/http"
+	"github.com/FelipeRibeiro12/ballast/internal/identidade"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -46,7 +47,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:    listenAddr(os.Getenv("HOST"), port),
-		Handler: apihttp.NewRouter(pool),
+		Handler: apihttp.NewRouter(pool, identidade.NovoServico(pool), os.Getenv("REGISTRO_ABERTO") == "true"),
 		// Sem ReadHeaderTimeout o servidor fica exposto a Slowloris.
 		ReadHeaderTimeout: 5 * time.Second,
 	}

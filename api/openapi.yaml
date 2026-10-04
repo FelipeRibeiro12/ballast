@@ -3,6 +3,56 @@ info:
   title: Ballast API
   version: 0.1.0
 paths:
+  /auth/cadastro:
+    post:
+      summary: Cria um usuário
+      description: >
+        Só responde quando o cadastro está aberto (REGISTRO_ABERTO=true).
+        Fechado, a resposta é a mesma de uma rota que não existe.
+      operationId: postAuthCadastro
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CadastroRequest"
+      responses:
+        "201":
+          description: Usuário criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usuario"
+        "400":
+          description: Entrada inválida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "404":
+          description: Cadastro fechado; corpo idêntico ao de rota inexistente, que não é JSON
+          content:
+            text/plain:
+              schema:
+                type: string
+        "409":
+          description: E-mail já cadastrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "415":
+          description: Content-Type diferente de application/json
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "500":
+          description: Falha interna
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
   /healthz:
     get:
       summary: Verifica se a API alcança o banco
@@ -30,3 +80,42 @@ paths:
                 properties:
                   erro:
                     type: string
+components:
+  schemas:
+    Erro:
+      type: object
+      required: [erro]
+      additionalProperties: false
+      properties:
+        erro:
+          type: string
+    Usuario:
+      type: object
+      required: [id, email, nome]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          maxLength: 254
+        nome:
+          type: string
+          nullable: true
+          maxLength: 100
+    CadastroRequest:
+      type: object
+      required: [email, senha]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          maxLength: 254
+        senha:
+          type: string
+          minLength: 12
+          maxLength: 128
+        nome:
+          type: string
+          maxLength: 100

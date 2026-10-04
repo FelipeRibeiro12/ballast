@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/FelipeRibeiro12/ballast/internal/identidade"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers/legacy"
@@ -131,6 +132,39 @@ type casoDeResposta func(t *testing.T) (*http.Request, *httptest.ResponseRecorde
 
 func casosDeResposta() map[string]map[int]casoDeResposta {
 	return map[string]map[int]casoDeResposta{
+		"POST /auth/cadastro": {
+			http.StatusCreated: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a := novoAmbiente(t, true)
+				return postJSON(a.h, "/auth/cadastro", map[string]string{"email": emailUnico(t, a.pool), "senha": senhaDeTeste, "nome": "Fulano"})
+			},
+			http.StatusBadRequest: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a := novoAmbiente(t, true)
+				return postJSON(a.h, "/auth/cadastro", `{"email":"x"}`)
+			},
+			http.StatusNotFound: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a := novoAmbiente(t, false)
+				return postJSON(a.h, "/auth/cadastro", map[string]string{"email": emailUnico(t, a.pool), "senha": senhaDeTeste})
+			},
+			http.StatusConflict: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a := novoAmbiente(t, true)
+				corpo := map[string]string{"email": emailUnico(t, a.pool), "senha": senhaDeTeste}
+				postJSON(a.h, "/auth/cadastro", corpo)
+				return postJSON(a.h, "/auth/cadastro", corpo)
+			},
+			http.StatusUnsupportedMediaType: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a := novoAmbiente(t, true)
+				req := httptest.NewRequest(http.MethodPost, "/auth/cadastro", strings.NewReader("email=x"))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				rec := httptest.NewRecorder()
+				a.h.ServeHTTP(rec, req)
+				return req, rec
+			},
+			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				pool := poolIndisponivel(t)
+				h := NewRouter(pool, identidade.NovoServico(pool), true)
+				return postJSON(h, "/auth/cadastro", map[string]string{"email": "a@exemplo.test", "senha": senhaDeTeste})
+			},
+		},
 		"GET /healthz": {
 			http.StatusOK:                 casoHealth(poolDeTeste),
 			http.StatusServiceUnavailable: casoHealth(poolIndisponivel),
@@ -142,7 +176,7 @@ func casoHealth(newPool func(*testing.T) *pgxpool.Pool) casoDeResposta {
 	return func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 		rec := httptest.NewRecorder()
-		NewRouter(newPool(t)).ServeHTTP(rec, req)
+		NewRouter(newPool(t), nil, false).ServeHTTP(rec, req)
 		return req, rec
 	}
 }
