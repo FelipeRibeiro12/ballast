@@ -15,6 +15,8 @@ Armadilhas:
 
 F1 (branch feat/f1-cadastro-login): ADR-015 (token opaco, SHA-256 no banco, cookie HttpOnly/Secure/SameSite=Lax; JWT descartado). Tabelas usuario/sessao/tentativa_login (chave = e-mail, sem FK, para não enumerar conta). Sem `mfa_segredo` (F20). `REGISTRO_ABERTO=false` por padrão, 404 quando desligado, seed do usuário. Rate limit na borda é a F20.5 e é ela que destrava `REGISTRO_ABERTO=true`. Sem tela de cadastro. `health_check` segue como dívida (fora da F1).
 
+Ajustes do usuário na F1 (2026-10-03, depois do backend já lançado): UUID v7 via `github.com/google/uuid` (aprovada; à mão só com 3 testes: versão 7, variante 10, monotonicidade com N goroutines); 404 do cadastro fica (403 revelaria que existe), spec documenta 201 e 404 e o teste de aderência roda os dois estados de REGISTRO_ABERTO; `COOKIE_SECURE` padrão true, `.env.example` de dev com false, e a API **recusa subir** com false fora de `APP_ENV` de desenvolvimento (dívida: HTTPS local com mkcert, aposentar a flag); `schema.d.ts` regenerado no mesmo commit que muda o `openapi.yaml` (exceção autorizada à fronteira: backend roda `pnpm --dir web generate:api`), todo commit verde por causa do bisect.
+
 Regras do usuário para o qa (2026-10-03):
 - Se o qa travar, **parar e descrever onde empacou**, não assumir a tarefa. O qa não tem Edit de propósito. (Na F0.5 ele travou 2x ao corrigir o relatório e eu editei sozinho: o usuário não gostou da lógica; causa provável: sem Edit ele reescreve o arquivo inteiro via Write.)
 - Todo relatório de QA inclui uma linha do que os testes **não** cobrem.
