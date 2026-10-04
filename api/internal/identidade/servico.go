@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -42,4 +43,51 @@ func (s *Servico) Cadastra(ctx context.Context, email, senha string, nome *strin
 		return "", false, err
 	}
 	return id, true, nil
+}
+
+// ok=false cobre e-mail inexistente e senha errada sem distinguir. No
+// inexistente roda um argon2 fictício para o tempo não denunciar a conta.
+func (s *Servico) Autentica(ctx context.Context, email, senha string) (id string, ok bool, err error) {
+	var hash string
+	err = s.pool.QueryRow(ctx, "SELECT id, senha_hash FROM usuario WHERE email = $1", email).Scan(&id, &hash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", VerificaSenhaFicticia(senha), nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if !VerificaSenha(senha, hash) {
+		return "", false, nil
+	}
+	return id, true, nil
+}
+
+// Sessão com prazo absoluto: não renova a cada uso, então um token roubado
+// morre em 7 dias mesmo que seja usado todo dia.
+const sessaoDuracao = 7 * 24 * time.Hour
+
+// IniciaSessao devolve o token em claro, que só existe aqui e no cookie; o
+// banco guarda o SHA-256 dele.
+func (s *Servico) IniciaSessao(ctx context.Context, usuarioID string) (token string, expiraEm time.Time, err error) {
+	token, hash, err := novoToken()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	id, err := novoUUID(time.Now())
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expiraEm = time.Now().Add(sessaoDuracao)
+	_, err = s.pool.Exec(ctx,
+		"INSERT INTO sessao (id, usuario_id, token_hash, expira_em) VALUES ($1, $2, $3, $4)",
+		id, usuarioID, hash, expiraEm)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return token, expiraEm, nil
+}
+
+func (s *Servico) Perfil(ctx context.Context, usuarioID string) (email string, nome *string, err error) {
+	err = s.pool.QueryRow(ctx, "SELECT email, nome FROM usuario WHERE id = $1", usuarioID).Scan(&email, &nome)
+	return email, nome, err
 }

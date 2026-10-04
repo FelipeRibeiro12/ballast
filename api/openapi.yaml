@@ -53,6 +53,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
+  /auth/login:
+    post:
+      summary: Abre uma sessão
+      description: >
+        A sessão vai no cookie ballast_sessao (HttpOnly, Secure, SameSite=Lax),
+        válido por 7 dias absolutos, sem renovação. E-mail inexistente e senha
+        errada dão a mesma resposta.
+      operationId: postAuthLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Sessão aberta
+          headers:
+            Set-Cookie:
+              required: true
+              description: ballast_sessao=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usuario"
+        "400":
+          description: Entrada inválida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "401":
+          description: Credenciais inválidas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "415":
+          description: Content-Type diferente de application/json
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+        "500":
+          description: Falha interna
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
   /healthz:
     get:
       summary: Verifica se a API alcança o banco
@@ -119,3 +170,15 @@ components:
         nome:
           type: string
           maxLength: 100
+    LoginRequest:
+      type: object
+      required: [email, senha]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          maxLength: 254
+        senha:
+          type: string
+          minLength: 1
+          maxLength: 128

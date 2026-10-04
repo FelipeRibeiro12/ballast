@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -19,6 +20,10 @@ import (
 type Identidade interface {
 	// criado=false quando o e-mail já existe. O e-mail chega normalizado.
 	Cadastra(ctx context.Context, email, senha string, nome *string) (id string, criado bool, err error)
+	// ok=false quando o e-mail não existe ou a senha não confere.
+	Autentica(ctx context.Context, email, senha string) (id string, ok bool, err error)
+	IniciaSessao(ctx context.Context, usuarioID string) (token string, expiraEm time.Time, err error)
+	Perfil(ctx context.Context, usuarioID string) (email string, nome *string, err error)
 }
 
 const (
@@ -158,4 +163,68 @@ func ipDe(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+type loginRequest struct {
+	Email string `json:"email"`
+	Senha string `json:"senha"`
+}
+
+const cookieSessao = "ballast_sessao"
+
+// Mensagem única para e-mail inexistente e senha errada: diferenciar entrega
+// quais e-mails têm conta.
+const erroCredenciais = "credenciais inválidas"
+
+func loginHandler(ident Identidade) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req loginRequest
+		if !leCorpoJSON(w, r, &req) {
+			return
+		}
+		email := normalizaEmail(req.Email)
+		// A política de tamanho mínimo é do cadastro; aqui só o teto, contra DoS no argon2.
+		if !emailValido(email) || req.Senha == "" || utf8.RuneCountInString(req.Senha) > senhaMaxCaracteres {
+			escreveErro(w, http.StatusBadRequest, "e-mail ou senha inválidos")
+			return
+		}
+
+		id, ok, err := ident.Autentica(r.Context(), email, req.Senha)
+		if err != nil {
+			slog.Error("login: falha ao autenticar", "err", err, "ip", ipDe(r))
+			escreveErro(w, http.StatusInternalServerError, "erro interno")
+			return
+		}
+		if !ok {
+			slog.Warn("login falhou", "email", mascaraEmail(email), "ip", ipDe(r))
+			escreveErro(w, http.StatusUnauthorized, erroCredenciais)
+			return
+		}
+
+		token, expiraEm, err := ident.IniciaSessao(r.Context(), id)
+		if err != nil {
+			slog.Error("login: falha ao abrir sessão", "err", err, "usuario_id", id, "ip", ipDe(r))
+			escreveErro(w, http.StatusInternalServerError, "erro interno")
+			return
+		}
+		perfilEmail, nome, err := ident.Perfil(r.Context(), id)
+		if err != nil {
+			slog.Error("login: falha ao ler o perfil", "err", err, "usuario_id", id, "ip", ipDe(r))
+			escreveErro(w, http.StatusInternalServerError, "erro interno")
+			return
+		}
+
+		// Secure sempre ligado, sem flag para desligar (ADR-015).
+		http.SetCookie(w, &http.Cookie{
+			Name:     cookieSessao,
+			Value:    token,
+			Path:     "/",
+			MaxAge:   int(time.Until(expiraEm).Seconds()),
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+		})
+		slog.Info("login ok", "usuario_id", id, "ip", ipDe(r))
+		escreveJSON(w, http.StatusOK, usuarioJSON{ID: id, Email: perfilEmail, Nome: nome})
+	}
 }

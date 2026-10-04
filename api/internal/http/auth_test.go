@@ -4,13 +4,18 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/FelipeRibeiro12/ballast/internal/identidade"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -301,5 +306,236 @@ func TestCadastroComBancoIndisponivelNaoVazaDetalhe(t *testing.T) {
 	}
 	if logBuf.Len() == 0 {
 		t.Error("erro de banco não foi registrado no log")
+	}
+}
+
+// Cria o usuário pela API, que é o caminho que o app usa.
+func (a *ambiente) cadastra(t *testing.T, email string) usuarioResposta {
+	t.Helper()
+	_, rec := postJSON(a.h, "/auth/cadastro", map[string]string{"email": email, "senha": senhaDeTeste, "nome": "Fulano"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("cadastro de apoio: status = %d (corpo: %s)", rec.Code, rec.Body)
+	}
+	var u usuarioResposta
+	if err := json.Unmarshal(rec.Body.Bytes(), &u); err != nil {
+		t.Fatal(err)
+	}
+	return u
+}
+
+func cookieDe(rec *httptest.ResponseRecorder, nome string) *http.Cookie {
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == nome {
+			return c
+		}
+	}
+	return nil
+}
+
+func TestLoginAbreSessao(t *testing.T) {
+	a := novoAmbiente(t, true)
+	email := emailUnico(t, a.pool)
+	criado := a.cadastra(t, email)
+	logBuf := capturaLog(t)
+
+	_, rec := postJSON(a.h, "/auth/login", map[string]string{"email": email, "senha": senhaDeTeste})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (corpo: %s)", rec.Code, rec.Body)
+	}
+	var u usuarioResposta
+	_ = json.Unmarshal(rec.Body.Bytes(), &u)
+	if u != (usuarioResposta{ID: criado.ID, Email: email, Nome: u.Nome}) || u.Nome == nil || *u.Nome != "Fulano" {
+		t.Errorf("resposta = %+v, want usuário %+v", u, criado)
+	}
+	c := cookieDe(rec, "ballast_sessao")
+	if c == nil || c.Value == "" {
+		t.Fatalf("sem cookie de sessão: %v", rec.Header()["Set-Cookie"])
+	}
+
+	if strings.Contains(rec.Body.String(), senhaDeTeste) || strings.Contains(rec.Body.String(), c.Value) {
+		t.Error("corpo vaza senha ou token")
+	}
+	for _, proibido := range []string{senhaDeTeste, c.Value, "argon2", email} {
+		if strings.Contains(logBuf.String(), proibido) {
+			t.Errorf("log contém %q", proibido)
+		}
+	}
+	if !strings.Contains(logBuf.String(), criado.ID) {
+		t.Errorf("login bem-sucedido sem usuario_id no log: %s", logBuf)
+	}
+}
+
+func TestLoginGravaSoOHashDoToken(t *testing.T) {
+	a := novoAmbiente(t, true)
+	email := emailUnico(t, a.pool)
+	u := a.cadastra(t, email)
+
+	_, rec := postJSON(a.h, "/auth/login", map[string]string{"email": email, "senha": senhaDeTeste})
+	c := cookieDe(rec, "ballast_sessao")
+	if c == nil {
+		t.Fatalf("login sem cookie (status %d)", rec.Code)
+	}
+	token := c.Value
+
+	bruto, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(bruto) != 32 {
+		t.Fatalf("token deve ser base64url de 32 bytes (len=%d, err=%v)", len(bruto), err)
+	}
+	var hashNoBanco []byte
+	var duracao string
+	err = a.pool.QueryRow(context.Background(),
+		"SELECT token_hash, (expira_em - criada_em)::text FROM sessao WHERE usuario_id = $1", u.ID).Scan(&hashNoBanco, &duracao)
+	if err != nil {
+		t.Fatalf("sessão não gravada: %v", err)
+	}
+	esperado := sha256.Sum256([]byte(token))
+	if !bytes.Equal(hashNoBanco, esperado[:]) {
+		t.Error("token_hash não é o SHA-256 do token do cookie")
+	}
+	if bytes.Equal(hashNoBanco, bruto) || bytes.Contains(hashNoBanco, []byte(token)) {
+		t.Error("o token em claro foi gravado no banco")
+	}
+	// criada_em usa o relógio do banco e expira_em o da aplicação: tolera folga.
+	if !strings.HasPrefix(duracao, "6 days 23:59") && !strings.HasPrefix(duracao, "7 days") {
+		t.Errorf("duração da sessão = %q, want 7 dias", duracao)
+	}
+}
+
+func TestLoginComEmailInexistenteESenhaErradaSaoIdenticos(t *testing.T) {
+	a := novoAmbiente(t, true)
+	email := emailUnico(t, a.pool)
+	a.cadastra(t, email)
+
+	_, senhaErrada := postJSON(a.h, "/auth/login", map[string]string{"email": email, "senha": "senha-errada-12345"})
+	_, inexistente := postJSON(a.h, "/auth/login", map[string]string{"email": emailUnico(t, nil), "senha": "senha-errada-12345"})
+
+	if senhaErrada.Code != http.StatusUnauthorized || inexistente.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d e %d, want 401 nos dois", senhaErrada.Code, inexistente.Code)
+	}
+	if senhaErrada.Body.String() != inexistente.Body.String() {
+		t.Errorf("corpos diferem: %q x %q", senhaErrada.Body, inexistente.Body)
+	}
+	if want := `{"erro":"credenciais inválidas"}` + "\n"; senhaErrada.Body.String() != want {
+		t.Errorf("corpo = %q, want %q", senhaErrada.Body, want)
+	}
+	for _, rec := range []*httptest.ResponseRecorder{senhaErrada, inexistente} {
+		if len(rec.Header().Values("Set-Cookie")) != 0 {
+			t.Error("falha de login definiu cookie")
+		}
+	}
+	if !maps.EqualFunc(senhaErrada.Header(), inexistente.Header(), slices.Equal) {
+		t.Errorf("cabeçalhos diferem: %v x %v", senhaErrada.Header(), inexistente.Header())
+	}
+}
+
+// O e-mail inexistente precisa gastar o argon2 também; sem isso o tempo de
+// resposta entrega quais e-mails têm conta. Compara com folga larga (o argon2
+// custa ordens de grandeza mais que a consulta) para não ficar instável.
+func TestLoginComEmailInexistenteGastaOTempoDoArgon2(t *testing.T) {
+	a := novoAmbiente(t, true)
+	email := emailUnico(t, a.pool)
+	a.cadastra(t, email)
+	postJSON(a.h, "/auth/login", map[string]string{"email": emailUnico(t, nil), "senha": "senha-errada-12345"}) // aquece o hash fictício
+
+	medir := func(email string) time.Duration {
+		inicio := time.Now()
+		postJSON(a.h, "/auth/login", map[string]string{"email": email, "senha": "senha-errada-12345"})
+		return time.Since(inicio)
+	}
+	existente, inexistente := medir(email), medir(emailUnico(t, nil))
+	if inexistente < existente/3 {
+		t.Errorf("e-mail inexistente respondeu em %v e o existente em %v: o argon2 fictício não está rodando", inexistente, existente)
+	}
+}
+
+func TestLoginNormalizaACaixaDoEmail(t *testing.T) {
+	a := novoAmbiente(t, true)
+	email := emailUnico(t, a.pool)
+	a.cadastra(t, email)
+
+	_, rec := postJSON(a.h, "/auth/login", map[string]string{"email": " " + strings.ToUpper(email) + " ", "senha": senhaDeTeste})
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
+	}
+}
+
+func TestLoginFalhaRegistraEmailMascarado(t *testing.T) {
+	a := novoAmbiente(t, true)
+	email := emailUnico(t, a.pool)
+	a.cadastra(t, email)
+	logBuf := capturaLog(t)
+
+	postJSON(a.h, "/auth/login", map[string]string{"email": email, "senha": "senha-errada-12345"})
+
+	log := logBuf.String()
+	if !strings.Contains(log, "t***@exemplo.test") || !strings.Contains(log, "192.0.2.1") {
+		t.Errorf("log da falha sem e-mail mascarado e IP: %s", log)
+	}
+	for _, proibido := range []string{email, "senha-errada-12345", senhaDeTeste} {
+		if strings.Contains(log, proibido) {
+			t.Errorf("log contém %q", proibido)
+		}
+	}
+}
+
+func TestLoginValidaEntrada(t *testing.T) {
+	a := novoAmbiente(t, true)
+	casos := map[string]string{
+		"campo desconhecido":   `{"email":"a@exemplo.test","senha":"x","lembrar":true}`,
+		"senha ausente":        `{"email":"a@exemplo.test"}`,
+		"senha vazia":          `{"email":"a@exemplo.test","senha":""}`,
+		"senha de 129":         `{"email":"a@exemplo.test","senha":"` + strings.Repeat("a", 129) + `"}`,
+		"e-mail inválido":      `{"email":"nao-e-email","senha":"x"}`,
+		"json quebrado":        `{`,
+		"corpo acima de 8 KiB": `{"email":"a@exemplo.test","senha":"` + strings.Repeat("a", 9000) + `"}`,
+	}
+	for nome, corpo := range casos {
+		t.Run(nome, func(t *testing.T) {
+			_, rec := postJSON(a.h, "/auth/login", corpo)
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400 (corpo: %s)", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
+func TestLoginAceitaSenhaCurtaEDevolve401(t *testing.T) {
+	// A política de tamanho vale só no cadastro; no login, senha curta é senha errada.
+	a := novoAmbiente(t, true)
+	_, rec := postJSON(a.h, "/auth/login", map[string]string{"email": emailUnico(t, nil), "senha": "curta"})
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestLoginRejeitaContentTypeQueNaoSejaJSON(t *testing.T) {
+	a := novoAmbiente(t, true)
+	req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader("email=a"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	a.h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Errorf("status = %d, want 415", rec.Code)
+	}
+}
+
+func TestLoginComBancoIndisponivelNaoVazaDetalhe(t *testing.T) {
+	pool := poolIndisponivel(t)
+	h := NewRouter(pool, identidade.NovoServico(pool), true)
+	logBuf := capturaLog(t)
+
+	_, rec := postJSON(h, "/auth/login", map[string]string{"email": "a@exemplo.test", "senha": senhaDeTeste})
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	for _, proibido := range []string{"127.0.0.1", "dial", "connect", "postgres"} {
+		if strings.Contains(rec.Body.String(), proibido) {
+			t.Errorf("corpo vaza %q: %s", proibido, rec.Body)
+		}
+	}
+	if logBuf.Len() == 0 || strings.Contains(logBuf.String(), senhaDeTeste) {
+		t.Errorf("log vazio ou com a senha: %s", logBuf)
 	}
 }

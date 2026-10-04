@@ -132,6 +132,33 @@ type casoDeResposta func(t *testing.T) (*http.Request, *httptest.ResponseRecorde
 
 func casosDeResposta() map[string]map[int]casoDeResposta {
 	return map[string]map[int]casoDeResposta{
+		"POST /auth/login": {
+			http.StatusOK: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a, email := ambienteComUsuario(t)
+				return postJSON(a.h, "/auth/login", map[string]string{"email": email, "senha": senhaDeTeste})
+			},
+			http.StatusBadRequest: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a := novoAmbiente(t, true)
+				return postJSON(a.h, "/auth/login", `{"email":"x"}`)
+			},
+			http.StatusUnauthorized: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a := novoAmbiente(t, true)
+				return postJSON(a.h, "/auth/login", map[string]string{"email": emailUnico(t, nil), "senha": senhaDeTeste})
+			},
+			http.StatusUnsupportedMediaType: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				a := novoAmbiente(t, true)
+				req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader("email=x"))
+				req.Header.Set("Content-Type", "text/plain")
+				rec := httptest.NewRecorder()
+				a.h.ServeHTTP(rec, req)
+				return req, rec
+			},
+			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+				pool := poolIndisponivel(t)
+				h := NewRouter(pool, identidade.NovoServico(pool), true)
+				return postJSON(h, "/auth/login", map[string]string{"email": "a@exemplo.test", "senha": senhaDeTeste})
+			},
+		},
 		"POST /auth/cadastro": {
 			http.StatusCreated: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 				a := novoAmbiente(t, true)
@@ -244,5 +271,57 @@ func TestRespostasSeguemASpec(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func ambienteComUsuario(t *testing.T) (*ambiente, string) {
+	t.Helper()
+	a := novoAmbiente(t, true)
+	email := emailUnico(t, a.pool)
+	a.cadastra(t, email)
+	return a, email
+}
+
+// A spec descreve o Set-Cookie do login e o servidor emite exatamente os
+// atributos de segurança prometidos (ADR-015).
+func TestLoginDefineCookieDeSessaoComOsAtributosDeSeguranca(t *testing.T) {
+	spec := loadSpec(t)
+	resp := spec.Paths.Value("/auth/login").GetOperation(http.MethodPost).Responses.Value("200").Value
+	if resp.Headers["Set-Cookie"] == nil {
+		t.Error("a resposta 200 de /auth/login não documenta o Set-Cookie na spec")
+	}
+
+	a, email := ambienteComUsuario(t)
+	_, rec := postJSON(a.h, "/auth/login", map[string]string{"email": email, "senha": senhaDeTeste})
+
+	linhas := rec.Header().Values("Set-Cookie")
+	if len(linhas) != 1 {
+		t.Fatalf("Set-Cookie = %v, want exatamente um", linhas)
+	}
+	c := cookieDe(rec, "ballast_sessao")
+	if c == nil {
+		t.Fatalf("cookie ballast_sessao ausente: %v", linhas)
+	}
+	if !c.HttpOnly {
+		t.Error("cookie sem HttpOnly")
+	}
+	if !c.Secure {
+		t.Error("cookie sem Secure")
+	}
+	if c.SameSite != http.SameSiteLaxMode {
+		t.Errorf("SameSite = %v, want Lax", c.SameSite)
+	}
+	if c.Path != "/" {
+		t.Errorf("Path = %q, want /", c.Path)
+	}
+	if c.Domain != "" {
+		t.Errorf("Domain = %q: cookie sem Domain fica preso ao host de origem", c.Domain)
+	}
+	// 7 dias absolutos; a diferença de segundos entre gravar e responder é tolerada.
+	if c.MaxAge < 7*24*3600-10 || c.MaxAge > 7*24*3600 {
+		t.Errorf("Max-Age = %d, want ~604800", c.MaxAge)
+	}
+	if !strings.Contains(linhas[0], "Max-Age=") {
+		t.Errorf("Set-Cookie sem Max-Age explícito: %s", linhas[0])
 	}
 }
