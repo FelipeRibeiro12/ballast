@@ -45,12 +45,10 @@ func run() error {
 	}
 	defer pool.Close()
 
-	srv := &http.Server{
-		Addr:    listenAddr(os.Getenv("HOST"), port),
-		Handler: apihttp.NewRouter(pool, identidade.NovoServico(pool), os.Getenv("REGISTRO_ABERTO") == "true"),
-		// Sem ReadHeaderTimeout o servidor fica exposto a Slowloris.
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	srv := novoServidor(
+		listenAddr(os.Getenv("HOST"), port),
+		apihttp.NewRouter(pool, identidade.NovoServico(pool), os.Getenv("REGISTRO_ABERTO") == "true"),
+	)
 
 	errCh := make(chan error, 1)
 	go func() {
