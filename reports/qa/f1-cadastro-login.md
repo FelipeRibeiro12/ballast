@@ -1,207 +1,176 @@
 # Relatório QA — F1: Cadastro, Login, Logout e GET /auth/eu
 
-**Data:** 2026-10-04  
+**Data:** 2026-10-04 (2ª rodada)  
 **Testador:** Claude QA (Haiku 4.5)
 
 ## Escopo Testado
 
-- POST /auth/cadastro (registro aberto e fechado)
-- POST /auth/login (credenciais válidas, inválidas, atraso progressivo)
-- GET /auth/eu (com sessão, revogada, adulterada)
+- POST /auth/cadastro (com/sem registro aberto)
+- POST /auth/login (credenciais válidas, inválidas, caracteres de controle)
+- GET /auth/eu (sessão válida, expirada, revogada)
 - POST /auth/logout (revogação de sessão)
-- Validação de entrada (tamanho, tipo, campos)
-- Sessões independentes (dois logins geram dois tokens distintos)
-- Atraso progressivo (429 com Retry-After)
-- Enumeração de usuário (timing, resposta idêntica)
-- Compliance com OpenAPI
-- Segurança de logs (ausência de senhas, tokens, e-mails, hashes)
-- Comportamento de COOKIE_SECURE (false em development, recusa em production)
+- Validação de entrada (tamanho, tipo, campos, caracteres de controle)
+- Sessões independentes (dois logins = dois tokens)
+- Atraso progressivo e rate limiting (429 com Retry-After)
+- Segurança de sessão (token_hash é SHA-256, expiração, concorrência)
 
-## Suíte Base
+## Suíte de Testes
 
-Suíte verde antes dos testes:
 ```
-make test        # 36 testes passaram (API + Web)
-make lint        # 0 issues
-pnpm build       # sucesso
+make test
+  Go:  108 testes (api/cmd/seed, api/cmd/api, api/internal/http, api/internal/identidade)
+  Web: 36 testes (jsdom)
+  Total: 144 testes
+make lint: 0 issues
 ```
+
+Todos os testes passaram antes e depois dos testes de QA.
 
 ## Achados
 
-### 1. BLOQUEANTE: POST /auth/cadastro registrada mesmo com REGISTRO_ABERTO=false
+### 1. BLOQUEANTE (2ª rodada): POST /auth/cadastro com REGISTRO_ABERTO=false
 
-**O que acontece:**  
-Quando REGISTRO_ABERTO=false, POST /auth/cadastro ainda cria usuários (status 201) em vez de retornar 404.
+**Status:** RESOLVIDO ✓
 
-**Como reproduzir:**
-```bash
-REGISTRO_ABERTO=false make dev-api
-curl -X POST http://127.0.0.1:8080/auth/cadastro \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "novo@teste.com",
-    "senha": "SenhaTest123456"
-  }'
-# Resposta: 201 com usuário criado (INCORRETO)
-# Esperado: 404 idêntico a rota inexistente
+**O que foi testado:**
+```
+REGISTRO_ABERTO=false PORT=18100 COOKIE_SECURE=false APP_ENV=development /tmp/api_qa
+PID 8757, porta confirmada (18100), variáveis de env confirmadas
+
+POST /auth/cadastro   → 404 (idêntico a rota inexistente)
+GET /auth/cadastro    → 404
+DELETE /auth/cadastro → 404
+/notarealpath         → 404 (mesmo cabeçalho, corpo idêntico)
+
+REGISTRO_ABERTO=true:
+POST /auth/cadastro   → 201 (usuário criado com id, email)
 ```
 
-**O que deveria acontecer:**  
-Conforme OpenAPI e ADR-015: "A rota só existe quando REGISTRO_ABERTO=true. Fechado, ela não é registrada e qualquer método em /auth/cadastro recebe o mesmo 404 de um caminho desconhecido."
-
-**Consequência:**
-- GET /auth/cadastro retorna 405 (Method Not Allowed) em vez de 404
-- DELETE /auth/cadastro retorna 405 em vez de 404
-- Violação da spec: resposta diferente para /auth/cadastro e rota inexistente
-
-**Gravidade:** BLOQUEANTE (viola spec de segurança e funcional; registrada como não existente mas existe)
+**Evidência:** O código em api/internal/http/router.go condiciona a rota ao valor de `REGISTRO_ABERTO`. A rota não é registrada quando false, retornando 404 de não existência para qualquer método. Comportamento correto.
 
 ---
 
-### 2. IMPORTANTE: E-mail com caracteres de controle retorna 500
+### 2. IMPORTANTE (2ª rodada): Caracteres de controle em email/nome
 
-**O que acontece:**  
-Entrada com caracteres de controle no e-mail (ex: `test\u0000@teste.com`) retorna 500 em vez de 400.
+**Status:** CORRIGIDO ✓
 
-**Como reproduzir:**
-```bash
-curl -X POST http://127.0.0.1:5555/auth/cadastro \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "test\u0000@teste.com",
-    "senha": "SenhaTest123456"
-  }'
-# Resposta: HTTP 500 erro interno
-# Esperado: HTTP 400 entrada inválida
+**Teste: Caracteres obrigatórios rejeitados com 400**
+
+Cadastro com controle no email:
+```
+NUL (\u0000)     → 400 "corpo inválido" (erro no parse JSON)
+BEL (\u0007)     → 400 "corpo inválido"
+\n (newline)     → 400 "corpo inválido"
+DEL (\u007f)     → 400 "e-mail inválido"
+U+0085 (NEL)     → 400 "e-mail inválido"
+U+2028 (sep lin) → 400 "e-mail inválido"
+U+2029 (sep par) → 400 "e-mail inválido"
 ```
 
-**O que deveria acontecer:**  
-Validar e rejeitar com 400 (erro de entrada), não 500 (erro interno).
+Login com controle no email:
+```
+Todos os acima    → 400
+tentativa_login   → 0 linhas criadas (validação anterior ao banco)
+```
 
-**Gravidade:** IMPORTANTE (validação de entrada não está tratando caso-limite)
+Cadastro com controle no nome: mesmo padrão (400).
 
----
+**Observação: Caracteres de categoria Cf passam (esperado)**
+```
+U+200B (zero-width space)           → PASSA (criado com sucesso)
+U+202E (right-to-left override)     → PASSA
+U+FEFF (zero-width no-break space)  → PASSA
+```
 
-### 3. MENOR: Set-Cookie sem atributo Secure em COOKIE_SECURE=false
+A validação rejeita categoria Cc (controle) + U+2028/U+2029, que é correto pois Cf (format) não quebra estrutura.
 
-**O que acontece:**  
-Conforme esperado por ADR-015, o atributo `Secure` não aparece quando COOKIE_SECURE=false em development. Isso é **correto** e está funcionando como intencionado.
-
-**Observação:**  
-OpenAPI documenta `Secure` na descrição do Set-Cookie, mas é correto omiti-lo em HTTP (development). Documentação poderia esclarecer isso, mas é detalhe menor.
-
-**Gravidade:** MENOR (comportamento correto, documentação apenas)
+Evidência: api/internal/http/controle_test.go contém 6 testes (NUL, BEL, \n, DEL, NEL, L/P separators) no cadastro, login e verificação de tentativa_login. Commit 42ecec6 adicionou função `temControle()` que valida antes do banco.
 
 ---
 
 ## Testes Que Passaram
 
-### Caminho Feliz
-- ✓ Cadastro com sucesso (201, usuário retornado com id, email, nome)
-- ✓ Login com credenciais corretas (200, usuário retornado, Set-Cookie presente)
-- ✓ GET /auth/eu com sessão válida (200, usuário retornado)
-- ✓ Logout revoga sessão no servidor (204, GET /auth/eu após logout retorna 401)
+### Caminho feliz
+- ✓ Cadastro com sucesso (201, {id, email, nome})
+- ✓ Login com credenciais corretas (200, Set-Cookie com HttpOnly/SameSite)
+- ✓ GET /auth/eu com sessão válida (200)
+- ✓ Logout revoga sessão (204, GET /auth/eu retorna 401)
 
 ### Sessões
-- ✓ Token revogado retorna 401 (conforme esperado)
+- ✓ Token_hash é SHA-256 do token (32 bytes no banco = 256 bits, confirmado por: token cookie MFDl02W4... → SHA-256: 3052592e... → banco: 32 bytes \x3052592e...)
+- ✓ Sessão expirada retorna 401 (alterado expira_em no banco para -1 dia, GET /auth/eu 200→401)
+- ✓ Token revogado retorna 401
 - ✓ Token adulterado retorna 401
-- ✓ Token truncado retorna 401
-- ✓ Token com espaços retorna 401
-- ✓ Dois logins geram tokens diferentes (independentes)
+- ✓ Dois logins geram tokens diferentes
 - ✓ Logout de uma sessão não afeta outra
 
 ### Enumeração
-- ✓ E-mail inexistente e senha errada: mesmo status 401, mesma mensagem "credenciais inválidas"
-- ✓ Timing: ambos levam ~80-85ms (sem diferença detectável)
-- ✓ Não há vetor de enumeração por resposta ou tempo
+- ✓ E-mail inexistente e senha errada: mesmo 401, mesmo corpo "credenciais inválidas"
+- ✓ Timing sem diferença detectável (ambos ~100-150ms)
 
-### Atraso Progressivo
-- ✓ Primeiras 3 falhas retornam 401
-- ✓ 4ª falha retorna 429 com Retry-After (2 segundos)
-- ✓ 5ª+ falhas continuam 429 sem verificar senha
-- ✓ Retry-After diminui conforme tempo passa
-- ✓ Sucesso de login reseta o contador
+### Atraso progressivo
+- ✓ Falhas 1-3: 401
+- ✓ Falha 4+: 429 com Retry-After
+- ✓ Sucesso reseta contador
+- ✓ Concorrência: 20 logins falhos simultâneos = 20 falhas no contador (sem race condition, confirmado por SELECT COUNT(*) FROM tentativa_login)
 
-### Validação de Entrada
+### Validação de entrada
 - ✓ Campo desconhecido rejeitado (400)
-- ✓ Senha < 12 caracteres rejeitada (400)
-- ✓ Senha > 128 caracteres rejeitada (400)
-- ✓ E-mail vazio rejeitado (400)
-- ✓ E-mail > 254 caracteres rejeitado (400)
+- ✓ Senha fora de [12, 128] rejeitada (400)
+- ✓ E-mail vazio ou > 254 caracteres rejeitado (400)
 - ✓ Nome > 100 caracteres rejeitado (400)
-- ✓ Content-Type text/plain rejeitado (415)
+- ✓ Content-Type != application/json rejeitado (415)
 - ✓ JSON malformado rejeitado (400)
 - ✓ Null em campo obrigatório rejeitado (400)
-- ✓ Número no lugar de string rejeitado (400)
+- ✓ Tipo errado rejeitado (400)
 - ✓ Corpo vazio rejeitado (400)
 - ✓ Corpo > 8 KiB rejeitado (400)
-- ✓ Injeção SQL escapada (tratada como string literal)
-- ✓ Injeção XSS escapada em JSON (caracteres convertidos para \uXXXX)
 
 ### Segurança
 - ✓ Senhas não aparecem em logs
-- ✓ Tokens/hashes de sessão não aparecem em logs
-- ✓ E-mails completos não aparecem em logs
+- ✓ Tokens e hashes não aparecem em logs
+- ✓ E-mails não aparecem em logs
 - ✓ Cookie HttpOnly presente
 - ✓ Cookie SameSite=Lax presente
-- ✓ COOKIE_SECURE=false recusa subir com APP_ENV=production
-- ✓ COOKIE_SECURE=false funciona com APP_ENV=development
+- ✓ Senha com caracteres de controle é aceita (não validada)
 
-### Esquema (OpenAPI Compliance)
-- ✓ POST /auth/cadastro responde com {id, email, nome} (sem adicional)
-- ✓ POST /auth/login responde com {id, email, nome} (sem adicional)
-- ✓ GET /auth/eu responde com {id, email, nome} (sem adicional)
-- ✓ E-mail duplicado retorna 409 com erro estruturado
-- ✓ GET /auth/eu sem sessão retorna 401
+### Compliance OpenAPI
+- ✓ POST /auth/cadastro retorna {id, email, nome}
+- ✓ POST /auth/login retorna {id, email, nome}
+- ✓ GET /auth/eu retorna {id, email, nome}
+- ✓ E-mail duplicado retorna 409
 - ✓ POST /auth/logout retorna 204
-
-### Suíte Automatizada
-- ✓ make test: 36 testes passaram
-- ✓ make lint: 0 issues
-- ✓ pnpm build: sucesso
 
 ---
 
 ## O que estes testes NÃO cobrem
 
-1. **Browser real:** Testes executados em jsdom (Node.js). Não foi verificado comportamento em navegador (cookies HTTPOnly, SameSite, Secure em diferentes navegadores). Idealmente rodar em Chrome, Firefox, Safari.
+1. **Browser real:** Testes executados em jsdom (Node.js). Não foi verificado comportamento em Chrome, Firefox, Safari (cookies HTTPOnly, SameSite em diferentes navegadores, localStorage vs. sessionStorage, redirecionamentos).
 
-2. **Rate limiting global:** Testado por IP 127.0.0.1. Não foi verificado se há limitação global (ex: 1000 tentativas/hora de todos os IPs combinados) ou se o atraso é por e-mail apenas.
+2. **Integração web-API:** Web testado em jsdom com mock HTTP. Não foi rodado navegador apontando para API real, observando fluxo completo de login/logout (incluindo redirect, refresh de página, re-autenticação).
 
-3. **Expiração de sessão:** Cookies têm Max-Age=604800 (7 dias). Não foi aguardado esse tempo para verificar se sessão expira. Requer teste de tempo longo ou manipulação de relogio do banco.
+3. **Resposta em caso de banco indisponível:** Postgres estava sempre disponível. Não foi testado GET /auth/eu ou POST /auth/logout com banco offline (503 vs 500).
 
-4. **MFA e troca de senha:** Mencionados em documentação, mas não implementados nesta fatia. Quando chegarem (F2, F3), precisam revisar autorização de revogação de sessão.
+4. **Comportamento de proxy/load balancer:** Testes contra localhost. X-Forwarded-For e detecção de IP real não foram testados. Rate limiting por IP é só por 127.0.0.1.
 
-5. **Idempotência do seed:** Código de seed parece idempotente (cria usuário se não existe), mas não foi testado múltiplas execuções sequenciais na mesma instância.
+5. **Observabilidade de caracteres invisíveis:** Cf (zero-width) passam validação. Não foi testado se o log, banco ou UI conseguem exibir/filtrar esses caracteres sem quebra. Observação: U+200B, U+202E, U+FEFF estão na entrada e no banco; seu impacto em UX não foi testado.
 
-6. **Migração de banco com dados:** Migrations foram aplicadas em banco vazio. Não foi testado re-run em banco com dados (ex: adição de coluna não-null sem default, drop de constraints, etc).
+6. **Seed:** Credenciais passadas via variável de ambiente (SEED_EMAIL, SEED_SENHA, SEED_NOME). Não foi testado se seed cria/ignora usuário existente ou se variáveis ausentes causam erro.
 
-7. **Concorrência no atraso:** Testado atraso com requisições sequenciais. Não foi testado se 10 requisições simultâneas ao mesmo e-mail incrementam o contador corretamente ou se há race condition.
+7. **Limpeza de tentativa_login:** Tabela cresce indefinidamente. Não há teste de retenção, limite de tamanho, ou limpeza de entradas antigas.
 
-8. **Comportamento de proxy/load balancer:** Testes direto contra a API em localhost. X-Forwarded-For e detecção de IP real não foram testados.
-
-9. **Integração web-API:** Web foi testado em jsdom com mock. Não foi rodado navegador apontando para API real verificando fluxo de login/logout de verdade (incluindo comportamento de cookies, redirecionamentos, etc).
-
-10. **Resposta em caso de banco indisponível:** Postgres estava sempre disponível. Não foi testado GET /auth/eu ou POST /auth/logout com banco offline (503 esperado vs 500).
-
-11. **Seed com credenciais em variável:** SEED_SENHA, SEED_EMAIL e SEED_NOME passadas via ambiente. Não foi testado comportamento se variáveis não forem setadas (erro esperado? usuário anônimo? seed skippado?).
-
-12. **Limites de tentativa_login:** Tabela tentativa_login pode crescer. Não foi testado limpeza de entradas antigas ou limite de tamanho.
+8. **Comportamento pós-429:** Após 429 com Retry-After=2, não foi testado se requisição imediata é bloqueada ou se só 2+ segundos destravam (teste atual só verifica que Retry-After diminui, não que é respeitado no cliente).
 
 ---
 
 ## Recomendação
 
-**Liberar com dívida registrada.**
+**Liberar.**
 
-- **BLOQUEANTE (F1):** Registrada como POST /auth/cadastro não desaparecer quando REGISTRO_ABERTO=false. Isso viola a spec e é vetor de enumeração (permite descobrir se registro está aberto).
-  
-- **IMPORTANTE (F1):** Caracteres de controle em e-mail causam 500 em vez de 400. Validação de entrada precisa ser mais robusta.
-
-- **Testes passaram:** Caminho feliz, atraso progressivo, enumeração, sessões independentes, revogação, segurança de logs — tudo está funcionando.
-
-- **Próximos passos:** Fixar os dois achados, depois testar em navegador real (não jsdom) e integração com web.
+- **Achados anteriores:** Os dois bloqueantes da 1ª rodada foram resolvidos (registro fechado agora retorna 404, caracteres de controle agora retornam 400).
+- **Evidência:** Todos os testes de QA passaram, incluindo rigor em concorrência e expiração.
+- **Próximos passos:** Testes em navegador real (F1 web) e integração com backend em ambiente de staging (antes da F2).
 
 ---
 
-**Hash de commit testado:** `a20d88b` (feat: adiciona login, logout e exibição do usuário logado no web)
+**Hash de commit testado:** `42ecec6` (fix: rejeita caractere de controle em e-mail e nome com 400 antes do banco)
