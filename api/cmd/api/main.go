@@ -29,6 +29,11 @@ func run() error {
 		port = "8080"
 	}
 
+	cookieSecure, err := leCookieSecure(os.Getenv("COOKIE_SECURE"), os.Getenv("APP_ENV"))
+	if err != nil {
+		return err
+	}
+
 	// Não ecoa o valor: a URL carrega a senha do banco.
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -47,7 +52,7 @@ func run() error {
 
 	srv := novoServidor(
 		listenAddr(os.Getenv("HOST"), port),
-		apihttp.NewRouter(pool, identidade.NovoServico(pool), os.Getenv("REGISTRO_ABERTO") == "true"),
+		apihttp.NewRouter(pool, identidade.NovoServico(pool), os.Getenv("REGISTRO_ABERTO") == "true", cookieSecure),
 	)
 
 	errCh := make(chan error, 1)

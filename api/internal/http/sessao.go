@@ -56,7 +56,7 @@ func euHandler(ident Identidade) http.HandlerFunc {
 
 // Sem exigeSessao de propósito: logout sem sessão válida também é 204, e a
 // revogação acontece no servidor, não só no cookie.
-func logoutHandler(ident Identidade) http.HandlerFunc {
+func logoutHandler(ident Identidade, cookieSecure bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		revogada := false
 		if cookie, err := r.Cookie(cookieSessao); err == nil && cookie.Value != "" {
@@ -74,7 +74,7 @@ func logoutHandler(ident Identidade) http.HandlerFunc {
 			Path:     "/",
 			MaxAge:   -1,
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   cookieSecure,
 			SameSite: http.SameSiteLaxMode,
 		})
 		slog.Info("logout", "sessao_revogada", revogada, "ip", ipDe(r))

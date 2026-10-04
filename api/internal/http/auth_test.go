@@ -33,7 +33,7 @@ type ambiente struct {
 func novoAmbiente(t *testing.T, registroAberto bool) *ambiente {
 	t.Helper()
 	pool := poolDeTeste(t)
-	return &ambiente{pool: pool, h: NewRouter(pool, identidade.NovoServico(pool), registroAberto)}
+	return &ambiente{pool: pool, h: NewRouter(pool, identidade.NovoServico(pool), registroAberto, true)}
 }
 
 func emailUnico(t *testing.T, pool *pgxpool.Pool) string {
@@ -309,7 +309,7 @@ func TestCadastroNormalizaEmailEBarraDuplicadoComOutraCaixa(t *testing.T) {
 
 func TestCadastroComBancoIndisponivelNaoVazaDetalhe(t *testing.T) {
 	pool := poolIndisponivel(t)
-	h := NewRouter(pool, identidade.NovoServico(pool), true)
+	h := NewRouter(pool, identidade.NovoServico(pool), true, true)
 	logBuf := capturaLog(t)
 
 	_, rec := postJSON(h, "/auth/cadastro", map[string]string{"email": "a@exemplo.test", "senha": senhaDeTeste})
@@ -543,7 +543,7 @@ func TestLoginRejeitaContentTypeQueNaoSejaJSON(t *testing.T) {
 
 func TestLoginComBancoIndisponivelNaoVazaDetalhe(t *testing.T) {
 	pool := poolIndisponivel(t)
-	h := NewRouter(pool, identidade.NovoServico(pool), true)
+	h := NewRouter(pool, identidade.NovoServico(pool), true, true)
 	logBuf := capturaLog(t)
 
 	_, rec := postJSON(h, "/auth/login", map[string]string{"email": "a@exemplo.test", "senha": senhaDeTeste})
@@ -760,7 +760,7 @@ func TestLogoutNaoRevogaSessaoDeOutroUsuario(t *testing.T) {
 
 func TestEuELogoutComBancoIndisponivelDao500SemVazar(t *testing.T) {
 	pool := poolIndisponivel(t)
-	h := NewRouter(pool, identidade.NovoServico(pool), true)
+	h := NewRouter(pool, identidade.NovoServico(pool), true, true)
 	c := &http.Cookie{Name: "ballast_sessao", Value: "qualquer"}
 	logBuf := capturaLog(t)
 
@@ -779,5 +779,26 @@ func TestEuELogoutComBancoIndisponivelDao500SemVazar(t *testing.T) {
 	}
 	if strings.Contains(logBuf.String(), "qualquer") {
 		t.Error("log contém o token")
+	}
+}
+
+// Com cookieSecure=false (só desenvolvimento, validado no startup) os cookies
+// perdem Secure e mantêm os outros atributos.
+func TestCookieSemSecureQuandoDesligado(t *testing.T) {
+	pool := poolDeTeste(t)
+	a := &ambiente{pool: pool, h: NewRouter(pool, identidade.NovoServico(pool), true, false)}
+	email := emailUnico(t, pool)
+	a.cadastra(t, email)
+
+	_, rec := postJSON(a.h, "/auth/login", map[string]string{"email": email, "senha": senhaDeTeste})
+	login := cookieDe(rec, "ballast_sessao")
+	if login == nil || login.Secure || !login.HttpOnly || login.SameSite != http.SameSiteLaxMode {
+		t.Errorf("cookie de login = %+v, want sem Secure, HttpOnly e Lax", login)
+	}
+
+	_, rec = postComCookie(a.h, "/auth/logout", &http.Cookie{Name: "ballast_sessao", Value: login.Value})
+	exp := cookieDe(rec, "ballast_sessao")
+	if exp == nil || exp.Secure || !exp.HttpOnly || exp.MaxAge >= 0 {
+		t.Errorf("cookie de logout = %+v, want sem Secure, HttpOnly e expirado", exp)
 	}
 }

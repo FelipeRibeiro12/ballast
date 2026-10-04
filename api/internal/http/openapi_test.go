@@ -144,7 +144,7 @@ func casosDeResposta() map[string]map[int]casoDeResposta {
 			},
 			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 				pool := poolIndisponivel(t)
-				h := NewRouter(pool, identidade.NovoServico(pool), true)
+				h := NewRouter(pool, identidade.NovoServico(pool), true, true)
 				return getComCookie(h, "/auth/eu", &http.Cookie{Name: "ballast_sessao", Value: "x"})
 			},
 		},
@@ -156,7 +156,7 @@ func casosDeResposta() map[string]map[int]casoDeResposta {
 			},
 			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 				pool := poolIndisponivel(t)
-				h := NewRouter(pool, identidade.NovoServico(pool), true)
+				h := NewRouter(pool, identidade.NovoServico(pool), true, true)
 				return postComCookie(h, "/auth/logout", &http.Cookie{Name: "ballast_sessao", Value: "x"})
 			},
 		},
@@ -183,7 +183,7 @@ func casosDeResposta() map[string]map[int]casoDeResposta {
 			},
 			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 				pool := poolIndisponivel(t)
-				h := NewRouter(pool, identidade.NovoServico(pool), true)
+				h := NewRouter(pool, identidade.NovoServico(pool), true, true)
 				return postJSON(h, "/auth/login", map[string]string{"email": "a@exemplo.test", "senha": senhaDeTeste})
 			},
 		},
@@ -216,7 +216,7 @@ func casosDeResposta() map[string]map[int]casoDeResposta {
 			},
 			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 				pool := poolIndisponivel(t)
-				h := NewRouter(pool, identidade.NovoServico(pool), true)
+				h := NewRouter(pool, identidade.NovoServico(pool), true, true)
 				return postJSON(h, "/auth/cadastro", map[string]string{"email": "a@exemplo.test", "senha": senhaDeTeste})
 			},
 		},
@@ -231,7 +231,7 @@ func casoHealth(newPool func(*testing.T) *pgxpool.Pool) casoDeResposta {
 	return func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 		rec := httptest.NewRecorder()
-		NewRouter(newPool(t), nil, false).ServeHTTP(rec, req)
+		NewRouter(newPool(t), nil, false, true).ServeHTTP(rec, req)
 		return req, rec
 	}
 }

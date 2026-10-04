@@ -175,7 +175,7 @@ const cookieSessao = "ballast_sessao"
 // quais e-mails têm conta.
 const erroCredenciais = "credenciais inválidas"
 
-func loginHandler(ident Identidade) http.HandlerFunc {
+func loginHandler(ident Identidade, cookieSecure bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req loginRequest
 		if !leCorpoJSON(w, r, &req) {
@@ -213,14 +213,14 @@ func loginHandler(ident Identidade) http.HandlerFunc {
 			return
 		}
 
-		// Secure sempre ligado, sem flag para desligar (ADR-015).
+		// Secure só é desligado em desenvolvimento; o startup recusa false fora dele.
 		http.SetCookie(w, &http.Cookie{
 			Name:     cookieSessao,
 			Value:    token,
 			Path:     "/",
 			MaxAge:   int(time.Until(expiraEm).Seconds()),
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   cookieSecure,
 			SameSite: http.SameSiteLaxMode,
 		})
 		slog.Info("login ok", "usuario_id", id, "ip", ipDe(r))

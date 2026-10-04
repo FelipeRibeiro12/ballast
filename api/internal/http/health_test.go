@@ -36,7 +36,7 @@ func TestHealthLeDoBanco(t *testing.T) {
 	pool := poolDeTeste(t)
 
 	rec := httptest.NewRecorder()
-	NewRouter(pool, nil, false).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	NewRouter(pool, nil, false, true).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
@@ -71,7 +71,7 @@ func TestHealthBancoInacessivel(t *testing.T) {
 	defer slog.SetDefault(anterior)
 
 	rec := httptest.NewRecorder()
-	NewRouter(pool, nil, false).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	NewRouter(pool, nil, false, true).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
@@ -95,7 +95,7 @@ func TestHealthRejectsOtherMethods(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	// O mux responde 405 antes de chegar no handler, então o pool não é usado.
-	NewRouter(nil, nil, false).ServeHTTP(rec, req)
+	NewRouter(nil, nil, false, true).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
