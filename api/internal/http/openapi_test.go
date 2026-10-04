@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,35 +36,46 @@ func loadSpec(t *testing.T) *openapi3.T {
 }
 
 // O ServeMux não permite enumerar as rotas registradas, então lemos os
-// literais passados a Handle/HandleFunc em router.go. Registro com padrão não
-// literal falha o teste, para não deixar uma rota escapar da conferência.
+// literais passados a Handle/HandleFunc em todos os .go não-teste do pacote.
+// Registro com padrão não literal falha o teste, para não deixar uma rota
+// escapar da conferência.
 func registeredRoutes(t *testing.T) []string {
 	t.Helper()
-	file, err := parser.ParseFile(token.NewFileSet(), "router.go", nil, 0)
+	arquivos, err := filepath.Glob("*.go")
 	if err != nil {
-		t.Fatalf("lê router.go: %v", err)
+		t.Fatalf("lista arquivos do pacote: %v", err)
 	}
 	var routes []string
-	ast.Inspect(file, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
+	fset := token.NewFileSet()
+	for _, arquivo := range arquivos {
+		if strings.HasSuffix(arquivo, "_test.go") {
+			continue
 		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || (sel.Sel.Name != "Handle" && sel.Sel.Name != "HandleFunc") {
-			return true
+		file, err := parser.ParseFile(fset, arquivo, nil, 0)
+		if err != nil {
+			t.Fatalf("lê %s: %v", arquivo, err)
 		}
-		lit, ok := call.Args[0].(*ast.BasicLit)
-		if !ok || lit.Kind != token.STRING {
-			t.Errorf("router.go: padrão de rota não literal em %s; o teste de aderência não consegue conferir", sel.Sel.Name)
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || (sel.Sel.Name != "Handle" && sel.Sel.Name != "HandleFunc") || len(call.Args) == 0 {
+				return true
+			}
+			lit, ok := call.Args[0].(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				t.Errorf("%s: padrão de rota não literal em %s; o teste de aderência não consegue conferir", arquivo, sel.Sel.Name)
+				return true
+			}
+			pattern, _ := strconv.Unquote(lit.Value)
+			routes = append(routes, pattern)
 			return true
-		}
-		pattern, _ := strconv.Unquote(lit.Value)
-		routes = append(routes, pattern)
-		return true
-	})
+		})
+	}
 	if len(routes) == 0 {
-		t.Fatal("nenhuma rota encontrada em router.go: a varredura está quebrada")
+		t.Fatal("nenhuma rota encontrada nos .go do pacote: a varredura está quebrada")
 	}
 	sort.Strings(routes)
 	return routes
@@ -113,38 +125,69 @@ func poolIndisponivel(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
+// Cada caso exercita uma rota até produzir o status indicado e devolve a
+// requisição e a resposta, para o teste conferir contra a spec.
+type casoDeResposta func(t *testing.T) (*http.Request, *httptest.ResponseRecorder)
+
+func casosDeResposta() map[string]map[int]casoDeResposta {
+	return map[string]map[int]casoDeResposta{
+		"GET /healthz": {
+			http.StatusOK:                 casoHealth(poolDeTeste),
+			http.StatusServiceUnavailable: casoHealth(poolIndisponivel),
+		},
+	}
+}
+
+func casoHealth(newPool func(*testing.T) *pgxpool.Pool) casoDeResposta {
+	return func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		rec := httptest.NewRecorder()
+		NewRouter(newPool(t)).ServeHTTP(rec, req)
+		return req, rec
+	}
+}
+
+// Os status esperados vêm da spec: status declarado sem caso falha o teste, e
+// caso para status que a spec não declara também.
 func TestRespostasSeguemASpec(t *testing.T) {
 	spec := loadSpec(t)
 	router, err := legacy.NewRouter(spec)
 	if err != nil {
 		t.Fatalf("monta roteador da spec: %v", err)
 	}
-
-	// Cada rota registrada precisa declarar aqui os status que a spec descreve.
-	cases := map[string]map[int]func(*testing.T) *pgxpool.Pool{
-		"GET /healthz": {
-			http.StatusOK:                 poolDeTeste,
-			http.StatusServiceUnavailable: poolIndisponivel,
-		},
-	}
+	casos := casosDeResposta()
 
 	for _, pattern := range registeredRoutes(t) {
-		statuses, ok := cases[pattern]
-		if !ok {
-			t.Errorf("rota %q sem caso de resposta neste teste", pattern)
-			continue
-		}
 		method, path := splitPattern(t, pattern)
-		for status, newPool := range statuses {
+		item := spec.Paths.Value(path)
+		if item == nil || item.GetOperation(method) == nil {
+			continue // TestRotasEstaoNaSpec já reporta
+		}
+		responses := item.GetOperation(method).Responses.Map()
+
+		esperados := map[int]bool{}
+		for codigo := range responses {
+			status, err := strconv.Atoi(codigo)
+			if err != nil {
+				t.Errorf("%s: resposta %q da spec não é um status numérico; o teste não deriva casos de default nem de faixas", pattern, codigo)
+				continue
+			}
+			esperados[status] = true
+			if casos[pattern][status] == nil {
+				t.Errorf("%s: status %d consta na spec e nenhum caso o exercita", pattern, status)
+			}
+		}
+		for status := range casos[pattern] {
+			if !esperados[status] {
+				t.Errorf("%s: caso para o status %d, que a spec não declara", pattern, status)
+			}
+		}
+
+		for status, caso := range casos[pattern] {
 			t.Run(pattern+" "+strconv.Itoa(status), func(t *testing.T) {
-				pool := newPool(t)
-
-				req := httptest.NewRequest(method, path, nil)
-				rec := httptest.NewRecorder()
-				NewRouter(pool).ServeHTTP(rec, req)
-
+				req, rec := caso(t)
 				if rec.Code != status {
-					t.Fatalf("status = %d, want %d", rec.Code, status)
+					t.Fatalf("status = %d, want %d (corpo: %s)", rec.Code, status, rec.Body.String())
 				}
 
 				route, pathParams, err := router.FindRoute(req)
