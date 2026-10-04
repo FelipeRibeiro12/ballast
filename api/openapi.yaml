@@ -7,8 +7,9 @@ paths:
     post:
       summary: Cria um usuário
       description: >
-        Só responde quando o cadastro está aberto (REGISTRO_ABERTO=true).
-        Fechado, a resposta é a mesma de uma rota que não existe.
+        A rota só existe quando REGISTRO_ABERTO=true. Fechado, ela não é
+        registrada e qualquer método em /auth/cadastro recebe o mesmo 404 de
+        um caminho desconhecido.
       operationId: postAuthCadastro
       requestBody:
         required: true
@@ -30,7 +31,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
         "404":
-          description: Cadastro fechado; corpo idêntico ao de rota inexistente, que não é JSON
+          description: 404 quando REGISTRO_ABERTO não é true; corpo idêntico ao de rota inexistente, que não é JSON
           content:
             text/plain:
               schema:

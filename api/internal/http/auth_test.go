@@ -159,6 +159,27 @@ func TestCadastroFechadoDevolve404IgualARotaInexistente(t *testing.T) {
 	}
 }
 
+// Fechado, a rota não existe no mux: qualquer método tem que dar o mesmo 404 de
+// um caminho desconhecido, senão o 405 denuncia que o cadastro existe.
+func TestCadastroFechadoTrataQualquerMetodoComoRotaInexistente(t *testing.T) {
+	a := novoAmbiente(t, false)
+	_, desconhecida := postJSON(a.h, "/auth/nao-existe", map[string]string{})
+
+	for _, metodo := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch, http.MethodOptions} {
+		rec := httptest.NewRecorder()
+		a.h.ServeHTTP(rec, httptest.NewRequest(metodo, "/auth/cadastro", nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s: status = %d, want 404", metodo, rec.Code)
+		}
+		if rec.Header().Get("Allow") != "" {
+			t.Errorf("%s: cabeçalho Allow = %q denuncia a rota", metodo, rec.Header().Get("Allow"))
+		}
+		if metodo != http.MethodHead && rec.Body.String() != desconhecida.Body.String() {
+			t.Errorf("%s: corpo %q difere do 404 de rota desconhecida %q", metodo, rec.Body, desconhecida.Body)
+		}
+	}
+}
+
 func TestCadastroFechadoNaoDependeDoCorpo(t *testing.T) {
 	a := novoAmbiente(t, false)
 	// Mesmo com content-type errado, a rota fechada responde 404 e não 415.

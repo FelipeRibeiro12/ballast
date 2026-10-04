@@ -55,13 +55,8 @@ type cadastroRequest struct {
 	Nome  *string `json:"nome"`
 }
 
-func cadastroHandler(ident Identidade, registroAberto bool) http.HandlerFunc {
+func cadastroHandler(ident Identidade) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Antes de olhar o corpo: fechado tem que ser indistinguível de rota que não existe.
-		if !registroAberto {
-			http.NotFound(w, r)
-			return
-		}
 		var req cadastroRequest
 		if !leCorpoJSON(w, r, &req) {
 			return
