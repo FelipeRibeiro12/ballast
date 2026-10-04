@@ -43,6 +43,12 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Antes de aceitar conexões: o argon2 leva centenas de ms e a primeira
+	// tentativa com e-mail inexistente não pode ser a que paga esse custo.
+	if err := identidade.AquecerHashFicticio(); err != nil {
+		return fmt.Errorf("aquece o hash fictício: %w", err)
+	}
+
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		// O erro de parse do pgx não inclui a senha, mas não arrisco embrulhar a URL.

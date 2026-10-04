@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
-	"sync"
+	"sync/atomic"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -62,19 +62,32 @@ func VerificaSenha(senha, hash string) bool {
 	return subtle.ConstantTimeCompare(obtido, esperado) == 1
 }
 
-// Hash gerado uma vez, sob demanda, para o login de e-mail inexistente gastar
-// o mesmo tempo de um login de e-mail real.
-var hashFicticio = sync.OnceValue(func() string {
+// Hash descartável para o login de e-mail inexistente gastar o mesmo tempo de
+// um login de e-mail real. Gerado no startup por AquecerHashFicticio; se
+// alguém esquecer, a primeira chamada gera (e a corrida só duplica trabalho).
+var hashFicticio atomic.Pointer[string]
+
+// AquecerHashFicticio gera o hash antes de o servidor aceitar conexões, para a
+// primeira tentativa com e-mail inexistente não ser mais lenta que as outras.
+func AquecerHashFicticio() error {
 	hash, err := HashSenha("senha-ficticia-sem-uso")
 	if err != nil {
-		panic(err)
+		return err
 	}
-	return hash
-})
+	hashFicticio.Store(&hash)
+	return nil
+}
 
 // VerificaSenhaFicticia roda o argon2 contra um hash descartável e sempre
 // devolve false.
 func VerificaSenhaFicticia(senha string) bool {
-	VerificaSenha(senha, hashFicticio())
+	p := hashFicticio.Load()
+	if p == nil {
+		if err := AquecerHashFicticio(); err != nil {
+			return false
+		}
+		p = hashFicticio.Load()
+	}
+	VerificaSenha(senha, *p)
 	return false
 }

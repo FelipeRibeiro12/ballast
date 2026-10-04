@@ -62,3 +62,20 @@ func TestVerificaSenhaFicticiaNuncaAceita(t *testing.T) {
 		t.Error("verificador fictício aceitou uma senha")
 	}
 }
+
+func TestAquecerHashFicticioPreencheOHashAntesDaPrimeiraVerificacao(t *testing.T) {
+	hashFicticio.Store(nil)
+	if err := AquecerHashFicticio(); err != nil {
+		t.Fatalf("AquecerHashFicticio: %v", err)
+	}
+	p := hashFicticio.Load()
+	if p == nil || !strings.HasPrefix(*p, "$argon2id$") {
+		t.Fatalf("hash fictício após aquecer = %v, want um hash argon2id", p)
+	}
+	if VerificaSenhaFicticia("qualquer coisa") {
+		t.Error("verificador fictício aceitou uma senha")
+	}
+	if hashFicticio.Load() != p {
+		t.Error("a verificação regenerou o hash em vez de reaproveitar o aquecido")
+	}
+}
