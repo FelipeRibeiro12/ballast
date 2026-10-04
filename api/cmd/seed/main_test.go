@@ -27,7 +27,9 @@ func ambienteSeed(t *testing.T, email, senha, nome string) (func(string) string,
 	}
 	t.Cleanup(pool.Close)
 	t.Cleanup(func() {
-		pool.Exec(context.Background(), "DELETE FROM usuario WHERE email = lower($1)", email)
+		if _, err := pool.Exec(context.Background(), "DELETE FROM usuario WHERE email = lower($1)", email); err != nil {
+			t.Errorf("limpa usuário de teste: %v", err)
+		}
 	})
 	env := map[string]string{"DATABASE_URL": url, "SEED_EMAIL": email, "SEED_SENHA": senha, "SEED_NOME": nome}
 	return func(k string) string { return env[k] }, pool
@@ -60,9 +62,9 @@ func TestSeedCriaUsuarioEEhIdempotente(t *testing.T) {
 		t.Errorf("saída = %q, want dizer que já existe", saida.String())
 	}
 	var n int
-	pool.QueryRow(context.Background(), "SELECT count(*) FROM usuario WHERE email = 'seed-teste@exemplo.test'").Scan(&n)
-	if n != 1 {
-		t.Errorf("%d usuários, want 1", n)
+	err = pool.QueryRow(context.Background(), "SELECT count(*) FROM usuario WHERE email = 'seed-teste@exemplo.test'").Scan(&n)
+	if err != nil || n != 1 {
+		t.Errorf("%d usuários (err=%v), want 1", n, err)
 	}
 }
 
