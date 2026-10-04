@@ -171,6 +171,9 @@ digitado, inclusive inexistente, sem limpeza hoje) e limpar sessões expiradas.
 - **DÍVIDA** — `pnpm build` do web lê `../api/openapi.yaml`; se a hospedagem do PWA usar `web/` como raiz, o build falha. Conferir ao escolher a hospedagem (ou deixar a geração só no CI).
 - **DÍVIDA** — `COOKIE_SECURE=false` em desenvolvimento (Safari recusa cookie `Secure` sobre HTTP). Servir o dev sobre HTTPS com certificado local (mkcert) e aposentar a flag. A API já se recusa a subir com a flag falsa fora de `APP_ENV=development`.
 - **DÍVIDA** — Sessão expirada ou revogada fica na tabela `sessao` sem limpeza. Resolver quando o volume importar ou na F20.5.
+- **DÍVIDA** — E-mail e nome aceitam caracteres invisíveis da categoria Cf (U+200B, U+202E de inversão bidi, U+FEFF): dois e-mails que parecem iguais na tela e são diferentes, ou nome que embaralha a exibição. Decidir a regra (rejeitar Cf ou normalizar) na fatia que primeiro exibir nome de outra pessoa.
+- **DÍVIDA** — `cmd/seed` não está provado usando a mesma validação de e-mail e nome do cadastro (controle, tamanho). Conferir e unificar.
+- **DÍVIDA** — Nenhuma verificação em navegador real: o fluxo login → `/auth/eu` → logout com o cookie de verdade, o layout em 360px e o foco só foram vistos em jsdom e por curl. Fazer à mão antes de a F2 começar.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
