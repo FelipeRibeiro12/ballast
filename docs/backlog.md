@@ -150,6 +150,11 @@ nenhuma extensão instalada.
 ### F20.5 — Rate limit na borda
 Limite por IP e por rota na entrada da API (infra). É esta fatia que destrava
 `REGISTRO_ABERTO=true`: sem ela o endpoint de cadastro aberto não existe.
+Tem de existir antes do primeiro deploy público, não só antes de abrir o
+cadastro: o login sem limite de concorrência aloca 64 MiB de argon2 por
+tentativa (auditoria de segurança da F1, M3), e o IP do log vem de
+`RemoteAddr`, que atrás de proxy é o IP do proxy (B3). Inclui um semáforo no
+argon2.
 Também precisa conter o crescimento de `tentativa_login` (uma linha por e-mail
 digitado, inclusive inexistente, sem limpeza hoje) e limpar sessões expiradas.
 
@@ -174,6 +179,8 @@ digitado, inclusive inexistente, sem limpeza hoje) e limpar sessões expiradas.
 - **DÍVIDA** — E-mail e nome aceitam caracteres invisíveis da categoria Cf (U+200B, U+202E de inversão bidi, U+FEFF): dois e-mails que parecem iguais na tela e são diferentes, ou nome que embaralha a exibição. Decidir a regra (rejeitar Cf ou normalizar) na fatia que primeiro exibir nome de outra pessoa.
 - **DÍVIDA** — `cmd/seed` não está provado usando a mesma validação de e-mail e nome do cadastro (controle, tamanho). Conferir e unificar.
 - **DÍVIDA** — Nenhuma verificação em navegador real: o fluxo login → `/auth/eu` → logout com o cookie de verdade, o layout em 360px e o foco só foram vistos em jsdom e por curl. Fazer à mão antes de a F2 começar.
+- **DÍVIDA** — Atraso de login chaveado só pelo e-mail permite a um terceiro que conheça o e-mail da vítima mantê-la sob atraso (até 15 min) com uma requisição por janela (auditoria F1, M2). Sem bloqueio de conta, mas é negação de serviço parcial. Decisão de produto pendente: atraso por e-mail+IP, ou segundo fator/recuperação (F20). Revisar na F20.5.
+- **DÍVIDA** — Endurecimentos baixos da auditoria da F1 (B4): cookie com prefixo `__Host-`, cabeçalho `X-Content-Type-Options: nosniff`, limpeza de sessões. Aceitos: B1 (409 do cadastro enumera e-mail só com `REGISTRO_ABERTO=true`) e B2 (`.env.example` de dev com `COOKIE_SECURE=false`; a guarda por `APP_ENV` cobre a cópia sem edição fora de dev).
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
