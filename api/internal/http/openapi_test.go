@@ -14,7 +14,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/FelipeRibeiro12/ballast/internal/identidade"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers/legacy"
@@ -144,7 +143,7 @@ func casosDeResposta() map[string]map[int]casoDeResposta {
 			},
 			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 				pool := poolIndisponivel(t)
-				h := NewRouter(pool, identidade.NovoServico(pool), true, true)
+				h := NewRouter(pool, servicoDeTeste(pool), true, true)
 				return getComCookie(h, "/auth/eu", &http.Cookie{Name: "ballast_sessao", Value: "x"})
 			},
 		},
@@ -156,7 +155,7 @@ func casosDeResposta() map[string]map[int]casoDeResposta {
 			},
 			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 				pool := poolIndisponivel(t)
-				h := NewRouter(pool, identidade.NovoServico(pool), true, true)
+				h := NewRouter(pool, servicoDeTeste(pool), true, true)
 				return postComCookie(h, "/auth/logout", &http.Cookie{Name: "ballast_sessao", Value: "x"})
 			},
 		},
@@ -183,7 +182,7 @@ func casosDeResposta() map[string]map[int]casoDeResposta {
 			},
 			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 				pool := poolIndisponivel(t)
-				h := NewRouter(pool, identidade.NovoServico(pool), true, true)
+				h := NewRouter(pool, servicoDeTeste(pool), true, true)
 				return postJSON(h, "/auth/login", map[string]string{"email": "a@exemplo.test", "senha": senhaDeTeste})
 			},
 		},
@@ -216,7 +215,7 @@ func casosDeResposta() map[string]map[int]casoDeResposta {
 			},
 			http.StatusInternalServerError: func(t *testing.T) (*http.Request, *httptest.ResponseRecorder) {
 				pool := poolIndisponivel(t)
-				h := NewRouter(pool, identidade.NovoServico(pool), true, true)
+				h := NewRouter(pool, servicoDeTeste(pool), true, true)
 				return postJSON(h, "/auth/cadastro", map[string]string{"email": "a@exemplo.test", "senha": senhaDeTeste})
 			},
 		},

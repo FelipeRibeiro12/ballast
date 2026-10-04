@@ -16,21 +16,32 @@ import (
 // O hash guarda os parâmetros em que foi gerado, então subir estes valores no
 // futuro não invalida as senhas existentes.
 const (
-	argonMemoriaKiB = 64 * 1024
-	argonIteracoes  = 3
-	argonParalelo   = 2
 	argonSaltBytes  = 16
 	argonSaidaBytes = 32
 )
 
+type ParametrosArgon struct {
+	MemoriaKiB uint32
+	Iteracoes  uint32
+	Paralelo   uint8
+}
+
+var parametrosProducao = ParametrosArgon{MemoriaKiB: 64 * 1024, Iteracoes: 3, Paralelo: 2}
+
 func HashSenha(senha string) (string, error) {
+	return HashSenhaCom(senha, parametrosProducao)
+}
+
+// HashSenhaCom existe para a suíte de testes usar parâmetros baratos; o código
+// de produção chama HashSenha.
+func HashSenhaCom(senha string, p ParametrosArgon) (string, error) {
 	salt := make([]byte, argonSaltBytes)
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	chave := argon2.IDKey([]byte(senha), salt, argonIteracoes, argonMemoriaKiB, argonParalelo, argonSaidaBytes)
+	chave := argon2.IDKey([]byte(senha), salt, p.Iteracoes, p.MemoriaKiB, p.Paralelo, argonSaidaBytes)
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
-		argon2.Version, argonMemoriaKiB, argonIteracoes, argonParalelo,
+		argon2.Version, p.MemoriaKiB, p.Iteracoes, p.Paralelo,
 		base64.RawStdEncoding.EncodeToString(salt),
 		base64.RawStdEncoding.EncodeToString(chave)), nil
 }

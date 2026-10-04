@@ -16,15 +16,30 @@ const pgUniqueViolation = "23505"
 // Servico assume entrada já validada e normalizada pela borda (e-mail em
 // minúsculas, tamanhos checados): a regra de formato mora no handler.
 type Servico struct {
-	pool *pgxpool.Pool
+	pool       *pgxpool.Pool
+	parametros ParametrosArgon
 }
 
-func NovoServico(pool *pgxpool.Pool) *Servico { return &Servico{pool: pool} }
+type Opcao func(*Servico)
+
+// ComParametrosDeHash troca os parâmetros do argon2 no cadastro. É para testes:
+// o main não passa opções e usa os de produção.
+func ComParametrosDeHash(p ParametrosArgon) Opcao {
+	return func(s *Servico) { s.parametros = p }
+}
+
+func NovoServico(pool *pgxpool.Pool, opcoes ...Opcao) *Servico {
+	s := &Servico{pool: pool, parametros: parametrosProducao}
+	for _, aplica := range opcoes {
+		aplica(s)
+	}
+	return s
+}
 
 // Cadastra devolve criado=false quando o e-mail já existe. O hash é calculado
 // antes do INSERT para que e-mail repetido e e-mail novo custem o mesmo tempo.
 func (s *Servico) Cadastra(ctx context.Context, email, senha string, nome *string) (id string, criado bool, err error) {
-	hash, err := HashSenha(senha)
+	hash, err := HashSenhaCom(senha, s.parametros)
 	if err != nil {
 		return "", false, err
 	}

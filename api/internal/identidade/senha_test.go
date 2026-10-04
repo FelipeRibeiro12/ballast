@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+var parametrosBaratos = ParametrosArgon{MemoriaKiB: 8, Iteracoes: 1, Paralelo: 1}
+
 func TestHashSenhaUsaFormatoPHCComOsParametrosDefinidos(t *testing.T) {
 	hash, err := HashSenha("uma senha bem longa")
 	if err != nil {
@@ -22,17 +24,17 @@ func TestHashSenhaUsaFormatoPHCComOsParametrosDefinidos(t *testing.T) {
 }
 
 func TestHashSenhaGeraSaltDiferenteACadaChamada(t *testing.T) {
-	a, _ := HashSenha("mesma senha longa")
-	b, _ := HashSenha("mesma senha longa")
+	a, _ := HashSenhaCom("mesma senha longa", parametrosBaratos)
+	b, _ := HashSenhaCom("mesma senha longa", parametrosBaratos)
 	if a == b {
 		t.Error("dois hashes da mesma senha são idênticos: salt não está variando")
 	}
 }
 
 func TestVerificaSenha(t *testing.T) {
-	hash, err := HashSenha("senha correta 123")
+	hash, err := HashSenhaCom("senha correta 123", parametrosBaratos)
 	if err != nil {
-		t.Fatalf("HashSenha: %v", err)
+		t.Fatalf("HashSenhaCom: %v", err)
 	}
 	if !VerificaSenha("senha correta 123", hash) {
 		t.Error("senha correta rejeitada")
@@ -77,5 +79,15 @@ func TestAquecerHashFicticioPreencheOHashAntesDaPrimeiraVerificacao(t *testing.T
 	}
 	if hashFicticio.Load() != p {
 		t.Error("a verificação regenerou o hash em vez de reaproveitar o aquecido")
+	}
+}
+
+func TestHashSenhaComGravaOsParametrosRecebidos(t *testing.T) {
+	hash, err := HashSenhaCom("uma senha bem longa", parametrosBaratos)
+	if err != nil {
+		t.Fatalf("HashSenhaCom: %v", err)
+	}
+	if !strings.HasPrefix(hash, "$argon2id$v=19$m=8,t=1,p=1$") {
+		t.Errorf("hash = %q, prefixo inesperado", hash)
 	}
 }

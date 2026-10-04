@@ -23,6 +23,46 @@ import (
 
 const senhaDeTeste = "senha-de-teste-12345"
 
+// Parâmetros baratos só para a suíte: com os de produção (64 MiB) cada usuário
+// de teste custa centenas de ms. Só o teste de parâmetros de produção os usa.
+var hashBarato = identidade.ParametrosArgon{MemoriaKiB: 8, Iteracoes: 1, Paralelo: 1}
+
+func servicoDeTeste(pool *pgxpool.Pool) *identidade.Servico {
+	return identidade.NovoServico(pool, identidade.ComParametrosDeHash(hashBarato))
+}
+
+func hashGravado(t *testing.T, pool *pgxpool.Pool, email string) string {
+	t.Helper()
+	var hash string
+	if err := pool.QueryRow(context.Background(), "SELECT senha_hash FROM usuario WHERE email = $1", email).Scan(&hash); err != nil {
+		t.Fatalf("lê senha_hash: %v", err)
+	}
+	return hash
+}
+
+func TestCadastroUsaOsParametrosDeHashInjetados(t *testing.T) {
+	a := novoAmbiente(t, true)
+	email := emailUnico(t, a.pool)
+	a.cadastra(t, email)
+	if hash := hashGravado(t, a.pool, email); !strings.HasPrefix(hash, "$argon2id$v=19$m=8,t=1,p=1$") {
+		t.Errorf("hash = %q, want os parâmetros baratos injetados", hash)
+	}
+}
+
+// O único teste da suíte HTTP com os parâmetros reais: garante que o serviço
+// montado como no main (sem opções) grava o hash com os valores de produção.
+func TestCadastroSemOpcoesUsaOsParametrosDeProducao(t *testing.T) {
+	pool := poolDeTeste(t)
+	h := NewRouter(pool, identidade.NovoServico(pool), true, true)
+	email := emailUnico(t, pool)
+	if _, rec := postJSON(h, "/auth/cadastro", map[string]string{"email": email, "senha": senhaDeTeste}); rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d (corpo: %s)", rec.Code, rec.Body)
+	}
+	if hash := hashGravado(t, pool, email); !strings.HasPrefix(hash, "$argon2id$v=19$m=65536,t=3,p=2$") {
+		t.Errorf("hash = %q, want os parâmetros de produção", hash)
+	}
+}
+
 // Integração com o Postgres real e o serviço de identidade de verdade: é a
 // única composição que prova que o SQL, o hash e o handler funcionam juntos.
 type ambiente struct {
@@ -33,7 +73,7 @@ type ambiente struct {
 func novoAmbiente(t *testing.T, registroAberto bool) *ambiente {
 	t.Helper()
 	pool := poolDeTeste(t)
-	return &ambiente{pool: pool, h: NewRouter(pool, identidade.NovoServico(pool), registroAberto, true)}
+	return &ambiente{pool: pool, h: NewRouter(pool, servicoDeTeste(pool), registroAberto, true)}
 }
 
 func emailUnico(t *testing.T, pool *pgxpool.Pool) string {
@@ -309,7 +349,7 @@ func TestCadastroNormalizaEmailEBarraDuplicadoComOutraCaixa(t *testing.T) {
 
 func TestCadastroComBancoIndisponivelNaoVazaDetalhe(t *testing.T) {
 	pool := poolIndisponivel(t)
-	h := NewRouter(pool, identidade.NovoServico(pool), true, true)
+	h := NewRouter(pool, servicoDeTeste(pool), true, true)
 	logBuf := capturaLog(t)
 
 	_, rec := postJSON(h, "/auth/cadastro", map[string]string{"email": "a@exemplo.test", "senha": senhaDeTeste})
@@ -543,7 +583,7 @@ func TestLoginRejeitaContentTypeQueNaoSejaJSON(t *testing.T) {
 
 func TestLoginComBancoIndisponivelNaoVazaDetalhe(t *testing.T) {
 	pool := poolIndisponivel(t)
-	h := NewRouter(pool, identidade.NovoServico(pool), true, true)
+	h := NewRouter(pool, servicoDeTeste(pool), true, true)
 	logBuf := capturaLog(t)
 
 	_, rec := postJSON(h, "/auth/login", map[string]string{"email": "a@exemplo.test", "senha": senhaDeTeste})
@@ -760,7 +800,7 @@ func TestLogoutNaoRevogaSessaoDeOutroUsuario(t *testing.T) {
 
 func TestEuELogoutComBancoIndisponivelDao500SemVazar(t *testing.T) {
 	pool := poolIndisponivel(t)
-	h := NewRouter(pool, identidade.NovoServico(pool), true, true)
+	h := NewRouter(pool, servicoDeTeste(pool), true, true)
 	c := &http.Cookie{Name: "ballast_sessao", Value: "qualquer"}
 	logBuf := capturaLog(t)
 
@@ -786,7 +826,7 @@ func TestEuELogoutComBancoIndisponivelDao500SemVazar(t *testing.T) {
 // perdem Secure e mantêm os outros atributos.
 func TestCookieSemSecureQuandoDesligado(t *testing.T) {
 	pool := poolDeTeste(t)
-	a := &ambiente{pool: pool, h: NewRouter(pool, identidade.NovoServico(pool), true, false)}
+	a := &ambiente{pool: pool, h: NewRouter(pool, servicoDeTeste(pool), true, false)}
 	email := emailUnico(t, pool)
 	a.cadastra(t, email)
 
