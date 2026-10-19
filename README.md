@@ -30,7 +30,8 @@ make dev
 Preencha `.env` no formato `CHAVE=valor`, sem aspas, `$` ou `#`:
 
 - `DATABASE_URL`: `jdbc:postgresql://localhost:5432/<POSTGRES_DB>`
-- `DB_USER` e `DB_PASSWORD`: usuário e senha que a API usa. Repita os valores de `POSTGRES_USER` e `POSTGRES_PASSWORD`.
+- `DB_USER` e `DB_PASSWORD`: papel que a API usa, só com DML (ADR-021). Escolha valores **diferentes** de `POSTGRES_USER`; o Compose cria o papel no init do volume novo.
+- `DB_MIGRATION_USER` e `DB_MIGRATION_PASSWORD`: dono do schema, usado só pelo Flyway. No dev, repita `POSTGRES_USER` e `POSTGRES_PASSWORD`.
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: o Compose usa para criar o banco na primeira subida.
 - `HOST` (padrão `127.0.0.1`) e `PORT` (padrão `8080`): onde a API escuta.
 
