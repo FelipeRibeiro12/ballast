@@ -1,107 +1,95 @@
 # Ballast
 
-App de controle financeiro pessoal: fiat e cripto no mesmo lugar, com recorrência, cartão de crédito parcelado, metas e projeção de saldo. Leia a visão do produto em `docs/visao.md` e as decisões de arquitetura em `docs/adr-*.md`.
+App de controle financeiro pessoal: fiat e cripto no mesmo lugar, com recorrência, cartão de crédito parcelado, metas e projeção de saldo.
+
+Hoje a API (Java 25, Spring Boot 4) responde só `GET /healthz`, que confere a conexão com o Postgres. A web mostra o resultado.
+
+Visão do produto em `docs/visao.md`. Decisões em `docs/adr-*.md`.
 
 ## Pré-requisitos
 
-- Go 1.27.1
-- Node 26
-- pnpm 12.8.1 (presente no `web/package.json`)
-- Docker com Docker Compose
-- golangci-lint v2.14.0 ou superior (`brew install golangci-lint`; confirme com `golangci-lint --version`)
+- JDK 25, com `JAVA_HOME` apontando para ele
+- Docker com Docker Compose (Postgres local e Testcontainers nos testes)
+- Node 26 (versão usada no CI) e pnpm 12.8.1 (campo `packageManager` do `web/package.json`)
 
-## Setup
+Maven não precisa estar instalado: a API usa o wrapper `api/mvnw`.
 
-Copie o arquivo de variáveis de ambiente:
+## Como rodar
 
-```bash
-cp .env.example .env
-```
-
-Preencha em `.env`:
-- `POSTGRES_USER`: usuário do banco (ex.: `postgres`)
-- `POSTGRES_PASSWORD`: senha (sem aspas, `$` ou `#`)
-- `POSTGRES_DB`: nome do banco (ex.: `ballast`)
-- `DATABASE_URL`: string de conexão (ex.: `postgres://postgres:suasenha@localhost:5432/ballast`); caracteres especiais na senha (`@`, `/`, `:`) quebram a URL — use apenas letras e números
-- `SEED_EMAIL`, `SEED_SENHA`, `SEED_NOME`: dados do primeiro usuário (senha de 12 a 128 caracteres)
-- `APP_ENV=development` e `COOKIE_SECURE=false`: desenvolvimento local (Safari recusa cookie Secure sobre HTTP)
-
-As demais chaves já têm valor no `.env.example`. `COINGECKO_API_URL` não é usada ainda.
-
-A chave `.env` real nunca entra no repositório.
-
-Instale dependências, suba o banco e aplique migrations:
+No macOS, o OpenJDK do Homebrew é keg-only:
 
 ```bash
+brew install openjdk@25
+export JAVA_HOME="$(brew --prefix openjdk@25)"   # fish: set -gx JAVA_HOME (brew --prefix openjdk@25)
+cp .env.example .env                              # depois preencha o .env
 make setup
 make db-up
-make migrate
-```
-
-Se `make migrate` falhar com "password authentication failed", o banco já existiu com outra senha. Limpe com `docker compose down -v` e repita `make db-up` e `make migrate`.
-
-## Rodar
-
-Depois de `make setup` e `make migrate`, crie o primeiro usuário:
-
-```bash
-make seed
 make dev
 ```
 
-Abra `http://localhost:5173` e entre com `SEED_EMAIL` e `SEED_SENHA`.
+Preencha `.env` no formato `CHAVE=valor`, sem aspas, `$` ou `#`:
 
-A API sobe em `http://localhost:8080/healthz`, web em `http://localhost:5173`. `/healthz` confirma que o banco está respondendo.
+- `DATABASE_URL`: `jdbc:postgresql://localhost:5432/<POSTGRES_DB>`
+- `DB_USER` e `DB_PASSWORD`: usuário e senha que a API usa. Repita os valores de `POSTGRES_USER` e `POSTGRES_PASSWORD`.
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: o Compose usa para criar o banco na primeira subida.
+- `HOST` (padrão `127.0.0.1`) e `PORT` (padrão `8080`): onde a API escuta.
 
-Por padrão, a API escuta só em 127.0.0.1. Em container ou produção, defina `HOST=0.0.0.0` no `.env`.
+`COINGECKO_API_URL` está no `.env.example`, mas ainda não é usada.
 
-Para rodar separado: `make dev-api` (só backend) ou `make dev-web` (só frontend).
+As migrations rodam sozinhas quando a API sobe, pelo Flyway. Não há comando separado.
 
-O proxy do Vite repassa `/auth` e `/healthz` para a API; mude o alvo com `API_PROXY_TARGET` (padrão `http://localhost:8080`).
+- API: `http://127.0.0.1:8080/healthz`. Responde 503 quando o banco não responde.
+- Web: `http://localhost:5173` (porta padrão do Vite).
 
-## Autenticação
+`make dev` sobe API e web juntas. `make dev-api` e `make dev-web` sobem cada uma.
 
-Rotas: `POST /auth/cadastro` (só com `REGISTRO_ABERTO=true`), `POST /auth/login`, `POST /auth/logout`, `GET /auth/eu`. O contrato está em `api/openapi.yaml`.
+O proxy do Vite (`web/vite.config.ts`) repassa `/healthz` para `http://localhost:8080` fixo. Se mudar `PORT`, mude também o proxy.
 
-Após três falhas consecutivas de senha no mesmo e-mail, a API responde 429 com `Retry-After` e o atraso dobra a cada falha, até 15 minutos. Não bloqueia a conta.
+### Se você rodou a versão em Go
+
+O volume do Postgres local tem tabelas criadas pelo goose e nenhum histórico do Flyway. O Flyway recusa subir nesse estado. O `.env` antigo também não serve: `DATABASE_URL` estava no formato `postgres://` e faltam `DB_USER` e `DB_PASSWORD`.
+
+Para recomeçar, apagando os dados locais de desenvolvimento:
+
+```bash
+docker compose down -v
+cp .env.example .env   # sobrescreve o .env antigo; preencha de novo
+make db-up
+```
 
 ## Testar e construir
 
 ```bash
-make test    # testes de API e web
-make lint    # linter de Go (go vet, golangci-lint) e web (oxlint)
-make build   # binário da API e build de produção da web
+make test    # testes da API (sobem o Postgres com Testcontainers) e da web
+make lint    # spotless na API e oxlint na web
+make build   # jar da API e build de produção da web
 ```
 
-Comandos por pacote: `make test-api`, `make test-web`, `make build-api`, `make build-web`.
-
-Os testes de integração do Go precisam de `DATABASE_URL` definida.
+`make test` precisa do Docker rodando e de `make setup` feito antes. Não precisa de `.env` nem de banco subido.
 
 ## Contrato da API
 
-A spec OpenAPI está em `api/openapi.yaml`. Os tipos TypeScript são gerados para `web/src/api/schema.d.ts`.
+`api/openapi.yaml` é gerado do código pelo springdoc e commitado (ADR-019). O teste `OpenApiSpecTest`, dentro do `make test`, falha se o arquivo commitado diverge do gerado.
 
-Quando você altera a spec:
+Ao mudar rota ou DTO:
 
 ```bash
-pnpm --dir web generate:api
+make spec
 git add api/openapi.yaml web/src/api/schema.d.ts
 ```
 
-O `pnpm build` (web) já executa `generate:api` antes de compilar. O CI falha se o arquivo gerado divergir do commitado. O teste do Go (`api/internal/http/openapi_test.go`) valida que toda rota do router consta na spec, e vice-versa.
-
-Rota nova entra na spec no mesmo PR da implementação.
+`make spec` regenera a spec e o cliente TypeScript.
 
 ## Estrutura
 
 ```
 api/
-├── cmd/api/       # binário
-├── internal/      # pacotes privados (contas, lançamentos, recorrência, cartão, etc)
-└── migrations/    # esquema do banco
+├── mvnw                           # wrapper do Maven
+├── openapi.yaml                   # contrato gerado do código
+└── src/main/
+    ├── java/com/felipe/ballast/   # um pacote por contexto; hoje: health, openapi
+    └── resources/db/migration/    # migrations Flyway (V<n>__descricao.sql)
 web/
-└── src/           # React + Vite
-docs/             # visão, ADRs, contratos
+└── src/                           # React + Vite
+docs/                              # visão, ADRs, contratos, backlog
 ```
-
-Pacotes não importam internals de outros pacotes — a comunicação é por interface definida no consumidor.
