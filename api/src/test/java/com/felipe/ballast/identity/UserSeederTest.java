@@ -40,7 +40,8 @@ class UserSeederTest {
     UserSeeder.Result result = seeder.seed(email, PASSWORD, "Fulano");
 
     assertThat(result.created()).isTrue();
-    UserProfile user = identity.authenticate(email, PASSWORD).orElseThrow();
+    UserProfile user =
+        ((IdentityService.LoginResult.Success) identity.authenticate(email, PASSWORD)).user();
     assertThat(user.id()).isEqualTo(result.userId());
     assertThat(user.name()).isEqualTo("Fulano");
   }
@@ -63,8 +64,10 @@ class UserSeederTest {
 
     assertThat(second.created()).isFalse();
     assertThat(countByEmail(email)).isEqualTo(1);
-    assertThat(identity.authenticate(email, PASSWORD)).isPresent();
-    assertThat(identity.authenticate(email, "outra-senha-12345")).isEmpty();
+    assertThat(identity.authenticate(email, PASSWORD))
+        .isInstanceOf(IdentityService.LoginResult.Success.class);
+    assertThat(identity.authenticate(email, "outra-senha-12345"))
+        .isInstanceOf(IdentityService.LoginResult.BadCredentials.class);
   }
 
   static Stream<Arguments> invalidInputs() {

@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -19,11 +20,25 @@ public class IdentityService {
   // Prazo absoluto, sem renovação a cada uso: token roubado morre em 7 dias mesmo usado todo dia.
   static final Duration SESSION_LIFETIME = Duration.ofDays(7);
 
+  private static final Duration MIN_RETRY = Duration.ofMillis(1);
+
   record NewSession(String token, Instant expiresAt) {}
+
+  public sealed interface LoginResult {
+    // Senha certa, fora do atraso.
+    record Success(UserProfile user) implements LoginResult {}
+
+    // E-mail inexistente e senha errada, sem distinguir. failures é a contagem já gravada.
+    record BadCredentials(int failures) implements LoginResult {}
+
+    // Atraso em vigor: a senha nem foi verificada e a tentativa não foi contada.
+    record Delayed(Duration retryAfter, int failures) implements LoginResult {}
+  }
 
   private final UserAccountRepository users;
   private final LoginSessionRepository sessions;
   private final SessionQueries sessionQueries;
+  private final LoginAttempts attempts;
   private final PasswordHasher hasher;
   private final Clock clock;
 
@@ -31,11 +46,13 @@ public class IdentityService {
       UserAccountRepository users,
       LoginSessionRepository sessions,
       SessionQueries sessionQueries,
+      LoginAttempts attempts,
       PasswordHasher hasher,
       Clock clock) {
     this.users = users;
     this.sessions = sessions;
     this.sessionQueries = sessionQueries;
+    this.attempts = attempts;
     this.hasher = hasher;
     this.clock = clock;
   }
@@ -67,19 +84,40 @@ public class IdentityService {
     return false;
   }
 
-  // Vazio cobre e-mail inexistente e senha errada sem distinguir. No inexistente roda uma
+  // A tentativa é reservada (contada) antes do argon2, num único comando: é isso que faz
+  // tentativas simultâneas contarem uma a uma. Se o banco falhar depois da reserva, o contador
+  // já subiu e fica assim (fail-closed). No atraso a senha não é verificada nem contada, senão
+  // quem digita o e-mail alheio manteria o dono trancado. No e-mail inexistente roda uma
   // verificação fictícia para o tempo de resposta não denunciar a conta. Sem @Transactional: o
   // argon2 leva centenas de ms e não deve segurar conexão do pool.
-  public Optional<UserProfile> authenticate(String email, String password) {
+  public LoginResult authenticate(String email, String password) {
+    OptionalInt reserved = attempts.reserve(email, clock.instant());
+    if (reserved.isEmpty()) {
+      return delayedResult(email);
+    }
+    int failures = reserved.getAsInt();
+
     Optional<UserAccount> account = users.findByEmail(email);
     if (account.isEmpty()) {
       hasher.matchesDummy(password);
-      return Optional.empty();
+      return new LoginResult.BadCredentials(failures);
     }
     if (!hasher.matches(password, account.get().getPasswordHash())) {
-      return Optional.empty();
+      return new LoginResult.BadCredentials(failures);
     }
-    return account.map(IdentityService::profileOf);
+    attempts.clear(email);
+    return new LoginResult.Success(profileOf(account.get()));
+  }
+
+  private LoginResult delayedResult(String email) {
+    Optional<LoginAttempts.Delay> delay = attempts.findDelay(email, clock.instant());
+    // O atraso pode vencer entre a recusa e a leitura (ou a linha sumir num login com sucesso);
+    // recusado é recusado, com o mínimo de 1 ms.
+    Duration remaining = delay.map(LoginAttempts.Delay::remaining).orElse(Duration.ZERO);
+    if (remaining.compareTo(MIN_RETRY) < 0) {
+      remaining = MIN_RETRY;
+    }
+    return new LoginResult.Delayed(remaining, delay.map(LoginAttempts.Delay::failures).orElse(0));
   }
 
   // Devolve o token em claro, que só existe aqui e no cookie.

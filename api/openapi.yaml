@@ -124,6 +124,22 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Content-Type diferente de application/json
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Atraso progressivo em vigor para esse e-mail; resposta idêntica
+            para e-mail com e sem conta
+          headers:
+            Retry-After:
+              description: "Segundos inteiros, arredondados para cima, até a próxima\
+                \ tentativa ser verificada"
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+              style: simple
         "500":
           content:
             application/json:

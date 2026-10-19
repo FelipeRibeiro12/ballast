@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Import;
 // que é como a spec é gerada.
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, TestClock.Config.class})
 @SpringBootTest(
     properties = {
       "ballast.registration-open=true",

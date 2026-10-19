@@ -284,6 +284,17 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Atraso progressivo em vigor para esse e-mail; resposta idêntica para e-mail com e sem conta */
+            429: {
+                headers: {
+                    /** @description Segundos inteiros, arredondados para cima, até a próxima tentativa ser verificada */
+                    "Retry-After": number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Falha interna */
             500: {
                 headers: {

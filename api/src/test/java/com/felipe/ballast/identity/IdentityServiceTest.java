@@ -1,6 +1,7 @@
 package com.felipe.ballast.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.felipe.ballast.IntegrationTest;
 import java.time.Clock;
@@ -16,7 +17,9 @@ class IdentityServiceTest {
   @Autowired UserAccountRepository users;
   @Autowired LoginSessionRepository sessions;
   @Autowired SessionQueries sessionQueries;
+  @Autowired LoginAttempts attempts;
   @Autowired Clock clock;
+  @Autowired org.springframework.jdbc.core.simple.JdbcClient jdbc;
 
   private CountingHasher hasher;
   private IdentityService service;
@@ -50,7 +53,7 @@ class IdentityServiceTest {
   @BeforeEach
   void setUp() {
     hasher = new CountingHasher();
-    service = new IdentityService(users, sessions, sessionQueries, hasher, clock);
+    service = new IdentityService(users, sessions, sessionQueries, attempts, hasher, clock);
   }
 
   @Test
@@ -65,7 +68,8 @@ class IdentityServiceTest {
 
   @Test
   void unknownEmailRunsTheDummyVerificationSoTheTimingDoesNotGiveTheAccountAway() {
-    assertThat(service.authenticate(uniqueEmail(), "qualquer-senha-123")).isEmpty();
+    assertThat(service.authenticate(uniqueEmail(), "qualquer-senha-123"))
+        .isInstanceOf(IdentityService.LoginResult.BadCredentials.class);
 
     assertThat(hasher.dummyCalls).hasValue(1);
   }
@@ -75,9 +79,38 @@ class IdentityServiceTest {
     String email = uniqueEmail();
     service.register(email, "senha-de-teste-12345", null);
 
-    assertThat(service.authenticate(email, "senha-errada-12345")).isEmpty();
-    assertThat(service.authenticate(email, "senha-de-teste-12345")).isPresent();
+    assertThat(service.authenticate(email, "senha-errada-12345"))
+        .isInstanceOf(IdentityService.LoginResult.BadCredentials.class);
+    assertThat(service.authenticate(email, "senha-de-teste-12345"))
+        .isInstanceOf(IdentityService.LoginResult.Success.class);
 
     assertThat(hasher.dummyCalls).hasValue(0);
+  }
+
+  // Fail-closed: a tentativa é contada antes do argon2, então uma falha depois dela não devolve
+  // a chance ao atacante.
+  @Test
+  void keepsTheCountWhenTheVerificationFailsAfterTheReservation() {
+    String email = uniqueEmail();
+    PasswordHasher exploding =
+        new PasswordHasher(
+            new IdentityProperties("false", "", "", new IdentityProperties.Password(8, 1, 1))) {
+          @Override
+          public boolean matchesDummy(String rawPassword) {
+            throw new IllegalStateException("falha simulada");
+          }
+        };
+    IdentityService failing =
+        new IdentityService(users, sessions, sessionQueries, attempts, exploding, clock);
+
+    assertThatThrownBy(() -> failing.authenticate(email, "qualquer-senha-123"))
+        .isInstanceOf(IllegalStateException.class);
+
+    assertThat(
+            jdbc.sql("SELECT falhas FROM tentativa_login WHERE email = :email")
+                .param("email", email)
+                .query(Integer.class)
+                .single())
+        .isEqualTo(1);
   }
 }

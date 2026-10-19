@@ -36,6 +36,10 @@ class AuthController {
   // e-mails têm conta.
   private static final ErrorResponse BAD_CREDENTIALS = new ErrorResponse("credenciais inválidas");
 
+  // Igual para e-mail com e sem conta, pelo mesmo motivo.
+  private static final ErrorResponse TOO_MANY_ATTEMPTS =
+      new ErrorResponse("muitas tentativas, tente mais tarde");
+
   private static final ErrorResponse NOT_AUTHENTICATED = new ErrorResponse("não autenticado");
 
   private final IdentityService identity;
@@ -73,6 +77,20 @@ class AuthController {
       description = "Credenciais inválidas",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "429",
+      description =
+          "Atraso progressivo em vigor para esse e-mail; resposta idêntica para e-mail com e sem"
+              + " conta",
+      headers =
+          @Header(
+              name = "Retry-After",
+              required = true,
+              description =
+                  "Segundos inteiros, arredondados para cima, até a próxima tentativa ser"
+                      + " verificada",
+              schema = @Schema(type = "integer", minimum = "1")),
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "415",
       description = "Content-Type diferente de application/json",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -85,18 +103,41 @@ class AuthController {
       consumes = MediaType.APPLICATION_JSON_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
-    Optional<UserProfile> user = identity.authenticate(request.email(), request.password());
-    if (user.isEmpty()) {
-      log.warn(
-          "login falhou email={} ip={}", MaskedEmail.of(request.email()), ClientAddress.of(http));
-      return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(BAD_CREDENTIALS);
-    }
-    IdentityService.NewSession session = identity.startSession(user.get().id());
-    log.info("login ok usuario_id={} ip={}", user.get().id(), ClientAddress.of(http));
-    return ResponseEntity.ok()
-        .header(
-            HttpHeaders.SET_COOKIE, cookies.open(session.token(), IdentityService.SESSION_LIFETIME))
-        .body(UserResponse.from(user.get()));
+    String ip = ClientAddress.of(http);
+    return switch (identity.authenticate(request.email(), request.password())) {
+      case IdentityService.LoginResult.Delayed delayed -> {
+        // Arredonda para cima: dizer 0 faria o cliente tentar de novo ainda dentro do atraso.
+        long seconds =
+            Math.max(1, (delayed.retryAfter().toNanos() + 999_999_999L) / 1_000_000_000L);
+        log.warn(
+            "login recusado: muitas tentativas email={} ip={} falhas={} retry_after={}",
+            MaskedEmail.of(request.email()),
+            ip,
+            delayed.failures(),
+            seconds);
+        yield ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header(HttpHeaders.RETRY_AFTER, Long.toString(seconds))
+            .body(TOO_MANY_ATTEMPTS);
+      }
+      case IdentityService.LoginResult.BadCredentials bad -> {
+        log.warn(
+            "login falhou email={} ip={} falhas={}",
+            MaskedEmail.of(request.email()),
+            ip,
+            bad.failures());
+        yield ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(BAD_CREDENTIALS);
+      }
+      case IdentityService.LoginResult.Success success -> {
+        UserProfile user = success.user();
+        IdentityService.NewSession session = identity.startSession(user.id());
+        log.info("login ok usuario_id={} ip={}", user.id(), ip);
+        yield ResponseEntity.ok()
+            .header(
+                HttpHeaders.SET_COOKIE,
+                cookies.open(session.token(), IdentityService.SESSION_LIFETIME))
+            .body(UserResponse.from(user));
+      }
+    };
   }
 
   @Operation(
