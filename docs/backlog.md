@@ -147,6 +147,9 @@ tentativa (auditoria de segurança da F1, M3), e o IP do log vem de
 argon2.
 Também precisa conter o crescimento de `tentativa_login` (uma linha por e-mail
 digitado, inclusive inexistente, sem limpeza hoje) e limpar sessões expiradas.
+Inclui uma trava mecânica no deploy que recuse `REGISTRO_ABERTO=true` em
+produção enquanto esta fatia não fechar: hoje só o comentário do
+`.env.example` impede (auditoria do PR #6). Dono: devops.
 
 ## Mais adiante
 
