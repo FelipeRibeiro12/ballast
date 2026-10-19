@@ -61,6 +61,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Encerra a sessão
+         * @description Marca a sessão como revogada no servidor e expira o cookie. Sem sessão válida também responde 204. Não lê corpo.
+         */
+        post: operations["postAuthLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -265,6 +285,35 @@ export interface operations {
                 };
             };
             /** @description Falha interna */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postAuthLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessão encerrada, ou não havia sessão */
+            204: {
+                headers: {
+                    /** @description ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0 */
+                    "Set-Cookie": string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Falha interna; a sessão pode não ter sido revogada */
             500: {
                 headers: {
                     [name: string]: unknown;

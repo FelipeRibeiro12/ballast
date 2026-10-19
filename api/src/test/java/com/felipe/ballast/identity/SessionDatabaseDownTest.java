@@ -2,6 +2,7 @@ package com.felipe.ballast.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.felipe.ballast.TestcontainersConfiguration;
 import jakarta.servlet.http.Cookie;
@@ -45,7 +46,7 @@ class SessionDatabaseDownTest {
   @Autowired MockMvc mvc;
 
   @Test
-  void sessionCheckAnswersAGeneric500WithoutLeakingDriverDetails(CapturedOutput output)
+  void sessionCheckAndLogoutAnswerAGeneric500WithoutLeakingDriverDetails(CapturedOutput output)
       throws Exception {
     TestUsers users = new TestUsers(mvc);
     Cookie session = users.session(users.register());
@@ -60,5 +61,13 @@ class SessionDatabaseDownTest {
     assertThat(response.getContentAsString(StandardCharsets.UTF_8))
         .isEqualTo("{\"erro\":\"erro interno\"}");
     assertThat(output.getAll()).contains("falha ao consultar a sessão");
+
+    // Sem confirmar a revogação, não dá para dizer ao cliente que saiu.
+    MockHttpServletResponse logout =
+        mvc.perform(post("/auth/logout").cookie(session)).andReturn().getResponse();
+    assertThat(logout.getStatus()).isEqualTo(500);
+    assertThat(logout.getContentAsString(StandardCharsets.UTF_8))
+        .isEqualTo("{\"erro\":\"erro interno\"}");
+    assertThat(logout.getHeader("Set-Cookie")).isNull();
   }
 }

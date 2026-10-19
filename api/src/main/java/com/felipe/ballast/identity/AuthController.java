@@ -2,6 +2,7 @@ package com.felipe.ballast.identity;
 
 import com.felipe.ballast.web.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -11,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Optional;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -18,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -120,5 +123,44 @@ class AuthController {
         .findProfile(user.id())
         .<ResponseEntity<?>>map(profile -> ResponseEntity.ok(UserResponse.from(profile)))
         .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(NOT_AUTHENTICATED));
+  }
+
+  // Rota pública de propósito: logout sem sessão válida também é 204,
+  // e a revogação acontece no servidor, não só no cookie. Não lê corpo.
+  @Operation(
+      operationId = "postAuthLogout",
+      summary = "Encerra a sessão",
+      description =
+          "Marca a sessão como revogada no servidor e expira o cookie. Sem sessão válida também"
+              + " responde 204. Não lê corpo.")
+  @ApiResponse(
+      responseCode = "204",
+      description = "Sessão encerrada, ou não havia sessão",
+      headers =
+          @Header(
+              name = "Set-Cookie",
+              required = true,
+              description = "ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0",
+              schema = @Schema(type = "string")))
+  @ApiResponse(
+      responseCode = "500",
+      description = "Falha interna; a sessão pode não ter sido revogada",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON_VALUE,
+              schema = @Schema(implementation = ErrorResponse.class)))
+  @PostMapping("/auth/logout")
+  ResponseEntity<Void> logout(
+      @Parameter(hidden = true) @CookieValue(name = SessionCookies.NAME, required = false)
+          String token,
+      HttpServletRequest http) {
+    Optional<UUID> revokedOwner =
+        token == null || token.isEmpty() ? Optional.empty() : identity.revokeSession(token);
+    log.info(
+        "logout usuario_id={} sessao_revogada={} ip={}",
+        revokedOwner.map(UUID::toString).orElse("-"),
+        revokedOwner.isPresent(),
+        ClientAddress.of(http));
+    return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, cookies.expire()).build();
   }
 }

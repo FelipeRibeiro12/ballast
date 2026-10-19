@@ -97,6 +97,12 @@ public class IdentityService {
     return sessionQueries.findActiveUserId(SessionTokens.hash(token), clock.instant());
   }
 
+  // Devolve o dono da sessão revogada, ou vazio se não havia sessão ativa com esse token.
+  @Transactional
+  public Optional<UUID> revokeSession(String token) {
+    return sessionQueries.revoke(SessionTokens.hash(token), clock.instant());
+  }
+
   public Optional<UserProfile> findProfile(UUID userId) {
     return users.findById(userId).map(IdentityService::profileOf);
   }

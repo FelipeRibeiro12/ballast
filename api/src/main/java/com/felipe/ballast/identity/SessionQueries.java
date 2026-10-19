@@ -30,17 +30,19 @@ class SessionQueries {
         .optional();
   }
 
-  // O filtro revogada_em IS NULL preserva o instante do primeiro logout.
-  boolean revoke(byte[] tokenHash, Instant now) {
+  // O filtro revogada_em IS NULL preserva o instante do primeiro logout. Vazio quando não havia
+  // sessão ativa com esse hash; senão devolve o dono, para o log de segurança.
+  Optional<UUID> revoke(byte[] tokenHash, Instant now) {
     return jdbc.sql(
-                """
-                UPDATE sessao SET revogada_em = :now
-                WHERE token_hash = :hash AND revogada_em IS NULL
-                """)
-            .param("hash", tokenHash)
-            .param("now", utc(now))
-            .update()
-        == 1;
+            """
+            UPDATE sessao SET revogada_em = :now
+            WHERE token_hash = :hash AND revogada_em IS NULL
+            RETURNING usuario_id
+            """)
+        .param("hash", tokenHash)
+        .param("now", utc(now))
+        .query(UUID.class)
+        .optional();
   }
 
   private static OffsetDateTime utc(Instant instant) {

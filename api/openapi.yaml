@@ -133,6 +133,31 @@ paths:
       summary: Abre uma sessão
       tags:
       - auth
+  /auth/logout:
+    post:
+      description: Marca a sessão como revogada no servidor e expira o cookie. Sem
+        sessão válida também responde 204. Não lê corpo.
+      operationId: postAuthLogout
+      responses:
+        "204":
+          description: "Sessão encerrada, ou não havia sessão"
+          headers:
+            Set-Cookie:
+              description: ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/;
+                Max-Age=0
+              required: true
+              schema:
+                type: string
+              style: simple
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Falha interna; a sessão pode não ter sido revogada
+      summary: Encerra a sessão
+      tags:
+      - auth
   /healthz:
     get:
       operationId: getHealth
