@@ -10,6 +10,12 @@ Este documento descreve o modelo-alvo. As migrations constroem em direção a
 ele, e nem toda coluna aqui existe hoje. O estado atual é o schema: veja
 a tabela `flyway_schema_history` e `api/src/main/resources/db/migration/`.
 
+**Usuários de banco (ADR-021):** o Flyway conecta como dono do schema
+(`DB_MIGRATION_USER`); a aplicação conecta como `DB_USER`, só com
+`SELECT/INSERT/UPDATE/DELETE`. A `V3` concede o DML nas tabelas atuais e, por
+`ALTER DEFAULT PRIVILEGES`, nas futuras. Tabela criada por migration já nasce
+acessível à aplicação; `TRUNCATE` e DDL ficam só com o dono.
+
 **Dinheiro (ADR-005):** fiat é `numeric(18,2)` no banco e `BigDecimal` no Java,
 e trafega no JSON como inteiro em centavos. Cripto é `numeric(38,18)` e trafega
 como string decimal. A precisão 18 garante que todo valor fiat cabe em `long`

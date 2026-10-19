@@ -10,6 +10,12 @@ spring:
       # minuto antes do 503. Com 2 s o health check responde logo; num app de um
       # usuário só, esperar mais do que isso por conexão já é falha.
       connection-timeout: 2000
+  flyway:
+    # ADR-021: a migração roda como dono do schema; a aplicação (datasource) só tem DML
+    user: ${DB_MIGRATION_USER}
+    password: ${DB_MIGRATION_PASSWORD}
+    placeholders:
+      app_user: ${DB_USER}
   jpa:
     hibernate:
       ddl-auto: validate

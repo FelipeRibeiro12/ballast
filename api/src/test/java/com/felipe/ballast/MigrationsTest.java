@@ -26,12 +26,12 @@ class MigrationsTest {
   }
 
   @Test
-  void appliesBothMigrationsInOrder() {
+  void appliesAllMigrationsInOrder() {
     List<String> versions =
         jdbc.sql("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank")
             .query(String.class)
             .list();
 
-    assertThat(versions).containsExactly("1", "2");
+    assertThat(versions).containsExactly("1", "2", "3");
   }
 }
