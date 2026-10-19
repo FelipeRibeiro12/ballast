@@ -58,7 +58,7 @@ Preencha no formato `CHAVE=valor`, sem aspas, `$` ou `#`. O modelo está em `.en
 
 ### Proxy da web
 
-O Vite repassa `/healthz` e `/auth` para a API. O destino padrão é `http://localhost:8080`. Se a API estiver em outra porta ou endereço, suba a web com `API_PROXY_TARGET`, por exemplo `API_PROXY_TARGET=http://127.0.0.1:8080 make dev-web`. O padrão não foi conferido neste Mac com a API em `127.0.0.1`.
+O Vite repassa `/healthz` e `/auth` para a API. O destino padrão é `http://localhost:8080`. Se a API estiver em outra porta ou endereço, suba a web com `API_PROXY_TARGET`, por exemplo `API_PROXY_TARGET=http://127.0.0.1:8080 make dev-web`. Com o padrão, o Node tenta `::1` e cai para `127.0.0.1`, onde a API escuta.
 
 ### Volume do Postgres de antes desta versão
 
