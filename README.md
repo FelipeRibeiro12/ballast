@@ -2,7 +2,7 @@
 
 App de controle financeiro pessoal: fiat e cripto no mesmo lugar, com recorrência, cartão de crédito parcelado, metas e projeção de saldo.
 
-Hoje existem cadastro, login, logout e a sessão que os sustenta. Contas, lançamentos e os demais módulos ainda não existem.
+Hoje existem cadastro, login, logout e contas (criar, listar, arquivar), com saldo igual ao saldo inicial. Lançamentos e os demais módulos ainda não existem.
 
 Visão do produto em `docs/visao.md`. Decisões em `docs/adr-*.md`.
 
@@ -92,8 +92,11 @@ Rotas atuais:
 - `GET /auth/eu`: devolve o usuário da sessão.
 - `POST /auth/logout`: revoga a sessão no servidor e apaga o cookie. Responde 204.
 - `POST /auth/cadastro`: existe só com `REGISTRO_ABERTO=true`. Fechado, responde 401 sem sessão e 404 com sessão, como uma rota inexistente.
+- `GET /contas`: lista as contas ativas do usuário da sessão, com `?arquivadas=true` só as arquivadas.
+- `POST /contas`: corpo `{"nome", "tipo", "saldoInicialCentavos"}`. Tipo `corrente`, `poupanca` ou `dinheiro`. Nome único por usuário sem diferenciar caixa; repetido dá 409.
+- `GET /contas/{id}` e `PATCH /contas/{id}` com `{"arquivada": true|false}`. Conta de outro usuário dá 404.
 
-Rota que não é pública responde 401 sem sessão. `POST` exige `Content-Type: application/json`.
+Rota que não é pública responde 401 sem sessão. `POST` e `PATCH` exigem `Content-Type: application/json`, e corpo acima de 4 KiB dá 413. Banco fora dá 503 em qualquer rota. Valor em dinheiro vai em inteiro de centavos (ADR-005, ADR-023).
 
 Ao mudar rota ou DTO:
 

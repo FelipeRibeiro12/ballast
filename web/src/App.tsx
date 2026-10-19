@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   CredenciaisInvalidasError,
@@ -12,6 +12,7 @@ import {
   postLogout,
 } from './api'
 import type { Usuario } from './api'
+import Contas from './Contas'
 
 type EstadoSessao =
   | { tipo: 'carregando' }
@@ -336,6 +337,13 @@ function App() {
     }
   }, [tentativa])
 
+  // Estável para não refazer a busca de contas a cada render do App.
+  const aoSessaoExpirar = useCallback((): void => {
+    setTelaAnonima('login')
+    setAviso('Sua sessão acabou. Entre de novo.')
+    setSessao({ tipo: 'anonimo' })
+  }, [])
+
   function tentarDeNovo(): void {
     setSessao({ tipo: 'carregando' })
     setTentativa((n) => n + 1)
@@ -380,15 +388,18 @@ function App() {
         />
       )}
       {sessao.tipo === 'logado' && (
-        <Logado
-          usuario={sessao.usuario}
-          aoSair={() => {
-            // Quem entrou pelo cadastro não deve voltar a ver o formulário de cadastro.
-            setTelaAnonima('login')
-            setAviso(null)
-            setSessao({ tipo: 'anonimo' })
-          }}
-        />
+        <>
+          <Logado
+            usuario={sessao.usuario}
+            aoSair={() => {
+              // Quem entrou pelo cadastro não deve voltar a ver o formulário de cadastro.
+              setTelaAnonima('login')
+              setAviso(null)
+              setSessao({ tipo: 'anonimo' })
+            }}
+          />
+          <Contas aoSessaoExpirar={aoSessaoExpirar} />
+        </>
       )}
       <Rodape />
     </main>

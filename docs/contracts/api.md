@@ -10,3 +10,10 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
 - As rotas declaram `produces = application/json`. Cliente que manda só
   `Accept: text/html` recebe 406, e isso vale também para o `/healthz`: probe
   de orquestrador precisa aceitar JSON ou `*/*`.
+- Em qualquer rota, banco fora responde 503 `{"erro":"serviço indisponível"}`, e
+  corpo acima de 4 KiB responde 413 (ADR-023).
+- Em `/contas/{id}`, conta de outro usuário, id inexistente e id que não é UUID
+  respondem 404 com o mesmo corpo.
+- Dinheiro de fiat sai e entra como inteiro de centavos
+  (`saldoInicialCentavos`, `saldoCentavos`), entre -9007199254740991 e
+  9007199254740991. Decimal no JSON (`12.5`) é recusado com 400.

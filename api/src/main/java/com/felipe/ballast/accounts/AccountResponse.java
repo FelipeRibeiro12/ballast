@@ -1,0 +1,47 @@
+package com.felipe.ballast.accounts;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.UUID;
+
+@Schema(name = "Conta")
+public record AccountResponse(
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID id,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, minLength = 1, maxLength = 100)
+        String nome,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) AccountType tipo,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, allowableValues = "BRL") String moeda,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "Centavos de real, inteiro com sinal",
+            minimum = "-9007199254740991",
+            maximum = "9007199254740991")
+        long saldoInicialCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "Centavos de real, inteiro com sinal",
+            minimum = "-9007199254740991",
+            maximum = "9007199254740991")
+        long saldoCentavos,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) boolean arquivada,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant criadaEm) {
+
+  // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
+  // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
+  static AccountResponse from(AccountSummary summary) {
+    return new AccountResponse(
+        summary.id(),
+        summary.name(),
+        summary.type(),
+        summary.currency(),
+        toCents(summary.initialBalance()),
+        toCents(summary.balance()),
+        summary.archived(),
+        summary.createdAt());
+  }
+
+  private static long toCents(BigDecimal amount) {
+    return amount.movePointRight(2).longValueExact();
+  }
+}

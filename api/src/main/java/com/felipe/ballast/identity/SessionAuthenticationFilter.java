@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
@@ -51,17 +52,26 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
       Optional<UUID> userId;
       try {
         userId = identity.findUserIdBySession(token.get());
+      } catch (DataAccessResourceFailureException e) {
+        log.error("sessão: banco indisponível ip={}", ClientAddress.of(request), e);
+        writeError(response, HttpServletResponse.SC_SERVICE_UNAVAILABLE, "serviço indisponível");
+        return;
       } catch (DataAccessException e) {
         log.error("sessão: falha ao consultar a sessão ip={}", ClientAddress.of(request), e);
-        response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.getWriter().write("{\"erro\":\"erro interno\"}");
+        writeError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "erro interno");
         return;
       }
       userId.ifPresent(SessionAuthenticationFilter::authenticate);
     }
     chain.doFilter(request, response);
+  }
+
+  private static void writeError(HttpServletResponse response, int status, String message)
+      throws IOException {
+    response.setStatus(status);
+    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+    response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+    response.getWriter().write("{\"erro\":\"" + message + "\"}");
   }
 
   private static void authenticate(UUID userId) {

@@ -152,3 +152,103 @@ export async function postLogout(): Promise<void> {
     throw new ApiError(`/auth/logout respondeu ${resposta.status}`)
   }
 }
+
+export type Conta = components['schemas']['Conta']
+export type CriarContaRequest = components['schemas']['CriarContaRequest']
+
+export class SessaoExpiradaError extends ApiError {}
+
+export class NomeDeContaRepetidoError extends ApiError {}
+
+export class ServicoIndisponivelError extends ApiError {}
+
+export class ContaNaoEncontradaError extends ApiError {}
+
+export class ContaInvalidaError extends ApiError {
+  // null quando o corpo do 400 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('conta recusada por entrada inválida')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+const TIPOS_DE_CONTA: readonly string[] = ['corrente', 'poupanca', 'dinheiro']
+
+function isConta(valor: unknown): valor is Conta {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'nome' in valor &&
+    typeof valor.nome === 'string' &&
+    'tipo' in valor &&
+    typeof valor.tipo === 'string' &&
+    TIPOS_DE_CONTA.includes(valor.tipo) &&
+    'moeda' in valor &&
+    valor.moeda === 'BRL' &&
+    // Fora do inteiro seguro o JSON já perdeu o centavo no parse.
+    'saldoInicialCentavos' in valor &&
+    Number.isSafeInteger(valor.saldoInicialCentavos) &&
+    'saldoCentavos' in valor &&
+    Number.isSafeInteger(valor.saldoCentavos) &&
+    'arquivada' in valor &&
+    typeof valor.arquivada === 'boolean' &&
+    'criadaEm' in valor &&
+    typeof valor.criadaEm === 'string'
+  )
+}
+
+async function lerConta(resposta: Response, origem: string): Promise<Conta> {
+  const corpo: unknown = await resposta.json()
+  if (!isConta(corpo)) {
+    throw new ApiError(`${origem} com formato inesperado`)
+  }
+  return corpo
+}
+
+// Erros comuns às rotas de contas; o 409 e o 400 só existem nas que gravam.
+async function recusarResposta(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 404) throw new ContaNaoEncontradaError('conta não encontrada')
+  if (resposta.status === 409) throw new NomeDeContaRepetidoError('nome de conta repetido')
+  if (resposta.status === 400) throw new ContaInvalidaError(await lerMensagemDeErro(resposta))
+  throw new ApiError(`${origem} respondeu ${resposta.status}`)
+}
+
+export async function fetchContas(arquivadas: boolean): Promise<Conta[]> {
+  const resposta = await fetch(`${baseUrl}/contas${arquivadas ? '?arquivadas=true' : ''}`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarResposta(resposta, '/contas')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isConta)) {
+    throw new ApiError('/contas com formato inesperado')
+  }
+  return corpo
+}
+
+export async function postConta(dados: CriarContaRequest): Promise<Conta> {
+  const resposta = await fetch(`${baseUrl}/contas`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarResposta(resposta, 'POST /contas')
+  return lerConta(resposta, 'POST /contas')
+}
+
+export async function patchConta(id: string, arquivada: boolean): Promise<Conta> {
+  const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ arquivada }),
+  })
+  if (!resposta.ok) return recusarResposta(resposta, 'PATCH /contas/{id}')
+  return lerConta(resposta, 'PATCH /contas/{id}')
+}

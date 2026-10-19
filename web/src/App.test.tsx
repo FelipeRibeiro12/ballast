@@ -14,7 +14,7 @@ function jsonResponse(corpo: unknown, status: number, headers: Record<string, st
 }
 
 // Roteia por "MÉTODO caminho". Recebe funções para a promessa rejeitada só nascer
-// quando o fetch for chamado. /healthz responde 200 salvo se a rota for informada.
+// quando o fetch for chamado. /healthz e GET /contas respondem 200 salvo se a rota for informada.
 function mockFetch(rotas: Rotas): void {
   vi.stubGlobal(
     'fetch',
@@ -23,6 +23,8 @@ function mockFetch(rotas: Rotas): void {
       const rota = rotas[chave]
       if (rota) return rota(init?.body)
       if (chave === 'GET /healthz') return Promise.resolve(jsonResponse({ mensagem: 'ok' }, 200))
+      // A tela logada sempre busca as contas; os testes de sessão não querem saber delas.
+      if (chave === 'GET /contas') return Promise.resolve(jsonResponse([], 200))
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),
   )

@@ -15,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -45,8 +46,10 @@ class SessionDatabaseDownTest {
 
   @Autowired MockMvc mvc;
 
+  private static final String UNAVAILABLE = "{\"erro\":\"serviço indisponível\"}";
+
   @Test
-  void sessionCheckAndLogoutAnswerAGeneric500WithoutLeakingDriverDetails(CapturedOutput output)
+  void everyRouteAnswersAGeneric503WithoutLeakingDriverDetails(CapturedOutput output)
       throws Exception {
     TestUsers users = new TestUsers(mvc);
     Cookie session = users.session(users.register());
@@ -57,17 +60,45 @@ class SessionDatabaseDownTest {
     MockHttpServletResponse response =
         mvc.perform(get("/auth/eu").cookie(session)).andReturn().getResponse();
 
-    assertThat(response.getStatus()).isEqualTo(500);
-    assertThat(response.getContentAsString(StandardCharsets.UTF_8))
-        .isEqualTo("{\"erro\":\"erro interno\"}");
-    assertThat(output.getAll()).contains("falha ao consultar a sessão");
+    assertThat(response.getStatus()).isEqualTo(503);
+    assertThat(response.getContentAsString(StandardCharsets.UTF_8)).isEqualTo(UNAVAILABLE);
+    assertThat(output.getAll()).contains("sessão: banco indisponível");
 
-    // Sem confirmar a revogação, não dá para dizer ao cliente que saiu.
+    // Rotas de contas: a sessão é consultada antes, e é onde o banco fora aparece primeiro.
+    MockHttpServletResponse accounts =
+        mvc.perform(get("/contas").cookie(session)).andReturn().getResponse();
+    assertThat(accounts.getStatus()).isEqualTo(503);
+    assertThat(accounts.getContentAsString(StandardCharsets.UTF_8)).isEqualTo(UNAVAILABLE);
+    MockHttpServletResponse created =
+        mvc.perform(
+                post("/contas")
+                    .cookie(session)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"nome\":\"Nubank\",\"tipo\":\"corrente\"}"))
+            .andReturn()
+            .getResponse();
+    assertThat(created.getStatus()).isEqualTo(503);
+
+    // Sem confirmar a revogação, não dá para dizer ao cliente que saiu. Rota pública: o erro
+    // chega pelo ApiExceptionHandler (JdbcClient), não pelo filtro.
     MockHttpServletResponse logout =
         mvc.perform(post("/auth/logout").cookie(session)).andReturn().getResponse();
-    assertThat(logout.getStatus()).isEqualTo(500);
-    assertThat(logout.getContentAsString(StandardCharsets.UTF_8))
-        .isEqualTo("{\"erro\":\"erro interno\"}");
+    assertThat(logout.getStatus()).isEqualTo(503);
+    assertThat(logout.getContentAsString(StandardCharsets.UTF_8)).isEqualTo(UNAVAILABLE);
     assertThat(logout.getHeader("Set-Cookie")).isNull();
+
+    // Caminho do JPA: a falha vem ao abrir a transação, outra exceção que a do JdbcClient.
+    MockHttpServletResponse register =
+        mvc.perform(
+                post("/auth/cadastro")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        "{\"email\":\"novo@exemplo.test\",\"senha\":\"senha-de-teste-12345\"}"))
+            .andReturn()
+            .getResponse();
+    assertThat(register.getStatus()).isEqualTo(503);
+    assertThat(register.getContentAsString(StandardCharsets.UTF_8)).isEqualTo(UNAVAILABLE);
+
+    assertThat(output.getAll()).doesNotContain("novo@exemplo");
   }
 }

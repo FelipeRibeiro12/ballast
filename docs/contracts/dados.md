@@ -98,11 +98,20 @@ conta
   saldo_inicial     numeric(18,2) not null default 0
   arquivada         bool not null default false
   criada_em         timestamptz not null
-  unique (usuario_id, nome)
+  unique index (usuario_id, lower(nome))
 ```
 
-`tipo`: `corrente` · `poupanca` · `dinheiro` · `beneficio` · `cartao_credito`
-· `cripto`
+`tipo` no modelo-alvo: `corrente` · `poupanca` · `dinheiro` · `beneficio` ·
+`cartao_credito` · `cripto`.
+
+Migration `V5` (ADR-023): o `CHECK` de `tipo` aceita só `corrente`, `poupanca` e
+`dinheiro`, e o de `moeda` só `BRL`. Cada fatia que trouxer outro tipo alarga o
+`CHECK` por migration. O nome tem de 1 a 100 caracteres e não tem espaço nas
+pontas. `saldo_inicial` fica entre -90071992547409.91 e 90071992547409.91, o
+`Number.MAX_SAFE_INTEGER` em centavos. O nome é único por usuário sem diferenciar
+caixa (`conta_usuario_nome_unico`), inclusive contra conta arquivada. Esse índice
+também atende a busca por `usuario_id`. `usuario_id` é `ON DELETE CASCADE`,
+`criada_em` tem `DEFAULT now()`, e o `id` vem da aplicação.
 
 Saldo **não** é coluna. É `saldo_inicial` + soma dos lançamentos realizados.
 Guardar saldo materializado é a origem clássica de divergência; se a
