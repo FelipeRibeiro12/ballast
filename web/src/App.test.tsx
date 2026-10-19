@@ -369,3 +369,181 @@ describe('App: logout', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /sair/i })).toBeEnabled())
   })
 })
+
+describe('App: cadastro', () => {
+  const eu401 = () => Promise.resolve(jsonResponse({ erro: 'x' }, 401))
+  const novoUsuario = { ...usuario, nome: null }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+  })
+
+  async function abrirCadastro(rotas: Rotas): Promise<void> {
+    vi.stubEnv('VITE_REGISTRO_ABERTO', 'true')
+    mockFetch({ 'GET /auth/eu': eu401, ...rotas })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: /criar conta/i }))
+    await screen.findByRole('form', { name: /criar conta/i })
+  }
+
+  function preencherCadastro(email: string, senha: string, confirmacao: string = senha): void {
+    fireEvent.change(screen.getByLabelText(/e-mail/i), { target: { value: email } })
+    fireEvent.change(screen.getByLabelText(/^senha/i), { target: { value: senha } })
+    fireEvent.change(screen.getByLabelText(/confirmar senha/i), { target: { value: confirmacao } })
+    fireEvent.submit(screen.getByRole('form', { name: /criar conta/i }))
+  }
+
+  it.each([[undefined], [''], ['false'], ['TRUE'], ['1']])(
+    'com a flag %j não existe "Criar conta"',
+    async (valor) => {
+      if (valor !== undefined) vi.stubEnv('VITE_REGISTRO_ABERTO', valor)
+      mockFetch({ 'GET /auth/eu': eu401 })
+      render(<App />)
+      await screen.findByLabelText(/e-mail/i)
+      expect(screen.queryByRole('button', { name: /criar conta/i })).toBeNull()
+    },
+  )
+
+  it('declara os atributos do formulário e volta com "Já tenho conta"', async () => {
+    await abrirCadastro({})
+    const nome = screen.getByLabelText(/nome/i)
+    const email = screen.getByLabelText(/e-mail/i)
+    const senha = screen.getByLabelText(/^senha/i)
+    const confirmacao = screen.getByLabelText(/confirmar senha/i)
+    expect(nome).toHaveAttribute('maxlength', '100')
+    expect(nome).not.toBeRequired()
+    expect(email).toHaveAttribute('type', 'email')
+    expect(email).toHaveAttribute('autocomplete', 'username')
+    expect(email).toHaveAttribute('maxlength', '254')
+    expect(senha).toHaveAttribute('autocomplete', 'new-password')
+    expect(senha).toHaveAttribute('minlength', '12')
+    expect(senha).toHaveAttribute('maxlength', '128')
+    expect(confirmacao).toHaveAttribute('autocomplete', 'new-password')
+    fireEvent.click(screen.getByRole('button', { name: /já tenho conta/i }))
+    expect(await screen.findByRole('form', { name: /entrar/i })).toBeVisible()
+  })
+
+  it('cadastra, faz o login automático e mostra a tela logada', async () => {
+    await abrirCadastro({
+      'POST /auth/cadastro': () => Promise.resolve(jsonResponse(novoUsuario, 201)),
+      'POST /auth/login': () => Promise.resolve(jsonResponse(novoUsuario, 200)),
+    })
+    fireEvent.change(screen.getByLabelText(/nome/i), { target: { value: 'Ana' } })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    expect(await screen.findByRole('button', { name: /sair/i })).toBeVisible()
+    expect(JSON.parse(String(chamadasA('POST /auth/cadastro')[0][1]?.body))).toEqual({
+      email: 'ana@exemplo.com',
+      senha: 'senha-bem-longa-1',
+      nome: 'Ana',
+    })
+    expect(JSON.parse(String(chamadasA('POST /auth/login')[0][1]?.body))).toEqual({
+      email: 'ana@exemplo.com',
+      senha: 'senha-bem-longa-1',
+    })
+  })
+
+  it('não manda o campo nome quando ele está vazio', async () => {
+    await abrirCadastro({
+      'POST /auth/cadastro': () => Promise.resolve(jsonResponse(novoUsuario, 201)),
+      'POST /auth/login': () => Promise.resolve(jsonResponse(novoUsuario, 200)),
+    })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    await screen.findByRole('button', { name: /sair/i })
+    expect(JSON.parse(String(chamadasA('POST /auth/cadastro')[0][1]?.body))).not.toHaveProperty('nome')
+  })
+
+  it('senhas diferentes não enviam nada e avisam', async () => {
+    await abrirCadastro({})
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1', 'senha-bem-longa-2')
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent('As senhas não conferem.')
+    expect(chamadasA('POST /auth/cadastro')).toHaveLength(0)
+    expect(screen.getByLabelText(/^senha/i)).toHaveValue('')
+    expect(screen.getByLabelText(/confirmar senha/i)).toHaveValue('')
+    expect(screen.getByLabelText(/^senha/i)).toHaveAccessibleDescription('As senhas não conferem.')
+  })
+
+  it('409 mostra que o e-mail já tem conta e limpa as senhas', async () => {
+    await abrirCadastro({
+      'POST /auth/cadastro': () => Promise.resolve(jsonResponse({ erro: 'e-mail já cadastrado' }, 409)),
+    })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Este e-mail já tem conta.')
+    expect(screen.getByLabelText(/^senha/i)).toHaveValue('')
+    expect(screen.getByLabelText(/confirmar senha/i)).toHaveValue('')
+    expect(screen.getByLabelText(/e-mail/i)).toHaveValue('ana@exemplo.com')
+    expect(screen.getByRole('button', { name: /criar conta/i })).toBeEnabled()
+  })
+
+  it('400 mostra a mensagem do servidor', async () => {
+    await abrirCadastro({
+      'POST /auth/cadastro': () => Promise.resolve(jsonResponse({ erro: 'senha fraca demais' }, 400)),
+    })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    expect(await screen.findByRole('alert')).toHaveTextContent('senha fraca demais')
+  })
+
+  it('400 sem mensagem no formato do contrato cai no texto genérico', async () => {
+    await abrirCadastro({
+      'POST /auth/cadastro': () => Promise.resolve(jsonResponse({ outra: 1 }, 400)),
+    })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível criar a conta. Tente de novo.')
+  })
+
+  it.each([[401], [404], [413], [415], [500]])('%i mostra mensagem genérica', async (status) => {
+    await abrirCadastro({
+      'POST /auth/cadastro': () => Promise.resolve(jsonResponse({ erro: 'detalhe interno' }, status)),
+    })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent('Não foi possível criar a conta. Tente de novo.')
+    expect(alerta).not.toHaveTextContent(/detalhe interno/)
+  })
+
+  it('erro de rede mostra mensagem genérica', async () => {
+    await abrirCadastro({ 'POST /auth/cadastro': () => Promise.reject(new TypeError('Failed to fetch')) })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível criar a conta. Tente de novo.')
+  })
+
+  it('login pós-cadastro falhando volta para o login com o aviso', async () => {
+    await abrirCadastro({
+      'POST /auth/cadastro': () => Promise.resolve(jsonResponse(novoUsuario, 201)),
+      'POST /auth/login': () => Promise.resolve(jsonResponse({ erro: 'x' }, 500)),
+    })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    expect(await screen.findByRole('form', { name: /entrar/i })).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent('Conta criada. Entre com seu e-mail e senha.')
+    expect(screen.queryByRole('button', { name: /sair/i })).toBeNull()
+  })
+
+  it('desabilita o botão durante o envio e não envia duas vezes', async () => {
+    let responder: (r: Response) => void = () => {}
+    await abrirCadastro({
+      'POST /auth/cadastro': () => new Promise<Response>((resolve) => { responder = resolve }),
+      'POST /auth/login': () => Promise.resolve(jsonResponse(novoUsuario, 200)),
+    })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    expect(await screen.findByRole('button', { name: /criando/i })).toBeDisabled()
+    fireEvent.submit(screen.getByRole('form', { name: /criar conta/i }))
+    expect(chamadasA('POST /auth/cadastro')).toHaveLength(1)
+    responder(jsonResponse(novoUsuario, 201))
+    expect(await screen.findByRole('button', { name: /sair/i })).toBeVisible()
+    expect(chamadasA('POST /auth/login')).toHaveLength(1)
+  })
+
+  it('a senha não aparece em nenhum console.*', async () => {
+    const espioes = (['log', 'info', 'warn', 'error', 'debug'] as const).map((nivel) =>
+      vi.spyOn(console, nivel).mockImplementation(() => {}),
+    )
+    await abrirCadastro({ 'POST /auth/cadastro': () => Promise.reject(new TypeError('Failed to fetch')) })
+    preencherCadastro('ana@exemplo.com', 'segredo-super-unico')
+    await screen.findByRole('alert')
+    for (const espiao of espioes) {
+      expect(JSON.stringify(espiao.mock.calls)).not.toContain('segredo-super-unico')
+    }
+  })
+})

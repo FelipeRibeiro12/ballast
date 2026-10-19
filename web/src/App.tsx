@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   CredenciaisInvalidasError,
+  EmailJaCadastradoError,
+  EntradaInvalidaError,
   LimiteTentativasError,
   fetchHealthz,
   fetchUsuarioAtual,
   postLogin,
+  postCadastro,
   postLogout,
 } from './api'
 import type { Usuario } from './api'
@@ -31,7 +34,28 @@ function mensagemDeLogin(erro: unknown): string {
   return 'Não foi possível entrar. Tente de novo.'
 }
 
-function Login({ aoEntrar }: { aoEntrar: (usuario: Usuario) => void }) {
+// Lida na renderização para o teste poder trocar a flag; só a string exata liga (ADR-022).
+function registroAberto(): boolean {
+  return import.meta.env.VITE_REGISTRO_ABERTO === 'true'
+}
+
+function mensagemDeCadastro(erro: unknown): string {
+  if (erro instanceof EmailJaCadastradoError) return 'Este e-mail já tem conta.'
+  if (erro instanceof EntradaInvalidaError && erro.mensagemServidor !== null) {
+    return erro.mensagemServidor
+  }
+  return 'Não foi possível criar a conta. Tente de novo.'
+}
+
+function Login({
+  aoEntrar,
+  aoCriarConta,
+  aviso,
+}: {
+  aoEntrar: (usuario: Usuario) => void
+  aoCriarConta: (() => void) | null
+  aviso: string | null
+}) {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -87,6 +111,7 @@ function Login({ aoEntrar }: { aoEntrar: (usuario: Usuario) => void }) {
           onChange={(evento) => setSenha(evento.target.value)}
         />
       </div>
+      {aviso !== null && <p role="status">{aviso}</p>}
       {mensagem !== null && (
         <p id="erro-login" role="alert" className="erro">
           {mensagem}
@@ -94,6 +119,131 @@ function Login({ aoEntrar }: { aoEntrar: (usuario: Usuario) => void }) {
       )}
       <button type="submit" disabled={enviando}>
         {enviando ? 'Entrando...' : 'Entrar'}
+      </button>
+      {aoCriarConta !== null && (
+        <button type="button" onClick={aoCriarConta}>
+          Criar conta
+        </button>
+      )}
+    </form>
+  )
+}
+
+function Cadastro({
+  aoEntrar,
+  aoContaCriadaSemLogin,
+  aoVoltar,
+}: {
+  aoEntrar: (usuario: Usuario) => void
+  aoContaCriadaSemLogin: () => void
+  aoVoltar: () => void
+}) {
+  const [nome, setNome] = useState('')
+  const [email, setEmail] = useState('')
+  const [senha, setSenha] = useState('')
+  const [confirmacao, setConfirmacao] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [mensagem, setMensagem] = useState<string | null>(null)
+  const campoSenha = useRef<HTMLInputElement>(null)
+  // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
+  const emVoo = useRef(false)
+
+  function recusar(texto: string): void {
+    setMensagem(texto)
+    setSenha('')
+    setConfirmacao('')
+    campoSenha.current?.focus()
+  }
+
+  async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
+    evento.preventDefault()
+    if (emVoo.current) return
+    if (senha !== confirmacao) {
+      recusar('As senhas não conferem.')
+      return
+    }
+    emVoo.current = true
+    setEnviando(true)
+    setMensagem(null)
+    try {
+      await postCadastro(nome === '' ? { email, senha } : { email, senha, nome })
+    } catch (erro) {
+      recusar(mensagemDeCadastro(erro))
+      emVoo.current = false
+      setEnviando(false)
+      return
+    }
+    // A conta já existe: falha no login não é falha de cadastro, então não mostra erro de cadastro.
+    try {
+      aoEntrar(await postLogin({ email, senha }))
+    } catch {
+      aoContaCriadaSemLogin()
+    }
+  }
+
+  return (
+    <form onSubmit={(evento) => void enviar(evento)} aria-label="Criar conta">
+      <div className="campo">
+        <label htmlFor="cadastro-nome">Nome (opcional)</label>
+        <input
+          id="cadastro-nome"
+          type="text"
+          autoComplete="name"
+          maxLength={100}
+          value={nome}
+          onChange={(evento) => setNome(evento.target.value)}
+        />
+      </div>
+      <div className="campo">
+        <label htmlFor="cadastro-email">E-mail</label>
+        <input
+          id="cadastro-email"
+          type="email"
+          autoComplete="username"
+          maxLength={254}
+          required
+          value={email}
+          onChange={(evento) => setEmail(evento.target.value)}
+        />
+      </div>
+      <div className="campo">
+        <label htmlFor="cadastro-senha">Senha</label>
+        <input
+          id="cadastro-senha"
+          ref={campoSenha}
+          type="password"
+          autoComplete="new-password"
+          minLength={12}
+          maxLength={128}
+          required
+          value={senha}
+          aria-describedby={mensagem === null ? undefined : 'erro-cadastro'}
+          onChange={(evento) => setSenha(evento.target.value)}
+        />
+      </div>
+      <div className="campo">
+        <label htmlFor="cadastro-confirmacao">Confirmar senha</label>
+        <input
+          id="cadastro-confirmacao"
+          type="password"
+          autoComplete="new-password"
+          minLength={12}
+          maxLength={128}
+          required
+          value={confirmacao}
+          onChange={(evento) => setConfirmacao(evento.target.value)}
+        />
+      </div>
+      {mensagem !== null && (
+        <p id="erro-cadastro" role="alert" className="erro">
+          {mensagem}
+        </p>
+      )}
+      <button type="submit" disabled={enviando}>
+        {enviando ? 'Criando...' : 'Criar conta'}
+      </button>
+      <button type="button" onClick={aoVoltar}>
+        Já tenho conta
       </button>
     </form>
   )
@@ -167,6 +317,8 @@ function Rodape() {
 function App() {
   const [sessao, setSessao] = useState<EstadoSessao>({ tipo: 'carregando' })
   const [tentativa, setTentativa] = useState(0)
+  const [telaAnonima, setTelaAnonima] = useState<'login' | 'cadastro'>('login')
+  const [aviso, setAviso] = useState<string | null>(null)
 
   useEffect(() => {
     let ativo = true
@@ -203,11 +355,40 @@ function App() {
           </button>
         </>
       )}
-      {sessao.tipo === 'anonimo' && (
-        <Login aoEntrar={(usuario) => setSessao({ tipo: 'logado', usuario })} />
+      {sessao.tipo === 'anonimo' && telaAnonima === 'login' && (
+        <Login
+          aoEntrar={(usuario) => setSessao({ tipo: 'logado', usuario })}
+          aoCriarConta={
+            registroAberto()
+              ? () => {
+                  setAviso(null)
+                  setTelaAnonima('cadastro')
+                }
+              : null
+          }
+          aviso={aviso}
+        />
+      )}
+      {sessao.tipo === 'anonimo' && telaAnonima === 'cadastro' && registroAberto() && (
+        <Cadastro
+          aoEntrar={(usuario) => setSessao({ tipo: 'logado', usuario })}
+          aoContaCriadaSemLogin={() => {
+            setAviso('Conta criada. Entre com seu e-mail e senha.')
+            setTelaAnonima('login')
+          }}
+          aoVoltar={() => setTelaAnonima('login')}
+        />
       )}
       {sessao.tipo === 'logado' && (
-        <Logado usuario={sessao.usuario} aoSair={() => setSessao({ tipo: 'anonimo' })} />
+        <Logado
+          usuario={sessao.usuario}
+          aoSair={() => {
+            // Quem entrou pelo cadastro não deve voltar a ver o formulário de cadastro.
+            setTelaAnonima('login')
+            setAviso(null)
+            setSessao({ tipo: 'anonimo' })
+          }}
+        />
       )}
       <Rodape />
     </main>

@@ -49,4 +49,10 @@ Armadilhas:
 
 - O check `CodeQL` (resultados do code scanning) não é obrigatório no ruleset, mas falha com alerta aberto; ler os alertas antes do merge (`gh api repos/.../code-scanning/alerts?ref=refs/pull/N/merge`).
 - QA com a API real pegou o que os testes de MockMvc não pegavam (banco congelado com `docker pause`); manter esse passo.
-- Porta 8080 da máquina do dono tem um processo `api` antigo (pid 89846 em 2026-10-19): QA e testes de proxy em porta alta.
+- Porta 8080: o processo `api` antigo saiu; agora o Docker Desktop escuta em `*:8080` sem container, e a API ainda sobe em 127.0.0.1:8080. QA e testes de proxy seguem em porta alta.
+
+## F1.1 tela de cadastro (2026-10-19, PR #6)
+
+- `make seed` com "url not specified" era `DATABASE_URL` vazio no `.env` do dono. Diagnosticar o `.env` só por nome de chave e formato (awk com comprimento, espaço, `@`), nunca pelo valor.
+- Volume do Postgres anterior à ADR-021 não tem `ballast_owner` nem `ballast_app`: o init só roda com volume vazio, então é `docker compose down -v`.
+- `VITE_*` do `.env` da raiz chega ao Vite pelo `export` do Makefile (conferido no módulo servido). O reviewer disse o contrário sem testar.

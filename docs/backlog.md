@@ -7,6 +7,13 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
+### F1.1 — Tela de cadastro
+Formulário de cadastro no web contra o `POST /auth/cadastro` que já existe.
+O link só aparece com `VITE_REGISTRO_ABERTO=true` no build, e a API só
+responde com `REGISTRO_ABERTO=true`; fora isso, nada muda (ADR-022). Depois do
+201 o web faz o login com as mesmas credenciais. Em produção o cadastro segue
+fechado até a F20.5.
+
 ### F2 — Contas
 Criar, listar, arquivar. Tipos `corrente`, `poupanca`, `dinheiro`.
 Saldo calculado (`saldo_inicial` + lançamentos), nunca materializado.
@@ -140,6 +147,9 @@ tentativa (auditoria de segurança da F1, M3), e o IP do log vem de
 argon2.
 Também precisa conter o crescimento de `tentativa_login` (uma linha por e-mail
 digitado, inclusive inexistente, sem limpeza hoje) e limpar sessões expiradas.
+Inclui uma trava mecânica no deploy que recuse `REGISTRO_ABERTO=true` em
+produção enquanto esta fatia não fechar: hoje só o comentário do
+`.env.example` impede (auditoria do PR #6). Dono: devops.
 
 ## Mais adiante
 
