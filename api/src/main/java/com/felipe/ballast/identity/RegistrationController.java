@@ -53,6 +53,10 @@ class RegistrationController {
       description = "E-mail já cadastrado",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "413",
+      description = "Corpo maior que 4 KiB, com ou sem Content-Length",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "415",
       description = "Content-Type diferente de application/json",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))

@@ -175,6 +175,15 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Corpo maior que 4 KiB, com ou sem Content-Length */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Content-Type diferente de application/json */
             415: {
                 headers: {
@@ -275,6 +284,15 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Corpo maior que 4 KiB, com ou sem Content-Length */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Content-Type diferente de application/json */
             415: {
                 headers: {
@@ -323,6 +341,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Content-Length acima de 4 KiB; o corpo nunca é lido */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Erro"];
+                };
             };
             /** @description Falha interna; a sessão pode não ter sido revogada */
             500: {

@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.lang.Nullable;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -40,6 +41,21 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             .findFirst()
             .orElse("requisição inválida");
     return body(status, headers, message);
+  }
+
+  // O estouro do limite de corpo chega embrulhado pelo parser de JSON.
+  @Override
+  protected ResponseEntity<Object> handleHttpMessageNotReadable(
+      HttpMessageNotReadableException ex,
+      HttpHeaders headers,
+      HttpStatusCode status,
+      WebRequest request) {
+    for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
+      if (cause instanceof RequestBodyTooLargeException) {
+        return body(HttpStatus.CONTENT_TOO_LARGE, headers, "corpo grande demais");
+      }
+    }
+    return super.handleHttpMessageNotReadable(ex, headers, status, request);
   }
 
   @Override

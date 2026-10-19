@@ -36,6 +36,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: E-mail já cadastrado
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Corpo maior que 4 KiB, com ou sem Content-Length"
         "415":
           content:
             application/json:
@@ -118,6 +124,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Credenciais inválidas
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Corpo maior que 4 KiB, com ou sem Content-Length"
         "415":
           content:
             application/json:
@@ -165,6 +177,12 @@ paths:
               schema:
                 type: string
               style: simple
+        "413":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Length acima de 4 KiB; o corpo nunca é lido
         "500":
           content:
             application/json:

@@ -77,6 +77,10 @@ class AuthController {
       description = "Credenciais inválidas",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "413",
+      description = "Corpo maior que 4 KiB, com ou sem Content-Length",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "429",
       description =
           "Atraso progressivo em vigor para esse e-mail; resposta idêntica para e-mail com e sem"
@@ -183,6 +187,10 @@ class AuthController {
               required = true,
               description = "ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0",
               schema = @Schema(type = "string")))
+  @ApiResponse(
+      responseCode = "413",
+      description = "Content-Length acima de 4 KiB; o corpo nunca é lido",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "500",
       description = "Falha interna; a sessão pode não ter sido revogada",
