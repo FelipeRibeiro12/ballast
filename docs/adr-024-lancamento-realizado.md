@@ -55,9 +55,17 @@ dono e como as categorias nascem.
   - `DELETE` apaga a linha. `cancelado` fica para a recorrência, onde
     existe o que cancelar.
 - **Saldo.** `saldo_inicial` mais receitas realizadas menos despesas
-  realizadas, numa consulta agregada só para a lista de contas. Saldo acima
-  de ±9.007.199.254.740.991 centavos está fora do contrato: com o teto por
-  lançamento, precisaria de milhares de lançamentos no limite.
+  realizadas, numa consulta agregada só para a lista de contas.
+- **Teto do saldo.** O saldo de cada conta fica em ±9.007.199.254.740.991
+  centavos, o mesmo teto do JSON. Criar, editar ou apagar lançamento que
+  levaria o saldo de alguma conta para fora dessa faixa dá 400 `saldo da
+  conta fora do limite`. A primeira versão deste ADR dizia que estourar
+  exigiria milhares de lançamentos; o QA mostrou que dois no teto bastam.
+- **Escrita serializada por conta.** Toda escrita de lançamento trava a linha
+  da conta com `SELECT ... FOR UPDATE` na mesma transação, antes de conferir
+  se a conta está arquivada e se o saldo cabe. Quando um `PUT` troca a conta,
+  as duas linhas são travadas em ordem de id, para duas trocas cruzadas não se
+  travarem. Arquivar faz `UPDATE` na mesma linha e entra na fila.
 
 ## Justificativa
 
@@ -72,10 +80,17 @@ autorização.
 Período obrigatório na listagem dá teto ao resultado sem inventar paginação
 antes de haver volume.
 
+A trava da linha da conta fecha duas corridas com um mecanismo só: lançar
+enquanto a conta é arquivada, e dois lançamentos simultâneos que juntos
+passariam do teto. Num app de um usuário, a fila por conta não custa nada
+perceptível.
+
 ## Alternativas descartadas
 
 - **Categorias globais com `usuario_id` nulo**: quebra a fronteira de
   autorização e complica o `unique`.
+- **Saldo como string decimal no JSON**: tiraria o teto, mas mudaria o
+  contrato de fiat do ADR-005 só para um caso que não existe no uso real.
 - **Status `cancelado` no lugar do `DELETE`**: guarda lixo sem dar nada ao
   usuário enquanto não houver recorrência.
 - **`data_competencia` e `data_caixa` separadas na API já agora**: sem
