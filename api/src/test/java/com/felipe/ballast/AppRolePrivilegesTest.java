@@ -77,6 +77,59 @@ class AppRolePrivilegesTest {
     assertDenied("CREATE TABLE intruso (id int)");
     assertDenied("TRUNCATE usuario");
     assertDenied("TRUNCATE conta");
+    assertDenied("TRUNCATE categoria");
+    assertDenied("TRUNCATE lancamento");
+  }
+
+  @Test
+  void allowsDmlOnCategoriaAndLancamento() {
+    UUID usuarioId = UUID.randomUUID();
+    UUID contaId = UUID.randomUUID();
+    UUID categoriaId = UUID.randomUUID();
+    UUID lancamentoId = UUID.randomUUID();
+    jdbc.sql("INSERT INTO usuario (id, email, senha_hash) VALUES (:id, :email, 'hash')")
+        .param("id", usuarioId)
+        .param("email", "lanc-dml-" + usuarioId + "@example.com")
+        .update();
+    jdbc.sql(
+            "INSERT INTO conta (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'Caixa', 'dinheiro')")
+        .param("id", contaId)
+        .param("usuarioId", usuarioId)
+        .update();
+    // nome fora da lista das sementes, que já nasceram junto com o usuário
+    jdbc.sql(
+            "INSERT INTO categoria (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'Pets', 'despesa')")
+        .param("id", categoriaId)
+        .param("usuarioId", usuarioId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO lancamento (id, usuario_id, tipo, titulo, categoria_id, conta_id, valor,"
+                + " data_competencia, data_caixa) VALUES (:id, :usuarioId, 'despesa', 'Ração',"
+                + " :categoriaId, :contaId, 10.50, DATE '2026-10-19', DATE '2026-10-19')")
+        .param("id", lancamentoId)
+        .param("usuarioId", usuarioId)
+        .param("categoriaId", categoriaId)
+        .param("contaId", contaId)
+        .update();
+    jdbc.sql("UPDATE lancamento SET titulo = 'Ração premium' WHERE id = :id")
+        .param("id", lancamentoId)
+        .update();
+    jdbc.sql("UPDATE categoria SET cor = '#FFAA00' WHERE id = :id")
+        .param("id", categoriaId)
+        .update();
+    String titulo =
+        jdbc.sql("SELECT titulo FROM lancamento WHERE id = :id")
+            .param("id", lancamentoId)
+            .query(String.class)
+            .single();
+    int deleted =
+        jdbc.sql("DELETE FROM lancamento WHERE id = :id").param("id", lancamentoId).update();
+    int deletedCategoria =
+        jdbc.sql("DELETE FROM categoria WHERE id = :id").param("id", categoriaId).update();
+
+    assertThat(titulo).isEqualTo("Ração premium");
+    assertThat(deleted).isEqualTo(1);
+    assertThat(deletedCategoria).isEqualTo(1);
   }
 
   @Test

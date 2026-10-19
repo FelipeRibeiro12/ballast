@@ -78,3 +78,64 @@ select {
   min-height: 2.75rem;
   width: 100%;
 }
+
+.mes-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.totais {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.totais dt {
+  font-size: 0.8rem;
+}
+
+.totais dd {
+  margin: 0;
+  font-weight: bold;
+}
+
+.receita {
+  color: #1b6e2d;
+}
+
+.despesa {
+  color: #b00020;
+}
+
+.lancamentos {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.lancamentos li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.lancamento-dados {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lancamento-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

@@ -192,6 +192,52 @@ paths:
       summary: Encerra a sessão
       tags:
       - auth
+  /categorias:
+    get:
+      description: "Ordenada por tipo (despesa antes de receita) e nome sem diferenciar\
+        \ caixa. Sem o parâmetro, devolve os dois tipos."
+      operationId: getCategorias
+      parameters:
+      - in: query
+        name: tipo
+        required: false
+        schema:
+          type: string
+          enum:
+          - receita
+          - despesa
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Categoria"
+          description: Categorias do usuário
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: tipo com valor diferente de receita e despesa
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Lista as categorias do usuário
+      tags:
+      - categorias
   /contas:
     get:
       description: "Ordenada por nome sem diferenciar caixa. Sem o parâmetro, devolve\
@@ -419,6 +465,282 @@ paths:
       summary: Verifica se a API alcança o banco
       tags:
       - health
+  /lancamentos:
+    get:
+      description: "Filtra por dataCaixa, com as duas pontas incluídas, do mais novo\
+        \ para o mais antigo (depois criadoEm e id, também decrescentes). de e ate\
+        \ são obrigatórios e o intervalo tem no máximo 366 dias contando os dois extremos.\
+        \ contaId, se vier, precisa ser um UUID; conta que não é do usuário ou nã\
+        o existe devolve lista vazia, sem distinguir."
+      operationId: getLancamentos
+      parameters:
+      - in: query
+        name: de
+        required: true
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: ate
+        required: true
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: contaId
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lancamento"
+          description: Lançamentos do período
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "de ou ate ausente ou fora do formato AAAA-MM-DD (ano de 1900\
+            \ a 2199), de depois de ate, intervalo maior que 366 dias ou contaId que\
+            \ não é UUID"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Lista os lançamentos do usuário num período
+      tags:
+      - lancamentos
+    post:
+      description: "A data enviada vai para dataCompetencia e dataCaixa. Conta e categoria\
+        \ precisam ser do usuário, e a categoria precisa ser do mesmo tipo do lanç\
+        amento; os três casos de recusa (inexistente, de outro usuário, id inválido)\
+        \ têm a mesma mensagem."
+      operationId: postLancamentos
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LancamentoRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lancamento"
+          description: Lançamento criado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado; \"conta nã\
+            o encontrada\", \"conta arquivada\", \"categoria não encontrada\" ou \"\
+            saldo da conta fora do limite\" (o saldo passaria de 9007199254740991\
+            \ centavos, para mais ou para menos)"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Cria um lançamento realizado
+      tags:
+      - lancamentos
+  /lancamentos/{id}:
+    delete:
+      description: "Apaga a linha, também numa conta arquivada. O saldo deixa de somá\
+        -lo."
+      operationId: deleteLancamentosById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Lançamento apagado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "\"saldo da conta fora do limite\": apagar o lançamento tiraria\
+            \ o saldo da faixa de ±9007199254740991 centavos, e nada é apagado"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Lançamento de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Apaga um lançamento
+      tags:
+      - lancamentos
+    get:
+      operationId: getLancamentosById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lancamento"
+          description: Lançamento
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Lançamento de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Devolve um lançamento do usuário
+      tags:
+      - lancamentos
+    put:
+      description: "Mesmo corpo do POST, substitui todos os campos e grava a data\
+        \ nas duas colunas. Mover o lançamento para uma conta arquivada é recusado\
+        \ (400 \"conta arquivada\"). Editar sem trocar de conta vale mesmo com a conta\
+        \ arquivada, para corrigir lançamento antigo."
+      operationId: putLancamentosById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LancamentoRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lancamento"
+          description: Lançamento com os valores novos
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado; \"conta nã\
+            o encontrada\", \"conta arquivada\" (só ao trocar de conta), \"categoria\
+            \ não encontrada\" ou \"saldo da conta fora do limite\" (em qualquer das\
+            \ contas afetadas)"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Lançamento de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Substitui um lançamento
+      tags:
+      - lancamentos
 components:
   schemas:
     AtualizarContaRequest:
@@ -445,6 +767,43 @@ components:
       required:
       - email
       - senha
+    Categoria:
+      type: object
+      properties:
+        cor:
+          type:
+          - string
+          - "null"
+          maxLength: 9
+        icone:
+          type:
+          - string
+          - "null"
+          maxLength: 50
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+        paiId:
+          type:
+          - string
+          - "null"
+          format: uuid
+        tipo:
+          type: string
+          enum:
+          - receita
+          - despesa
+      required:
+      - cor
+      - icone
+      - id
+      - nome
+      - paiId
+      - tipo
     Conta:
       type: object
       properties:
@@ -534,6 +893,107 @@ components:
           type: string
       required:
       - mensagem
+    Lancamento:
+      type: object
+      properties:
+        categoriaId:
+          type: string
+          format: uuid
+        contaId:
+          type: string
+          format: uuid
+        criadoEm:
+          type: string
+          format: date-time
+        dataCaixa:
+          type: string
+          format: date
+          description: Quando o dinheiro se move; saldo e fluxo de caixa usam esta
+        dataCompetencia:
+          type: string
+          format: date
+          description: Quando o fato aconteceu; gráfico por categoria e orçamento
+            usam esta
+        descricao:
+          type:
+          - string
+          - "null"
+          maxLength: 500
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - realizado
+        tipo:
+          type: string
+          enum:
+          - receita
+          - despesa
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+        valorCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real, sempre positivo; o sinal vem do tipo"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - categoriaId
+      - contaId
+      - criadoEm
+      - dataCaixa
+      - dataCompetencia
+      - descricao
+      - id
+      - status
+      - tipo
+      - titulo
+      - valorCentavos
+    LancamentoRequest:
+      type: object
+      properties:
+        categoriaId:
+          type: string
+          format: uuid
+        contaId:
+          type: string
+          format: uuid
+        data:
+          type: string
+          format: date
+          description: Grava a mesma data em dataCompetencia e dataCaixa
+          example: 2026-03-10
+        descricao:
+          type:
+          - string
+          - "null"
+          maxLength: 500
+        tipo:
+          type: string
+          enum:
+          - receita
+          - despesa
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+        valorCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real, sempre positivo; o sinal vem do tipo"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - categoriaId
+      - contaId
+      - data
+      - tipo
+      - titulo
+      - valorCentavos
     LoginRequest:
       type: object
       properties:

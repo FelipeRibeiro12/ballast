@@ -31,3 +31,9 @@ export function lerCentavos(texto: string): number | null {
   if (centavos > LIMITE_SEGURO) return null
   return Number(sinal === '-' ? -centavos : centavos)
 }
+
+// Valor de lançamento: o sinal vem do tipo, então zero e negativo não passam.
+export function lerValorPositivo(texto: string): number | null {
+  const centavos = lerCentavos(texto)
+  return centavos !== null && centavos > 0 ? centavos : null
+}

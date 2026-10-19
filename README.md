@@ -2,7 +2,7 @@
 
 App de controle financeiro pessoal: fiat e cripto no mesmo lugar, com recorrência, cartão de crédito parcelado, metas e projeção de saldo.
 
-Hoje existem cadastro, login, logout e contas (criar, listar, arquivar), com saldo igual ao saldo inicial. Lançamentos e os demais módulos ainda não existem.
+Hoje existem cadastro, login, logout, contas (criar, listar, arquivar) e lançamentos realizados de receita e despesa, com categorias semeadas e saldo calculado. Transferência, recorrência e os demais módulos ainda não existem.
 
 Visão do produto em `docs/visao.md`. Decisões em `docs/adr-*.md`.
 
@@ -95,8 +95,12 @@ Rotas atuais:
 - `GET /contas`: lista as contas ativas do usuário da sessão, com `?arquivadas=true` só as arquivadas.
 - `POST /contas`: corpo `{"nome", "tipo", "saldoInicialCentavos"}`. Tipo `corrente`, `poupanca` ou `dinheiro`. Nome único por usuário sem diferenciar caixa; repetido dá 409.
 - `GET /contas/{id}` e `PATCH /contas/{id}` com `{"arquivada": true|false}`. Conta de outro usuário dá 404.
+- `GET /categorias`: as categorias do usuário, semeadas no cadastro. Opcional `?tipo=receita|despesa`.
+- `POST /lancamentos`: corpo `{"tipo", "titulo", "descricao", "valorCentavos", "categoriaId", "contaId", "data"}`. A `data` vale para competência e caixa. Conta arquivada, conta ou categoria de outro usuário e saldo que sairia da faixa do JSON dão 400.
+- `GET /lancamentos?de=AAAA-MM-DD&ate=AAAA-MM-DD`, com `contaId` opcional: período obrigatório de até 366 dias, por data de caixa.
+- `GET`, `PUT` e `DELETE /lancamentos/{id}`. Lançamento de outro usuário dá 404.
 
-Rota que não é pública responde 401 sem sessão. `POST` e `PATCH` exigem `Content-Type: application/json`, e corpo acima de 4 KiB dá 413. Banco fora dá 503 em qualquer rota. Valor em dinheiro vai em inteiro de centavos (ADR-005, ADR-023).
+Rota que não é pública responde 401 sem sessão. `POST`, `PUT` e `PATCH` exigem `Content-Type: application/json`, e corpo acima de 4 KiB dá 413. Banco fora dá 503 em qualquer rota. Valor em dinheiro vai em inteiro de centavos (ADR-005, ADR-023).
 
 Ao mudar rota ou DTO:
 

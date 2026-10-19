@@ -10,18 +10,37 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 // Leitura com saldo, em SQL (ADR-017). Toda consulta filtra por usuario_id.
-// Saldo: hoje é só o saldo_inicial. A F3 troca a expressão por saldo_inicial mais a soma dos
-// lançamentos realizados (LEFT JOIN agregado por conta_id), nesta mesma consulta, para a
-// listagem continuar com uma ida ao banco só.
+// Saldo: saldo_inicial mais receitas realizadas menos despesas realizadas (ADR-024), calculado
+// aqui para a listagem fazer uma ida ao banco só. Nunca é coluna.
 @Repository
 class AccountQueries {
 
-  private static final String COLUMNS =
+  // MATERIALIZED força um agregado só por consulta. Sem ele o planejador pode refazer o agregado
+  // para cada conta (nested loop) quando subestima as linhas.
+  private static final String MOVEMENT_START =
       """
-      SELECT c.id, c.nome, c.tipo, c.moeda, c.saldo_inicial, c.saldo_inicial AS saldo,
+      WITH movement AS MATERIALIZED (
+        SELECT conta_id,
+               SUM(CASE WHEN tipo = 'receita' THEN valor ELSE -valor END) AS movimento
+        FROM lancamento
+        WHERE usuario_id = :userId AND status = 'realizado'
+      """;
+
+  private static final String MOVEMENT_END =
+      """
+        GROUP BY conta_id
+      )
+      SELECT c.id, c.nome, c.tipo, c.moeda, c.saldo_inicial,
+             c.saldo_inicial + COALESCE(m.movimento, 0) AS saldo,
              c.arquivada, c.criada_em
       FROM conta c
+      LEFT JOIN movement m ON m.conta_id = c.id
       """;
+
+  private static final String LIST_COLUMNS = MOVEMENT_START + MOVEMENT_END;
+  // O detalhe filtra o agregado também pela conta pedida, para não somar o usuário inteiro.
+  private static final String FIND_COLUMNS =
+      MOVEMENT_START + "  AND conta_id = :id\n" + MOVEMENT_END;
 
   private final JdbcClient jdbc;
 
@@ -31,7 +50,7 @@ class AccountQueries {
 
   List<AccountSummary> list(UUID userId, boolean archived) {
     return jdbc.sql(
-            COLUMNS
+            LIST_COLUMNS
                 + """
                 WHERE c.usuario_id = :userId AND c.arquivada = :archived
                 ORDER BY lower(c.nome), c.id
@@ -44,7 +63,7 @@ class AccountQueries {
 
   Optional<AccountSummary> find(UUID userId, UUID id) {
     return jdbc.sql(
-            COLUMNS
+            FIND_COLUMNS
                 + """
                 WHERE c.usuario_id = :userId AND c.id = :id
                 """)

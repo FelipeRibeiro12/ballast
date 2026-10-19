@@ -17,3 +17,24 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
 - Dinheiro de fiat sai e entra como inteiro de centavos
   (`saldoInicialCentavos`, `saldoCentavos`), entre -9007199254740991 e
   9007199254740991. Decimal no JSON (`12.5`) é recusado com 400.
+- Em `/lancamentos/{id}`, vale a mesma regra de 404 (outro usuário, inexistente
+  ou id que não é UUID, mesmo corpo). `valorCentavos` é sempre positivo, de 1
+  a 9007199254740991, e o sinal vem do `tipo` (ADR-024).
+- `GET /lancamentos` exige `de` e `ate` (AAAA-MM-DD, ano de 1900 a 2199, `de`
+  menor ou igual a `ate`, no máximo 366 dias contando os dois extremos) e filtra
+  por `dataCaixa`. `contaId` opcional: UUID malformado dá 400; UUID bem formado
+  de conta alheia ou inexistente dá lista vazia, para não revelar a conta.
+- Em `POST` e `PUT /lancamentos`, conta inexistente, de outro usuário ou id
+  inválido dá 400 `conta não encontrada`; categoria inexistente, de outro
+  usuário, de tipo diferente do lançamento ou id inválido dá 400
+  `categoria não encontrada`; conta arquivada dá 400 `conta arquivada`. No `PUT`,
+  a recusa por conta arquivada vale só ao trocar de conta: editar ou apagar
+  lançamento que já está numa conta arquivada é permitido.
+- O saldo de cada conta fica entre -9007199254740991 e 9007199254740991
+  centavos. `POST`, `PUT` e `DELETE /lancamentos` que levariam o saldo de
+  alguma conta afetada (no `PUT` que troca de conta, as duas) para fora dessa
+  faixa dão 400 `saldo da conta fora do limite` e nada grava. Toda escrita de
+  lançamento é serializada por conta (ADR-024): depois que o `PATCH` de arquivar
+  respondeu 200, nenhum lançamento novo entra na conta.
+- O corpo do lançamento recebe uma `data` e a API grava a mesma em
+  `dataCompetencia` e `dataCaixa`. Campo não declarado dá 400.

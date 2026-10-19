@@ -33,6 +33,9 @@ function mockFetch(rotas: Rotas): void {
       const rota = rotas[chave]
       if (rota) return rota(init?.body)
       if (chave === 'GET /healthz') return Promise.resolve(jsonResponse({ mensagem: 'ok' }, 200))
+      // A tela logada também busca categorias e lançamentos; estes testes não querem saber deles.
+      if (chave === 'GET /categorias') return Promise.resolve(jsonResponse([], 200))
+      if (chave.startsWith('GET /lancamentos?')) return Promise.resolve(jsonResponse([], 200))
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),
   )
@@ -58,6 +61,11 @@ function preencherNovaConta(nome: string, saldo = ''): void {
 const enviarNovaConta = (): void => {
   fireEvent.submit(screen.getByRole('form', { name: /nova conta/i }))
 }
+
+// A tela de lançamentos também lista o nome das contas nos selects, então a busca fica na seção de contas.
+const secaoContas = (): HTMLElement => screen.getByRole('region', { name: /^contas/i })
+const contasNubank = async (): Promise<HTMLElement> =>
+  within(await screen.findByRole('region', { name: /^contas/i })).findByText('Nubank')
 
 describe('Contas', () => {
   afterEach(() => {
@@ -127,7 +135,7 @@ describe('Contas', () => {
     expect(alerta).toHaveTextContent('Não foi possível carregar as contas.')
     expect(alerta).not.toHaveTextContent(/boom/)
     fireEvent.click(screen.getByRole('button', { name: /tentar de novo/i }))
-    expect(await screen.findByText('Nubank')).toBeVisible()
+    expect(await contasNubank()).toBeVisible()
   })
 
   it('503 mostra serviço indisponível', async () => {
@@ -298,11 +306,11 @@ describe('Contas', () => {
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: /arquivar nubank/i }))
     expect(await screen.findByText('Nenhuma conta ainda.')).toBeVisible()
-    expect(screen.queryByText('Nubank')).toBeNull()
+    expect(within(secaoContas()).queryByText('Nubank')).toBeNull()
     expect(JSON.parse(String(chamadasA('PATCH /contas/c1')[0][1]?.body))).toEqual({ arquivada: true })
 
     fireEvent.click(screen.getByRole('button', { name: /ver arquivadas/i }))
-    expect(await screen.findByText('Nubank')).toBeVisible()
+    expect(await contasNubank()).toBeVisible()
     expect(screen.queryByRole('form', { name: /nova conta/i })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /desarquivar nubank/i }))
@@ -310,7 +318,7 @@ describe('Contas', () => {
     expect(JSON.parse(String(chamadasA('PATCH /contas/c1')[1][1]?.body))).toEqual({ arquivada: false })
 
     fireEvent.click(screen.getByRole('button', { name: /voltar às ativas/i }))
-    expect(await screen.findByText('Nubank')).toBeVisible()
+    expect(await contasNubank()).toBeVisible()
   })
 
   it('arquivadas vazias mostra "Nenhuma conta arquivada."', async () => {
@@ -333,7 +341,7 @@ describe('Contas', () => {
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: /arquivar nubank/i }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível alterar a conta. Tente de novo.')
-    expect(screen.getByText('Nubank')).toBeVisible()
+    expect(within(secaoContas()).getByText('Nubank')).toBeVisible()
     await waitFor(() => expect(screen.getByRole('button', { name: /arquivar nubank/i })).toBeEnabled())
   })
 
@@ -363,7 +371,7 @@ describe('Contas', () => {
     expect(await screen.findByText('Nenhuma conta ainda.')).toBeVisible()
     expect(screen.getByRole('alert')).toHaveTextContent('Essa conta não existe mais.')
     expect(chamadasA('GET /contas')).toHaveLength(2)
-    expect(screen.queryByText('Nubank')).toBeNull()
+    expect(within(secaoContas()).queryByText('Nubank')).toBeNull()
   })
 
   it('conta nova entra na ordem do servidor: nome sem caixa e id no empate', async () => {

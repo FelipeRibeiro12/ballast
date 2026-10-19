@@ -113,6 +113,9 @@ caixa (`conta_usuario_nome_unico`), inclusive contra conta arquivada. Esse índi
 também atende a busca por `usuario_id`. `usuario_id` é `ON DELETE CASCADE`,
 `criada_em` tem `DEFAULT now()`, e o `id` vem da aplicação.
 
+Migration `V6` (ADR-024): `conta` ganha `unique (id, usuario_id)`
+(`conta_id_usuario_unico`), o alvo da FK composta de `lancamento`.
+
 Saldo **não** é coluna. É `saldo_inicial` + soma dos lançamentos realizados.
 Guardar saldo materializado é a origem clássica de divergência; se a
 performance exigir, isso vira view materializada depois, com ADR.
@@ -256,15 +259,47 @@ categoria
   cor         text
   icone       text
   pai_id      uuid fk null           -- "Alimentação > Restaurante"
-  unique (usuario_id, nome, pai_id)
+  unique (usuario_id, pai_id, lower(nome))
 ```
 
 Hierarquia de um nível só. Dois níveis já cobrem o uso real e mantêm a consulta
 simples; mais que isso vira árvore e a agregação fica custosa.
 
-Sementes: Salário, Aluguel recebido, Benefício, Rendimento · Alimentação,
-Refeição, Mercado, Combustível, Transporte, Moradia, Saúde, Lazer, Assinatura,
-Educação, Outros.
+Migration `V6` (ADR-024): o nome tem de 1 a 100 caracteres, sem espaço nas
+pontas. `cor` e `icone` são opcionais, com no máximo 9 e 50 caracteres (cabe
+`#RRGGBBAA` e um nome de ícone). `usuario_id` é `ON DELETE CASCADE`, e o `id`
+vem da aplicação.
+
+- **Nome único por pai.** `categoria_usuario_pai_nome_unico` é um índice único
+  em `(usuario_id, pai_id, lower(nome)) NULLS NOT DISTINCT`. O `NULLS NOT DISTINCT`
+  (Postgres 15+) faz duas raízes de mesmo nome colidirem; num `unique` comum o
+  `pai_id` nulo nunca colide. Nomes iguais sob pais diferentes são permitidos.
+- **Pai do mesmo usuário e de um nível só, sem trigger.** `pai_id` é FK
+  composta `(pai_id, usuario_id, pai_nivel)` para `categoria (id, usuario_id,
+  nivel)`. `nivel` (0 raiz, 1 filha) e `pai_nivel` (0 quando há pai, nulo sem pai)
+  são colunas geradas: **a aplicação não escreve nelas** e o INSERT não as cita.
+  Como a FK exige pai de `nivel` 0, uma filha não vira pai, e uma raiz com filhas
+  não vira filha. A categoria filha pode ter tipo diferente do pai; se isso
+  importar, é CHECK novo.
+- **Alvo da FK de `lancamento`:** `unique (id, usuario_id, tipo)`
+  (`categoria_id_usuario_tipo_unico`). Não existe `unique (id, usuario_id)` sozinho
+  porque nada aponta para ele; quem precisar cria.
+- As FKs de `categoria` e `lancamento` são `ON DELETE NO ACTION`, não `RESTRICT`.
+  Recusam apagar o pai com filho do mesmo jeito, mas só checam no fim do comando.
+  Com `RESTRICT`, apagar o usuário falharia no meio do cascade, quando a conta
+  some antes dos lançamentos.
+- Categoria com lançamento não se apaga (a FK recusa). O CRUD de categoria
+  (fatia futura) decide entre arquivar e bloquear.
+
+Sementes (usuários existentes na `V6`, usuários novos pela aplicação, **a mesma
+lista nos dois lugares**; esta é a fonte):
+
+- Receita: Salário, Aluguel recebido, Benefício, Rendimento, Outras receitas
+- Despesa: Alimentação, Refeição, Mercado, Combustível, Transporte, Moradia,
+  Saúde, Lazer, Assinatura, Educação, Outros
+
+São 16. "Outros" é despesa e a receita genérica chama "Outras receitas" (ADR-024).
+A `V6` gera o id das sementes com `gen_random_uuid()` (v4), só no backfill.
 
 ---
 
@@ -358,6 +393,37 @@ lancamento
   criado_em         timestamptz not null
   unique (usuario_id, hash_externo)
 ```
+
+Migration `V6` (ADR-024) cria só o recorte da F3: `id`, `usuario_id`, `tipo`,
+`titulo`, `descricao`, `categoria_id`, `conta_id`, `valor`, `data_competencia`,
+`data_caixa`, `status`, `criado_em`. As demais colunas e tabelas deste bloco
+chegam com as suas fatias.
+
+- `tipo` aceita só `receita` e `despesa` (a F4 alarga para `transferencia` e
+  permite `categoria_id` nulo só nela). `status` aceita só `realizado` e tem
+  `DEFAULT 'realizado'` (a recorrência alarga para `previsto` e `cancelado`).
+- `titulo` de 1 a 100 caracteres sem espaço nas pontas; `descricao` nula ou até
+  500 caracteres (conta caracteres, não bytes).
+- `valor` entre 0.01 e 90071992547409.91 (`lancamento_valor_faixa`). As duas
+  datas entre 1900-01-01 e 2199-12-31. `criado_em` tem `DEFAULT now()`; o `id`
+  vem da aplicação. `usuario_id` é `ON DELETE CASCADE`.
+- **O dono é garantido pelo banco.** `lancamento_conta_mesmo_usuario`: FK
+  `(conta_id, usuario_id)` para `conta (id, usuario_id)`.
+  `lancamento_categoria_mesmo_usuario_e_tipo`: FK `(categoria_id, usuario_id,
+  tipo)` para `categoria (id, usuario_id, tipo)`, o que também impede despesa
+  em categoria de receita e o contrário. Ambas `ON DELETE NO ACTION` (motivo na
+  seção Categoria): conta e categoria com lançamento não se apagam.
+- Índice da F3: só `lancamento_usuario_data_caixa (usuario_id, data_caixa)`.
+  Atende a lista por intervalo (com `conta_id` como filtro), o saldo por conta
+  (lê os lançamentos do usuário) e a busca por `usuario_id` e `id` usa a chave
+  primária. Medido com 400 mil linhas: lista de um mês (5 mil linhas) 4 ms,
+  saldo de usuário com 2 mil lançamentos 0,7 ms, de usuário com 300 mil
+  (75% da tabela) 26 ms com seq scan, que nenhum índice melhora. Índice por
+  `conta_id` ou `categoria_id` ficou de fora: ganhou 0,3 ms no saldo e a
+  checagem das FKs na exclusão do usuário caiu de 5 ms para 2 ms. Quem trouxer
+  CRUD de categoria ou relatório cria o dele com o `EXPLAIN`.
+- Query do saldo: `sum` por `conta_id` filtrando `usuario_id` e
+  `status = 'realizado'`, com receita somando e despesa subtraindo.
 
 Pontos que importam:
 
@@ -530,6 +596,7 @@ create index on lancamento (usuario_id, hash_externo) where hash_externo is not 
 create index on importacao_linha (importacao_id, decisao);
 ```
 
+Na `V6` só o primeiro existe; os outros chegam com as fatias que têm a query.
 O primeiro serve saldo e fluxo de caixa; o segundo, gráfico por categoria e
 orçamento. Antes de adicionar qualquer outro, rode `EXPLAIN ANALYZE` e mostre o
 antes e o depois.

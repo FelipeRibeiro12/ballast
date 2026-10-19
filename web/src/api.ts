@@ -252,3 +252,146 @@ export async function patchConta(id: string, arquivada: boolean): Promise<Conta>
   if (!resposta.ok) return recusarResposta(resposta, 'PATCH /contas/{id}')
   return lerConta(resposta, 'PATCH /contas/{id}')
 }
+
+export type Categoria = components['schemas']['Categoria']
+export type Lancamento = components['schemas']['Lancamento']
+export type LancamentoRequest = components['schemas']['LancamentoRequest']
+
+export class LancamentoNaoEncontradoError extends ApiError {}
+
+export class LancamentoInvalidoError extends ApiError {
+  // null quando o corpo do 400 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('lançamento recusado por entrada inválida')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+function isCategoria(valor: unknown): valor is Categoria {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'nome' in valor &&
+    typeof valor.nome === 'string' &&
+    'tipo' in valor &&
+    (valor.tipo === 'receita' || valor.tipo === 'despesa') &&
+    'paiId' in valor &&
+    (valor.paiId === null || typeof valor.paiId === 'string') &&
+    'cor' in valor &&
+    (valor.cor === null || typeof valor.cor === 'string') &&
+    'icone' in valor &&
+    (valor.icone === null || typeof valor.icone === 'string')
+  )
+}
+
+function isLancamento(valor: unknown): valor is Lancamento {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'tipo' in valor &&
+    (valor.tipo === 'receita' || valor.tipo === 'despesa') &&
+    'status' in valor &&
+    valor.status === 'realizado' &&
+    'titulo' in valor &&
+    typeof valor.titulo === 'string' &&
+    'descricao' in valor &&
+    (valor.descricao === null || typeof valor.descricao === 'string') &&
+    // Fora do inteiro seguro o JSON já perdeu o centavo no parse.
+    'valorCentavos' in valor &&
+    Number.isSafeInteger(valor.valorCentavos) &&
+    'categoriaId' in valor &&
+    typeof valor.categoriaId === 'string' &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'dataCompetencia' in valor &&
+    typeof valor.dataCompetencia === 'string' &&
+    'dataCaixa' in valor &&
+    typeof valor.dataCaixa === 'string' &&
+    'criadoEm' in valor &&
+    typeof valor.criadoEm === 'string'
+  )
+}
+
+async function lerLancamento(resposta: Response, origem: string): Promise<Lancamento> {
+  const corpo: unknown = await resposta.json()
+  if (!isLancamento(corpo)) {
+    throw new ApiError(`${origem} com formato inesperado`)
+  }
+  return corpo
+}
+
+async function recusarRespostaDeLancamento(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 404) throw new LancamentoNaoEncontradoError('lançamento não encontrado')
+  if (resposta.status === 400) {
+    throw new LancamentoInvalidoError(await lerMensagemDeErro(resposta))
+  }
+  throw new ApiError(`${origem} respondeu ${resposta.status}`)
+}
+
+export async function fetchCategorias(): Promise<Categoria[]> {
+  const resposta = await fetch(`${baseUrl}/categorias`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeLancamento(resposta, '/categorias')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isCategoria)) {
+    throw new ApiError('/categorias com formato inesperado')
+  }
+  return corpo
+}
+
+export async function fetchLancamentos(
+  de: string,
+  ate: string,
+  contaId?: string,
+): Promise<Lancamento[]> {
+  const parametros = new URLSearchParams({ de, ate })
+  if (contaId !== undefined) parametros.set('contaId', contaId)
+  const resposta = await fetch(`${baseUrl}/lancamentos?${parametros.toString()}`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarRespostaDeLancamento(resposta, '/lancamentos')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isLancamento)) {
+    throw new ApiError('/lancamentos com formato inesperado')
+  }
+  return corpo
+}
+
+export async function postLancamento(dados: LancamentoRequest): Promise<Lancamento> {
+  const resposta = await fetch(`${baseUrl}/lancamentos`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeLancamento(resposta, 'POST /lancamentos')
+  return lerLancamento(resposta, 'POST /lancamentos')
+}
+
+export async function putLancamento(id: string, dados: LancamentoRequest): Promise<Lancamento> {
+  const resposta = await fetch(`${baseUrl}/lancamentos/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeLancamento(resposta, 'PUT /lancamentos/{id}')
+  return lerLancamento(resposta, 'PUT /lancamentos/{id}')
+}
+
+export async function deleteLancamento(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/lancamentos/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) {
+    return recusarRespostaDeLancamento(resposta, 'DELETE /lancamentos/{id}')
+  }
+}

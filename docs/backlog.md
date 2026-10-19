@@ -7,13 +7,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
-### F3 — Lançamento realizado
-Receita e despesa com título, valor, categoria, descrição opcional, conta e
-data. Saldo da conta reagindo. Categorias semeadas.
-Aqui as duas datas já existem e são iguais — não adie isso.
-Teste obrigatório: saldo = `saldo_inicial` + realizados, igual em `GET /contas`
-e `GET /contas/{id}` (a consulta da F2 devolve só o inicial; revisão do PR #7).
-
 ### F4 — Transferência entre contas
 Par de lançamentos ligados, excluído de todo relatório de receita e despesa.
 É curta, mas se vier depois dos gráficos você refaz os gráficos.
@@ -165,13 +158,15 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — `/healthz` público consulta o banco e grava stack trace a cada falha: em flood esgota o pool e enche o log (auditoria do PR da migração, B2). Separar liveness (sem banco) de readiness (com banco) e limitar o log. Dono: backend, na F20.5.
 - **DÍVIDA** — E-mail com letra de conversão exótica ("İ") pode virar minúscula diferente no `toLowerCase(Locale.ROOT)` do Java e no `lower()` do Postgres, e o CHECK de minúsculas daria 500. Mesmo risco da versão Go, sem teste. Resolver junto com a regra dos caracteres Cf. Na F2 o índice `lower(nome)` da conta deixa passar `İstambul` e `i̇stambul` como nomes diferentes (QA da F2, D3).
 - **DÍVIDA** — Dois cookies `ballast_sessao` na mesma requisição contam como sem sessão, mesmo os dois válidos e iguais (`20ac315`). Decisão deliberada contra cookie tossing; manter o teste que trava isso.
-- **DÍVIDA** — O handler de 500 loga a exceção inteira. Hoje a única constraint com dado pessoal é a do e-mail, já tratada; uma constraint nova com dado pessoal faria o `Key (...)` do Postgres aparecer no log (auditoria do PR #5, B1). Dono: backend, na fatia que criar a constraint. Na F2 vale também para `conta`: uma violação de CHECK relançada pelo `AccountService` levaria o "Failing row contains" com o nome ao log (auditoria do PR #7, B2).
+- **DÍVIDA** — O handler de 500 loga a exceção inteira. Hoje a única constraint com dado pessoal é a do e-mail, já tratada; uma constraint nova com dado pessoal faria o `Key (...)` do Postgres aparecer no log (auditoria do PR #5, B1). Dono: backend, na fatia que criar a constraint. Na F2 vale também para `conta`: uma violação de CHECK relançada pelo `AccountService` levaria o "Failing row contains" com o nome ao log (auditoria do PR #7, B2). Na F3 apareceu pela terceira vez (CHECK de `lancamento` traria título e descrição; auditoria do PR #8). **Paga no começo da F4**: para `DataIntegrityViolationException`, logar só a classe e o nome da constraint.
 - **DÍVIDA** — O `osv-scanner -L api/pom.xml` não resolve as versões herdadas do BOM do Boot para todos os pacotes; a cobertura do grafo transitivo é parcial (auditoria do PR #5). Gerar SBOM ou `dependency:tree` no CI e escanear o resultado. Dono: devops, junto com o Dependabot.
 - **DÍVIDA** — `%2F` ou `{}` no caminho recebem a página de erro HTML do Tomcat, não `{"erro": ...}` (QA da F2, D5). Sem vazamento além de ser Tomcat. Dono: backend, na F20.5 junto com os cabeçalhos.
 - **DÍVIDA** — Chave JSON repetida no corpo: a última vence sem aviso (QA da F2, S3). Ligar `STRICT_DUPLICATE_DETECTION` do Jackson e testar. Dono: backend, na próxima fatia com rota de escrita.
 - **DÍVIDA** — O `HealthRepository` restaura o `setNetworkTimeout` no `finally` sem tolerar conexão já fechada pelo Hikari, o caso que dava 500 no `SessionQueries` (F2). Conferir com teste de banco congelado sem espera e unificar os dois num utilitário. Dono: backend, na F20.5 junto com liveness e readiness.
-- **DÍVIDA** — Sem teto de contas por usuário e sem paginação em `GET /contas` (auditoria do PR #7, B1). Só afeta a própria conta. Dono: backend, na F20.5 junto com o rate limit.
+- **DÍVIDA** — Sem teto de contas por usuário e sem paginação em `GET /contas` (auditoria do PR #7, B1). Só afeta a própria conta. Dono: backend, na F20.5 junto com o rate limit. O mesmo vale para `GET /lancamentos`, cujo teto é só a janela de 366 dias (revisão do PR #8); paginar na fatia que trouxer importação.
 - **DÍVIDA** — O teto de 2 s da consulta de sessão (`SessionQueries`) só tem teste de banco congelado. Falta um que confira que o `networkTimeout` da conexão volta ao valor do pool depois de uma consulta normal (revisão do PR #7). Dono: backend, na fatia que mexer no pool.
+- **DÍVIDA** — Categoria filha pode ter tipo diferente do pai: a V6 garante um nível só, mas não o mesmo tipo (F3). Um `CHECK` junto com a FK do pai fecha isso. Dono: dba, na fatia que trouxer o CRUD de categoria.
+- **DÍVIDA** — A trava da conta na escrita de lançamento (ADR-024) espera sem prazo próprio: uma transação presa segura as outras até o `socketTimeout` de 30 s. Definir `lock_timeout` curto na transação de escrita e responder 503. Dono: backend, na F5, que vai escrever lançamento em lote.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
