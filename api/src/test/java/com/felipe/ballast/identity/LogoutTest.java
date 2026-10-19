@@ -126,4 +126,17 @@ class LogoutTest {
     assertThat(mvc.perform(get("/auth/eu").cookie(sessionB)).andReturn().getResponse().getStatus())
         .isEqualTo(200);
   }
+
+  @Test
+  void aRepeatedSessionCookieIs204WithoutRevokingAnything() throws Exception {
+    TestUsers.Registered user = users.register();
+    Cookie session = users.session(user);
+
+    MockHttpServletResponse response =
+        mvc.perform(post("/auth/logout").cookie(session, session)).andReturn().getResponse();
+
+    assertThat(response.getStatus()).isEqualTo(204);
+    assertExpiredCookie(response);
+    assertThat(revokedAt(user)).as("sem sessão única, nada é revogado").isNull();
+  }
 }

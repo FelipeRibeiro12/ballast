@@ -2,7 +2,6 @@ package com.felipe.ballast.identity;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -47,11 +46,11 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
-    String token = tokenOf(request);
-    if (token != null) {
+    Optional<String> token = SessionCookies.tokenOf(request);
+    if (token.isPresent()) {
       Optional<UUID> userId;
       try {
-        userId = identity.findUserIdBySession(token);
+        userId = identity.findUserIdBySession(token.get());
       } catch (DataAccessException e) {
         log.error("sessão: falha ao consultar a sessão ip={}", ClientAddress.of(request), e);
         response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
@@ -71,18 +70,5 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
         UsernamePasswordAuthenticationToken.authenticated(
             new AuthenticatedUser(userId), null, List.of()));
     SecurityContextHolder.setContext(context);
-  }
-
-  private static String tokenOf(HttpServletRequest request) {
-    Cookie[] cookies = request.getCookies();
-    if (cookies == null) {
-      return null;
-    }
-    for (Cookie cookie : cookies) {
-      if (SessionCookies.NAME.equals(cookie.getName()) && !cookie.getValue().isEmpty()) {
-        return cookie.getValue();
-      }
-    }
-    return null;
   }
 }

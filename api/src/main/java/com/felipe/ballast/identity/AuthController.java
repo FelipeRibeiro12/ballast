@@ -2,7 +2,6 @@ package com.felipe.ballast.identity;
 
 import com.felipe.ballast.web.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -20,7 +19,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -199,12 +197,8 @@ class AuthController {
               mediaType = MediaType.APPLICATION_JSON_VALUE,
               schema = @Schema(implementation = ErrorResponse.class)))
   @PostMapping("/auth/logout")
-  ResponseEntity<Void> logout(
-      @Parameter(hidden = true) @CookieValue(name = SessionCookies.NAME, required = false)
-          String token,
-      HttpServletRequest http) {
-    Optional<UUID> revokedOwner =
-        token == null || token.isEmpty() ? Optional.empty() : identity.revokeSession(token);
+  ResponseEntity<Void> logout(HttpServletRequest http) {
+    Optional<UUID> revokedOwner = SessionCookies.tokenOf(http).flatMap(identity::revokeSession);
     log.info(
         "logout usuario_id={} sessao_revogada={} ip={}",
         revokedOwner.map(UUID::toString).orElse("-"),

@@ -142,4 +142,25 @@ class MeTest {
     assertThat(response.getContentAsString(StandardCharsets.UTF_8))
         .isEqualTo("{\"erro\":\"não encontrado\"}");
   }
+
+  // Vale o mesmo nas duas ordens: antes, um primeiro valor vazio era ignorado e um lixo derrubava
+  // a sessão, e o resultado dependia de quem escreveu primeiro.
+  @Test
+  void aRepeatedSessionCookieIsTreatedAsNoSessionInAnyOrder() throws Exception {
+    Cookie valid = users.session(users.register());
+
+    for (Cookie[] cookies :
+        new Cookie[][] {
+          {new Cookie(SESSION_COOKIE, ""), valid},
+          {new Cookie(SESSION_COOKIE, "lixo"), valid},
+          {valid, new Cookie(SESSION_COOKIE, "lixo")},
+          {valid, valid}
+        }) {
+      MockHttpServletResponse response =
+          mvc.perform(get("/auth/eu").cookie(cookies)).andReturn().getResponse();
+
+      assertThat(response.getStatus()).isEqualTo(401);
+      assertThat(response.getContentAsString(StandardCharsets.UTF_8)).isEqualTo(NOT_AUTHENTICATED);
+    }
+  }
 }
