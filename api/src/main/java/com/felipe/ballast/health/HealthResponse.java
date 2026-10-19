@@ -1,3 +1,6 @@
 package com.felipe.ballast.health;
 
-public record HealthResponse(String mensagem) {}
+import io.swagger.v3.oas.annotations.media.Schema;
+
+public record HealthResponse(
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String mensagem) {}

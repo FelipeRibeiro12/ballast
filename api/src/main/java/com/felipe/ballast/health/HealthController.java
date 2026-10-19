@@ -1,5 +1,9 @@
 package com.felipe.ballast.health;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -19,6 +23,21 @@ class HealthController {
     this.repository = repository;
   }
 
+  @Operation(operationId = "getHealth", summary = "Verifica se a API alcança o banco")
+  @ApiResponse(
+      responseCode = "200",
+      description = "API e banco respondendo",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON_VALUE,
+              schema = @Schema(implementation = HealthResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON_VALUE,
+              schema = @Schema(implementation = HealthError.class)))
   @GetMapping(path = "/healthz", produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> check() {
     try {

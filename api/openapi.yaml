@@ -1,253 +1,42 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: Ballast API
   version: 0.1.0
+servers:
+- url: /
 paths:
-  /auth/cadastro:
-    post:
-      summary: Cria um usuário
-      description: >
-        A rota só existe quando REGISTRO_ABERTO=true. Fechado, ela não é
-        registrada e qualquer método em /auth/cadastro recebe o mesmo 404 de
-        um caminho desconhecido.
-      operationId: postAuthCadastro
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CadastroRequest"
-      responses:
-        "201":
-          description: Usuário criado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Usuario"
-        "400":
-          description: Entrada inválida
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
-        "404":
-          description: 404 quando REGISTRO_ABERTO não é true; corpo idêntico ao de rota inexistente, que não é JSON
-          content:
-            text/plain:
-              schema:
-                type: string
-        "409":
-          description: E-mail já cadastrado
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
-        "415":
-          description: Content-Type diferente de application/json
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
-        "500":
-          description: Falha interna
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
-  /auth/login:
-    post:
-      summary: Abre uma sessão
-      description: >
-        A sessão vai no cookie ballast_sessao (HttpOnly, Secure, SameSite=Lax),
-        válido por 7 dias absolutos, sem renovação. E-mail inexistente e senha
-        errada dão a mesma resposta. A partir da 4ª falha consecutiva do mesmo
-        e-mail digitado (exista conta ou não), o login recusa com 429 por
-        2^(falhas-3) segundos, no máximo 15 minutos, sem verificar a senha e
-        sem contar a tentativa. O atraso nunca bloqueia a conta.
-      operationId: postAuthLogin
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginRequest"
-      responses:
-        "200":
-          description: Sessão aberta
-          headers:
-            Set-Cookie:
-              required: true
-              description: ballast_sessao=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800
-              schema:
-                type: string
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Usuario"
-        "400":
-          description: Entrada inválida
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
-        "401":
-          description: Credenciais inválidas
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
-        "415":
-          description: Content-Type diferente de application/json
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
-        "429":
-          description: Atraso progressivo em vigor para esse e-mail; resposta idêntica para e-mail com e sem conta
-          headers:
-            Retry-After:
-              required: true
-              description: Segundos inteiros, arredondados para cima, até a próxima tentativa ser verificada
-              schema:
-                type: integer
-                minimum: 1
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
-        "500":
-          description: Falha interna
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
-  /auth/eu:
-    get:
-      summary: Devolve o usuário da sessão
-      operationId: getAuthEu
-      security:
-        - cookieAuth: []
-      responses:
-        "200":
-          description: Usuário da sessão
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Usuario"
-        "401":
-          description: Sem cookie, ou token desconhecido, expirado ou revogado; todos iguais
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
-        "500":
-          description: Falha interna
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
-  /auth/logout:
-    post:
-      summary: Encerra a sessão
-      description: >
-        Marca a sessão como revogada no servidor e expira o cookie. Sem sessão
-        válida também responde 204. Não lê corpo.
-      operationId: postAuthLogout
-      responses:
-        "204":
-          description: Sessão encerrada, ou não havia sessão
-          headers:
-            Set-Cookie:
-              required: true
-              description: ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0
-              schema:
-                type: string
-        "500":
-          description: Falha interna; a sessão pode não ter sido revogada
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Erro"
   /healthz:
     get:
-      summary: Verifica se a API alcança o banco
       operationId: getHealth
       responses:
         "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
           description: API e banco respondendo
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [mensagem]
-                additionalProperties: false
-                properties:
-                  mensagem:
-                    type: string
         "503":
-          description: Banco indisponível
           content:
             application/json:
               schema:
-                type: object
-                required: [erro]
-                additionalProperties: false
-                properties:
-                  erro:
-                    type: string
+                $ref: "#/components/schemas/HealthError"
+          description: Banco indisponível
+      summary: Verifica se a API alcança o banco
+      tags:
+      - health-controller
 components:
-  securitySchemes:
-    cookieAuth:
-      type: apiKey
-      in: cookie
-      name: ballast_sessao
   schemas:
-    Erro:
+    HealthError:
       type: object
-      required: [erro]
-      additionalProperties: false
       properties:
         erro:
           type: string
-    Usuario:
+      required:
+      - erro
+    HealthResponse:
       type: object
-      required: [id, email, nome]
-      additionalProperties: false
       properties:
-        id:
+        mensagem:
           type: string
-          format: uuid
-        email:
-          type: string
-          maxLength: 254
-        nome:
-          type: string
-          nullable: true
-          maxLength: 100
-    CadastroRequest:
-      type: object
-      required: [email, senha]
-      additionalProperties: false
-      properties:
-        email:
-          type: string
-          maxLength: 254
-        senha:
-          type: string
-          minLength: 12
-          maxLength: 128
-        nome:
-          type: string
-          maxLength: 100
-    LoginRequest:
-      type: object
-      required: [email, senha]
-      additionalProperties: false
-      properties:
-        email:
-          type: string
-          maxLength: 254
-        senha:
-          type: string
-          minLength: 1
-          maxLength: 128
+      required:
+      - mensagem

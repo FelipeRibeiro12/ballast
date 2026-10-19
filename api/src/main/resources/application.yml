@@ -19,3 +19,7 @@ server:
   # loopback por padrão: sem HOST explícito a API não escuta na rede local
   address: ${HOST:127.0.0.1}
   port: ${PORT:8080}
+
+springdoc:
+  # Chaves ordenadas: a spec é commitada e comparada byte a byte no teste.
+  writer-with-order-by-keys: true
