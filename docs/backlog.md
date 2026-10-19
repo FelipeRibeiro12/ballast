@@ -172,6 +172,7 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — O `HealthRepository` restaura o `setNetworkTimeout` no `finally` sem tolerar conexão já fechada pelo Hikari, o caso que dava 500 no `SessionQueries` (F2). Conferir com teste de banco congelado sem espera e unificar os dois num utilitário. Dono: backend, na F20.5 junto com liveness e readiness.
 - **DÍVIDA** — Sem teto de contas por usuário e sem paginação em `GET /contas` (auditoria do PR #7, B1). Só afeta a própria conta. Dono: backend, na F20.5 junto com o rate limit.
 - **DÍVIDA** — O teto de 2 s da consulta de sessão (`SessionQueries`) só tem teste de banco congelado. Falta um que confira que o `networkTimeout` da conexão volta ao valor do pool depois de uma consulta normal (revisão do PR #7). Dono: backend, na fatia que mexer no pool.
+- **DÍVIDA** — Categoria filha pode ter tipo diferente do pai: a V6 garante um nível só, mas não o mesmo tipo (F3). Um `CHECK` junto com a FK do pai fecha isso. Dono: dba, na fatia que trouxer o CRUD de categoria.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
