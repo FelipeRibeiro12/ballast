@@ -1,9 +1,14 @@
 package com.felipe.ballast.identity;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
+import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 // Assume entrada já validada e normalizada na borda (RegisterRequest).
 @Service
@@ -11,12 +16,25 @@ public class IdentityService {
 
   private static final String EMAIL_UNIQUE_CONSTRAINT = "usuario_email_key";
 
-  private final UserAccountRepository users;
-  private final PasswordHasher hasher;
+  // Prazo absoluto, sem renovação a cada uso: token roubado morre em 7 dias mesmo usado todo dia.
+  static final Duration SESSION_LIFETIME = Duration.ofDays(7);
 
-  IdentityService(UserAccountRepository users, PasswordHasher hasher) {
+  record NewSession(String token, Instant expiresAt) {}
+
+  private final UserAccountRepository users;
+  private final LoginSessionRepository sessions;
+  private final PasswordHasher hasher;
+  private final Clock clock;
+
+  IdentityService(
+      UserAccountRepository users,
+      LoginSessionRepository sessions,
+      PasswordHasher hasher,
+      Clock clock) {
     this.users = users;
+    this.sessions = sessions;
     this.hasher = hasher;
+    this.clock = clock;
   }
 
   // Vazio quando o e-mail já existe. Sem @Transactional de propósito: o saveAndFlush abre a
@@ -27,7 +45,7 @@ public class IdentityService {
     String hash = hasher.hash(password);
     try {
       UserAccount saved = users.saveAndFlush(new UserAccount(email, hash, name));
-      return Optional.of(new UserProfile(saved.getId(), saved.getEmail(), saved.getName()));
+      return Optional.of(profileOf(saved));
     } catch (DataIntegrityViolationException e) {
       if (isDuplicateEmail(e)) {
         return Optional.empty();
@@ -44,5 +62,34 @@ public class IdentityService {
       }
     }
     return false;
+  }
+
+  // Vazio cobre e-mail inexistente e senha errada sem distinguir. No inexistente roda uma
+  // verificação fictícia para o tempo de resposta não denunciar a conta. Sem @Transactional: o
+  // argon2 leva centenas de ms e não deve segurar conexão do pool.
+  public Optional<UserProfile> authenticate(String email, String password) {
+    Optional<UserAccount> account = users.findByEmail(email);
+    if (account.isEmpty()) {
+      hasher.matchesDummy(password);
+      return Optional.empty();
+    }
+    if (!hasher.matches(password, account.get().getPasswordHash())) {
+      return Optional.empty();
+    }
+    return account.map(IdentityService::profileOf);
+  }
+
+  // Devolve o token em claro, que só existe aqui e no cookie.
+  @Transactional
+  public NewSession startSession(UUID userId) {
+    String token = SessionTokens.generate();
+    Instant expiresAt = clock.instant().plus(SESSION_LIFETIME);
+    sessions.save(
+        new LoginSession(users.getReferenceById(userId), SessionTokens.hash(token), expiresAt));
+    return new NewSession(token, expiresAt);
+  }
+
+  private static UserProfile profileOf(UserAccount account) {
+    return new UserProfile(account.getId(), account.getEmail(), account.getName());
   }
 }

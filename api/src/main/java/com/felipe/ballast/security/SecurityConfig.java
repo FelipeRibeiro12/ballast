@@ -41,6 +41,7 @@ class SecurityConfig {
               if (properties.isRegistrationOpen()) {
                 auth.requestMatchers(HttpMethod.POST, "/auth/cadastro").permitAll();
               }
+              auth.requestMatchers(HttpMethod.POST, "/auth/login").permitAll();
               auth.anyRequest().authenticated();
             })
         .exceptionHandling(
