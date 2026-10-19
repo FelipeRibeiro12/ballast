@@ -7,6 +7,13 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
+### F1.1 — Tela de cadastro
+Formulário de cadastro no web contra o `POST /auth/cadastro` que já existe.
+O link só aparece com `VITE_REGISTRO_ABERTO=true` no build, e a API só
+responde com `REGISTRO_ABERTO=true`; fora isso, nada muda (ADR-022). Depois do
+201 o web faz o login com as mesmas credenciais. Em produção o cadastro segue
+fechado até a F20.5.
+
 ### F2 — Contas
 Criar, listar, arquivar. Tipos `corrente`, `poupanca`, `dinheiro`.
 Saldo calculado (`saldo_inicial` + lançamentos), nunca materializado.
