@@ -12,3 +12,4 @@ Fatia entregue sai do `docs/backlog.md` e vira linha aqui.
 - F1 (cadastro e login): tela de entrada e de saída na web. Usuário inicial criado por `make seed`. Cadastro pela API só com `REGISTRO_ABERTO=true`.
 - F1 (cadastro e login): a API conecta com um papel que só tem DML, e a migração roda com outro. Dois pares novos no `.env`: `DB_USER` e `DB_MIGRATION_USER`. Quem já tem o banco local de antes precisa de `docker compose down -v`, descrito no README.
 - F1.1 (tela de cadastro): formulário de cadastro no web, visível só com `VITE_REGISTRO_ABERTO=true`. Depois de criar a conta, o web já entra com ela.
+- F2 (contas): criar, listar, ver e arquivar contas corrente, poupança e dinheiro, com saldo e total na tela. Valores em centavos. Banco fora passa a dar 503 em qualquer rota, e o limite de 4 KiB de corpo vale para todas.
