@@ -29,6 +29,7 @@ export async function fetchHealthz(): Promise<Healthz> {
 
 export type Usuario = components['schemas']['Usuario']
 export type LoginRequest = components['schemas']['LoginRequest']
+export type CadastroRequest = components['schemas']['CadastroRequest']
 
 export class CredenciaisInvalidasError extends ApiError {}
 
@@ -39,6 +40,18 @@ export class LimiteTentativasError extends ApiError {
   constructor(segundos: number | null) {
     super('login recusado por excesso de tentativas')
     this.segundos = segundos
+  }
+}
+
+export class EmailJaCadastradoError extends ApiError {}
+
+export class EntradaInvalidaError extends ApiError {
+  // null quando o corpo do 400 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('cadastro recusado por entrada inválida')
+    this.mensagemServidor = mensagemServidor
   }
 }
 
@@ -95,6 +108,39 @@ export async function postLogin(dados: LoginRequest): Promise<Usuario> {
     throw new ApiError(`/auth/login respondeu ${resposta.status}`)
   }
   return lerUsuario(resposta, '/auth/login')
+}
+
+async function lerMensagemDeErro(resposta: Response): Promise<string | null> {
+  try {
+    const corpo: unknown = await resposta.json()
+    if (
+      typeof corpo === 'object' &&
+      corpo !== null &&
+      'erro' in corpo &&
+      typeof corpo.erro === 'string' &&
+      corpo.erro !== ''
+    ) {
+      return corpo.erro
+    }
+  } catch {
+    // Corpo vazio ou que não é JSON: cai na mensagem genérica da tela.
+  }
+  return null
+}
+
+export async function postCadastro(dados: CadastroRequest): Promise<Usuario> {
+  const resposta = await fetch(`${baseUrl}/auth/cadastro`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (resposta.status === 409) throw new EmailJaCadastradoError('e-mail já cadastrado')
+  if (resposta.status === 400) throw new EntradaInvalidaError(await lerMensagemDeErro(resposta))
+  if (!resposta.ok) {
+    throw new ApiError(`/auth/cadastro respondeu ${resposta.status}`)
+  }
+  return lerUsuario(resposta, '/auth/cadastro')
 }
 
 export async function postLogout(): Promise<void> {
