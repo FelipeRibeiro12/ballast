@@ -5,6 +5,193 @@ info:
 servers:
 - url: /
 paths:
+  /auth/cadastro:
+    post:
+      description: "A rota só existe quando REGISTRO_ABERTO=true. Fechado, ela responde\
+        \ exatamente como uma rota inexistente (401 sem sessão, 404 com sessão), para\
+        \ não revelar que existe."
+      operationId: postAuthCadastro
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CadastroRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usuario"
+          description: Usuário criado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: E-mail já cadastrado
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Corpo maior que 4 KiB, com ou sem Content-Length"
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Falha interna
+      summary: Cria um usuário
+      tags:
+      - auth
+  /auth/eu:
+    get:
+      operationId: getAuthEu
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usuario"
+          description: Usuário da sessão
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Sem cookie, ou token desconhecido, expirado ou revogado; todos\
+            \ iguais"
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Falha interna
+      security:
+      - cookieAuth: []
+      summary: Devolve o usuário da sessão
+      tags:
+      - auth
+  /auth/login:
+    post:
+      description: "A sessão vai no cookie ballast_sessao (HttpOnly, Secure, SameSite=Lax),\
+        \ válido por 7 dias absolutos, sem renovação. E-mail inexistente e senha errada\
+        \ dão a mesma resposta."
+      operationId: postAuthLogin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usuario"
+          description: Sessão aberta
+          headers:
+            Set-Cookie:
+              description: ballast_sessao=<token>; HttpOnly; Secure; SameSite=Lax;
+                Path=/; Max-Age=604800
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Credenciais inválidas
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Corpo maior que 4 KiB, com ou sem Content-Length"
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Atraso progressivo em vigor para esse e-mail; resposta idêntica
+            para e-mail com e sem conta
+          headers:
+            Retry-After:
+              description: "Segundos inteiros, arredondados para cima, até a próxima\
+                \ tentativa ser verificada"
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+              style: simple
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Falha interna
+      summary: Abre uma sessão
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      description: Marca a sessão como revogada no servidor e expira o cookie. Sem
+        sessão válida também responde 204. Não lê corpo.
+      operationId: postAuthLogout
+      responses:
+        "204":
+          description: "Sessão encerrada, ou não havia sessão"
+          headers:
+            Set-Cookie:
+              description: ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/;
+                Max-Age=0
+              required: true
+              schema:
+                type: string
+              style: simple
+        "413":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Length acima de 4 KiB; o corpo nunca é lido
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Falha interna; a sessão pode não ter sido revogada
+      summary: Encerra a sessão
+      tags:
+      - auth
   /healthz:
     get:
       operationId: getHealth
@@ -26,6 +213,31 @@ paths:
       - health
 components:
   schemas:
+    CadastroRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          minLength: 0
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 0
+        senha:
+          type: string
+          maxLength: 128
+          minLength: 12
+      required:
+      - email
+      - senha
+    Erro:
+      type: object
+      properties:
+        erro:
+          type: string
+      required:
+      - erro
     HealthError:
       type: object
       properties:
@@ -40,3 +252,40 @@ components:
           type: string
       required:
       - mensagem
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          minLength: 0
+        senha:
+          type: string
+          maxLength: 128
+          minLength: 1
+      required:
+      - email
+      - senha
+    Usuario:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 254
+        id:
+          type: string
+          format: uuid
+        nome:
+          type:
+          - string
+          - "null"
+          maxLength: 100
+      required:
+      - email
+      - id
+      - nome
+  securitySchemes:
+    cookieAuth:
+      in: cookie
+      name: ballast_sessao
+      type: apiKey

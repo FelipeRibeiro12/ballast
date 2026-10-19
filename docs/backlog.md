@@ -7,35 +7,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
-### F1 — Cadastro e login
-Usuário, senha com argon2id, sessão com expiração, logout invalidando no
-servidor. Toda rota daqui para frente escopada por `usuario_id`.
-Inclui limite de tentativa de login na aplicação, por conta e não só por IP,
-com atraso progressivo em vez de bloqueio (bloquear vira negação de serviço
-contra o usuário legítimo). Cadastro fechado por `REGISTRO_ABERTO=false`
-(padrão no `.env.example`, 404 quando desligado), usuário inicial por seed.
-Se não couber numa sessão com o limite de tentativa, separar o limite em fatia
-logo em seguida.
-**MFA fica para a F20**: `mfa_segredo` existe no modelo-alvo
-(`dados.md`), não na migration desta fatia.
-Critérios extras: as rotas entram na spec gerada do código (ADR-019).
-Relatório do QA inclui uma linha do que os testes **não** cobrem. Sem tela de
-cadastro: com `REGISTRO_ABERTO=false` ela não teria uso. O seed usa a mesma
-validação de e-mail e nome do cadastro (controle, tamanho).
-Reimplementação em Java (ADR-016): a primeira versão, em Go, foi descartada
-no PR da migração. Ficam as decisões (ADR-015) e a migration `V2`, já
-aplicada. O frontend dela (login, logout, usuário logado) saiu junto, e está
-no histórico em `a20d88b` e `dbc4018` para ser recuperado. Os relatórios de QA
-e segurança daquela versão estão em `reports/` e os achados M2, M3, B3 e B4
-continuam valendo para o desenho.
-Requisitos novos da auditoria do PR da migração: Spring Security com
-`Argon2PasswordEncoder` e `bcprov` (aprovados no ADR-015); usuário de banco do
-Flyway separado do usuário da aplicação, que fica só com DML
-(`spring.flyway.user`); `/v3/api-docs*` desligado fora de dev, ou os três paths
-no teste de autorização; limite de tamanho do corpo JSON antes de abrir o
-login; decidir CSRF com o cookie `SameSite=Lax` e conferir os cabeçalhos de
-segurança que o Spring Security liga.
-
 ### F2 — Contas
 Criar, listar, arquivar. Tipos `corrente`, `poupanca`, `dinheiro`.
 Saldo calculado (`saldo_inicial` + lançamentos), nunca materializado.
@@ -181,10 +152,9 @@ digitado, inclusive inexistente, sem limpeza hoje) e limpar sessões expiradas.
 - **DÍVIDA** — O Makefile faz `-include .env` com `export`, então todo alvo (inclusive `make test` e `make lint`) herda o `.env` inteiro, contra o menor privilégio do `seguranca.md`. Registrada em 2026-10-03, sem correção agendada; destrava quando um alvo precisar de segredo que os outros não devem ver. Com a api Java o `.env` tem `DB_PASSWORD` solto, e `make setup` (`pnpm install`) também o herda: um `postinstall` malicioso leria a senha (auditoria do PR da migração, B6).
 - **DÍVIDA** — Gate do cliente TS não enxerga mudança de spec que o `openapi-typescript` não reflete nos tipos (`maxLength`, `description`, `example`), e passa sempre se `schema.d.ts` entrar no `.gitignore`. Aceito: o gate garante tipo em dia, não spec inteira propagada.
 - **DÍVIDA** — `openapi-typescript` 7.13 declara peer `typescript ^5` e o web usa 6; só aparece em `pnpm peers check`. Reavaliar quando sair versão com suporte ao 6.
-- **DÍVIDA** — `Healthz` no web deriva de `paths[...]`. A spec gerada pelo springdoc já tem `components` (`HealthResponse`, `HealthError`): trocar por `components['schemas']`. Dono: frontend, na F1.
 - **DÍVIDA** — `actionlint` não roda no CI nem localmente; o YAML dos workflows não é validado por ferramenta.
 - **DÍVIDA** — `pnpm build` do web lê `../api/openapi.yaml`; se a hospedagem do PWA usar `web/` como raiz, o build falha. Conferir ao escolher a hospedagem (ou deixar a geração só no CI).
-- **DÍVIDA** — `COOKIE_SECURE=false` em desenvolvimento (Safari recusa cookie `Secure` sobre HTTP). Servir o dev sobre HTTPS com certificado local (mkcert) e aposentar a flag. A F1 em Java precisa recusar subir com a flag falsa fora de `APP_ENV=development`, como a versão Go fazia.
+- **DÍVIDA** — `COOKIE_SECURE=false` em desenvolvimento (Safari recusa cookie `Secure` sobre HTTP). Servir o dev sobre HTTPS com certificado local (mkcert) e aposentar a flag. A API já recusa subir com a flag falsa fora de `APP_ENV=development`, antes de migrar o banco.
 - **DÍVIDA** — Sessão expirada ou revogada fica na tabela `sessao` sem limpeza. Resolver quando o volume importar ou na F20.5.
 - **DÍVIDA** — E-mail e nome aceitam caracteres invisíveis da categoria Cf (U+200B, U+202E de inversão bidi, U+FEFF): dois e-mails que parecem iguais na tela e são diferentes, ou nome que embaralha a exibição. Decidir a regra (rejeitar Cf ou normalizar) na fatia que primeiro exibir nome de outra pessoa.
 - **DÍVIDA** — Nenhuma verificação em navegador real: o fluxo login → `/auth/eu` → logout com o cookie de verdade, o layout em 360px e o foco só foram vistos em jsdom e por curl. Fazer à mão antes de a F2 começar.
@@ -192,6 +162,11 @@ digitado, inclusive inexistente, sem limpeza hoje) e limpar sessões expiradas.
 - **DÍVIDA** — Endurecimentos baixos da auditoria da F1 (B4): cookie com prefixo `__Host-`, cabeçalho `X-Content-Type-Options: nosniff`, limpeza de sessões. Aceitos: B1 (409 do cadastro enumera e-mail só com `REGISTRO_ABERTO=true`) e B2 (`.env.example` de dev com `COOKIE_SECURE=false`; a guarda por `APP_ENV` cobre a cópia sem edição fora de dev).
 - **DÍVIDA** — O check `análise estática (javascript-typescript)` tem nome de linguagem, não de módulo, e quebra na próxima troca de stack do web. Renomear para `análise estática (web)` com a mesma sequência do ruleset do ADR-016. Dono: devops, na próxima fatia que mexer no `seguranca.yml`.
 - **DÍVIDA** — `/healthz` público consulta o banco e grava stack trace a cada falha: em flood esgota o pool e enche o log (auditoria do PR da migração, B2). Separar liveness (sem banco) de readiness (com banco) e limitar o log. Dono: backend, na F20.5.
+- **DÍVIDA** — E-mail com letra de conversão exótica ("İ") pode virar minúscula diferente no `toLowerCase(Locale.ROOT)` do Java e no `lower()` do Postgres, e o CHECK de minúsculas daria 500. Mesmo risco da versão Go, sem teste. Resolver junto com a regra dos caracteres Cf.
+- **DÍVIDA** — Com o banco indisponível, rotas autenticadas respondem 500 `erro interno` e só o `/healthz` responde 503 (reteste de QA da F1). Decidir se toda falha de acesso ao banco vira 503. Dono: backend, na F2, que é a primeira fatia com várias rotas de banco.
+- **DÍVIDA** — Dois cookies `ballast_sessao` na mesma requisição contam como sem sessão, mesmo os dois válidos e iguais (`20ac315`). Decisão deliberada contra cookie tossing; manter o teste que trava isso.
+- **DÍVIDA** — O handler de 500 loga a exceção inteira. Hoje a única constraint com dado pessoal é a do e-mail, já tratada; uma constraint nova com dado pessoal faria o `Key (...)` do Postgres aparecer no log (auditoria do PR #5, B1). Dono: backend, na fatia que criar a constraint.
+- **DÍVIDA** — O `osv-scanner -L api/pom.xml` não resolve as versões herdadas do BOM do Boot para todos os pacotes; a cobertura do grafo transitivo é parcial (auditoria do PR #5). Gerar SBOM ou `dependency:tree` no CI e escanear o resultado. Dono: devops, junto com o Dependabot.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

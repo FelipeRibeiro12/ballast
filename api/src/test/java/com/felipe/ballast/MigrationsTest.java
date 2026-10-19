@@ -8,12 +8,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
 class MigrationsTest {
 
   @Autowired JdbcClient jdbc;
+  @Autowired PostgreSQLContainer postgres;
 
   @Test
   void createsTablesOnEmptyDatabase() {
@@ -26,12 +29,18 @@ class MigrationsTest {
   }
 
   @Test
-  void appliesBothMigrationsInOrder() {
+  void appliesAllMigrationsInOrder() {
+    // o papel da aplicação não lê o histórico (V4), então a consulta vai como dono
+    JdbcClient owner =
+        JdbcClient.create(
+            new DriverManagerDataSource(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword()));
     List<String> versions =
-        jdbc.sql("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank")
+        owner
+            .sql("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank")
             .query(String.class)
             .list();
 
-    assertThat(versions).containsExactly("1", "2");
+    assertThat(versions).containsExactly("1", "2", "3", "4");
   }
 }

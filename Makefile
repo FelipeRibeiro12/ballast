@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: setup dev dev-api dev-web build build-api build-web test test-api test-web lint lint-api lint-web db-up db-down spec
+.PHONY: setup dev dev-api dev-web build build-api build-web test test-api test-web lint lint-api lint-web db-up db-down spec seed
 
 setup:
 	pnpm --dir web install --frozen-lockfile
@@ -52,3 +52,8 @@ db-down:
 spec:
 	cd api && ./mvnw -B test -Dtest=OpenApiSpecTest -Dspec.atualizar=true
 	pnpm --dir web generate:api
+
+# Cria o usuário inicial de SEED_EMAIL, SEED_SENHA e SEED_NOME (.env). Idempotente; sobe sem
+# servidor web e sai.
+seed:
+	cd api && SPRING_PROFILES_ACTIVE=seed ./mvnw -B -q spring-boot:run

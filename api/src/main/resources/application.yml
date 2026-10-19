@@ -10,10 +10,51 @@ spring:
       # minuto antes do 503. Com 2 s o health check responde logo; num app de um
       # usuário só, esperar mais do que isso por conexão já é falha.
       connection-timeout: 2000
+      # Banco congelado (TCP aberto, ninguém responde): o Hikari valida cada conexão ociosa
+      # antes de emprestá-la e, com o padrão de 5 s, uma só validação já estoura os 2 s acima
+      # (pior caso: 5 s). Com 1 s, a segunda validação fecha o prazo em cerca de 2 s. Um banco
+      # saudável responde o ping em milissegundos.
+      validation-timeout: 1000
+      data-source-properties:
+        # Teto de leitura do socket (segundos), para a conexão presa num banco congelado não
+        # ficar presa para sempre no pool. 30 s é folga para uma agregação lenta de verdade sem
+        # resposta parcial; passou disso, a consulta é um problema a corrigir. O /healthz usa
+        # um teto próprio de 2 s.
+        socketTimeout: 30
+  flyway:
+    # ADR-021: a migração roda como dono do schema; a aplicação (datasource) só tem DML
+    user: ${DB_MIGRATION_USER}
+    password: ${DB_MIGRATION_PASSWORD}
+    placeholders:
+      app_user: ${DB_USER}
+  jackson:
+    deserialization:
+      # O Boot ignora campo desconhecido por padrão; aqui vira 400, e lixo depois do JSON também.
+      fail-on-unknown-properties: true
+      fail-on-trailing-tokens: true
+    mapper:
+      # Sem isto, {"email": 1} viraria "1" em vez de erro.
+      allow-coercion-of-scalars: false
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+
+ballast:
+  # Vazio vale como o padrão: o .env.example deixa as chaves em branco.
+  registration-open: ${REGISTRO_ABERTO:false}
+  cookie-secure: ${COOKIE_SECURE:true}
+  app-env: ${APP_ENV:}
+  seed:
+    email: ${SEED_EMAIL:}
+    password: ${SEED_SENHA:}
+    name: ${SEED_NOME:}
+
+logging:
+  level:
+    # O Hibernate loga o erro do driver, e o do Postgres traz "Key (email)=(...)" com o e-mail
+    # inteiro. E-mail repetido é caminho esperado do cadastro e já é logado mascarado.
+    org.hibernate.orm.jdbc.error: "OFF"
 
 server:
   # loopback por padrão: sem HOST explícito a API não escuta na rede local
@@ -21,5 +62,9 @@ server:
   port: ${PORT:8080}
 
 springdoc:
+  api-docs:
+    # Desligado por padrão: a spec descreve a superfície inteira da API e produção não precisa
+    # servi-la. Só liga com API_DOCS_ENABLED=true explícito (desenvolvimento) ou no teste.
+    enabled: ${API_DOCS_ENABLED:false}
   # Chaves ordenadas: a spec é commitada e comparada byte a byte no teste.
   writer-with-order-by-keys: true

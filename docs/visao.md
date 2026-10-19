@@ -104,6 +104,8 @@ Isso é o núcleo. Sem ele, nada mais faz sentido.
 | Acesso a dados | Spring Data JPA; SQL direto para agregação | 017 |
 | Migrations | Flyway | 018 |
 | Contrato da API | Spec gerada do código (springdoc) | 019 |
+| Autenticação | Spring Security com filtro de sessão; CSRF por `SameSite=Lax` e JSON | 020 |
+| Usuários de banco | Migração como dono do schema; aplicação só com DML | 021 |
 
 ## O desenho
 
