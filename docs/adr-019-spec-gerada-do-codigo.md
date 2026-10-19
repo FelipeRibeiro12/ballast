@@ -47,6 +47,9 @@ spec não mentir, e o segundo caminho é mais forte. O teste de aderência com
   build.
 - Renomear campo de DTO muda o `openapi.yaml` no mesmo PR, e quem revisa vê.
 - Perde-se escrever o contrato antes do código.
+- A spec sai em OpenAPI 3.1 (a escrita à mão era 3.0.3) e sem
+  `additionalProperties: false` nas respostas. O contrato de `/healthz` não
+  mudou, mas a spec ficou mais permissiva que a anterior.
 - Anotação de controller e DTO passa a ser contrato. Validação sem Bean
   Validation ou campo sem `@Schema` dá spec pobre, e spec pobre dá cliente TS
   pobre.

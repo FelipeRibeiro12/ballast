@@ -33,3 +33,14 @@ Armadilhas desta rodada:
 - `DATABASE_URL` não persiste entre chamadas de Bash: teste de integração pula em silêncio e parece verde.
 - Subagente já despejou o ambiente do shell no output uma vez (`export $(cat ...)`): proibir no prompt.
 - Em subagentes, `Write` do arquivo inteiro funcionou para o QA quando o relatório foi pedido uma vez só; travou ao tentar corrigir linhas pontuais.
+
+## Migração para Java (2026-10-19, PR #4, branch feat/migracao-java)
+
+Stack virou Java 25 + Boot 4.1.1 (ADR-016 a 019); F1 em Go descartada, volta como fatia. Diário em `docs/diario.md`.
+
+Armadilhas:
+- JDK 25 é keg-only no Homebrew: todo comando precisa de `JAVA_HOME=/opt/homebrew/opt/openjdk@25`. Docker Desktop pode estar parado: `open -a Docker`.
+- Ruleset "main protegida" (id 24421437) exige 7 checks pelo nome. Renomear job: tirar o nome antigo via `gh api -X PUT .../rulesets/24421437`, empurrar, incluir o novo depois do primeiro run. Merge não exige aprovação (0), mas `strict` exige branch atualizada.
+- `gh pr checks --watch` sai cedo com checks pendentes; usar laço com `grep pending`.
+- osv-scanner mostra "found 14 packages" (diretas) mas resolve transitivas; já pegou CVE do Tomcat e Jackson gerenciados pelo Boot.
+- Subagente pode afirmar arquivo desatualizado sem ter lido o atual (docs disse que o CLAUDE.md citava Go): conferir com grep antes de aceitar.
