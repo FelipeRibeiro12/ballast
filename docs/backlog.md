@@ -7,35 +7,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
-### F1 — Cadastro e login
-Usuário, senha com argon2id, sessão com expiração, logout invalidando no
-servidor. Toda rota daqui para frente escopada por `usuario_id`.
-Inclui limite de tentativa de login na aplicação, por conta e não só por IP,
-com atraso progressivo em vez de bloqueio (bloquear vira negação de serviço
-contra o usuário legítimo). Cadastro fechado por `REGISTRO_ABERTO=false`
-(padrão no `.env.example`, 404 quando desligado), usuário inicial por seed.
-Se não couber numa sessão com o limite de tentativa, separar o limite em fatia
-logo em seguida.
-**MFA fica para a F20**: `mfa_segredo` existe no modelo-alvo
-(`dados.md`), não na migration desta fatia.
-Critérios extras: as rotas entram na spec gerada do código (ADR-019).
-Relatório do QA inclui uma linha do que os testes **não** cobrem. Sem tela de
-cadastro: com `REGISTRO_ABERTO=false` ela não teria uso. O seed usa a mesma
-validação de e-mail e nome do cadastro (controle, tamanho).
-Reimplementação em Java (ADR-016): a primeira versão, em Go, foi descartada
-no PR da migração. Ficam as decisões (ADR-015) e a migration `V2`, já
-aplicada. O frontend dela (login, logout, usuário logado) saiu junto, e está
-no histórico em `a20d88b` e `dbc4018` para ser recuperado. Os relatórios de QA
-e segurança daquela versão estão em `reports/` e os achados M2, M3, B3 e B4
-continuam valendo para o desenho.
-Requisitos novos da auditoria do PR da migração: Spring Security com
-`Argon2PasswordEncoder` e `bcprov` (aprovados no ADR-015); usuário de banco do
-Flyway separado do usuário da aplicação, que fica só com DML
-(`spring.flyway.user`); `/v3/api-docs*` desligado fora de dev, ou os três paths
-no teste de autorização; limite de tamanho do corpo JSON antes de abrir o
-login; decidir CSRF com o cookie `SameSite=Lax` e conferir os cabeçalhos de
-segurança que o Spring Security liga.
-
 ### F2 — Contas
 Criar, listar, arquivar. Tipos `corrente`, `poupanca`, `dinheiro`.
 Saldo calculado (`saldo_inicial` + lançamentos), nunca materializado.
