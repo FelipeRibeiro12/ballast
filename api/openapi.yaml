@@ -51,6 +51,34 @@ paths:
       summary: Cria um usuário
       tags:
       - auth
+  /auth/eu:
+    get:
+      operationId: getAuthEu
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usuario"
+          description: Usuário da sessão
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Sem cookie, ou token desconhecido, expirado ou revogado; todos\
+            \ iguais"
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Falha interna
+      security:
+      - cookieAuth: []
+      summary: Devolve o usuário da sessão
+      tags:
+      - auth
   /auth/login:
     post:
       description: "A sessão vai no cookie ballast_sessao (HttpOnly, Secure, SameSite=Lax),\
@@ -197,3 +225,8 @@ components:
       - email
       - id
       - nome
+  securitySchemes:
+    cookieAuth:
+      in: cookie
+      name: ballast_sessao
+      type: apiKey

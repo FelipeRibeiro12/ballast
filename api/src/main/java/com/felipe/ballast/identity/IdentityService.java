@@ -23,16 +23,19 @@ public class IdentityService {
 
   private final UserAccountRepository users;
   private final LoginSessionRepository sessions;
+  private final SessionQueries sessionQueries;
   private final PasswordHasher hasher;
   private final Clock clock;
 
   IdentityService(
       UserAccountRepository users,
       LoginSessionRepository sessions,
+      SessionQueries sessionQueries,
       PasswordHasher hasher,
       Clock clock) {
     this.users = users;
     this.sessions = sessions;
+    this.sessionQueries = sessionQueries;
     this.hasher = hasher;
     this.clock = clock;
   }
@@ -87,6 +90,15 @@ public class IdentityService {
     sessions.save(
         new LoginSession(users.getReferenceById(userId), SessionTokens.hash(token), expiresAt));
     return new NewSession(token, expiresAt);
+  }
+
+  // Vazio para token desconhecido, expirado ou revogado, sem distinguir.
+  public Optional<UUID> findUserIdBySession(String token) {
+    return sessionQueries.findActiveUserId(SessionTokens.hash(token), clock.instant());
+  }
+
+  public Optional<UserProfile> findProfile(UUID userId) {
+    return users.findById(userId).map(IdentityService::profileOf);
   }
 
   private static UserProfile profileOf(UserAccount account) {

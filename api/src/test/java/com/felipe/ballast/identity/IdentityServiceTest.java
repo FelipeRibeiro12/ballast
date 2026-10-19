@@ -15,6 +15,7 @@ class IdentityServiceTest {
 
   @Autowired UserAccountRepository users;
   @Autowired LoginSessionRepository sessions;
+  @Autowired SessionQueries sessionQueries;
   @Autowired Clock clock;
 
   private CountingHasher hasher;
@@ -49,7 +50,7 @@ class IdentityServiceTest {
   @BeforeEach
   void setUp() {
     hasher = new CountingHasher();
-    service = new IdentityService(users, sessions, hasher, clock);
+    service = new IdentityService(users, sessions, sessionQueries, hasher, clock);
   }
 
   @Test

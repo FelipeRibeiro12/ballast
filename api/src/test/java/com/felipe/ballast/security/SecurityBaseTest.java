@@ -1,6 +1,7 @@
 package com.felipe.ballast.security;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -42,6 +43,11 @@ class SecurityBaseTest {
   @Test
   void healthzStaysPublic() throws Exception {
     mvc.perform(get("/healthz")).andExpect(status().isOk());
+  }
+
+  @Test
+  void healthzAnswersHeadToo() throws Exception {
+    mvc.perform(head("/healthz")).andExpect(status().isOk());
   }
 
   @Test

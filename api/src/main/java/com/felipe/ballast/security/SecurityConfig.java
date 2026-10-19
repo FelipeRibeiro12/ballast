@@ -1,8 +1,13 @@
 package com.felipe.ballast.security;
 
 import com.felipe.ballast.identity.IdentityProperties;
+import com.felipe.ballast.identity.IdentityService;
+import com.felipe.ballast.identity.SessionAuthenticationFilter;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +18,10 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 // ADR-020: cadeia sem formLogin, sem httpBasic e sem HttpSession. O token de CSRF fica
 // desligado; a defesa é o SameSite=Lax do cookie mais o Content-Type application/json.
@@ -24,26 +33,19 @@ class SecurityConfig {
   private static final String FORBIDDEN = "{\"erro\":\"acesso negado\"}";
 
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http, IdentityProperties properties)
-      throws Exception {
+  SecurityFilterChain securityFilterChain(
+      HttpSecurity http, IdentityProperties properties, IdentityService identity) throws Exception {
+    RequestMatcher publicRoutes = publicRoutes(properties);
     return http.csrf(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .httpBasic(AbstractHttpConfigurer::disable)
         .logout(AbstractHttpConfigurer::disable)
         .headers(Customizer.withDefaults())
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-        // Públicas uma a uma; o que não está aqui exige sessão.
+        .addFilterBefore(
+            new SessionAuthenticationFilter(identity, publicRoutes), AuthorizationFilter.class)
         .authorizeHttpRequests(
-            auth -> {
-              auth.requestMatchers(HttpMethod.GET, "/healthz").permitAll();
-              auth.requestMatchers("/v3/api-docs*", "/v3/api-docs/**").permitAll();
-              // Fechado, a rota nem é pública: cai em anyRequest, igual a uma rota inexistente.
-              if (properties.isRegistrationOpen()) {
-                auth.requestMatchers(HttpMethod.POST, "/auth/cadastro").permitAll();
-              }
-              auth.requestMatchers(HttpMethod.POST, "/auth/login").permitAll();
-              auth.anyRequest().authenticated();
-            })
+            auth -> auth.requestMatchers(publicRoutes).permitAll().anyRequest().authenticated())
         .exceptionHandling(
             e ->
                 e.authenticationEntryPoint(
@@ -56,8 +58,24 @@ class SecurityConfig {
         .build();
   }
 
+  // Rotas públicas listadas uma a uma; o que não está aqui exige sessão. Fechado, o cadastro
+  // nem entra na lista e cai em anyRequest, igual a uma rota inexistente.
+  private static RequestMatcher publicRoutes(IdentityProperties properties) {
+    PathPatternRequestMatcher.Builder paths = PathPatternRequestMatcher.withDefaults();
+    List<RequestMatcher> routes = new ArrayList<>();
+    routes.add(paths.matcher(HttpMethod.GET, "/healthz"));
+    routes.add(paths.matcher(HttpMethod.HEAD, "/healthz"));
+    routes.add(paths.matcher("/v3/api-docs*"));
+    routes.add(paths.matcher("/v3/api-docs/**"));
+    routes.add(paths.matcher(HttpMethod.POST, "/auth/login"));
+    if (properties.isRegistrationOpen()) {
+      routes.add(paths.matcher(HttpMethod.POST, "/auth/cadastro"));
+    }
+    return new OrRequestMatcher(routes);
+  }
+
   private static void writeJson(HttpServletResponse response, int status, String body)
-      throws java.io.IOException {
+      throws IOException {
     response.setStatus(status);
     response.setContentType(MediaType.APPLICATION_JSON_VALUE);
     response.setCharacterEncoding(StandardCharsets.UTF_8.name());

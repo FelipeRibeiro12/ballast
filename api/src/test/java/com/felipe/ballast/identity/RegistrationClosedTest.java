@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 
 import com.felipe.ballast.TestcontainersConfiguration;
+import jakarta.servlet.http.Cookie;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -42,6 +43,7 @@ class RegistrationClosedTest {
 
   @Autowired MockMvc mvc;
   @Autowired JdbcClient jdbc;
+  @Autowired IdentityService identity;
 
   private MockHttpServletResponse call(HttpMethod method, String path, String contentType)
       throws Exception {
@@ -60,7 +62,7 @@ class RegistrationClosedTest {
     assertThat(closed.getContentType()).isEqualTo(unknown.getContentType());
     assertThat(closed.getHeaderNames())
         .containsExactlyInAnyOrderElementsOf(unknown.getHeaderNames());
-    assertThat(closed.getHeader("Allow")).isNull();
+    assertThat(closed.getHeader("Allow")).isEqualTo(unknown.getHeader("Allow"));
   }
 
   @Test
@@ -70,6 +72,35 @@ class RegistrationClosedTest {
       MockHttpServletResponse unknown = call(method, "/auth/nao-existe", "application/json");
 
       assertThat(closed.getStatus()).as(method.name()).isEqualTo(401);
+      assertSameAsUnknownRoute(closed, unknown);
+    }
+  }
+
+  @Test
+  void closedRegistrationAnswersLikeAnUnknownRouteForAnyMethodWithSession() throws Exception {
+    String email = "t" + UUID.randomUUID().toString().replace("-", "") + "@exemplo.test";
+    UserProfile user = identity.register(email, "senha-de-teste-12345", null).orElseThrow();
+    String token = identity.startSession(user.id()).token();
+
+    for (HttpMethod method : METHODS) {
+      MockHttpServletResponse closed =
+          mvc.perform(
+                  request(method, "/auth/cadastro")
+                      .content("{}")
+                      .contentType("application/json")
+                      .cookie(new Cookie("ballast_sessao", token)))
+              .andReturn()
+              .getResponse();
+      MockHttpServletResponse unknown =
+          mvc.perform(
+                  request(method, "/auth/nao-existe")
+                      .content("{}")
+                      .contentType("application/json")
+                      .cookie(new Cookie("ballast_sessao", token)))
+              .andReturn()
+              .getResponse();
+
+      assertThat(closed.getStatus()).as(method.name()).isEqualTo(404);
       assertSameAsUnknownRoute(closed, unknown);
     }
   }
