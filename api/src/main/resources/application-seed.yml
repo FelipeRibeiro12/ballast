@@ -1,0 +1,4 @@
+spring:
+  main:
+    # O seed grava o usuário e sai; sem porta aberta, sem filtros.
+    web-application-type: none
