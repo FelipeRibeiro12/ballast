@@ -51,5 +51,9 @@ server:
   port: ${PORT:8080}
 
 springdoc:
+  api-docs:
+    # Desligado por padrão: a spec descreve a superfície inteira da API e produção não precisa
+    # servi-la. Só liga com API_DOCS_ENABLED=true explícito (desenvolvimento) ou no teste.
+    enabled: ${API_DOCS_ENABLED:false}
   # Chaves ordenadas: a spec é commitada e comparada byte a byte no teste.
   writer-with-order-by-keys: true

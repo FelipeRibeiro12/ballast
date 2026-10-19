@@ -11,6 +11,7 @@ import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
@@ -34,8 +35,15 @@ class SecurityConfig {
 
   @Bean
   SecurityFilterChain securityFilterChain(
-      HttpSecurity http, IdentityProperties properties, IdentityService identity) throws Exception {
-    RequestMatcher publicRoutes = publicRoutes(properties);
+      HttpSecurity http,
+      IdentityProperties properties,
+      IdentityService identity,
+      Environment environment)
+      throws Exception {
+    // Vazio ou ausente vale falso: só "true" explícito abre a spec.
+    boolean apiDocsEnabled =
+        environment.getProperty("springdoc.api-docs.enabled", Boolean.class, false);
+    RequestMatcher publicRoutes = publicRoutes(properties, apiDocsEnabled);
     return http.csrf(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .httpBasic(AbstractHttpConfigurer::disable)
@@ -59,14 +67,17 @@ class SecurityConfig {
   }
 
   // Rotas públicas listadas uma a uma; o que não está aqui exige sessão. Fechado, o cadastro
-  // nem entra na lista e cai em anyRequest, igual a uma rota inexistente.
-  private static RequestMatcher publicRoutes(IdentityProperties properties) {
+  // nem entra na lista e cai em anyRequest, igual a uma rota inexistente; a spec idem.
+  private static RequestMatcher publicRoutes(
+      IdentityProperties properties, boolean apiDocsEnabled) {
     PathPatternRequestMatcher.Builder paths = PathPatternRequestMatcher.withDefaults();
     List<RequestMatcher> routes = new ArrayList<>();
     routes.add(paths.matcher(HttpMethod.GET, "/healthz"));
     routes.add(paths.matcher(HttpMethod.HEAD, "/healthz"));
-    routes.add(paths.matcher("/v3/api-docs*"));
-    routes.add(paths.matcher("/v3/api-docs/**"));
+    if (apiDocsEnabled) {
+      routes.add(paths.matcher("/v3/api-docs*"));
+      routes.add(paths.matcher("/v3/api-docs/**"));
+    }
     routes.add(paths.matcher(HttpMethod.POST, "/auth/login"));
     routes.add(paths.matcher(HttpMethod.POST, "/auth/logout"));
     if (properties.isRegistrationOpen()) {

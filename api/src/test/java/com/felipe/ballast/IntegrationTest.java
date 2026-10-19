@@ -9,14 +9,15 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 
 // Mesmo conjunto de propriedades em todos os testes de integração: o Spring reaproveita o
-// contexto (e o container do Postgres) entre as classes. Argon2 barato e cadastro aberto,
-// que é como a spec é gerada.
+// contexto (e o container do Postgres) entre as classes. Argon2 barato, cadastro aberto
+// e api-docs ligado, que é como a spec é gerada.
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 @Import({TestcontainersConfiguration.class, TestClock.Config.class})
 @SpringBootTest(
     properties = {
       "ballast.registration-open=true",
+      "springdoc.api-docs.enabled=true",
       "ballast.password.memory-kib=8",
       "ballast.password.iterations=1",
       "ballast.password.parallelism=1"

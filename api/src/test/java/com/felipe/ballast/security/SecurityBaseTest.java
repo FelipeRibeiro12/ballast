@@ -17,7 +17,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @Import(TestcontainersConfiguration.class)
-@SpringBootTest
+// api-docs ligado como no desenvolvimento; o caso desligado está em ApiDocsDisabledTest.
+@SpringBootTest(properties = "springdoc.api-docs.enabled=true")
 @AutoConfigureMockMvc
 class SecurityBaseTest {
 
