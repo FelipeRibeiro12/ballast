@@ -39,6 +39,13 @@ Spring fecharia o mesmo ataque com estado extra no PWA.
 - **Filtro próprio sem Spring Security**: perde os cabeçalhos padrão e a
   autorização declarativa, e o ADR-015 já aprovou a dependência.
 
+## Consequência
+
+Sem sessão, qualquer rota fora da lista pública responde 401, inclusive uma
+que não existe. Por isso `/auth/cadastro` fechado responde 401 sem sessão e
+404 com sessão: o mesmo que uma rota inexistente, que é a regra do ADR-015. A
+versão Go respondia 404 nos dois casos.
+
 ## Limitação reconhecida
 
 A defesa depende de o PWA e a API ficarem no mesmo site. Em sites diferentes,
