@@ -161,7 +161,17 @@ function NovaConta({
   )
 }
 
-export default function Contas({ aoSessaoExpirar }: { aoSessaoExpirar: () => void }) {
+export default function Contas({
+  aoSessaoExpirar,
+  versaoDeSaldo,
+  aoCarregarAtivas,
+}: {
+  aoSessaoExpirar: () => void
+  // Sobe quando um lançamento muda; a lista busca de novo para o saldo reagir.
+  versaoDeSaldo: number
+  // Entrega a lista de contas ativas sempre que ela muda, para a tela de lançamentos usar.
+  aoCarregarAtivas: (contas: Conta[]) => void
+}) {
   const [arquivadas, setArquivadas] = useState(false)
   const [estado, setEstado] = useState<EstadoLista>({ tipo: 'carregando' })
   const [tentativa, setTentativa] = useState(0)
@@ -188,7 +198,11 @@ export default function Contas({ aoSessaoExpirar }: { aoSessaoExpirar: () => voi
     return () => {
       ativo = false
     }
-  }, [arquivadas, tentativa, aoSessaoExpirar])
+  }, [arquivadas, tentativa, versaoDeSaldo, aoSessaoExpirar])
+
+  useEffect(() => {
+    if (!arquivadas && estado.tipo === 'ok') aoCarregarAtivas(estado.contas)
+  }, [arquivadas, estado, aoCarregarAtivas])
 
   function recarregar(): void {
     setEstado({ tipo: 'carregando' })
@@ -208,6 +222,18 @@ export default function Contas({ aoSessaoExpirar }: { aoSessaoExpirar: () => voi
     setFalhaDeAcao(null)
     try {
       await patchConta(conta.id, arquivar)
+      // Na visão de arquivadas o efeito de entrega não roda, então busca as ativas aqui.
+      if (arquivadas) {
+        try {
+          aoCarregarAtivas(await fetchContas(false))
+        } catch (erro) {
+          if (erro instanceof SessaoExpiradaError) {
+            aoSessaoExpirar()
+            return
+          }
+          setFalhaDeAcao('A conta mudou, mas não foi possível atualizar a lista de lançamentos.')
+        }
+      }
       // A conta troca de lista, então some desta sem precisar buscar de novo.
       setEstado((atual) =>
         atual.tipo === 'ok'

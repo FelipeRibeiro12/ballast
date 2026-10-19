@@ -6,7 +6,14 @@ import {
   NomeDeContaRepetidoError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
+  LancamentoInvalidoError,
+  LancamentoNaoEncontradoError,
+  deleteLancamento,
+  fetchCategorias,
   fetchContas,
+  fetchLancamentos,
+  postLancamento,
+  putLancamento,
   patchConta,
   postCadastro,
   postConta,
@@ -217,5 +224,134 @@ describe('rotas de contas', () => {
       expect(erro).toBeInstanceOf(ApiError)
       expect(erro).not.toBeInstanceOf(SessaoExpiradaError)
     }
+  })
+})
+
+describe('lançamentos e categorias', () => {
+  const lancamento = {
+    id: 'l1',
+    tipo: 'despesa',
+    status: 'realizado',
+    titulo: 'Feira',
+    descricao: null,
+    valorCentavos: 12345,
+    categoriaId: 'cd1',
+    contaId: 'c1',
+    dataCompetencia: '2026-10-05',
+    dataCaixa: '2026-10-05',
+    criadoEm: '2026-10-05T12:00:00Z',
+  }
+  const categoria = { id: 'cd1', nome: 'Mercado', tipo: 'despesa', paiId: null, cor: null, icone: null }
+  const dados = {
+    tipo: 'despesa' as const,
+    titulo: 'Feira',
+    valorCentavos: 12345,
+    categoriaId: 'cd1',
+    contaId: 'c1',
+    data: '2026-10-05',
+  }
+
+  function responder(corpo: unknown, status: number): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          status === 204
+            ? new Response(null, { status })
+            : new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } }),
+        ),
+      ),
+    )
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('fetchLancamentos monta a query com e sem contaId', async () => {
+    responder([lancamento], 200)
+    expect(await fetchLancamentos('2026-10-01', '2026-10-31')).toEqual([lancamento])
+    expect(fetch).toHaveBeenLastCalledWith('/lancamentos?de=2026-10-01&ate=2026-10-31', {
+      credentials: 'same-origin',
+    })
+    await fetchLancamentos('2026-10-01', '2026-10-31', 'c 1')
+    expect(fetch).toHaveBeenLastCalledWith('/lancamentos?de=2026-10-01&ate=2026-10-31&contaId=c+1', {
+      credentials: 'same-origin',
+    })
+  })
+
+  it('fetchCategorias lê a lista', async () => {
+    responder([categoria], 200)
+    expect(await fetchCategorias()).toEqual([categoria])
+    expect(fetch).toHaveBeenCalledWith('/categorias', { credentials: 'same-origin' })
+  })
+
+  it('postLancamento e putLancamento enviam o corpo, e o id vai codificado', async () => {
+    responder(lancamento, 201)
+    await postLancamento(dados)
+    expect(fetch).toHaveBeenCalledWith('/lancamentos', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+    responder(lancamento, 200)
+    await putLancamento('a/b', dados)
+    expect(fetch).toHaveBeenCalledWith('/lancamentos/a%2Fb', {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+  })
+
+  it('deleteLancamento aceita 204 e codifica o id', async () => {
+    responder(null, 204)
+    await deleteLancamento('a/b')
+    expect(fetch).toHaveBeenCalledWith('/lancamentos/a%2Fb', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    })
+  })
+
+  it('mapeia 401, 404, 400, 503 e o resto em erros tipados', async () => {
+    const chamadas = [
+      () => fetchCategorias(),
+      () => fetchLancamentos('2026-10-01', '2026-10-31'),
+      () => postLancamento(dados),
+      () => putLancamento('1', dados),
+      () => deleteLancamento('1'),
+    ]
+    for (const chamar of chamadas) {
+      responder({ erro: 'x' }, 401)
+      await expect(chamar()).rejects.toBeInstanceOf(SessaoExpiradaError)
+      responder({ erro: 'x' }, 404)
+      await expect(chamar()).rejects.toBeInstanceOf(LancamentoNaoEncontradoError)
+      responder({ erro: 'conta arquivada' }, 400)
+      await expect(chamar()).rejects.toBeInstanceOf(LancamentoInvalidoError)
+      await expect(chamar()).rejects.toMatchObject({ mensagemServidor: 'conta arquivada' })
+      responder('sem formato', 400)
+      await expect(chamar()).rejects.toMatchObject({ mensagemServidor: null })
+      responder({ erro: 'x' }, 503)
+      await expect(chamar()).rejects.toBeInstanceOf(ServicoIndisponivelError)
+      responder({ erro: 'x' }, 500)
+      const erro = await chamar().catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(SessaoExpiradaError)
+      expect(erro).not.toBeInstanceOf(LancamentoInvalidoError)
+    }
+  })
+
+  it.each([
+    ['categorias com campo faltando', () => fetchCategorias(), [{ ...categoria, nome: undefined }]],
+    ['categorias que não é lista', () => fetchCategorias(), categoria],
+    ['lista com tipo desconhecido', () => fetchLancamentos('a', 'b'), [{ ...lancamento, tipo: 'transferencia' }]],
+    ['lista com valor decimal', () => fetchLancamentos('a', 'b'), [{ ...lancamento, valorCentavos: 1.5 }]],
+    ['lista com valor fora do inteiro seguro', () => fetchLancamentos('a', 'b'), [{ ...lancamento, valorCentavos: 2 ** 60 }]],
+    ['post com campo faltando', () => postLancamento(dados), { ...lancamento, contaId: undefined }],
+    ['put com status inesperado', () => putLancamento('1', dados), { ...lancamento, status: 'previsto' }],
+  ])('recusa corpo fora do contrato: %s', async (_nome, chamar, corpo) => {
+    responder(corpo, 200)
+    await expect(chamar()).rejects.toThrow(/formato inesperado/)
   })
 })

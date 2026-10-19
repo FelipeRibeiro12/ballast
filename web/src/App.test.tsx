@@ -25,6 +25,9 @@ function mockFetch(rotas: Rotas): void {
       if (chave === 'GET /healthz') return Promise.resolve(jsonResponse({ mensagem: 'ok' }, 200))
       // A tela logada sempre busca as contas; os testes de sessão não querem saber delas.
       if (chave === 'GET /contas') return Promise.resolve(jsonResponse([], 200))
+      // A tela logada também busca categorias e lançamentos; estes testes não querem saber deles.
+      if (chave === 'GET /categorias') return Promise.resolve(jsonResponse([], 200))
+      if (chave.startsWith('GET /lancamentos?')) return Promise.resolve(jsonResponse([], 200))
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),
   )

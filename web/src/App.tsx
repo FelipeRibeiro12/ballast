@@ -11,8 +11,9 @@ import {
   postCadastro,
   postLogout,
 } from './api'
-import type { Usuario } from './api'
+import type { Conta, Usuario } from './api'
 import Contas from './Contas'
+import Lancamentos from './Lancamentos'
 
 type EstadoSessao =
   | { tipo: 'carregando' }
@@ -320,6 +321,10 @@ function App() {
   const [tentativa, setTentativa] = useState(0)
   const [telaAnonima, setTelaAnonima] = useState<'login' | 'cadastro'>('login')
   const [aviso, setAviso] = useState<string | null>(null)
+  // Contadores para uma tela mandar a outra buscar de novo, sem biblioteca de estado.
+  const [versaoDeSaldo, setVersaoDeSaldo] = useState(0)
+  // Contas ativas vindas da tela de Contas, para os selects de Lançamentos não buscarem de novo.
+  const [contasAtivas, setContasAtivas] = useState<Conta[] | null>(null)
 
   useEffect(() => {
     let ativo = true
@@ -398,7 +403,16 @@ function App() {
               setSessao({ tipo: 'anonimo' })
             }}
           />
-          <Contas aoSessaoExpirar={aoSessaoExpirar} />
+          <Contas
+            aoSessaoExpirar={aoSessaoExpirar}
+            versaoDeSaldo={versaoDeSaldo}
+            aoCarregarAtivas={setContasAtivas}
+          />
+          <Lancamentos
+            aoSessaoExpirar={aoSessaoExpirar}
+            contas={contasAtivas}
+            aoMudarSaldo={() => setVersaoDeSaldo((n) => n + 1)}
+          />
         </>
       )}
       <Rodape />
