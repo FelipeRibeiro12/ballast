@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-19 — F3: lançamento realizado (PR #8)
+
+O que entrou: migration V6 com `categoria` e `lancamento` (duas datas, valor positivo, FK composta com `usuario_id` para conta e para categoria com o tipo), sementes de categoria no cadastro e para quem já existia, `GET /categorias`, CRUD de lançamento com listagem por período, saldo da conta somando os realizados, tela do mês no web.
+Decisões: ADR-024, emendado na fatia depois do QA (teto do saldo por conta e escrita serializada pela trava da linha da conta). Fora de ADR: `contaId` de outro usuário no filtro devolve lista vazia; mover lançamento para conta arquivada é recusado, editar e apagar em conta arquivada é permitido; a semente roda por evento síncrono na transação do cadastro.
+Dívida registrada: `lock_timeout` na trava (F5), tipo da categoria filha (CRUD de categoria), paginação de lançamentos (importação), log do 500 com a exceção inteira (paga no começo da F4, terceira aparição).
+Achados do QA: 1 bloqueou (dois lançamentos no teto passavam do limite do JSON, premissa errada no ADR), 1 dívida subiu junto (lançamento gravado em conta arquivada por corrida), 1 corrigido (validador recusava letra fora do plano básico).
+Achados do revisor: 0 bloquearam, 2 dívidas (uma registrada, outra sem ação), 3 sugestões sem ação. Security: 0 críticos, 0 altos, 0 médios, 1 baixo (o log do 500).
+Pipeline: verde na primeira tentativa, os 7 checks obrigatórios; nenhum alerta do CodeQL.
+Em aberto: conferência em navegador das telas de contas e lançamentos em 360px.
+
 ## 2026-10-19 — F2: contas (PR #7)
 
 O que entrou: migration V5 da tabela `conta`; `POST /contas`, `GET /contas` (`?arquivadas=true`), `GET /contas/{id}` e `PATCH /contas/{id}` escopados pelo usuário da sessão, com saldo em SQL (hoje igual ao inicial); tela de contas no web com total, criação e arquivamento, dinheiro sem float. Banco fora dá 503 em qualquer rota e o limite de 4 KiB vale para todas.
