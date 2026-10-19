@@ -28,7 +28,15 @@ class MigrationsTest {
             .query(String.class)
             .list();
 
-    assertThat(tables).contains("health_check", "usuario", "sessao", "tentativa_login", "conta");
+    assertThat(tables)
+        .contains(
+            "health_check",
+            "usuario",
+            "sessao",
+            "tentativa_login",
+            "conta",
+            "categoria",
+            "lancamento");
   }
 
   @Test
@@ -44,7 +52,7 @@ class MigrationsTest {
             .query(String.class)
             .list();
 
-    assertThat(versions).containsExactly("1", "2", "3", "4", "5");
+    assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6");
   }
 
   @Test
