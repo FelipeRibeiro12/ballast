@@ -46,10 +46,37 @@ class AppRolePrivilegesTest {
   }
 
   @Test
+  void allowsDmlOnConta() {
+    UUID usuarioId = UUID.randomUUID();
+    UUID contaId = UUID.randomUUID();
+    jdbc.sql("INSERT INTO usuario (id, email, senha_hash) VALUES (:id, :email, 'hash')")
+        .param("id", usuarioId)
+        .param("email", "conta-dml-" + usuarioId + "@example.com")
+        .update();
+
+    jdbc.sql(
+            "INSERT INTO conta (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'Caixa', 'dinheiro')")
+        .param("id", contaId)
+        .param("usuarioId", usuarioId)
+        .update();
+    jdbc.sql("UPDATE conta SET arquivada = true WHERE id = :id").param("id", contaId).update();
+    boolean arquivada =
+        jdbc.sql("SELECT arquivada FROM conta WHERE id = :id")
+            .param("id", contaId)
+            .query(Boolean.class)
+            .single();
+    int deleted = jdbc.sql("DELETE FROM conta WHERE id = :id").param("id", contaId).update();
+
+    assertThat(arquivada).isTrue();
+    assertThat(deleted).isEqualTo(1);
+  }
+
+  @Test
   void deniesDdlAndTruncate() {
     assertDenied("DROP TABLE usuario");
     assertDenied("CREATE TABLE intruso (id int)");
     assertDenied("TRUNCATE usuario");
+    assertDenied("TRUNCATE conta");
   }
 
   @Test
