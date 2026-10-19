@@ -13,7 +13,8 @@ class PasswordHasherTest {
   // Parâmetros baratos: a suíte hasheia dezenas de vezes e 64 MiB por hash a deixaria lenta.
   private static final IdentityProperties.Password CHEAP = new IdentityProperties.Password(8, 1, 1);
 
-  private final PasswordHasher hasher = new PasswordHasher(new IdentityProperties("false", CHEAP));
+  private final PasswordHasher hasher =
+      new PasswordHasher(new IdentityProperties("false", "", "", CHEAP));
 
   @Test
   void hashesAsArgon2idWithInjectedParameters() {

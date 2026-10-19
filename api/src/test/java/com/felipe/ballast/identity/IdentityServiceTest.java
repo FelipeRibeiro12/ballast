@@ -18,7 +18,7 @@ class IdentityServiceTest {
     final AtomicInteger hashCalls = new AtomicInteger();
 
     CountingHasher() {
-      super(new IdentityProperties("false", new IdentityProperties.Password(8, 1, 1)));
+      super(new IdentityProperties("false", "", "", new IdentityProperties.Password(8, 1, 1)));
     }
 
     @Override
