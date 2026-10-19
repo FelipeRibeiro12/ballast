@@ -79,6 +79,7 @@ class AppRolePrivilegesTest {
     assertDenied("TRUNCATE conta");
     assertDenied("TRUNCATE categoria");
     assertDenied("TRUNCATE lancamento");
+    assertDenied("TRUNCATE transferencia");
   }
 
   @Test
@@ -130,6 +131,64 @@ class AppRolePrivilegesTest {
     assertThat(titulo).isEqualTo("Ração premium");
     assertThat(deleted).isEqualTo(1);
     assertThat(deletedCategoria).isEqualTo(1);
+  }
+
+  @Test
+  void allowsDmlOnTransferencia() {
+    UUID usuarioId = UUID.randomUUID();
+    UUID contaA = UUID.randomUUID();
+    UUID contaB = UUID.randomUUID();
+    UUID saida = UUID.randomUUID();
+    UUID entrada = UUID.randomUUID();
+    UUID transferenciaId = UUID.randomUUID();
+    jdbc.sql("INSERT INTO usuario (id, email, senha_hash) VALUES (:id, :email, 'hash')")
+        .param("id", usuarioId)
+        .param("email", "transf-dml-" + usuarioId + "@example.com")
+        .update();
+    for (UUID[] conta : new UUID[][] {{contaA}, {contaB}}) {
+      jdbc.sql(
+              "INSERT INTO conta (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, :nome,"
+                  + " 'dinheiro')")
+          .param("id", conta[0])
+          .param("usuarioId", usuarioId)
+          .param("nome", "Conta " + conta[0])
+          .update();
+    }
+    insertPerna(usuarioId, saida, contaA);
+    insertPerna(usuarioId, entrada, contaB);
+
+    jdbc.sql(
+            "INSERT INTO transferencia (id, usuario_id, saida_id, entrada_id, conta_saida_id,"
+                + " conta_entrada_id) VALUES (:id, :usuarioId, :saida, :entrada, :contaA, :contaB)")
+        .param("id", transferenciaId)
+        .param("usuarioId", usuarioId)
+        .param("saida", saida)
+        .param("entrada", entrada)
+        .param("contaA", contaA)
+        .param("contaB", contaB)
+        .update();
+    UUID lida =
+        jdbc.sql("SELECT saida_id FROM transferencia WHERE id = :id")
+            .param("id", transferenciaId)
+            .query(UUID.class)
+            .single();
+    int deleted =
+        jdbc.sql("DELETE FROM transferencia WHERE id = :id").param("id", transferenciaId).update();
+    jdbc.sql("DELETE FROM lancamento WHERE usuario_id = :id").param("id", usuarioId).update();
+
+    assertThat(lida).isEqualTo(saida);
+    assertThat(deleted).isEqualTo(1);
+  }
+
+  private void insertPerna(UUID usuarioId, UUID id, UUID contaId) {
+    jdbc.sql(
+            "INSERT INTO lancamento (id, usuario_id, tipo, titulo, conta_id, valor,"
+                + " data_competencia, data_caixa) VALUES (:id, :usuarioId, 'transferencia',"
+                + " 'Transferência', :contaId, 10.00, DATE '2026-10-19', DATE '2026-10-19')")
+        .param("id", id)
+        .param("usuarioId", usuarioId)
+        .param("contaId", contaId)
+        .update();
   }
 
   @Test

@@ -36,7 +36,8 @@ class MigrationsTest {
             "tentativa_login",
             "conta",
             "categoria",
-            "lancamento");
+            "lancamento",
+            "transferencia");
   }
 
   @Test
@@ -52,7 +53,7 @@ class MigrationsTest {
             .query(String.class)
             .list();
 
-    assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6");
+    assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7");
   }
 
   @Test
