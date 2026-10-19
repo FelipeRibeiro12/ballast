@@ -5,6 +5,11 @@ spring:
     url: ${DATABASE_URL}
     username: ${DB_USER}
     password: ${DB_PASSWORD}
+    hikari:
+      # Banco fora: o padrão de 30 s seguraria o /healthz (e qualquer rota) por meio
+      # minuto antes do 503. Com 2 s o health check responde logo; num app de um
+      # usuário só, esperar mais do que isso por conexão já é falha.
+      connection-timeout: 2000
   jpa:
     hibernate:
       ddl-auto: validate
