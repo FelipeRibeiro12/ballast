@@ -57,6 +57,9 @@ function mensagemDeGravacao(erro: unknown): string {
 
 function mensagemDeExclusao(erro: unknown): string {
   if (erro instanceof LancamentoNaoEncontradoError) return MENSAGEM_NAO_EXISTE
+  if (erro instanceof LancamentoInvalidoError && erro.mensagemServidor !== null) {
+    return erro.mensagemServidor
+  }
   if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
   return 'Não foi possível apagar o lançamento. Tente de novo.'
 }

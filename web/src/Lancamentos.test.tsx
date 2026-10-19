@@ -330,6 +330,19 @@ describe('Lancamentos', () => {
     await waitFor(() => expect(chamadasA('GET /contas')).toHaveLength(2))
   })
 
+  it('400 ao apagar mostra a mensagem do servidor e mantém o item', async () => {
+    mockFetch({
+      ...base,
+      [MES_ATUAL]: responde([lancamento()]),
+      'DELETE /lancamentos/l1': responde({ erro: 'saldo da conta fora do limite' }, 400),
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Apagar Feira' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar Feira' }))
+    expect(await screen.findByText('saldo da conta fora do limite')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Apagar Feira' })).toBeVisible()
+  })
+
   it('cancelar a confirmação não apaga', async () => {
     mockFetch({ ...base, [MES_ATUAL]: responde([lancamento()]) })
     render(<App />)
