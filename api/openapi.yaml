@@ -438,7 +438,6 @@ components:
         nome:
           type: string
           maxLength: 100
-          minLength: 0
         senha:
           type: string
           maxLength: 128

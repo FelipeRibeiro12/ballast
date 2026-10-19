@@ -19,7 +19,8 @@ public record RegisterRequest(
         @Size(min = 12, max = 128, message = PASSWORD_MESSAGE)
         String password,
     @JsonProperty("nome")
-        @Size(max = 100, message = NAME_MESSAGE)
+        @Schema(maxLength = 100)
+        @CodePointSize(max = 100, message = NAME_MESSAGE)
         @NoControlCharacters(message = NAME_MESSAGE)
         String name) {
 

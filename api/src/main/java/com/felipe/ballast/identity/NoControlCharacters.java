@@ -12,6 +12,7 @@ import java.lang.annotation.Target;
 
 // Cc cobre NUL, DEL e o NEL (U+0085). Os separadores U+2028 e U+2029 não são Cc, mas quebram
 // linha em log e em CSV como se fossem controle. O Postgres recusa NUL em text, o que viraria 500.
+// Surrogate solto também sai: não é UTF-8 válido, e o driver o troca por "?" em silêncio.
 @Documented
 @Constraint(validatedBy = NoControlCharacters.Validator.class)
 @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.RECORD_COMPONENT})
@@ -33,6 +34,7 @@ public @interface NoControlCharacters {
 
     private static boolean isControl(int codePoint) {
       return Character.getType(codePoint) == Character.CONTROL
+          || Character.isSurrogate((char) codePoint)
           || codePoint == 0x2028
           || codePoint == 0x2029;
     }

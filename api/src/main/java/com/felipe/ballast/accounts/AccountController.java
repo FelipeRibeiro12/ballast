@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -43,6 +44,10 @@ class AccountController {
 
   private static final ErrorResponse INVALID_ARCHIVED_FILTER =
       new ErrorResponse("arquivadas deve ser true ou false");
+
+  private static final Pattern CANONICAL_UUID =
+      Pattern.compile(
+          "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
   private final AccountService accounts;
 
@@ -232,7 +237,11 @@ class AccountController {
   }
 
   // Id malformado é 404 e não 400, para não diferenciar do id que simplesmente não existe.
+  // UUID.fromString também lê "1-1-1-1-1"; só a forma de 36 caracteres vale.
   private static Optional<UUID> parseId(String id) {
+    if (!CANONICAL_UUID.matcher(id).matches()) {
+      return Optional.empty();
+    }
     try {
       return Optional.of(UUID.fromString(id));
     } catch (IllegalArgumentException e) {

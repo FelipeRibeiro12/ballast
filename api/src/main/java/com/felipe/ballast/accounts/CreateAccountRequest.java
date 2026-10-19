@@ -1,12 +1,12 @@
 package com.felipe.ballast.accounts;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.felipe.ballast.identity.CodePointSize;
 import com.felipe.ballast.identity.NoControlCharacters;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
 @Schema(name = "CriarContaRequest")
@@ -14,7 +14,7 @@ public record CreateAccountRequest(
     @JsonProperty("nome")
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED, minLength = 1, maxLength = 100)
         @NotNull(message = NAME_MESSAGE)
-        @Size(min = 1, max = 100, message = NAME_MESSAGE)
+        @CodePointSize(min = 1, max = 100, message = NAME_MESSAGE)
         @NoControlCharacters(message = NAME_MESSAGE)
         String name,
     @JsonProperty("tipo")
