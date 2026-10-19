@@ -1,5 +1,6 @@
 package com.felipe.ballast.identity;
 
+import com.felipe.ballast.web.UnexpectedErrorLog;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -57,7 +58,8 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
         writeError(response, HttpServletResponse.SC_SERVICE_UNAVAILABLE, "serviço indisponível");
         return;
       } catch (DataAccessException e) {
-        log.error("sessão: falha ao consultar a sessão ip={}", ClientAddress.of(request), e);
+        UnexpectedErrorLog.error(
+            log, "sessão: falha ao consultar a sessão ip=" + ClientAddress.of(request), e);
         writeError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "erro interno");
         return;
       }
