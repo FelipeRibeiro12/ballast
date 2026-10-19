@@ -8,7 +8,12 @@ domínio. Ao implementar, traduza mantendo o conceito.
 
 Este documento descreve o modelo-alvo. As migrations constroem em direção a
 ele, e nem toda coluna aqui existe hoje. O estado atual é o schema: veja
-`goose status` e `api/migrations/`.
+a tabela `flyway_schema_history` e `api/src/main/resources/db/migration/`.
+
+**Dinheiro (ADR-005):** fiat é `numeric(18,2)` no banco e `BigDecimal` no Java,
+e trafega no JSON como inteiro em centavos. Cripto é `numeric(38,18)` e trafega
+como string decimal. A precisão 18 garante que todo valor fiat cabe em `long`
+de centavos.
 
 ---
 
@@ -64,7 +69,7 @@ tentativa_login                          -- atraso progressivo por conta
 `tentativa_login` não tem `usuario_id` de propósito: a chave é o e-mail
 digitado, para o app não revelar se a conta existe (`docs/ameacas.md`).
 
-Migration `00002`: `mfa_segredo` ainda não existe (entra na F20). No banco,
+Migration `V2`: `mfa_segredo` ainda não existe (entra na F20). No banco,
 `email` tem CHECK de minúsculas e no máximo 254 caracteres (nas duas tabelas
 que o guardam), `nome` no máximo 100, `token_hash` exatamente 32 bytes,
 `falhas >= 0`, e `criado_em`/`criada_em` têm `DEFAULT now()`. `sessao.usuario_id`
@@ -83,7 +88,7 @@ conta
   nome              text not null
   tipo              text not null       -- ver abaixo
   moeda             char(3) not null default 'BRL'
-  saldo_inicial     bigint not null default 0   -- centavos
+  saldo_inicial     numeric(18,2) not null default 0
   arquivada         bool not null default false
   criada_em         timestamptz not null
   unique (usuario_id, nome)
@@ -116,7 +121,7 @@ invariante de dinheiro.
 ```
 cartao
   conta_id            uuid pk fk       -- 1:1 com conta tipo cartao_credito
-  limite              bigint not null
+  limite              numeric(18,2) not null
   dia_fechamento      smallint not null check (between 1 and 31)
   dia_vencimento      smallint not null check (between 1 and 31)
   conta_pagamento_id  uuid fk          -- de onde sai o dinheiro da fatura
@@ -278,7 +283,7 @@ template_lancamento
   descricao     text
   categoria_id  uuid fk not null
   conta_id      uuid fk not null
-  valor_total   bigint not null      -- centavos; o cheio, antes da divisão
+  valor_total   numeric(18,2) not null  -- o cheio, antes da divisão
   regra_id      uuid fk not null
   ativo         bool not null default true
 ```
@@ -291,7 +296,7 @@ template_divisao
   template_id   uuid fk not null
   dia_do_mes    smallint not null
   percentual    numeric(5,2) null    -- 40.00
-  valor_fixo    bigint null          -- centavos
+  valor_fixo    numeric(18,2) null
   ordem         smallint not null
   check ((percentual is null) != (valor_fixo is null))
   unique (template_id, dia_do_mes)
@@ -305,7 +310,7 @@ Suporta os dois modos que você descreveu, e mais de dois dias:
 Sem nenhuma linha de divisão, o template gera uma ocorrência por período.
 
 **Regra do centavo:** em divisão por percentual, calcula-se cada parcela com
-truncamento e o resto vai para a **última** parcela pela `ordem`. A soma das
+truncamento (`setScale(2, RoundingMode.DOWN)`) e o resto vai para a **última** parcela pela `ordem`. A soma das
 parcelas é sempre igual ao `valor_total` — isso é invariante e precisa de teste
 (ex.: R$ 1.000,00 em três partes de 33,33% não pode somar R$ 999,99).
 
@@ -323,7 +328,7 @@ lancamento
   descricao         text
   categoria_id      uuid fk
   conta_id          uuid fk not null
-  valor             bigint not null    -- centavos, sempre positivo
+  valor             numeric(18,2) not null  -- sempre positivo
   data_competencia  date not null
   data_caixa        date not null
   status            text not null      -- previsto | realizado | cancelado
@@ -381,18 +386,18 @@ meta
   id                uuid pk
   usuario_id        uuid fk not null
   titulo            text not null
-  valor_alvo        bigint not null
+  valor_alvo        numeric(18,2) not null
   data_alvo         date null
   conta_id          uuid fk null       -- onde o dinheiro está guardado
   regra_id          uuid fk null       -- aporte recorrente
-  aporte_previsto   bigint null
+  aporte_previsto   numeric(18,2) null
   concluida_em      timestamptz null
 
 aporte_meta
   id            uuid pk
   meta_id       uuid fk not null
   lancamento_id uuid fk null           -- se veio de um lançamento real
-  valor         bigint not null
+  valor         numeric(18,2) not null
   data          date not null
 ```
 
@@ -426,7 +431,7 @@ importacao_linha
   linha_bruta     jsonb not null         -- o que veio, cru, para auditoria
   hash_externo    text null              -- FITID, ou hash de (data, valor, descrição)
   data            date null              -- campos já interpretados
-  valor           bigint null
+  valor           numeric(18,2) null
   descricao       text null
   decisao         text not null default 'pendente'
                   -- pendente | importar | ignorar | conciliar
@@ -468,7 +473,7 @@ orcamento
   usuario_id    uuid fk not null
   categoria_id  uuid fk not null
   mes           date not null         -- sempre dia 1
-  teto          bigint not null
+  teto          numeric(18,2) not null
   unique (usuario_id, categoria_id, mes)
 ```
 

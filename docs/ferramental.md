@@ -9,25 +9,32 @@ A configuração vive em dois lugares, e saber qual é qual evita duplicata:
 
 | Metade | Onde | No Git? | O que tem |
 |---|---|---|---|
-| **Pessoal** | `~/.claude/` | não | agentes, skills, regras de estilo e segurança |
-| **Do projeto** | `.claude/` + `CLAUDE.md` | **sim** | o que é específico do Ballast |
+| **Pessoal** | `~/.claude/` | não | regras de estilo e segurança, skills gerais |
+| **Do projeto** | `.claude/` + `CLAUDE.md` | **sim** | agentes, skills, regras e stacks do Ballast |
 
 A metade pessoal vale em todos os projetos da máquina e é instalada uma vez.
-A metade do projeto está versionada e vem com o repositório.
+A metade do projeto está versionada e vem com o repositório. Os agentes e as
+skills do kit também estão versionados aqui, para quem clonar ter o mesmo
+fluxo sem instalar nada.
 
 ## O que está no repositório
 
 ```
 CLAUDE.md                         # lei do projeto, toda sessão
 .claude/
+├── agents/                       # tech-lead e especialistas
+├── skills/                       # /piloto, /bootstrap, /pr, /adr...
+├── stacks/                       # referência por stack; a ativa vira rule
 ├── rules/
-│   ├── go.md                     # carrega ao ler api/**/*.go
-│   ├── sql.md                    # carrega ao ler api/migrations/**
+│   ├── java-spring.md            # carrega ao ler api/**/*.java
+│   ├── sql.md                    # carrega ao ler api/**/*.sql
 │   ├── typescript.md             # carrega ao ler web/**/*.ts(x)
-│   └── react.md                  # carrega ao ler web/**/*.tsx
+│   ├── react.md                  # carrega ao ler web/**/*.tsx
+│   └── comentarios.md, seguranca.md, solidity.md
 ├── hooks/bloqueia-segredo.sh     # bloqueia escrita em .env, *.key, *.pem
 └── settings.json                 # registra o hook
-.github/workflows/seguranca.yml   # gitleaks, govulncheck, pnpm audit, CodeQL
+.github/workflows/ci.yml          # spotless, mvnw verify, spec, web
+.github/workflows/seguranca.yml   # gitleaks, osv-scanner, pnpm audit, CodeQL
 docs/                             # visão, ADRs, modelo, backlog, ameaças
 ```
 
@@ -87,12 +94,14 @@ Vale registrar, porque muda o que se pode confiar:
 Regra prática: se algo **precisa** valer sempre, vai para hook ou CI. Se é
 orientação de como escrever, vai para rule.
 
-## Pendente de configurar no GitHub
+## Ruleset da `main`
 
-Nada no repositório substitui isto, e sem ele os gates do CI são contornáveis:
+O ruleset "main protegida" exige PR, proíbe force push e deleção, e pede sete
+checks pelo **nome do job**: `api`, `web`, `dependências (api)`,
+`dependências (web)`, `varredura de segredo`, `análise estática (api)` e
+`análise estática (javascript-typescript)`.
 
-**Settings → Branches → Add rule** na `main`:
-
-- Require a pull request before merging → 1 approval
-- Require status checks to pass → marque os jobs de `seguranca.yml`
-- Do not allow bypassing the above settings
+Renomear um job sem mexer no ruleset tranca todo merge: o check obrigatório
+nunca mais roda. A ordem é tirar o nome antigo do ruleset, renomear e empurrar,
+e incluir o nome novo depois do primeiro run (ADR-016). Por isso o nome de job
+descreve o módulo, não a linguagem.
