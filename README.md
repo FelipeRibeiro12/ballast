@@ -50,6 +50,7 @@ Preencha no formato `CHAVE=valor`, sem aspas, `$` ou `#`. O modelo está em `.en
 | `APP_ENV` | Só `development` libera `COOKIE_SECURE=false`. Vazio ou ausente conta como produção. |
 | `COOKIE_SECURE` | Vazio vale `true`. `false` só com `APP_ENV=development`; com outro `APP_ENV` a API não sobe. |
 | `REGISTRO_ABERTO` | `false` por padrão. `true` libera `POST /auth/cadastro`. Deixe `false` enquanto não houver limite de requisições na borda. |
+| `VITE_REGISTRO_ABERTO` | Vazio por padrão. `true` mostra a tela de cadastro no web. Só funciona junto com `REGISTRO_ABERTO=true` (ADR-022). |
 | `SEED_EMAIL`, `SEED_SENHA`, `SEED_NOME` | Usuário criado por `make seed`. Senha de 12 a 128 caracteres. Nome é opcional, até 100 caracteres. |
 | `API_DOCS_ENABLED` | `true` serve `/v3/api-docs`. Use só em desenvolvimento. Qualquer outro valor deixa desligado. |
 | `COINGECKO_API_URL` | Está no `.env.example`, mas ainda não é usada. |
