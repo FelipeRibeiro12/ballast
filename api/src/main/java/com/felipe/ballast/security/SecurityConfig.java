@@ -1,5 +1,6 @@
 package com.felipe.ballast.security;
 
+import com.felipe.ballast.identity.IdentityProperties;
 import jakarta.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -23,7 +24,8 @@ class SecurityConfig {
   private static final String FORBIDDEN = "{\"erro\":\"acesso negado\"}";
 
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+  SecurityFilterChain securityFilterChain(HttpSecurity http, IdentityProperties properties)
+      throws Exception {
     return http.csrf(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .httpBasic(AbstractHttpConfigurer::disable)
@@ -32,13 +34,15 @@ class SecurityConfig {
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         // Públicas uma a uma; o que não está aqui exige sessão.
         .authorizeHttpRequests(
-            auth ->
-                auth.requestMatchers(HttpMethod.GET, "/healthz")
-                    .permitAll()
-                    .requestMatchers("/v3/api-docs*", "/v3/api-docs/**")
-                    .permitAll()
-                    .anyRequest()
-                    .authenticated())
+            auth -> {
+              auth.requestMatchers(HttpMethod.GET, "/healthz").permitAll();
+              auth.requestMatchers("/v3/api-docs*", "/v3/api-docs/**").permitAll();
+              // Fechado, a rota nem é pública: cai em anyRequest, igual a uma rota inexistente.
+              if (properties.isRegistrationOpen()) {
+                auth.requestMatchers(HttpMethod.POST, "/auth/cadastro").permitAll();
+              }
+              auth.anyRequest().authenticated();
+            })
         .exceptionHandling(
             e ->
                 e.authenticationEntryPoint(

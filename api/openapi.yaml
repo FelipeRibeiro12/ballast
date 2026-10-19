@@ -5,6 +5,52 @@ info:
 servers:
 - url: /
 paths:
+  /auth/cadastro:
+    post:
+      description: "A rota só existe quando REGISTRO_ABERTO=true. Fechado, ela responde\
+        \ exatamente como uma rota inexistente (401 sem sessão, 404 com sessão), para\
+        \ não revelar que existe."
+      operationId: postAuthCadastro
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CadastroRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usuario"
+          description: Usuário criado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: E-mail já cadastrado
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Falha interna
+      summary: Cria um usuário
+      tags:
+      - auth
   /healthz:
     get:
       operationId: getHealth
@@ -26,6 +72,31 @@ paths:
       - health
 components:
   schemas:
+    CadastroRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          minLength: 0
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 0
+        senha:
+          type: string
+          maxLength: 128
+          minLength: 12
+      required:
+      - email
+      - senha
+    Erro:
+      type: object
+      properties:
+        erro:
+          type: string
+      required:
+      - erro
     HealthError:
       type: object
       properties:
@@ -40,3 +111,21 @@ components:
           type: string
       required:
       - mensagem
+    Usuario:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 254
+        id:
+          type: string
+          format: uuid
+        nome:
+          type:
+          - string
+          - "null"
+          maxLength: 100
+      required:
+      - email
+      - id
+      - nome

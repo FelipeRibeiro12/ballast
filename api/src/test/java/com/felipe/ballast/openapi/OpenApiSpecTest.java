@@ -4,22 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.felipe.ballast.TestcontainersConfiguration;
+import com.felipe.ballast.IntegrationTest;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
 // O web gera o cliente TS de api/openapi.yaml. Este teste é o gate do ADR-019:
 // a spec commitada tem que ser a que o código gera hoje.
-@Import(TestcontainersConfiguration.class)
-@SpringBootTest
-@AutoConfigureMockMvc
+@IntegrationTest
 class OpenApiSpecTest {
 
   private static final String UPDATE_PROPERTY = "spec.atualizar";
