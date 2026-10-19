@@ -1,7 +1,6 @@
-import type { paths } from './api/schema'
+import type { components } from './api/schema'
 
-export type Healthz =
-  paths['/healthz']['get']['responses']['200']['content']['application/json']
+export type Healthz = components['schemas']['HealthResponse']
 
 export class ApiError extends Error {}
 
