@@ -1,7 +1,12 @@
 # ADR-011: golangci-lint instalado por gerenciador de pacotes e fixado por versão
 
-**Status:** aceito
+**Status:** descartado, sem substituto
 **Data:** 2026-10-03
+**Descartado em:** 2026-10-19
+
+> **Descartado com o ADR-016.** Sem Go no projeto, a ferramenta perde objeto.
+> A regra da Consequência continua valendo para qualquer ferramenta de build:
+> versão fixada e igual na máquina e no CI.
 
 ## Contexto
 

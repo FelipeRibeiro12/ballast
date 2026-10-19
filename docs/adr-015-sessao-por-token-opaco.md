@@ -1,6 +1,6 @@
 # ADR-015: sessão por token opaco guardado como SHA-256
 
-**Status:** aceito
+**Status:** aceito, implementação ajustada em 2026-10-19 pela troca de stack (ADR-016)
 **Data:** 2026-10-03
 
 ## Contexto
@@ -9,12 +9,21 @@ A F1 introduz login. O servidor precisa invalidar uma sessão no logout e na tro
 
 ## Decisão
 
-- O token é opaco: 32 bytes de `crypto/rand`, codificados em base64url.
+- O token é opaco: 32 bytes de `SecureRandom`, codificados em base64url.
 - O banco guarda só o **SHA-256** do token, na tabela `sessao`, com `expira_em` e `revogada_em`. O token em claro só existe no cookie.
 - Cookie `HttpOnly`, `Secure`, `SameSite=Lax`, com o mesmo prazo da sessão.
 - `Secure` vem ligado por padrão. `COOKIE_SECURE=false` existe só para desenvolvimento (Safari recusa cookie `Secure` sobre HTTP), e a API se recusa a subir com ele falso se `APP_ENV` não for `development`. Aposentar a flag (HTTPS local com mkcert) está no backlog.
 - Logout e troca de senha marcam a sessão como revogada no servidor. Apagar o cookie não basta.
 - A comparação é feita pelo hash, por busca indexada: o banco recebe o hash do token apresentado e nunca o token.
+
+## Implementação em Java
+
+O desenho não muda com o ADR-016. O token sai de `SecureRandom` e o SHA-256 de
+`MessageDigest`, os dois do JDK.
+
+Argon2id **não vem no JDK**. O caminho é o `Argon2PasswordEncoder` do Spring
+Security, que usa o BouncyCastle (`bcprov`) por baixo. As duas dependências
+foram aprovadas pelo dono do projeto em 2026-10-19.
 
 ## Por que SHA-256 no token e argon2id na senha
 
