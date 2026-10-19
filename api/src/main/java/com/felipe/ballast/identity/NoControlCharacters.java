@@ -16,7 +16,7 @@ import java.lang.annotation.Target;
 @Constraint(validatedBy = NoControlCharacters.Validator.class)
 @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.RECORD_COMPONENT})
 @Retention(RetentionPolicy.RUNTIME)
-@interface NoControlCharacters {
+public @interface NoControlCharacters {
 
   String message() default "caractere inválido";
 

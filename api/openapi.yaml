@@ -192,6 +192,214 @@ paths:
       summary: Encerra a sessão
       tags:
       - auth
+  /contas:
+    get:
+      description: "Ordenada por nome sem diferenciar caixa. Sem o parâmetro, devolve\
+        \ só as ativas."
+      operationId: getContas
+      parameters:
+      - in: query
+        name: arquivadas
+        required: false
+        schema:
+          type: string
+          default: false
+          enum:
+          - "true"
+          - "false"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conta"
+          description: "Contas ativas, ou só as arquivadas com arquivadas=true"
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: arquivadas com valor diferente de true e false
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Lista as contas do usuário
+      tags:
+      - contas
+    post:
+      operationId: postContas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CriarContaRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conta"
+          description: Conta criada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Já existe uma conta do usuário com esse nome, sem diferenciar\
+            \ caixa"
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Cria uma conta
+      tags:
+      - contas
+  /contas/{id}:
+    get:
+      operationId: getContasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conta"
+          description: Conta
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Devolve uma conta do usuário
+      tags:
+      - contas
+    patch:
+      description: "Idempotente: repetir o mesmo valor devolve 200 e a mesma conta."
+      operationId: patchContasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AtualizarContaRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conta"
+          description: Conta com o estado novo
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Arquiva ou desarquiva uma conta
+      tags:
+      - contas
   /healthz:
     get:
       operationId: getHealth
@@ -213,6 +421,13 @@ paths:
       - health
 components:
   schemas:
+    AtualizarContaRequest:
+      type: object
+      properties:
+        arquivada:
+          type: boolean
+      required:
+      - arquivada
     CadastroRequest:
       type: object
       properties:
@@ -231,6 +446,74 @@ components:
       required:
       - email
       - senha
+    Conta:
+      type: object
+      properties:
+        arquivada:
+          type: boolean
+        criadaEm:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+        moeda:
+          type: string
+          enum:
+          - BRL
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+        saldoCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real, inteiro com sinal"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        saldoInicialCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real, inteiro com sinal"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        tipo:
+          type: string
+          enum:
+          - corrente
+          - poupanca
+          - dinheiro
+      required:
+      - arquivada
+      - criadaEm
+      - id
+      - moeda
+      - nome
+      - saldoCentavos
+      - saldoInicialCentavos
+      - tipo
+    CriarContaRequest:
+      type: object
+      properties:
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+        saldoInicialCentavos:
+          type: integer
+          format: int64
+          default: 0
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        tipo:
+          type: string
+          enum:
+          - corrente
+          - poupanca
+          - dinheiro
+      required:
+      - nome
+      - tipo
     Erro:
       type: object
       properties:

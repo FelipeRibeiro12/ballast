@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -11,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.lang.Nullable;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -68,6 +70,17 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     return body(statusCode, headers, messageFor(statusCode));
   }
 
+  // Banco fora: CannotGetJdbcConnectionException (JdbcClient) é filha da primeira; o JPA falha
+  // ao abrir a transação, com a segunda. Conexão que cai no meio da consulta também é a primeira.
+  @ExceptionHandler({
+    DataAccessResourceFailureException.class,
+    CannotCreateTransactionException.class
+  })
+  ResponseEntity<Object> handleDatabaseUnavailable(Exception ex) {
+    log.error("banco indisponível", ex);
+    return body(HttpStatus.SERVICE_UNAVAILABLE, new HttpHeaders(), "serviço indisponível");
+  }
+
   @ExceptionHandler(Exception.class)
   ResponseEntity<Object> handleUnexpected(Exception ex) {
     log.error("erro não tratado", ex);
@@ -88,6 +101,7 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
       case 405 -> "método não permitido";
       case 406 -> "formato não aceito";
       case 415 -> "content-type deve ser application/json";
+      case 503 -> "serviço indisponível";
       default -> status.is5xxServerError() ? "erro interno" : "requisição inválida";
     };
   }

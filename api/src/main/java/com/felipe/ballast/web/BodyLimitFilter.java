@@ -15,40 +15,31 @@ import java.nio.charset.StandardCharsets;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
-import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
-import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-// O Spring MVC lê corpo JSON sem teto. Nas rotas /auth/* o maior DTO válido (e-mail 254 +
+// O Spring MVC lê corpo JSON sem teto. Em toda rota o maior DTO válido (em /auth/*: e-mail 254 +
 // senha 128 + nome 100 caracteres, cada um no pior caso escapado em 6 bytes) cabe em ~3 KB;
 // 4 KiB dá folga para espaço e formatação e continua pequeno para quem quer esgotar memória.
+// Rota que precisar de corpo maior (upload de extrato, F22) pede uma exceção própria aqui.
 // Sem o cabeçalho Content-Length (chunked) o tamanho só aparece lendo, então a leitura é contada
 // e aborta no estouro, sem juntar o corpo na memória.
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class BodyLimitFilter extends OncePerRequestFilter {
 
-  static final int AUTH_BODY_LIMIT_BYTES = 4096;
+  static final int BODY_LIMIT_BYTES = 4096;
   static final String MESSAGE = "{\"erro\":\"corpo grande demais\"}";
-
-  private final RequestMatcher authRoutes =
-      PathPatternRequestMatcher.withDefaults().matcher("/auth/**");
-
-  @Override
-  protected boolean shouldNotFilter(HttpServletRequest request) {
-    return !authRoutes.matches(request);
-  }
 
   @Override
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
-    if (request.getContentLengthLong() > AUTH_BODY_LIMIT_BYTES) {
+    if (request.getContentLengthLong() > BODY_LIMIT_BYTES) {
       reject(response);
       return;
     }
-    chain.doFilter(new LimitedRequest(request, AUTH_BODY_LIMIT_BYTES), response);
+    chain.doFilter(new LimitedRequest(request, BODY_LIMIT_BYTES), response);
   }
 
   private static void reject(HttpServletResponse response) throws IOException {

@@ -32,6 +32,13 @@ spring:
       # O Boot ignora campo desconhecido por padrão; aqui vira 400, e lixo depois do JSON também.
       fail-on-unknown-properties: true
       fail-on-trailing-tokens: true
+      # Sem isto, 12.5 ou 1e3 viram inteiro por truncamento: em campo de dinheiro seria um
+      # centavo trocado sem erro.
+      accept-float-as-int: false
+    datatype:
+      enum:
+        # Sem isto, o número 0 vira o primeiro valor de um enum.
+        fail-on-numbers-for-enums: true
     mapper:
       # Sem isto, {"email": 1} viraria "1" em vez de erro.
       allow-coercion-of-scalars: false

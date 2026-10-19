@@ -79,6 +79,32 @@ class BodyLimitTest {
     }
   }
 
+  // A recusa vem do filtro, antes da autenticação: vale para qualquer rota, com ou sem sessão.
+  @Test
+  void rejectsDeclaredLengthAboveTheLimitOnAnyRouteWith413() throws Exception {
+    for (String path : new String[] {"/contas", "/contas/" + java.util.UUID.randomUUID()}) {
+      HttpResponse<String> response =
+          client.send(
+              request(path)
+                  .method("POST", BodyPublishers.ofString(loginBodyOfSize(LIMIT + 1)))
+                  .build(),
+              BodyHandlers.ofString(StandardCharsets.UTF_8));
+
+      assertThat(response.statusCode()).as(path).isEqualTo(413);
+      assertThat(response.body()).as(path).isEqualTo(TOO_LARGE);
+    }
+  }
+
+  @Test
+  void aBodyExactlyAtTheLimitOnAnotherRouteReachesTheAuthentication() throws Exception {
+    HttpResponse<String> response =
+        client.send(
+            request("/contas").POST(BodyPublishers.ofString(loginBodyOfSize(LIMIT))).build(),
+            BodyHandlers.ofString(StandardCharsets.UTF_8));
+
+    assertThat(response.statusCode()).isEqualTo(401);
+  }
+
   @Test
   void rejectsDeclaredLengthAboveTheLimitWith413() throws Exception {
     HttpResponse<String> response =
