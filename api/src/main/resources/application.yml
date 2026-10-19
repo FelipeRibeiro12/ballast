@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: ballast
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+server:
+  # loopback por padrão: sem HOST explícito a API não escuta na rede local
+  address: ${HOST:127.0.0.1}
+  port: ${PORT:8080}

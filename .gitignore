@@ -9,3 +9,4 @@ coverage/
 *.key
 *.pem
 .DS_Store
+target/
