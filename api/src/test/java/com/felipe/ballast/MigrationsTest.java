@@ -18,20 +18,17 @@ class MigrationsTest {
   @Test
   void createsTablesOnEmptyDatabase() {
     List<String> tables =
-        jdbc.sql(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
+        jdbc.sql("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
             .query(String.class)
             .list();
 
-    assertThat(tables)
-        .contains("health_check", "usuario", "sessao", "tentativa_login");
+    assertThat(tables).contains("health_check", "usuario", "sessao", "tentativa_login");
   }
 
   @Test
   void appliesBothMigrationsInOrder() {
     List<String> versions =
-        jdbc.sql(
-                "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank")
+        jdbc.sql("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank")
             .query(String.class)
             .list();
 

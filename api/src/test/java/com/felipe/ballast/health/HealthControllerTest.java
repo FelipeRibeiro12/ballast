@@ -2,7 +2,6 @@ package com.felipe.ballast.health;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.felipe.ballast.TestcontainersConfiguration;
@@ -31,7 +30,6 @@ class HealthControllerTest {
 
   @Test
   void rejectsClientThatOnlyAcceptsOtherMediaType() throws Exception {
-    mvc.perform(get("/healthz").accept(MediaType.TEXT_HTML))
-        .andExpect(status().isNotAcceptable());
+    mvc.perform(get("/healthz").accept(MediaType.TEXT_HTML)).andExpect(status().isNotAcceptable());
   }
 }

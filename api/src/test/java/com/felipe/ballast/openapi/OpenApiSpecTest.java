@@ -44,7 +44,9 @@ class OpenApiSpecTest {
     }
 
     String committed =
-        Files.exists(COMMITTED_SPEC) ? Files.readString(COMMITTED_SPEC, StandardCharsets.UTF_8) : "";
+        Files.exists(COMMITTED_SPEC)
+            ? Files.readString(COMMITTED_SPEC, StandardCharsets.UTF_8)
+            : "";
 
     assertThat(generated)
         .withFailMessage(
