@@ -23,7 +23,7 @@ paths:
           description: Banco indisponível
       summary: Verifica se a API alcança o banco
       tags:
-      - health-controller
+      - health
 components:
   schemas:
     HealthError:
