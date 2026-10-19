@@ -44,3 +44,9 @@ Armadilhas:
 - `gh pr checks --watch` sai cedo com checks pendentes; usar laço com `grep pending`.
 - osv-scanner mostra "found 14 packages" (diretas) mas resolve transitivas; já pegou CVE do Tomcat e Jackson gerenciados pelo Boot.
 - Subagente pode afirmar arquivo desatualizado sem ter lido o atual (docs disse que o CLAUDE.md citava Go): conferir com grep antes de aceitar.
+
+## F1 em Java (2026-10-19, PR #5)
+
+- O check `CodeQL` (resultados do code scanning) não é obrigatório no ruleset, mas falha com alerta aberto; ler os alertas antes do merge (`gh api repos/.../code-scanning/alerts?ref=refs/pull/N/merge`).
+- QA com a API real pegou o que os testes de MockMvc não pegavam (banco congelado com `docker pause`); manter esse passo.
+- Porta 8080 da máquina do dono tem um processo `api` antigo (pid 89846 em 2026-10-19): QA e testes de proxy em porta alta.

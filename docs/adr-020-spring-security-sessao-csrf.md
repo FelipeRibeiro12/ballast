@@ -20,7 +20,9 @@ entra e o que fazer com o CSRF, que ele liga por padrão.
 - Rotas públicas listadas uma a uma. Todo o resto exige sessão.
 - **O token de CSRF do Spring fica desligado.** A defesa é o `SameSite=Lax` do
   cookie mais a regra de que rota que muda estado só aceita
-  `Content-Type: application/json`, e o app não habilita CORS.
+  `Content-Type: application/json`, e o app não habilita CORS. A exceção é o
+  logout, que não lê corpo e aceita qualquer tipo: o `Lax` já impede o POST
+  de outro site de levar o cookie, e o pior efeito seria derrubar a sessão.
 - `/v3/api-docs*` só responde com `springdoc.api-docs.enabled=true`, ligado em
   desenvolvimento e teste. Em produção a spec fica no repositório.
 
@@ -52,3 +54,7 @@ A defesa depende de o PWA e a API ficarem no mesmo site. Em sites diferentes,
 o `Lax` também derruba o login legítimo, e esta decisão volta junto com a
 escolha da hospedagem. Qualquer rota futura que aceite outro `Content-Type`
 (upload de extrato, F22) precisa de defesa própria.
+
+O CodeQL acusa `java/spring-disabled-csrf-protection`. O alerta foi dispensado
+como "won't fix" citando este ADR, depois de a auditoria do PR #5 conferir as
+premissas no código.

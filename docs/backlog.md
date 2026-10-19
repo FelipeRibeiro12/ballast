@@ -165,6 +165,8 @@ digitado, inclusive inexistente, sem limpeza hoje) e limpar sessões expiradas.
 - **DÍVIDA** — E-mail com letra de conversão exótica ("İ") pode virar minúscula diferente no `toLowerCase(Locale.ROOT)` do Java e no `lower()` do Postgres, e o CHECK de minúsculas daria 500. Mesmo risco da versão Go, sem teste. Resolver junto com a regra dos caracteres Cf.
 - **DÍVIDA** — Com o banco indisponível, rotas autenticadas respondem 500 `erro interno` e só o `/healthz` responde 503 (reteste de QA da F1). Decidir se toda falha de acesso ao banco vira 503. Dono: backend, na F2, que é a primeira fatia com várias rotas de banco.
 - **DÍVIDA** — Dois cookies `ballast_sessao` na mesma requisição contam como sem sessão, mesmo os dois válidos e iguais (`20ac315`). Decisão deliberada contra cookie tossing; manter o teste que trava isso.
+- **DÍVIDA** — O handler de 500 loga a exceção inteira. Hoje a única constraint com dado pessoal é a do e-mail, já tratada; uma constraint nova com dado pessoal faria o `Key (...)` do Postgres aparecer no log (auditoria do PR #5, B1). Dono: backend, na fatia que criar a constraint.
+- **DÍVIDA** — O `osv-scanner -L api/pom.xml` não resolve as versões herdadas do BOM do Boot para todos os pacotes; a cobertura do grafo transitivo é parcial (auditoria do PR #5). Gerar SBOM ou `dependency:tree` no CI e escanear o resultado. Dono: devops, junto com o Dependabot.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
