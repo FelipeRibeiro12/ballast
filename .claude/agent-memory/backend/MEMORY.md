@@ -1,0 +1,1 @@
+- [Armadilhas da api Java](armadilhas-java-api.md) — springdoc 3, spotless/gjf com Java 25, teste do timeout do Hikari
