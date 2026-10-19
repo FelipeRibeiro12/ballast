@@ -7,9 +7,11 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 // Assume entrada já validada e normalizada na borda (RegisterRequest).
 @Service
@@ -41,6 +43,8 @@ public class IdentityService {
   private final LoginAttempts attempts;
   private final PasswordHasher hasher;
   private final Clock clock;
+  private final TransactionTemplate transaction;
+  private final ApplicationEventPublisher events;
 
   IdentityService(
       UserAccountRepository users,
@@ -48,23 +52,35 @@ public class IdentityService {
       SessionQueries sessionQueries,
       LoginAttempts attempts,
       PasswordHasher hasher,
-      Clock clock) {
+      Clock clock,
+      TransactionTemplate transaction,
+      ApplicationEventPublisher events) {
     this.users = users;
     this.sessions = sessions;
     this.sessionQueries = sessionQueries;
     this.attempts = attempts;
     this.hasher = hasher;
     this.clock = clock;
+    this.transaction = transaction;
+    this.events = events;
   }
 
-  // Vazio quando o e-mail já existe. Sem @Transactional de propósito: o saveAndFlush abre a
-  // própria transação, e a violação de unicidade precisa ser capturada fora dela (dentro, a
-  // transação ficaria marcada para rollback e o chamador veria UnexpectedRollbackException).
+  // Vazio quando o e-mail já existe. O usuário e as sementes de categoria (evento síncrono)
+  // entram na mesma transação, aberta com TransactionTemplate e não com @Transactional: a
+  // violação de unicidade sai do template já com o rollback feito e é capturada aqui fora. Com
+  // @Transactional ela marcaria a transação como rollback-only e o chamador veria
+  // UnexpectedRollbackException em vez do Optional vazio.
   // O hash é calculado antes do INSERT para e-mail novo e e-mail repetido custarem o mesmo tempo.
   public Optional<UserProfile> register(String email, String password, String name) {
     String hash = hasher.hash(password);
     try {
-      UserAccount saved = users.saveAndFlush(new UserAccount(email, hash, name));
+      UserAccount saved =
+          transaction.execute(
+              status -> {
+                UserAccount user = users.saveAndFlush(new UserAccount(email, hash, name));
+                events.publishEvent(new UserRegistered(user.getId()));
+                return user;
+              });
       return Optional.of(profileOf(saved));
     } catch (DataIntegrityViolationException e) {
       if (isDuplicateEmail(e)) {

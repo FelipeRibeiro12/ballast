@@ -1,6 +1,7 @@
 package com.felipe.ballast.accounts;
 
 import com.felipe.ballast.identity.AuthenticatedUser;
+import com.felipe.ballast.web.CanonicalUuid;
 import com.felipe.ballast.web.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -12,8 +13,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -44,10 +43,6 @@ class AccountController {
 
   private static final ErrorResponse INVALID_ARCHIVED_FILTER =
       new ErrorResponse("arquivadas deve ser true ou false");
-
-  private static final Pattern CANONICAL_UUID =
-      Pattern.compile(
-          "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
   private final AccountService accounts;
 
@@ -174,7 +169,7 @@ class AccountController {
   @GetMapping(path = "/contas/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> find(
       @AuthenticationPrincipal AuthenticatedUser user, @PathVariable("id") String id) {
-    return parseId(id)
+    return CanonicalUuid.parse(id)
         .flatMap(accountId -> accounts.find(user.id(), accountId))
         .<ResponseEntity<?>>map(found -> ResponseEntity.ok(AccountResponse.from(found)))
         .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND));
@@ -223,7 +218,7 @@ class AccountController {
       @PathVariable("id") String id,
       @Valid @RequestBody UpdateAccountRequest request) {
     Optional<AccountSummary> updated =
-        parseId(id)
+        CanonicalUuid.parse(id)
             .flatMap(accountId -> accounts.setArchived(user.id(), accountId, request.archived()));
     if (updated.isEmpty()) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
@@ -234,18 +229,5 @@ class AccountController {
         updated.get().id(),
         updated.get().archived());
     return ResponseEntity.ok(AccountResponse.from(updated.get()));
-  }
-
-  // Id malformado é 404 e não 400, para não diferenciar do id que simplesmente não existe.
-  // UUID.fromString também lê "1-1-1-1-1"; só a forma de 36 caracteres vale.
-  private static Optional<UUID> parseId(String id) {
-    if (!CANONICAL_UUID.matcher(id).matches()) {
-      return Optional.empty();
-    }
-    try {
-      return Optional.of(UUID.fromString(id));
-    } catch (IllegalArgumentException e) {
-      return Optional.empty();
-    }
   }
 }

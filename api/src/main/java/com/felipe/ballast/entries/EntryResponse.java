@@ -1,0 +1,57 @@
+package com.felipe.ballast.entries;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.UUID;
+
+@Schema(name = "Lancamento")
+public record EntryResponse(
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID id,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) EntryType tipo,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, minLength = 1, maxLength = 100)
+        String titulo,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true, maxLength = 500)
+        String descricao,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "Centavos de real, sempre positivo; o sinal vem do tipo",
+            minimum = "1",
+            maximum = "9007199254740991")
+        long valorCentavos,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID categoriaId,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID contaId,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "Quando o fato aconteceu; gráfico por categoria e orçamento usam esta")
+        LocalDate dataCompetencia,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "Quando o dinheiro se move; saldo e fluxo de caixa usam esta")
+        LocalDate dataCaixa,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, allowableValues = "realizado")
+        String status,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant criadoEm) {
+
+  // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
+  // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
+  static EntryResponse from(EntrySummary summary) {
+    return new EntryResponse(
+        summary.id(),
+        summary.type(),
+        summary.title(),
+        summary.description(),
+        toCents(summary.amount()),
+        summary.categoryId(),
+        summary.accountId(),
+        summary.competenceDate(),
+        summary.cashDate(),
+        summary.status(),
+        summary.createdAt());
+  }
+
+  private static long toCents(BigDecimal amount) {
+    return amount.movePointRight(2).longValueExact();
+  }
+}

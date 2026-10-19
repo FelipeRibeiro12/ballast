@@ -19,6 +19,8 @@ class IdentityServiceTest {
   @Autowired SessionQueries sessionQueries;
   @Autowired LoginAttempts attempts;
   @Autowired Clock clock;
+  @Autowired org.springframework.transaction.support.TransactionTemplate transaction;
+  @Autowired org.springframework.context.ApplicationEventPublisher events;
   @Autowired org.springframework.jdbc.core.simple.JdbcClient jdbc;
 
   private CountingHasher hasher;
@@ -53,7 +55,9 @@ class IdentityServiceTest {
   @BeforeEach
   void setUp() {
     hasher = new CountingHasher();
-    service = new IdentityService(users, sessions, sessionQueries, attempts, hasher, clock);
+    service =
+        new IdentityService(
+            users, sessions, sessionQueries, attempts, hasher, clock, transaction, events);
   }
 
   @Test
@@ -101,7 +105,8 @@ class IdentityServiceTest {
           }
         };
     IdentityService failing =
-        new IdentityService(users, sessions, sessionQueries, attempts, exploding, clock);
+        new IdentityService(
+            users, sessions, sessionQueries, attempts, exploding, clock, transaction, events);
 
     assertThatThrownBy(() -> failing.authenticate(email, "qualquer-senha-123"))
         .isInstanceOf(IllegalStateException.class);
