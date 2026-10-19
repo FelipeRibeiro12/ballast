@@ -1,6 +1,6 @@
 ---
 name: armadilhas-java-api
-description: Armadilhas encontradas ao montar a api Java (Boot 4.1, springdoc 3, spotless, Hikari); consulte antes de mexer no build ou no teste de indisponibilidade do banco
+description: Armadilhas encontradas ao montar a api Java (Boot 4.1, springdoc 3, spotless, Hikari, banco congelado); consulte antes de mexer no build, no pool ou nos testes de indisponibilidade do banco
 metadata:
   type: project
 ---
@@ -22,3 +22,6 @@ metadata:
 - Comentário Java com barra invertida seguida de "u" e letras vira escape unicode e quebra o compilador e o google-java-format ("illegal unicode escape"): escreva por extenso.
 - `BodyLimitFilter` (`web`, `@Order(HIGHEST_PRECEDENCE)`, só `/auth/**`, 4 KiB): Content-Length alto responde 413 no filtro; chunked estoura na leitura e o `ApiExceptionHandler` acha `RequestBodyTooLargeException` na cadeia de causas. Só um Tomcat real (`RANDOM_PORT` + `HttpClient`) exercita chunked; com upload de centenas de MB o Tomcat fecha a conexão e o cliente vê reset, não o 413.
 - `springdoc.api-docs.enabled` vem de `API_DOCS_ENABLED` (padrão false); `IntegrationTest` e `SecurityBaseTest` ligam por propriedade. springdoc usa `@ConditionalOnProperty` sem havingValue: valor vazio conta como ligado, então o `.env.example` traz `false` explícito e o `SecurityConfig` só libera `/v3/api-docs*` anônimo quando o valor lê como `true` (vazio vira false). Sem springdoc o path dá 404 mesmo logado.
+- /healthz com banco congelado (`docker pause`, TCP aberto): causa confirmada em três partes. (1) Hikari valida cada conexão ociosa há mais de 500 ms com `validation-timeout` (padrão 5 s) antes de emprestar; uma validação já passa dos 2 s do `connection-timeout`, daí os ~5 s. Corrigido com `validation-timeout: 1000`. (2) Conexão usada há menos de 500 ms não é validada: a consulta fica esperando num socket mudo, e o `setQueryTimeout` do pgjdbc cancela abrindo outra conexão, que também trava (cancelSignalTimeout de 10 s), e o driver espera esse cancelamento antes de devolver o erro (12 s medidos quando socket e query estouram juntos). Por isso o `HealthRepository` não usa `setQueryTimeout`: usa `setNetworkTimeout` de 2 s só na conexão emprestada. (3) O pool todo tem `socketTimeout=30` (data-source-properties) como teto. O "90 s sem resposta" do QA não foi reproduzido com MockMvc; o caso de consulta pendurada (2) é o que chegou perto (60 s+ sem o teto de socket).
+- Validação de configuração que precisa vir antes do Flyway: `EnvironmentPostProcessor` (Boot 4: `org.springframework.boot.EnvironmentPostProcessor`, registrado em `META-INF/spring.factories`) fazendo `Binder.bind`. Bean com validação no construtor só roda depois do Flyway.
+- Cookie `ballast_sessao` repetido vale como sem sessão (`SessionCookies.tokenOf`); filtro e logout usam o mesmo método. Teste de congelamento: `DockerClientFactory.instance().client().pauseContainerCmd(id)`.
