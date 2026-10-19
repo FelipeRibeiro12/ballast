@@ -7,13 +7,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
-### F3 — Lançamento realizado
-Receita e despesa com título, valor, categoria, descrição opcional, conta e
-data. Saldo da conta reagindo. Categorias semeadas.
-Aqui as duas datas já existem e são iguais — não adie isso.
-Teste obrigatório: saldo = `saldo_inicial` + realizados, igual em `GET /contas`
-e `GET /contas/{id}` (a consulta da F2 devolve só o inicial; revisão do PR #7).
-
 ### F4 — Transferência entre contas
 Par de lançamentos ligados, excluído de todo relatório de receita e despesa.
 É curta, mas se vier depois dos gráficos você refaz os gráficos.
