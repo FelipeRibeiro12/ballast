@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-19 — F2: contas (PR #7)
+
+O que entrou: migration V5 da tabela `conta`; `POST /contas`, `GET /contas` (`?arquivadas=true`), `GET /contas/{id}` e `PATCH /contas/{id}` escopados pelo usuário da sessão, com saldo em SQL (hoje igual ao inicial); tela de contas no web com total, criação e arquivamento, dinheiro sem float. Banco fora dá 503 em qualquer rota e o limite de 4 KiB vale para todas.
+Decisões: ADR-023. Fora de ADR: id fora da forma canônica de UUID dá 404; Jackson recusa escalar em campo de texto, float em inteiro e número em enum; tamanho de nome em code points.
+Dívida registrada: teste do saldo com lançamentos (na F3), teto de contas e paginação (F20.5), restore do timeout no `HealthRepository` e teste do caminho normal do `SessionQueries`, nome de conta no log de violação de CHECK, invisíveis e "İ" em nome de conta, HTML do Tomcat para `%2F`, chave JSON repetida.
+Achados do QA: 1 bloqueou (30 s na primeira chamada com banco congelado, causa no aliveBypassWindow do Hikari; teto de 2 s na consulta de sessão), 5 corrigidos junto, o resto virou dívida.
+Achados do revisor: 0 bloquearam, 2 dívidas, 2 sugestões sem ação. Security: 0 críticos, 0 altos, 0 médios, 3 baixos (2 viraram dívida, 1 só registro).
+Pipeline: verde na primeira tentativa, os 7 checks obrigatórios; nenhum alerta do CodeQL.
+Em aberto: conferência em navegador da tela de contas em 360px.
+
 ## 2026-10-19 — F1.1: tela de cadastro (PR #6)
 
 O que entrou: formulário de cadastro no web contra o `POST /auth/cadastro`, visível só com `VITE_REGISTRO_ABERTO=true`; depois do 201 o web entra com as mesmas credenciais. A API não mudou.

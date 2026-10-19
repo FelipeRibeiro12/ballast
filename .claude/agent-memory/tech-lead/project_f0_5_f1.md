@@ -56,3 +56,9 @@ Armadilhas:
 - `make seed` com "url not specified" era `DATABASE_URL` vazio no `.env` do dono. Diagnosticar o `.env` só por nome de chave e formato (awk com comprimento, espaço, `@`), nunca pelo valor.
 - Volume do Postgres anterior à ADR-021 não tem `ballast_owner` nem `ballast_app`: o init só roda com volume vazio, então é `docker compose down -v`.
 - `VITE_*` do `.env` da raiz chega ao Vite pelo `export` do Makefile (conferido no módulo servido). O reviewer disse o contrário sem testar.
+
+## F2 contas (2026-10-19, PR #7)
+
+- QA contra a API real com Postgres descartável próprio (porta alta) pegou o B1 que a suíte verde não pegava: banco congelado logo depois de uma requisição. Manter o QA real em toda fatia com rota de banco.
+- Rodar `qa` em paralelo com o `frontend` funciona: não se tocam. Pedir ao `backend` a causa com evidência antes da correção.
+- Fatia entregue sai do backlog no PR seguinte se esquecer; conferir o `## MVP` ao fechar.
