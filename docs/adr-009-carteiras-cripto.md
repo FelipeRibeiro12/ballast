@@ -1,6 +1,6 @@
 # ADR-009: Carteiras de cripto — observar endereço, nunca custodiar
 
-**Status:** aceito
+**Status:** aceito, emendado em 2026-10-19 (serviço separado descartado)
 **Data:** 2026-10-03
 
 ## Contexto
@@ -104,6 +104,31 @@ patrimônio. Daí a flag `confiavel` em `ativo_cripto`: por padrão, ativo
 desconhecido entra oculto e o usuário promove o que interessa. Sem isso, a
 primeira sincronização mostra um patrimônio errado e o usuário perde a
 confiança no app.
+
+## Emenda de 2026-10-19: o cliente do indexador mora no monolito
+
+Com a troca para Java (ADR-016), foi avaliado manter um serviço separado em Go
+só para a leitura de cadeia, sob o argumento de que Go tem mais ferramenta de
+web3.
+
+**Descartado.** O argumento não se aplica ao que este ADR decide. O app lê
+saldo e movimentação de um indexador por HTTP: sem ABI, sem assinatura de
+transação, sem chamar contrato. Isso é `RestClient` dentro do monolito. Onde a
+biblioteca de web3 faria diferença, o app não vai, por decisão de segurança
+registrada acima.
+
+O único ponto criptográfico é verificar a assinatura opcional de posse (F25).
+**Ed25519 vem no JDK** (desde o Java 15), e cobre a mensagem assinada no Solana.
+**secp256k1 não vem**: o JDK removeu a curva no Java 16, e recuperar o endereço
+de uma assinatura SIWE pede biblioteca, escolhida na F25. Isso é uma
+dependência, não um serviço.
+
+Um serviço separado para fazer chamada HTTP seria a complexidade que o ADR-001
+recusou: deploy, observabilidade e falha parcial próprios, sem ganho.
+
+O cliente do indexador segue a mesma regra de resiliência da cotação
+(ADR-006): cache da última leitura, data visível na interface, e nunca travar
+operação por indisponibilidade.
 
 ## Em aberto
 

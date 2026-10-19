@@ -24,7 +24,14 @@ export interface paths {
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: never;
+    schemas: {
+        HealthError: {
+            erro: string;
+        };
+        HealthResponse: {
+            mensagem: string;
+        };
+    };
     responses: never;
     parameters: never;
     requestBodies: never;
@@ -48,9 +55,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        mensagem: string;
-                    };
+                    "application/json": components["schemas"]["HealthResponse"];
                 };
             };
             /** @description Banco indisponível */
@@ -59,9 +64,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        erro: string;
-                    };
+                    "application/json": components["schemas"]["HealthError"];
                 };
             };
         };

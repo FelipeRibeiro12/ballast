@@ -7,19 +7,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
-### F0 — Walking skeleton
-Repositório, CI verde, `GET /healthz` tocando o banco, tela que mostra o
-resultado. Nada de domínio. Use `/bootstrap` e depois `/sdlc-skeleton`.
-
-### F0.5 — Contrato OpenAPI e cliente gerado
-Spec OpenAPI só do `/healthz` (`api/openapi.yaml`), geração do cliente TS no
-build do web, teste de aderência do handler à spec e gate no CI que falha
-quando o cliente commitado diverge do gerado. As rotas da F1 entram na spec
-junto com a implementação, na F1. Troca o tipo `Healthz` escrito à mão pelo
-gerado.
-Cumpre o que o ADR-002 exige e fecha a dívida do tipo à mão. Numerada 0.5 para
-não renumerar as fatias seguintes.
-
 ### F1 — Cadastro e login
 Usuário, senha com argon2id, sessão com expiração, logout invalidando no
 servidor. Toda rota daqui para frente escopada por `usuario_id`.
@@ -31,6 +18,23 @@ Se não couber numa sessão com o limite de tentativa, separar o limite em fatia
 logo em seguida.
 **MFA fica para a F20**: `mfa_segredo` existe no modelo-alvo
 (`dados.md`), não na migration desta fatia.
+Critérios extras: as rotas entram na spec gerada do código (ADR-019).
+Relatório do QA inclui uma linha do que os testes **não** cobrem. Sem tela de
+cadastro: com `REGISTRO_ABERTO=false` ela não teria uso. O seed usa a mesma
+validação de e-mail e nome do cadastro (controle, tamanho).
+Reimplementação em Java (ADR-016): a primeira versão, em Go, foi descartada
+no PR da migração. Ficam as decisões (ADR-015) e a migration `V2`, já
+aplicada. O frontend dela (login, logout, usuário logado) saiu junto, e está
+no histórico em `a20d88b` e `dbc4018` para ser recuperado. Os relatórios de QA
+e segurança daquela versão estão em `reports/` e os achados M2, M3, B3 e B4
+continuam valendo para o desenho.
+Requisitos novos da auditoria do PR da migração: Spring Security com
+`Argon2PasswordEncoder` e `bcprov` (aprovados no ADR-015); usuário de banco do
+Flyway separado do usuário da aplicação, que fica só com DML
+(`spring.flyway.user`); `/v3/api-docs*` desligado fora de dev, ou os três paths
+no teste de autorização; limite de tamanho do corpo JSON antes de abrir o
+login; decidir CSRF com o cookie `SameSite=Lax` e conferir os cabeçalhos de
+segurança que o Spring Security liga.
 
 ### F2 — Contas
 Criar, listar, arquivar. Tipos `corrente`, `poupanca`, `dinheiro`.
@@ -158,6 +162,13 @@ nenhuma extensão instalada.
 ### F20.5 — Rate limit na borda
 Limite por IP e por rota na entrada da API (infra). É esta fatia que destrava
 `REGISTRO_ABERTO=true`: sem ela o endpoint de cadastro aberto não existe.
+Tem de existir antes do primeiro deploy público, não só antes de abrir o
+cadastro: o login sem limite de concorrência aloca 64 MiB de argon2 por
+tentativa (auditoria de segurança da F1, M3), e o IP do log vem de
+`RemoteAddr`, que atrás de proxy é o IP do proxy (B3). Inclui um semáforo no
+argon2.
+Também precisa conter o crescimento de `tentativa_login` (uma linha por e-mail
+digitado, inclusive inexistente, sem limpeza hoje) e limpar sessões expiradas.
 
 ## Mais adiante
 
@@ -167,14 +178,20 @@ Limite por IP e por rota na entrada da API (infra). É esta fatia que destrava
 - **F29** — Capacitor para publicar nas lojas
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
 - **DÍVIDA** — Remover a tabela `health_check` e o `/healthz` que lê dela por migration nova, quando a F1 trouxer uma tabela real para o endpoint tocar.
-- **DÍVIDA** — O Makefile faz `-include .env` com `export`, então todo alvo (inclusive `make test` e `make lint`) herda o `.env` inteiro, contra o menor privilégio do `seguranca.md`. Registrada em 2026-10-03, sem correção agendada; destrava quando um alvo precisar de segredo que os outros não devem ver.
-- **DÍVIDA** — Teste de aderência (`api/internal/http/openapi_test.go`): os status esperados por rota ficam numa tabela do teste, não vêm da spec; um status novo na spec de rota já coberta não é exercitado. Resolver na F1, quando houver mais de uma rota.
+- **DÍVIDA** — O Makefile faz `-include .env` com `export`, então todo alvo (inclusive `make test` e `make lint`) herda o `.env` inteiro, contra o menor privilégio do `seguranca.md`. Registrada em 2026-10-03, sem correção agendada; destrava quando um alvo precisar de segredo que os outros não devem ver. Com a api Java o `.env` tem `DB_PASSWORD` solto, e `make setup` (`pnpm install`) também o herda: um `postinstall` malicioso leria a senha (auditoria do PR da migração, B6).
 - **DÍVIDA** — Gate do cliente TS não enxerga mudança de spec que o `openapi-typescript` não reflete nos tipos (`maxLength`, `description`, `example`), e passa sempre se `schema.d.ts` entrar no `.gitignore`. Aceito: o gate garante tipo em dia, não spec inteira propagada.
 - **DÍVIDA** — `openapi-typescript` 7.13 declara peer `typescript ^5` e o web usa 6; só aparece em `pnpm peers check`. Reavaliar quando sair versão com suporte ao 6.
-- **DÍVIDA** — `Healthz` deriva de `paths[...]` porque a spec não tem `components`. Trocar por `components['schemas']` quando a F1 criar os schemas.
+- **DÍVIDA** — `Healthz` no web deriva de `paths[...]`. A spec gerada pelo springdoc já tem `components` (`HealthResponse`, `HealthError`): trocar por `components['schemas']`. Dono: frontend, na F1.
 - **DÍVIDA** — `actionlint` não roda no CI nem localmente; o YAML dos workflows não é validado por ferramenta.
-- **DÍVIDA** — O teste de aderência só varre `api/internal/http/router.go`. Rota registrada em outro arquivo (ex.: `registraAuth(mux)`) escapa e o teste fica verde. Na F1, varrer todos os `.go` não-teste do pacote ou travar a convenção "toda rota é registrada em `router.go`". Critério de aceite da F1, junto com a tabela de status derivada da spec.
 - **DÍVIDA** — `pnpm build` do web lê `../api/openapi.yaml`; se a hospedagem do PWA usar `web/` como raiz, o build falha. Conferir ao escolher a hospedagem (ou deixar a geração só no CI).
+- **DÍVIDA** — `COOKIE_SECURE=false` em desenvolvimento (Safari recusa cookie `Secure` sobre HTTP). Servir o dev sobre HTTPS com certificado local (mkcert) e aposentar a flag. A F1 em Java precisa recusar subir com a flag falsa fora de `APP_ENV=development`, como a versão Go fazia.
+- **DÍVIDA** — Sessão expirada ou revogada fica na tabela `sessao` sem limpeza. Resolver quando o volume importar ou na F20.5.
+- **DÍVIDA** — E-mail e nome aceitam caracteres invisíveis da categoria Cf (U+200B, U+202E de inversão bidi, U+FEFF): dois e-mails que parecem iguais na tela e são diferentes, ou nome que embaralha a exibição. Decidir a regra (rejeitar Cf ou normalizar) na fatia que primeiro exibir nome de outra pessoa.
+- **DÍVIDA** — Nenhuma verificação em navegador real: o fluxo login → `/auth/eu` → logout com o cookie de verdade, o layout em 360px e o foco só foram vistos em jsdom e por curl. Fazer à mão antes de a F2 começar.
+- **DÍVIDA** — Atraso de login chaveado só pelo e-mail permite a um terceiro que conheça o e-mail da vítima mantê-la sob atraso (até 15 min) com uma requisição por janela (auditoria F1, M2). Sem bloqueio de conta, mas é negação de serviço parcial. Decisão de produto pendente: atraso por e-mail+IP, ou segundo fator/recuperação (F20). Revisar na F20.5.
+- **DÍVIDA** — Endurecimentos baixos da auditoria da F1 (B4): cookie com prefixo `__Host-`, cabeçalho `X-Content-Type-Options: nosniff`, limpeza de sessões. Aceitos: B1 (409 do cadastro enumera e-mail só com `REGISTRO_ABERTO=true`) e B2 (`.env.example` de dev com `COOKIE_SECURE=false`; a guarda por `APP_ENV` cobre a cópia sem edição fora de dev).
+- **DÍVIDA** — O check `análise estática (javascript-typescript)` tem nome de linguagem, não de módulo, e quebra na próxima troca de stack do web. Renomear para `análise estática (web)` com a mesma sequência do ruleset do ADR-016. Dono: devops, na próxima fatia que mexer no `seguranca.yml`.
+- **DÍVIDA** — `/healthz` público consulta o banco e grava stack trace a cada falha: em flood esgota o pool e enche o log (auditoria do PR da migração, B2). Separar liveness (sem banco) de readiness (com banco) e limitar o log. Dono: backend, na F20.5.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

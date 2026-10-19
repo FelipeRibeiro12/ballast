@@ -1,7 +1,12 @@
 # ADR-014: goose como ferramenta de migration
 
-**Status:** aceito
+**Status:** substituído por ADR-018
 **Data:** 2026-10-03
+**Substituído em:** 2026-10-19
+
+> **Substituído pelo ADR-018.** Sem Go no projeto (ADR-016), o goose perde o
+> `go.mod` que fixava a versão. As migrations, em SQL puro, portam para o
+> Flyway.
 
 ## Contexto
 

@@ -86,17 +86,24 @@ Isso é o núcleo. Sem ele, nada mais faz sentido.
 | Assunto | Decisão | ADR |
 |---|---|---|
 | Forma do sistema | Monolito modular | 001 |
-| Backend | Go | 002 |
+| ~~Backend~~ | ~~Go~~, substituído pelo 016 | ~~002~~ |
 | Banco | Postgres | 003 |
 | Clientes | PWA React, mobile-first | 004 |
-| Dinheiro | Inteiro em centavos; cripto em decimal | 005 |
+| Dinheiro | `BigDecimal` e `numeric`; no JSON, fiat em centavos e cripto em string | 005 |
 | Cripto | Quantidade armazenada, valor derivado | 006 |
 | Análise em Python | Só depois do MVP, somente leitura | 007 |
 | Importação de extrato | OFX primeiro, com revisão obrigatória | 008 |
-| Carteiras de cripto | Observar endereço; nunca custodiar nem assinar | 009 |
-| Lint do web | oxlint do template, não ESLint | 010 |
-| Lint do Go | golangci-lint por brew, fixado em v2.14.0 | 011 |
-| Pipeline | Dois workflows: `ci.yml` e `seguranca.yml` | 012 |
+| Carteiras de cripto | Observar endereço; cliente HTTP no monolito | 009 |
+| Lint do frontend | oxlint do template | 010 |
+| ~~Linter de Go~~ | ~~golangci-lint~~, descartado com o 016 | ~~011~~ |
+| Workflows | `ci.yml` e `seguranca.yml` separados | 012 |
+| ~~Driver Postgres~~ | ~~pgx~~, substituído pelo 017 | ~~013~~ |
+| ~~Migrations~~ | ~~goose~~, substituído pelo 018 | ~~014~~ |
+| Sessão | Token opaco, SHA-256, cookie | 015 |
+| Backend | **Java 25 + Spring Boot 4** | **016** |
+| Acesso a dados | Spring Data JPA; SQL direto para agregação | 017 |
+| Migrations | Flyway | 018 |
+| Contrato da API | Spec gerada do código (springdoc) | 019 |
 
 ## O desenho
 
@@ -106,7 +113,7 @@ Isso é o núcleo. Sem ele, nada mais faz sentido.
 └──────────────┬───────────────┘
                │ HTTP + OpenAPI
 ┌──────────────▼───────────────┐
-│  API Go — monolito modular   │
+│  API Spring, monolito modular│
 │                              │
 │  contas · lancamentos        │
 │  recorrencia · cartao        │
@@ -120,5 +127,6 @@ Isso é o núcleo. Sem ele, nada mais faz sentido.
                             └─────────────────┘
 ```
 
-Caixas por domínio, não por camada. O worker de cotação é uma goroutine com
-ticker dentro do monolito, não um serviço.
+Caixas por domínio, não por camada. O worker de cotação é uma tarefa agendada
+(`@Scheduled`) dentro do monolito, não um serviço. O cliente do indexador de
+cripto também fica no monolito (ADR-009).

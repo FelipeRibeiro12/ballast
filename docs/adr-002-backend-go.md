@@ -1,7 +1,16 @@
 # ADR-002: Go no backend
 
-**Status:** aceito
+**Status:** substituído por ADR-016
 **Data:** 2026-10-03
+**Substituído em:** 2026-10-19
+
+> **Substituído pelo ADR-016.** O objetivo de carreira que sustentava esta
+> decisão mudou de blockchain para mercado generalista, e com ele a
+> justificativa. Mantido no histórico porque o raciocínio continua válido para
+> o objetivo que ele atendia, e porque a limitação reconhecida no fim deste
+> arquivo é exatamente um dos motivos técnicos a favor da substituição.
+>
+> A mitigação spec-first registrada aqui foi invertida pelo ADR-019.
 
 ## Contexto
 

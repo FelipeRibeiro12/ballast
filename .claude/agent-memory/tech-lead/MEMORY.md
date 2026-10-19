@@ -1,2 +1,3 @@
 - [Bootstrap do monorepo](project_bootstrap.md) — onde as coisas ficam, armadilhas e dívidas do bootstrap (2026-10-03)
+- [F0.5 e F1](project_f0_5_f1.md) — contrato OpenAPI pronto, decisões da F1, regras para o qa (parar se travar; linha "não cobre")
 - [Memória vs ADR](feedback_memoria_vs_adr.md) — decisão de registro vai para docs/adr-NNN.md; memória guarda onde e armadilhas
