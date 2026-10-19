@@ -1,4 +1,3 @@
--- +goose Up
 -- Ids sem DEFAULT: o UUID v7 é gerado na aplicação (Postgres 17 não tem uuidv7()).
 -- mfa_segredo fica de fora; entra por migration própria na F20.
 CREATE TABLE usuario (
@@ -35,8 +34,8 @@ CREATE TABLE tentativa_login (
     CONSTRAINT tentativa_login_falhas_nao_negativas CHECK (falhas >= 0)
 );
 
--- +goose Down
+-- Para desfazer (o Flyway Community não tem down; rode à mão).
 -- Destrutivo: apaga os dados das três tabelas. Ordem inversa por causa da FK.
-DROP TABLE tentativa_login;
-DROP TABLE sessao;
-DROP TABLE usuario;
+-- DROP TABLE tentativa_login;
+-- DROP TABLE sessao;
+-- DROP TABLE usuario;
