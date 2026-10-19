@@ -43,7 +43,7 @@ Spring fecharia o mesmo ataque com estado extra no PWA.
 
 Sem sessão, qualquer rota fora da lista pública responde 401, inclusive uma
 que não existe. Por isso `/auth/cadastro` fechado responde 401 sem sessão e
-404 com sessão: o mesmo que uma rota inexistente, que é a regra do ADR-015. A
+404 com sessão: o mesmo que uma rota inexistente, que é a regra da F1. A
 versão Go respondia 404 nos dois casos.
 
 ## Limitação reconhecida
