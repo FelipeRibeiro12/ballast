@@ -14,7 +14,8 @@ a tabela `flyway_schema_history` e `api/src/main/resources/db/migration/`.
 (`DB_MIGRATION_USER`); a aplicação conecta como `DB_USER`, só com
 `SELECT/INSERT/UPDATE/DELETE`. A `V3` concede o DML nas tabelas atuais e, por
 `ALTER DEFAULT PRIVILEGES`, nas futuras. Tabela criada por migration já nasce
-acessível à aplicação; `TRUNCATE` e DDL ficam só com o dono.
+acessível à aplicação; `TRUNCATE` e DDL ficam só com o dono. A `V4` tira da
+aplicação o acesso a `flyway_schema_history`, que a V3 cobriu sem querer.
 
 **Dinheiro (ADR-005):** fiat é `numeric(18,2)` no banco e `BigDecimal` no Java,
 e trafega no JSON como inteiro em centavos. Cripto é `numeric(38,18)` e trafega

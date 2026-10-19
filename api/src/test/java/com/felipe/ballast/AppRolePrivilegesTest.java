@@ -52,6 +52,12 @@ class AppRolePrivilegesTest {
     assertDenied("TRUNCATE usuario");
   }
 
+  @Test
+  void deniesAccessToFlywayHistory() {
+    assertDenied("SELECT version FROM flyway_schema_history");
+    assertDenied("UPDATE flyway_schema_history SET success = true WHERE version = '1'");
+  }
+
   // DROP falha com "must be owner" e os demais com "permission denied"; os dois são negação
   private void assertDenied(String sql) {
     assertThatThrownBy(() -> jdbc.sql(sql).update())
