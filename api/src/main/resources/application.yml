@@ -10,6 +10,17 @@ spring:
       # minuto antes do 503. Com 2 s o health check responde logo; num app de um
       # usuário só, esperar mais do que isso por conexão já é falha.
       connection-timeout: 2000
+      # Banco congelado (TCP aberto, ninguém responde): o Hikari valida cada conexão ociosa
+      # antes de emprestá-la e, com o padrão de 5 s, uma só validação já estoura os 2 s acima
+      # (pior caso: 5 s). Com 1 s, a segunda validação fecha o prazo em cerca de 2 s. Um banco
+      # saudável responde o ping em milissegundos.
+      validation-timeout: 1000
+      data-source-properties:
+        # Teto de leitura do socket (segundos), para a conexão presa num banco congelado não
+        # ficar presa para sempre no pool. 30 s é folga para uma agregação lenta de verdade sem
+        # resposta parcial; passou disso, a consulta é um problema a corrigir. O /healthz usa
+        # um teto próprio de 2 s.
+        socketTimeout: 30
   flyway:
     # ADR-021: a migração roda como dono do schema; a aplicação (datasource) só tem DML
     user: ${DB_MIGRATION_USER}
