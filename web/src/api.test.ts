@@ -1,5 +1,17 @@
-import { ApiError, EmailJaCadastradoError, EntradaInvalidaError, postCadastro } from './api'
-import type { CadastroRequest, Healthz, LoginRequest, Usuario } from './api'
+import {
+  ApiError,
+  ContaNaoEncontradaError,
+  EmailJaCadastradoError,
+  EntradaInvalidaError,
+  NomeDeContaRepetidoError,
+  ServicoIndisponivelError,
+  SessaoExpiradaError,
+  fetchContas,
+  patchConta,
+  postCadastro,
+  postConta,
+} from './api'
+import type { CadastroRequest, Conta, CriarContaRequest, Healthz, LoginRequest, Usuario } from './api'
 import type { components, paths } from './api/schema'
 
 describe('tipos do contrato', () => {
@@ -105,5 +117,105 @@ describe('postCadastro', () => {
     expect(erro).toBeInstanceOf(ApiError)
     expect(erro).not.toBeInstanceOf(EmailJaCadastradoError)
     expect(erro).not.toBeInstanceOf(EntradaInvalidaError)
+  })
+})
+
+describe('rotas de contas', () => {
+  const conta = {
+    id: '3b1c6d52-1f0e-4c7a-8f2b-9a4d5e6f7a80',
+    nome: 'Nubank',
+    tipo: 'corrente',
+    moeda: 'BRL',
+    saldoInicialCentavos: 1000,
+    saldoCentavos: 1000,
+    arquivada: false,
+    criadaEm: '2026-10-19T12:00:00Z',
+  }
+
+  function responder(corpo: unknown, status: number): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(corpo), {
+            status,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        ),
+      ),
+    )
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('Conta e CriarContaRequest vêm do schema gerado', () => {
+    expectTypeOf<Conta>().toEqualTypeOf<components['schemas']['Conta']>()
+    expectTypeOf<CriarContaRequest>().toEqualTypeOf<components['schemas']['CriarContaRequest']>()
+  })
+
+  it('fetchContas pede as ativas ou as arquivadas com a sessão', async () => {
+    responder([conta], 200)
+    expect(await fetchContas(false)).toEqual([conta])
+    expect(fetch).toHaveBeenLastCalledWith('/contas', { credentials: 'same-origin' })
+    await fetchContas(true)
+    expect(fetch).toHaveBeenLastCalledWith('/contas?arquivadas=true', { credentials: 'same-origin' })
+  })
+
+  it.each([[{ ...conta, saldoCentavos: '10' }], [{ ...conta, tipo: 'cripto' }], [{ ...conta, saldoCentavos: 1.5 }]])(
+    'fetchContas recusa conta fora do formato %j',
+    async (invalida) => {
+      responder([invalida], 200)
+      await expect(fetchContas(false)).rejects.toBeInstanceOf(ApiError)
+    },
+  )
+
+  it('fetchContas recusa corpo que não é lista', async () => {
+    responder(conta, 200)
+    await expect(fetchContas(false)).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('postConta manda JSON com a sessão e devolve a conta', async () => {
+    responder(conta, 201)
+    const dados = { nome: 'Nubank', tipo: 'corrente', saldoInicialCentavos: 1000 } as const
+    expect(await postConta(dados)).toEqual(conta)
+    expect(fetch).toHaveBeenCalledWith('/contas', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+  })
+
+  it('patchConta põe o id codificado na URL e manda só arquivada', async () => {
+    responder({ ...conta, arquivada: true }, 200)
+    await patchConta('a/b', true)
+    expect(fetch).toHaveBeenCalledWith('/contas/a%2Fb', {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"arquivada":true}',
+    })
+  })
+
+  it('mapeia 401, 404, 409, 400, 503 e o resto em erros tipados', async () => {
+    const chamadas = [() => fetchContas(false), () => postConta({ nome: 'x', tipo: 'corrente', saldoInicialCentavos: 0 }), () => patchConta('1', true)]
+    for (const chamar of chamadas) {
+      responder({ erro: 'x' }, 401)
+      await expect(chamar()).rejects.toBeInstanceOf(SessaoExpiradaError)
+      responder({ erro: 'x' }, 409)
+      await expect(chamar()).rejects.toBeInstanceOf(NomeDeContaRepetidoError)
+      responder({ erro: 'nome vazio' }, 400)
+      await expect(chamar()).rejects.toMatchObject({ mensagemServidor: 'nome vazio' })
+      responder({ erro: 'x' }, 503)
+      await expect(chamar()).rejects.toBeInstanceOf(ServicoIndisponivelError)
+      responder({ erro: 'x' }, 404)
+      await expect(chamar()).rejects.toBeInstanceOf(ContaNaoEncontradaError)
+      responder({ erro: 'x' }, 500)
+      const erro = await chamar().catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(SessaoExpiradaError)
+    }
   })
 })
