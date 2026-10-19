@@ -16,6 +16,7 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 
 // A conferência da aplicação responde "existe" para tudo, como numa corrida em que a conta ou a
@@ -27,6 +28,7 @@ class EntryForeignKeyTest {
   @Autowired MockMvc mvc;
   @Autowired JdbcClient jdbc;
   @Autowired EntryRepository repository;
+  @Autowired TransactionTemplate transaction;
   private EntryService service;
   private EntriesApi.Actor a;
   private EntriesApi.Actor b;
@@ -39,7 +41,7 @@ class EntryForeignKeyTest {
     EntryQueries alwaysFound =
         new EntryQueries(jdbc) {
           @Override
-          Optional<Boolean> findAccountArchived(UUID userId, UUID accountId) {
+          Optional<Boolean> lockAccount(UUID userId, UUID accountId) {
             return Optional.of(false);
           }
 
@@ -48,7 +50,7 @@ class EntryForeignKeyTest {
             return true;
           }
         };
-    service = new EntryService(repository, alwaysFound);
+    service = new EntryService(repository, alwaysFound, transaction);
   }
 
   private EntryInput input(EntryType type, String categoryId, String accountId) {

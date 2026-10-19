@@ -978,7 +978,7 @@ export interface operations {
                     "application/json": components["schemas"]["Lancamento"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada" ou "categoria não encontrada" */
+            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada", "categoria não encontrada" ou "saldo da conta fora do limite" (o saldo passaria de 9007199254740991 centavos, para mais ou para menos) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1098,7 +1098,7 @@ export interface operations {
                     "application/json": components["schemas"]["Lancamento"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada" (só ao trocar de conta) ou "categoria não encontrada" */
+            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada" (só ao trocar de conta), "categoria não encontrada" ou "saldo da conta fora do limite" (em qualquer das contas afetadas) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1172,6 +1172,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": Record<string, never>;
+                };
+            };
+            /** @description "saldo da conta fora do limite": apagar o lançamento tiraria o saldo da faixa de ±9007199254740991 centavos, e nada é apagado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
                 };
             };
             /** @description Sem sessão válida */

@@ -1,18 +1,29 @@
 package com.felipe.ballast.entries;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 // Assume entrada já validada e normalizada na borda. Todo método recebe o dono vindo da sessão.
+//
+// Toda escrita roda numa transação que trava a linha da conta (SELECT ... FOR UPDATE) antes de
+// conferir conta arquivada e saldo. Arquivar faz UPDATE na mesma linha e entra na fila, e dois
+// lançamentos simultâneos na mesma conta não leem o mesmo saldo (ADR-024). Os dois travamentos de
+// um PUT que troca de conta seguem a ordem de id, para trocas cruzadas não se travarem.
 @Service
 class EntryService {
 
   private static final String ACCOUNT_FK = "lancamento_conta_mesmo_usuario";
   private static final String CATEGORY_FK = "lancamento_categoria_mesmo_usuario_e_tipo";
+
+  // 9007199254740991 centavos em reais. O valor é comparado com compareTo: a escala não conta.
+  private static final BigDecimal BALANCE_LIMIT = new BigDecimal("90071992547409.91");
 
   sealed interface SaveResult {
     record Saved(EntrySummary entry) implements SaveResult {}
@@ -21,69 +32,131 @@ class EntryService {
       ENTRY_NOT_FOUND,
       ACCOUNT_NOT_FOUND,
       ACCOUNT_ARCHIVED,
-      CATEGORY_NOT_FOUND
+      CATEGORY_NOT_FOUND,
+      BALANCE_OUT_OF_RANGE
     }
+  }
+
+  enum DeleteResult {
+    DELETED,
+    NOT_FOUND,
+    BALANCE_OUT_OF_RANGE
   }
 
   private final EntryRepository entries;
   private final EntryQueries queries;
+  private final TransactionTemplate transaction;
 
-  EntryService(EntryRepository entries, EntryQueries queries) {
+  EntryService(EntryRepository entries, EntryQueries queries, TransactionTemplate transaction) {
     this.entries = entries;
     this.queries = queries;
+    this.transaction = transaction;
   }
 
-  // Sem @Transactional de propósito: o saveAndFlush abre a própria transação, e a violação da FK
-  // precisa ser capturada fora dela. A conferência de conta e categoria antes é só para a
-  // mensagem; quem segura a corrida entre duas requisições é a FK composta.
+  // A violação da FK composta sai da transação já com rollback e é capturada aqui fora: capturar
+  // dentro deixaria a transação marcada como rollback-only e o commit lançaria
+  // UnexpectedRollbackException. A conferência de conta e categoria dentro é só para a mensagem;
+  // quem segura a corrida de dono é a FK.
   SaveResult create(UUID userId, EntryInput input) {
-    Optional<SaveResult.Rejected> rejected = checkReferences(userId, input, false);
-    if (rejected.isPresent()) {
-      return rejected.get();
-    }
-    UUID id;
     try {
-      id = entries.saveAndFlush(new Entry(userId, input)).getId();
+      return transaction.execute(status -> createLocked(status, userId, input));
     } catch (DataIntegrityViolationException e) {
       return rejectionOf(e).orElseThrow(() -> e);
     }
-    return saved(userId, id);
   }
 
   // Trocar de conta exige conta ativa. Ficar na mesma conta vale mesmo arquivada, senão um
   // lançamento antigo não poderia ser corrigido depois de arquivar a conta.
   SaveResult update(UUID userId, UUID id, EntryInput input) {
-    Optional<EntrySummary> current = queries.find(userId, id);
-    if (current.isEmpty()) {
-      return SaveResult.Rejected.ENTRY_NOT_FOUND;
-    }
-    boolean sameAccount = current.get().accountId().equals(input.accountId());
-    Optional<SaveResult.Rejected> rejected = checkReferences(userId, input, sameAccount);
-    if (rejected.isPresent()) {
-      return rejected.get();
-    }
-    int changed;
     try {
-      changed =
-          entries.replace(
-              userId,
-              id,
-              input.type().value(),
-              input.title(),
-              input.description(),
-              input.categoryId(),
-              input.accountId(),
-              input.amount(),
-              input.date());
+      return transaction.execute(status -> updateLocked(status, userId, id, input));
     } catch (DataIntegrityViolationException e) {
       return rejectionOf(e).orElseThrow(() -> e);
     }
-    return changed == 0 ? SaveResult.Rejected.ENTRY_NOT_FOUND : saved(userId, id);
   }
 
-  // Falso para lançamento de outro usuário ou inexistente, sem distinguir.
-  boolean delete(UUID userId, UUID id) {
-    return entries.deleteOwned(userId, id) > 0;
+  // NOT_FOUND para lançamento de outro usuário ou inexistente, sem distinguir. Apagar uma
+  // despesa grande também pode tirar o saldo da faixa, por isso confere como as outras escritas.
+  DeleteResult delete(UUID userId, UUID id) {
+    return transaction.execute(status -> deleteLocked(status, userId, id));
+  }
+
+  private SaveResult createLocked(TransactionStatus status, UUID userId, EntryInput input) {
+    if (input.accountId() == null) {
+      return SaveResult.Rejected.ACCOUNT_NOT_FOUND;
+    }
+    Optional<Boolean> archived = queries.lockAccount(userId, input.accountId());
+    Optional<SaveResult.Rejected> rejected = checkReferences(userId, input, archived, false);
+    if (rejected.isPresent()) {
+      return rejected.get();
+    }
+    UUID id = entries.saveAndFlush(new Entry(userId, input)).getId();
+    if (!balanceFits(userId, input.accountId())) {
+      status.setRollbackOnly();
+      return SaveResult.Rejected.BALANCE_OUT_OF_RANGE;
+    }
+    return saved(userId, id);
+  }
+
+  private SaveResult updateLocked(
+      TransactionStatus status, UUID userId, UUID id, EntryInput input) {
+    // O lançamento é travado primeiro para a conta de origem não mudar entre a leitura e o
+    // travamento dela. Nenhum outro caminho trava lançamento depois de travar conta.
+    Optional<UUID> currentAccount = queries.lockEntryAccount(userId, id);
+    if (currentAccount.isEmpty()) {
+      return SaveResult.Rejected.ENTRY_NOT_FOUND;
+    }
+    if (input.accountId() == null) {
+      return SaveResult.Rejected.ACCOUNT_NOT_FOUND;
+    }
+    boolean sameAccount = currentAccount.get().equals(input.accountId());
+    Optional<Boolean> targetArchived = Optional.empty();
+    for (UUID account : lockOrder(currentAccount.get(), input.accountId())) {
+      Optional<Boolean> archived = queries.lockAccount(userId, account);
+      if (account.equals(input.accountId())) {
+        targetArchived = archived;
+      }
+    }
+    Optional<SaveResult.Rejected> rejected =
+        checkReferences(userId, input, targetArchived, sameAccount);
+    if (rejected.isPresent()) {
+      return rejected.get();
+    }
+    int changed =
+        entries.replace(
+            userId,
+            id,
+            input.type().value(),
+            input.title(),
+            input.description(),
+            input.categoryId(),
+            input.accountId(),
+            input.amount(),
+            input.date());
+    if (changed == 0) {
+      return SaveResult.Rejected.ENTRY_NOT_FOUND;
+    }
+    if (!balanceFits(userId, currentAccount.get()) || !balanceFits(userId, input.accountId())) {
+      status.setRollbackOnly();
+      return SaveResult.Rejected.BALANCE_OUT_OF_RANGE;
+    }
+    return saved(userId, id);
+  }
+
+  private DeleteResult deleteLocked(TransactionStatus status, UUID userId, UUID id) {
+    Optional<UUID> account = queries.lockEntryAccount(userId, id);
+    if (account.isEmpty()) {
+      return DeleteResult.NOT_FOUND;
+    }
+    queries.lockAccount(userId, account.get());
+    if (entries.deleteOwned(userId, id) == 0) {
+      return DeleteResult.NOT_FOUND;
+    }
+    if (!balanceFits(userId, account.get())) {
+      status.setRollbackOnly();
+      return DeleteResult.BALANCE_OUT_OF_RANGE;
+    }
+    return DeleteResult.DELETED;
   }
 
   Optional<EntrySummary> find(UUID userId, UUID id) {
@@ -103,15 +176,11 @@ class EntryService {
   }
 
   private Optional<SaveResult.Rejected> checkReferences(
-      UUID userId, EntryInput input, boolean allowArchivedAccount) {
-    if (input.accountId() == null) {
+      UUID userId, EntryInput input, Optional<Boolean> accountArchived, boolean sameAccount) {
+    if (accountArchived.isEmpty()) {
       return Optional.of(SaveResult.Rejected.ACCOUNT_NOT_FOUND);
     }
-    Optional<Boolean> archived = queries.findAccountArchived(userId, input.accountId());
-    if (archived.isEmpty()) {
-      return Optional.of(SaveResult.Rejected.ACCOUNT_NOT_FOUND);
-    }
-    if (archived.get() && !allowArchivedAccount) {
+    if (accountArchived.get() && !sameAccount) {
       return Optional.of(SaveResult.Rejected.ACCOUNT_ARCHIVED);
     }
     if (input.categoryId() == null
@@ -119,6 +188,19 @@ class EntryService {
       return Optional.of(SaveResult.Rejected.CATEGORY_NOT_FOUND);
     }
     return Optional.empty();
+  }
+
+  // Lê o saldo depois da escrita, ainda dentro da transação e com a conta travada: ninguém mais
+  // muda o saldo entre esta leitura e o commit.
+  private boolean balanceFits(UUID userId, UUID accountId) {
+    return queries.balance(userId, accountId).abs().compareTo(BALANCE_LIMIT) <= 0;
+  }
+
+  private static List<UUID> lockOrder(UUID first, UUID second) {
+    if (first.equals(second)) {
+      return List.of(first);
+    }
+    return first.compareTo(second) < 0 ? List.of(first, second) : List.of(second, first);
   }
 
   // A FK composta é a rede de segurança: conta ou categoria de outro usuário (ou categoria de

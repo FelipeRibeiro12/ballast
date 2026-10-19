@@ -131,8 +131,13 @@ class EntryCreationTest {
 
     assertThat(created.get("valorCentavos").asLong()).isEqualTo(ceiling);
     assertThat(created.get("dataCaixa").asString()).isEqualTo("1900-01-01");
-    assertThat(api.create(actor.session(), with(valid, "data", "2199-12-31")).getStatus())
-        .isEqualTo(201);
+    // Conta própria: a primeira já está no piso do saldo (ADR-024), então não aceita mais despesa.
+    Map<String, Object> otherAccount =
+        with(
+            with(valid, "data", "2199-12-31"),
+            "contaId",
+            api.newAccount(actor.session(), "Outra " + UUID.randomUUID()));
+    assertThat(api.create(actor.session(), otherAccount).getStatus()).isEqualTo(201);
   }
 
   @Test
@@ -152,6 +157,20 @@ class EntryCreationTest {
         EntriesApi.body(api.create(actor.session(), with(valid, "descricao", "  nota  ")));
 
     assertThat(created.get("descricao").asString()).isEqualTo("nota");
+  }
+
+  @Test
+  void acceptsAnAssignedLetterOutsideTheBmpInTitleAndDescription() throws Exception {
+    // U+1D800 tem os 16 bits de baixo em D800, mas é uma letra atribuída e não um surrogate.
+    String letter = new String(Character.toChars(0x1D800));
+
+    MockHttpServletResponse response =
+        api.create(actor.session(), with(with(valid, "titulo", letter), "descricao", letter + "x"));
+
+    assertThat(response.getStatus()).isEqualTo(201);
+    JsonNode body = EntriesApi.body(response);
+    assertThat(body.get("titulo").asString()).isEqualTo(letter);
+    assertThat(body.get("descricao").asString()).isEqualTo(letter + "x");
   }
 
   @Test

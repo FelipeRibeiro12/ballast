@@ -1,5 +1,6 @@
 package com.felipe.ballast.entries;
 
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -59,13 +60,47 @@ class EntryQueries {
         .list();
   }
 
-  // Vazio quando a conta não existe ou é de outro usuário; senão, se está arquivada.
-  Optional<Boolean> findAccountArchived(UUID userId, UUID accountId) {
-    return jdbc.sql("SELECT arquivada FROM conta WHERE usuario_id = :userId AND id = :id")
+  // Trava a linha da conta até o fim da transação. Vazio quando a conta não existe ou é de outro
+  // usuário; senão, se está arquivada. Precisa rodar dentro de uma transação: fora dela a trava
+  // solta no mesmo instante. Quem arquiva faz UPDATE nesta mesma linha e espera na fila.
+  Optional<Boolean> lockAccount(UUID userId, UUID accountId) {
+    return jdbc.sql(
+            "SELECT arquivada FROM conta WHERE usuario_id = :userId AND id = :id FOR UPDATE")
         .param("userId", userId)
         .param("id", accountId)
         .query(Boolean.class)
         .optional();
+  }
+
+  // Trava o lançamento do dono e devolve a conta em que ele está agora. Vazio para lançamento
+  // alheio ou inexistente. Segura o PUT e o DELETE do mesmo lançamento um atrás do outro, para a
+  // conta lida aqui não mudar antes de ela ser travada.
+  Optional<UUID> lockEntryAccount(UUID userId, UUID entryId) {
+    return jdbc.sql(
+            "SELECT conta_id FROM lancamento WHERE usuario_id = :userId AND id = :id FOR UPDATE")
+        .param("userId", userId)
+        .param("id", entryId)
+        .query(UUID.class)
+        .optional();
+  }
+
+  // Saldo atual da conta na transação em curso (ADR-024), em reais. Mesma conta que o
+  // AccountQueries, só que para uma conta e sem o resto das colunas.
+  BigDecimal balance(UUID userId, UUID accountId) {
+    return jdbc.sql(
+            """
+            SELECT c.saldo_inicial + COALESCE(
+                     (SELECT SUM(CASE WHEN l.tipo = 'receita' THEN l.valor ELSE -l.valor END)
+                      FROM lancamento l
+                      WHERE l.usuario_id = :userId AND l.conta_id = :id
+                        AND l.status = 'realizado'), 0)
+            FROM conta c
+            WHERE c.usuario_id = :userId AND c.id = :id
+            """)
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(BigDecimal.class)
+        .single();
   }
 
   // Confere dono e tipo juntos: categoria de receita não serve para despesa.

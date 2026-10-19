@@ -173,6 +173,7 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Sem teto de contas por usuário e sem paginação em `GET /contas` (auditoria do PR #7, B1). Só afeta a própria conta. Dono: backend, na F20.5 junto com o rate limit.
 - **DÍVIDA** — O teto de 2 s da consulta de sessão (`SessionQueries`) só tem teste de banco congelado. Falta um que confira que o `networkTimeout` da conexão volta ao valor do pool depois de uma consulta normal (revisão do PR #7). Dono: backend, na fatia que mexer no pool.
 - **DÍVIDA** — Categoria filha pode ter tipo diferente do pai: a V6 garante um nível só, mas não o mesmo tipo (F3). Um `CHECK` junto com a FK do pai fecha isso. Dono: dba, na fatia que trouxer o CRUD de categoria.
+- **DÍVIDA** — A trava da conta na escrita de lançamento (ADR-024) espera sem prazo próprio: uma transação presa segura as outras até o `socketTimeout` de 30 s. Definir `lock_timeout` curto na transação de escrita e responder 503. Dono: backend, na F5, que vai escrever lançamento em lote.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

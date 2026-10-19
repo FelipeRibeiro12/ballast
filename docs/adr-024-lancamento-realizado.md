@@ -66,6 +66,9 @@ dono e como as categorias nascem.
   se a conta está arquivada e se o saldo cabe. Quando um `PUT` troca a conta,
   as duas linhas são travadas em ordem de id, para duas trocas cruzadas não se
   travarem. Arquivar faz `UPDATE` na mesma linha e entra na fila.
+  No `PUT` e no `DELETE` a linha do próprio lançamento é travada antes das
+  contas, para a conta de origem não mudar entre a leitura e a trava. Nenhum
+  caminho trava conta antes de lançamento, então a ordem não forma ciclo.
 
 ## Justificativa
 

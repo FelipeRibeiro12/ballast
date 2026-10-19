@@ -34,9 +34,16 @@ public @interface NoControlCharacters {
 
     private static boolean isControl(int codePoint) {
       return Character.getType(codePoint) == Character.CONTROL
-          || Character.isSurrogate((char) codePoint)
+          || isLoneSurrogate(codePoint)
           || codePoint == 0x2028
           || codePoint == 0x2029;
+    }
+
+    // Um par válido já chega aqui como um code point só (acima de U+FFFF); sobra na faixa de
+    // surrogate apenas o solto. Não dá para usar (char) codePoint: corta os 16 bits de cima e
+    // recusa letras atribuídas como U+1D800.
+    private static boolean isLoneSurrogate(int codePoint) {
+      return codePoint >= Character.MIN_SURROGATE && codePoint <= Character.MAX_SURROGATE;
     }
   }
 }

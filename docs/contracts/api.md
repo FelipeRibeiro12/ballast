@@ -30,5 +30,11 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
   `categoria não encontrada`; conta arquivada dá 400 `conta arquivada`. No `PUT`,
   a recusa por conta arquivada vale só ao trocar de conta: editar ou apagar
   lançamento que já está numa conta arquivada é permitido.
+- O saldo de cada conta fica entre -9007199254740991 e 9007199254740991
+  centavos. `POST`, `PUT` e `DELETE /lancamentos` que levariam o saldo de
+  alguma conta afetada (no `PUT` que troca de conta, as duas) para fora dessa
+  faixa dão 400 `saldo da conta fora do limite` e nada grava. Toda escrita de
+  lançamento é serializada por conta (ADR-024): depois que o `PATCH` de arquivar
+  respondeu 200, nenhum lançamento novo entra na conta.
 - O corpo do lançamento recebe uma `data` e a API grava a mesma em
   `dataCompetencia` e `dataCaixa`. Campo não declarado dá 400.

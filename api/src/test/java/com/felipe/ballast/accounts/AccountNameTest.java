@@ -64,4 +64,15 @@ class AccountNameTest {
     assertThat(response.getStatus()).isEqualTo(201);
     assertThat(AccountsApi.body(response).get("nome").asString()).isEqualTo("a" + EMOJI + "b");
   }
+
+  @Test
+  void acceptsAnAssignedLetterOutsideTheBmpWithSurrogateLookalikeLowBits() throws Exception {
+    // U+1D800 tem os 16 bits de baixo em D800, mas é uma letra atribuída.
+    String letter = new String(Character.toChars(0x1D800));
+
+    MockHttpServletResponse response = createNamed(letter + "a");
+
+    assertThat(response.getStatus()).isEqualTo(201);
+    assertThat(AccountsApi.body(response).get("nome").asString()).isEqualTo(letter + "a");
+  }
 }
