@@ -1,0 +1,143 @@
+package com.felipe.ballast.recurrences;
+
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
+
+// Assume entrada já validada e normalizada na borda. Todo método recebe o dono vindo da sessão,
+// menos os do job, que recebem o dono lido do próprio template.
+//
+// Ordem de travas: template e depois conta. Desativar trava só o template; arquivar trava só a
+// conta. Quem materializa (criar e job) trava o template, confere que continua ativo e trava a
+// conta para ler "arquivada": depois que desativar ou arquivar respondeu 200, nenhuma ocorrência
+// nova entra (ADR-026).
+@Service
+class RecurrenceService {
+
+  // "Hoje" e o horizonte seguem o dia do usuário, não o do servidor em UTC.
+  static final ZoneId ZONE = ZoneId.of("America/Sao_Paulo");
+
+  // Até onde a materialização enxerga à frente, em meses contados de hoje, ponta incluída.
+  static final int HORIZON_MONTHS = 12;
+
+  sealed interface CreateResult {
+    record Created(RecurrenceSummary recurrence, int materialized) implements CreateResult {}
+
+    enum Rejected implements CreateResult {
+      ACCOUNT_NOT_FOUND,
+      ACCOUNT_ARCHIVED,
+      CATEGORY_NOT_FOUND
+    }
+  }
+
+  private final RecurrenceQueries queries;
+  private final TransactionTemplate transaction;
+  private final Clock clock;
+
+  RecurrenceService(RecurrenceQueries queries, TransactionTemplate transaction, Clock clock) {
+    this.queries = queries;
+    this.transaction = transaction;
+    this.clock = clock;
+  }
+
+  // Regra, template e ocorrências na mesma transação: ou o template nasce com o horizonte
+  // preenchido, ou não nasce. As FKs compostas da V8 são a rede de segurança do dono; a conferência
+  // abaixo existe para dar a mensagem certa.
+  CreateResult create(UUID userId, RecurrenceInput input) {
+    if (input.accountId() == null) {
+      return CreateResult.Rejected.ACCOUNT_NOT_FOUND;
+    }
+    return transaction.execute(status -> createLocked(userId, input));
+  }
+
+  private CreateResult createLocked(UUID userId, RecurrenceInput input) {
+    Optional<Boolean> archived = queries.lockAccount(userId, input.accountId());
+    if (archived.isEmpty()) {
+      return CreateResult.Rejected.ACCOUNT_NOT_FOUND;
+    }
+    if (archived.get()) {
+      return CreateResult.Rejected.ACCOUNT_ARCHIVED;
+    }
+    if (input.categoryId() == null
+        || !queries.categoryExists(userId, input.categoryId(), input.type())) {
+      return CreateResult.Rejected.CATEGORY_NOT_FOUND;
+    }
+    UUID ruleId = queries.insertRule(userId, input.rule());
+    UUID templateId = queries.insertTemplate(userId, input, ruleId);
+    LocalDate today = today();
+    int materialized = materializeAhead(userId, templateId, input.rule(), today);
+    return queries
+        .find(userId, templateId, today)
+        .<CreateResult>map(found -> new CreateResult.Created(found, materialized))
+        .orElseThrow();
+  }
+
+  List<RecurrenceSummary> list(UUID userId) {
+    return queries.list(userId, today());
+  }
+
+  Optional<RecurrenceSummary> find(UUID userId, UUID id) {
+    return queries.find(userId, id, today());
+  }
+
+  // Vazio para template de outro usuário ou inexistente, sem distinguir. Repetível: desativar
+  // quem já está inativo apaga o que sobrar e devolve o mesmo estado.
+  Optional<RecurrenceSummary> deactivate(UUID userId, UUID id) {
+    LocalDate today = today();
+    boolean found =
+        Boolean.TRUE.equals(
+            transaction.execute(
+                status -> {
+                  if (queries.lockTemplate(userId, id).isEmpty()) {
+                    return false;
+                  }
+                  queries.deactivate(userId, id);
+                  queries.deleteFuturePlanned(userId, id, today);
+                  return true;
+                }));
+    return found ? queries.find(userId, id, today) : Optional.empty();
+  }
+
+  // Lote de templates ativos para o job, depois de afterId.
+  List<RecurrenceQueries.TemplateRef> activeTemplates(UUID afterId, int limit) {
+    return queries.listActiveTemplates(afterId, limit);
+  }
+
+  // Uma rodada do job para um template, numa transação própria. Devolve quantas ocorrências
+  // entraram; zero quando o template foi desativado, a conta foi arquivada ou nada é novo.
+  int materialize(UUID userId, UUID templateId) {
+    Integer inserted =
+        transaction.execute(
+            status -> {
+              Optional<RecurrenceQueries.LockedTemplate> template =
+                  queries.lockTemplate(userId, templateId);
+              if (template.isEmpty() || !template.get().active()) {
+                return 0;
+              }
+              Optional<Boolean> archived = queries.lockAccount(userId, template.get().accountId());
+              if (archived.isEmpty() || archived.get()) {
+                return 0;
+              }
+              return materializeAhead(userId, templateId, template.get().rule(), today());
+            });
+    return inserted == null ? 0 : inserted;
+  }
+
+  // De max(início, hoje) até hoje mais 12 meses, as duas pontas incluídas. Data que a regra gera
+  // antes de hoje nunca é materializada. Roda dentro de uma transação com o template travado.
+  private int materializeAhead(UUID userId, UUID templateId, RecurrenceRule rule, LocalDate today) {
+    LocalDate from = rule.start().isAfter(today) ? rule.start() : today;
+    LocalDate to = today.plusMonths(HORIZON_MONTHS);
+    List<LocalDate> dates = RecurrenceSchedule.occurrences(rule, from, to);
+    return queries.insertOccurrences(userId, templateId, dates);
+  }
+
+  private LocalDate today() {
+    return clock.instant().atZone(ZONE).toLocalDate();
+  }
+}

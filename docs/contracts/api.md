@@ -66,3 +66,67 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
 - `POST` e `PUT /lancamentos` só aceitam `tipo` `receita` ou `despesa`:
   `transferencia` dá 400. `PUT` e `DELETE /lancamentos/{id}` numa perna dão 400
   `use a rota de transferência` e não mudam nada.
+
+## Recorrência (ADR-026)
+
+Primeira entrega da F5: criar, listar, ver e desativar. Confirmar, cancelar e
+editar uma ocorrência (`PATCH` e `PUT /lancamentos/{id}`) e o bloqueio do
+`DELETE` ficam para a segunda entrega.
+
+- `POST /recorrencias` recebe `{"tipo", "titulo", "descricao"?,
+  "valorCentavos", "categoriaId", "contaId", "regra": {"frequencia",
+  "intervalo"?, "diaDoMes"?, "diaDaSemana"?, "inicio", "fim"?,
+  "ocorrenciasMax"?}}` e responde 201 `{"recorrencia": {...},
+  "ocorrenciasMaterializadas": N}`. `tipo` é `receita` ou `despesa`; título,
+  descrição e valor seguem as regras do lançamento. Sem `data`: quem dá as datas
+  é a regra.
+- Regra: `frequencia` é `diaria`, `semanal`, `mensal` ou `anual`; `intervalo`
+  de 1 a 99 (padrão 1) e conta a partir do período do `inicio` (mensal a cada 2
+  meses com início em janeiro: janeiro, março, maio). `inicio` obrigatório
+  (AAAA-MM-DD, ano de 1900 a 2199); no máximo um entre `fim` (incluído) e
+  `ocorrenciasMax` (1 a 10000, conta desde o `inicio`, também as que caíram
+  antes de hoje). `mensal` exige `diaDoMes` (1 a 31; dia maior que o último do
+  mês cai no último dia) e não aceita `diaDaSemana`. `semanal` exige
+  `diaDaSemana` (0 domingo a 6 sábado) e não aceita `diaDoMes`. `diaria` e
+  `anual` não aceitam nenhum dos dois (anual repete dia e mês do `inicio`; 29/2
+  cai em 28/2 em ano não bissexto). Semanal com intervalo maior que 1 conta
+  semanas de domingo a sábado a partir da semana do `inicio`.
+- A criação materializa, na mesma transação, as ocorrências de `max(inicio,
+  hoje)` até `hoje + 12 meses`, as duas pontas incluídas, como lançamentos
+  `previsto`. Hoje é a data em `America/Sao_Paulo`. A data que a regra gera antes
+  de hoje não vira lançamento. Série que já terminou é criada com
+  `ocorrenciasMaterializadas` 0. Um job diário (03:00 São Paulo) estende o
+  horizonte dos templates ativos; o cliente não chama nada para isso.
+- Corpo de `recorrencia` (também o de `GET`): `{id, tipo, titulo, descricao,
+  valorCentavos, categoriaId, contaId, ativo, criadoEm, regra: {frequencia,
+  intervalo, diaDoMes, diaDaSemana, inicio, fim, ocorrenciasMax},
+  proximaOcorrencia}`. Campos da regra que a frequência não usa vêm `null`.
+  `proximaOcorrencia` é a menor data prevista de hoje em diante, ou `null`.
+- Recusas do `POST`, todas 400 sem gravar nada, com mensagem fixa e sem o valor
+  enviado: campos fora da faixa ou combinação que a frequência não aceita (por
+  exemplo `mensal exige diaDoMes`, `informe fim ou ocorrenciasMax, não os dois`,
+  `fim deve ser igual ou posterior a inicio`), `conta não encontrada` (inexistente,
+  de outro usuário ou id inválido), `conta arquivada` e `categoria não
+  encontrada` (inexistente, de outro usuário, de tipo diferente do template ou id
+  inválido). Campo não declarado dá 400.
+- `GET /recorrencias` lista as do usuário, ativas e inativas, por título sem
+  diferenciar maiúscula de minúscula e depois por id. `GET /recorrencias/{id}`
+  devolve uma.
+- `PATCH /recorrencias/{id}` com `{"ativo": false}` desativa: marca o template
+  inativo e apaga as ocorrências `previsto`, não desgarradas, com data de hoje em
+  diante. As de antes de hoje, as realizadas e as editadas ficam. Repetir a
+  chamada devolve o mesmo estado. `{"ativo": true}` dá 400 `reativar não é
+  suportado`: corrigir é desativar e criar outra. Não existe `PUT` nem edição da
+  regra.
+- Em `/recorrencias/{id}`, outro usuário, inexistente e id que não é UUID dão 404
+  com o mesmo corpo.
+- Banco fora responde 503 `serviço indisponível`; corpo acima de 4 KiB, 413.
+- `GET /lancamentos` e `GET /lancamentos/{id}` ganham `templateId` (id da
+  recorrência que gerou a ocorrência, `null` nos avulsos), e `status` passa a
+  poder ser `previsto` (a guarda de tipo do cliente precisa aceitar), além de
+  `realizado` e `cancelado`. As previstas entram na lista do mês pela
+  `dataCaixa`, com `dataCompetencia` igual. **O saldo continua somando só
+  `realizado`**: previsto não muda `saldoCentavos`. Nesta entrega nenhuma rota
+  de `/lancamentos` cria, confirma ou cancela previsto; o `PUT` e o `DELETE`
+  ainda tratam uma ocorrência como um lançamento comum (a segunda entrega fecha
+  isso).

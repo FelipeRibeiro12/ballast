@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
 
 // Data da API: AAAA-MM-DD estrito, ano de 1900 a 2199 (a faixa do CHECK do banco). O formato é
 // conferido antes do parse porque o parser do java.time aceitaria, por exemplo, ano com sinal.
-final class IsoDates {
+public final class IsoDates {
 
   private static final Pattern SHAPE = Pattern.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}");
 
@@ -17,7 +17,7 @@ final class IsoDates {
   private IsoDates() {}
 
   // O ISO_LOCAL_DATE resolve em modo estrito: 2026-02-30 não vira 28 de fevereiro.
-  static Optional<LocalDate> parse(String text) {
+  public static Optional<LocalDate> parse(String text) {
     if (text == null || !SHAPE.matcher(text).matches()) {
       return Optional.empty();
     }
