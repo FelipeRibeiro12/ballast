@@ -39,7 +39,8 @@ class RecurrenceQueries {
       """
       ) AS o(id, dia)
       WHERE t.id = :templateId AND t.usuario_id = :userId
-      ON CONFLICT (template_id, ocorrencia_data) DO NOTHING
+      ON CONFLICT (template_id, ocorrencia_data, parcela_ordem)
+      WHERE template_id IS NOT NULL DO NOTHING
       """;
 
   private static final String COLUMNS =

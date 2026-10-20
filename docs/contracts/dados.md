@@ -374,18 +374,37 @@ composta, `NO ACTION`: `template_conta_mesmo_usuario`
 categoria no cascade da exclusão do usuário. O job que lista templates ativos
 pagina pela chave primária e não precisa de índice próprio.
 
+Migration `V9` em `lancamento` (ADR-027):
+
+- `parcela_ordem smallint` nula (`lancamento_parcela_ordem_faixa`, 1 a 10) e
+  `lancamento_parcela_so_com_template`: sem template não há parcela.
+- `lancamento_template_ocorrencia_parcela_unica`: índice único parcial em
+  `(template_id, ocorrencia_data, parcela_ordem) NULLS NOT DISTINCT WHERE
+  template_id IS NOT NULL`. O `NULLS NOT DISTINCT` mantém a regra da `V8` para
+  template sem divisão (duas sem parcela na mesma data colidem). O `WHERE`
+  evita que lançamento avulso, com tudo nulo, colida com outro avulso. Parcelas
+  dos dias 30 e 31 caem as duas em 28 de fevereiro e coexistem pela ordem. Não é
+  constraint porque índice parcial não pode ser. Criado antes de o índice da
+  `V8` cair, e o `CREATE` bloqueia escrita em `lancamento` só durante a
+  varredura.
+- Cláusula do `ON CONFLICT`: `ON CONFLICT (template_id, ocorrencia_data,
+  parcela_ordem) WHERE template_id IS NOT NULL DO NOTHING`. Sem o `WHERE` o
+  Postgres não infere o índice parcial e recusa o comando.
+
 ### Divisão — o caso do salário em dois dias
 
 ```
 template_divisao
   id            uuid pk
+  usuario_id    uuid fk not null
   template_id   uuid fk not null
-  dia_do_mes    smallint not null
-  percentual    numeric(5,2) null    -- 40.00
-  valor_fixo    numeric(18,2) null
-  ordem         smallint not null
-  check ((percentual is null) != (valor_fixo is null))
+  dia_do_mes    smallint not null    -- 1..31
+  percentual    numeric(5,2) null    -- 40.00; maior que 0 e menor que 100
+  valor_fixo    numeric(18,2) null   -- 0.01 a 90071992547409.91
+  ordem         smallint not null    -- 1..10
+  check ((percentual is null) <> (valor_fixo is null))
   unique (template_id, dia_do_mes)
+  unique (template_id, ordem)
 ```
 
 Suporta os dois modos que você descreveu, e mais de dois dias:
@@ -402,6 +421,26 @@ parcelas é sempre igual ao `valor_total` — isso é invariante e precisa de te
 
 Validação: soma dos percentuais = 100, ou soma dos valores fixos =
 `valor_total`.
+
+Migration `V9` (ADR-027), recorte da F6:
+
+- Só frequência mensal, de 2 a 10 parcelas. A aplicação garante o modo único
+  (todas as linhas do template em percentual, ou todas em valor fixo), a soma e
+  o mínimo de 2; o banco garante cada linha e as unicidades.
+- No JSON o percentual vai em centésimos de ponto percentual
+  (`percentualCentesimos`: 40% é `4000`, 33,33% é `3333`) e o valor fixo em
+  `valorCentavos`. No banco, `numeric(5,2)` e `numeric(18,2)`.
+- Regra do centavo da F6: cada parcela por percentual é
+  `valor_total × percentual / 100` truncada em 2 casas; a última pela `ordem`
+  recebe `valor_total` menos a soma das outras.
+- CHECKs: `divisao_percentual_faixa` (0 e 100 ficam de fora),
+  `divisao_valor_fixo_faixa`, `divisao_dia_do_mes_faixa`, `divisao_ordem_faixa`,
+  `divisao_percentual_ou_valor`. Únicos: `divisao_template_dia_unico` e
+  `divisao_template_ordem_unica`, que também servem a leitura por `template_id`.
+- O dono vem da FK composta `divisao_template_mesmo_usuario`
+  `(template_id, usuario_id)`, `NO ACTION` como as demais: template com parcela
+  não se apaga. `usuario_id` é `ON DELETE CASCADE`. Sem índice por `usuario_id`:
+  a tabela é pequena e só o cascade da exclusão do usuário a varre.
 
 ### Ocorrências
 
@@ -420,6 +459,7 @@ lancamento
   status            text not null      -- previsto | realizado | cancelado
   template_id       uuid fk null       -- de onde veio
   ocorrencia_data   date null          -- a data que a regra gerou; nula se e só se template_id é nulo
+  parcela_ordem     smallint null      -- 1..10; a ordem da parcela da divisão, nula sem divisão
   desgarrado        bool not null default false
   parcela_de_id     uuid fk null       -- self-fk: compra parcelada
   parcela_num       smallint null
@@ -427,13 +467,14 @@ lancamento
   hash_externo      text null          -- FITID do OFX, ou hash dos campos
   importacao_linha_id uuid fk null
   criado_em         timestamptz not null
-  unique (template_id, ocorrencia_data)
+  unique nulls not distinct (template_id, ocorrencia_data, parcela_ordem) where template_id is not null
   unique (usuario_id, hash_externo)
 ```
 
 Migration `V6` (ADR-024) cria só o recorte da F3: `id`, `usuario_id`, `tipo`,
 `titulo`, `descricao`, `categoria_id`, `conta_id`, `valor`, `data_competencia`,
 `data_caixa`, `status`, `criado_em`. A `V7` acrescenta a transferência e a `V8` o recorte da F5, abaixo.
+A `V9` acrescenta `parcela_ordem` e troca a chave de idempotência (abaixo).
 As demais colunas e tabelas deste bloco chegam com as suas fatias.
 
 - `tipo` aceita `receita`, `despesa` e `transferencia` (V7). `categoria_id` é
@@ -525,8 +566,8 @@ idempotente: rodar duas vezes não duplica. A chave de idempotência é
 `(template_id, ocorrencia_data)` em **toda** linha com template, desgarrada ou
 não (ADR-026). Com a chave em `data_competencia`, editar a data de uma
 ocorrência deixaria a regra gerar outra no dia antigo; `ocorrencia_data` guarda
-"qual ocorrência da série" e nunca muda. A F6 alarga a chave com a ordem da
-parcela.
+"qual ocorrência da série" e nunca muda. Desde a `V9` (ADR-027) a chave é
+`(template_id, ocorrencia_data, parcela_ordem)`.
 
 Migration `V8` em `lancamento` (ADR-026):
 
@@ -540,7 +581,7 @@ Migration `V8` em `lancamento` (ADR-026):
 - `lancamento_template_ocorrencia_unica`: `unique (template_id, ocorrencia_data)`.
   O Postgres ignora nulo em `unique` comum, então lançamento avulso não colide. É
   o alvo do `ON CONFLICT (template_id, ocorrencia_data) DO NOTHING` da
-  materialização e o índice da FK e da desativação.
+  materialização e o índice da FK e da desativação. A `V9` o substitui.
 - `lancamento_template_e_ocorrencia_juntos`: `(template_id IS NULL) =
   (ocorrencia_data IS NULL)`. `lancamento_desgarrado_so_com_template`.
   `lancamento_ocorrencia_data_faixa` (1900 a 2199).

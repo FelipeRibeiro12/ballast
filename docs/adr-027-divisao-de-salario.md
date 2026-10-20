@@ -24,8 +24,12 @@ que a chave de idempotência teria de crescer.
   são as parcelas.
 - **Chave de idempotência.** `lancamento` ganha `parcela_ordem` (nulo sem
   divisão) e a chave passa a ser `(template_id, ocorrencia_data,
-  parcela_ordem)` com `NULLS NOT DISTINCT`. Parcelas dos dias 30 e 31 caem as
-  duas em 28 de fevereiro e precisam continuar sendo duas ocorrências.
+  parcela_ordem)` com `NULLS NOT DISTINCT`, num índice parcial `WHERE
+  template_id IS NOT NULL`: sem o filtro, dois lançamentos avulsos (os três
+  campos nulos) colidiriam. Parcelas dos dias 30 e 31 caem as duas em 28 de
+  fevereiro e precisam continuar sendo duas ocorrências. A materialização usa
+  `ON CONFLICT (template_id, ocorrencia_data, parcela_ordem) WHERE template_id
+  IS NOT NULL DO NOTHING`.
 - **Valor de cada parcela.**
   - Percentual: `valor_total × percentual / 100` com `setScale(2,
     RoundingMode.DOWN)` em todas menos a última pela `ordem`, que recebe
