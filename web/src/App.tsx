@@ -415,6 +415,11 @@ function App() {
             aoSessaoExpirar={aoSessaoExpirar}
             versaoDeSaldo={versaoDeSaldo}
             aoCarregarAtivas={setContasAtivas}
+            aoMudarSaldo={() => {
+              setVersaoDeSaldo((n) => n + 1)
+              // O pagamento da fatura cria duas pernas que a lista do mês precisa mostrar.
+              setVersaoDaLista((n) => n + 1)
+            }}
           />
           {/* Logo abaixo das contas: é a resposta principal do app, antes de qualquer formulário. */}
           <SaldoProjetado

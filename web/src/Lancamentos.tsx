@@ -18,6 +18,7 @@ import {
   putLancamento,
 } from './api'
 import type { AjusteDeConfirmacao, Categoria, Conta, Lancamento } from './api'
+import { vencimentoDaFatura } from './fatura'
 import { formatarDataCompleta, formatarDiaMes, hojeLocal, intervaloDoMes, mesDeHoje, rotuloDoMes, somarMeses } from './datas'
 import type { Mes } from './datas'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
@@ -129,7 +130,7 @@ function FormularioDeLancamento({
   )
   const [categoriaEscolhida, setCategoriaEscolhida] = useState(inicial?.categoriaId ?? '')
   const [contaEscolhida, setContaEscolhida] = useState(inicial?.contaId ?? '')
-  const [data, setData] = useState(inicial?.dataCaixa ?? hojeLocal())
+  const [data, setData] = useState(inicial?.dataCompetencia ?? hojeLocal())
   const [descricao, setDescricao] = useState(inicial?.descricao ?? '')
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
@@ -147,6 +148,7 @@ function FormularioDeLancamento({
       inicial !== null && contaEscolhida === inicial.contaId
       ? contaEscolhida
       : (contas[0]?.id ?? '')
+  const cartaoEscolhido = contas.find((c) => c.id === contaId)?.cartao ?? null
   const contaArquivadaDoLancamento =
     inicial !== null && !contas.some((c) => c.id === inicial.contaId) ? inicial.contaId : null
 
@@ -284,7 +286,7 @@ function FormularioDeLancamento({
         </select>
       </div>
       <div className="campo">
-        <label htmlFor="lancamento-data">Data</label>
+        <label htmlFor="lancamento-data">{cartaoEscolhido === null ? 'Data' : 'Data da compra'}</label>
         <input
           id="lancamento-data"
           type="date"
@@ -294,6 +296,12 @@ function FormularioDeLancamento({
           value={data}
           onChange={(evento) => setData(evento.target.value)}
         />
+        {cartaoEscolhido !== null && /^\d{4}-\d{2}-\d{2}$/.test(data) && (
+          <small>
+            Entra na fatura que vence em{' '}
+            {formatarDiaMes(vencimentoDaFatura(data, cartaoEscolhido.diaFechamento, cartaoEscolhido.diaVencimento))}
+          </small>
+        )}
       </div>
       <div className="campo">
         <label htmlFor="lancamento-descricao">Descrição (opcional)</label>
@@ -331,17 +339,20 @@ function eDataNaFaixa(data: string): boolean {
 
 function FormularioDeConfirmacao({
   prevista,
+  cartao,
   aoConfirmar,
   aoVoltar,
 }: {
   prevista: Lancamento
+  // Cartão da conta da prevista, ou null. Nele a data é a da compra e a caixa vem do servidor.
+  cartao: Conta['cartao']
   // Devolve a mensagem de erro, ou null quando deu certo e o formulário vai fechar.
   aoConfirmar: (ajuste: AjusteDeConfirmacao) => Promise<string | null>
   aoVoltar: () => void
 }) {
   const valorPrevisto = formatarCentavos(prevista.valorCentavos).replace(/[^\d.,]/g, '')
   const [valor, setValor] = useState(valorPrevisto)
-  const [data, setData] = useState(prevista.dataCaixa)
+  const [data, setData] = useState(prevista.dataCompetencia)
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
@@ -365,7 +376,7 @@ function FormularioDeConfirmacao({
     // Só o que mudou vai no corpo: sem mudança o pedido é igual ao de confirmar direto.
     const ajuste: AjusteDeConfirmacao = {
       ...(valorCentavos === prevista.valorCentavos ? {} : { valorCentavos }),
-      ...(data === prevista.dataCaixa ? {} : { data }),
+      ...(data === prevista.dataCompetencia ? {} : { data }),
     }
     try {
       setMensagem(await aoConfirmar(ajuste))
@@ -398,7 +409,7 @@ function FormularioDeConfirmacao({
         />
       </div>
       <div className="campo">
-        <label htmlFor={`${id}-data`}>Data</label>
+        <label htmlFor={`${id}-data`}>{cartao === null ? 'Data' : 'Data da compra'}</label>
         <input
           id={`${id}-data`}
           type="date"
@@ -408,6 +419,12 @@ function FormularioDeConfirmacao({
           value={data}
           onChange={(evento) => setData(evento.target.value)}
         />
+        {cartao !== null && /^\d{4}-\d{2}-\d{2}$/.test(data) && (
+          <small>
+            Entra na fatura que vence em{' '}
+            {formatarDiaMes(vencimentoDaFatura(data, cartao.diaFechamento, cartao.diaVencimento))}
+          </small>
+        )}
       </div>
       {mensagem !== null && (
         <p id={`${id}-erro`} role="alert" className="erro">
@@ -433,8 +450,12 @@ function FormularioDeTransferencia({
   aoSalvar: () => void
   aoSessaoExpirar: () => void
 }) {
-  const [origemEscolhida, setOrigemEscolhida] = useState(contas[0]?.id ?? '')
-  const [destinoEscolhido, setDestinoEscolhido] = useState(contas[1]?.id ?? '')
+  // O servidor recusa cartão como origem de transferência; ele só entra como destino (pagar fatura).
+  const origens = contas.filter((c) => c.tipo !== 'cartao_credito')
+  const [origemEscolhida, setOrigemEscolhida] = useState(origens[0]?.id ?? '')
+  const [destinoEscolhido, setDestinoEscolhido] = useState(
+    contas.find((c) => c.id !== origens[0]?.id)?.id ?? '',
+  )
   const [titulo, setTitulo] = useState('')
   const [valor, setValor] = useState('')
   const [data, setData] = useState(hojeLocal())
@@ -445,12 +466,12 @@ function FormularioDeTransferencia({
   const emVoo = useRef(false)
 
   // A conta escolhida pode ter sido arquivada e sumido da lista; cai na primeira disponível.
-  const contaOrigemId = contas.some((c) => c.id === origemEscolhida) ? origemEscolhida : (contas[0]?.id ?? '')
+  const contaOrigemId = origens.some((c) => c.id === origemEscolhida) ? origemEscolhida : (origens[0]?.id ?? '')
   const contaDestinoId = contas.some((c) => c.id === destinoEscolhido)
     ? destinoEscolhido
     : (contas.find((c) => c.id !== contaOrigemId)?.id ?? '')
 
-  if (contas.length < 2) {
+  if (origens.length === 0 || contas.length < 2) {
     return <p>Crie duas contas para transferir.</p>
   }
 
@@ -508,7 +529,7 @@ function FormularioDeTransferencia({
           required
           onChange={(evento) => setOrigemEscolhida(evento.target.value)}
         >
-          {contas.map((conta) => (
+          {origens.map((conta) => (
             <option key={conta.id} value={conta.id}>
               {conta.nome}
             </option>
@@ -805,6 +826,7 @@ export default function Lancamentos({
   const nomesDeConta = new Map<string, string>()
   const nomesDeCategoria = new Map<string, string>()
   if (contas !== null) contas.forEach((conta) => nomesDeConta.set(conta.id, conta.nome))
+  const cartaoDaConta = (id: string): Conta['cartao'] => contas?.find((c) => c.id === id)?.cartao ?? null
   if (apoio.tipo === 'ok') {
     apoio.categorias.forEach((categoria) => nomesDeCategoria.set(categoria.id, categoria.nome))
   }
@@ -972,6 +994,7 @@ export default function Lancamentos({
                   {confirmandoEsta === 'ajustar' && (
                     <FormularioDeConfirmacao
                       prevista={vencida}
+                      cartao={cartaoDaConta(vencida.contaId)}
                       aoConfirmar={(ajuste) => confirmar(vencida, ajuste)}
                       aoVoltar={() => setConfirmando(null)}
                     />
@@ -1027,6 +1050,10 @@ export default function Lancamentos({
                     <div className="lancamento-dados">
                       <span>{formatarDiaMes(lancamento.dataCaixa)}</span>
                       <strong>{lancamento.titulo}</strong>
+                      {/* Na fatura do cartão o caixa cai depois da compra; mostra as duas. */}
+                      {lancamento.dataCompetencia !== lancamento.dataCaixa && (
+                        <small>compra em {formatarDiaMes(lancamento.dataCompetencia)}</small>
+                      )}
                       <span>
                         {ePerna
                           ? 'Transferência'
@@ -1134,6 +1161,7 @@ export default function Lancamentos({
                     {confirmandoEste === 'ajustar' && (
                       <FormularioDeConfirmacao
                         prevista={lancamento}
+                        cartao={cartaoDaConta(lancamento.contaId)}
                         aoConfirmar={(ajuste) => confirmar(lancamento, ajuste)}
                         aoVoltar={() => setConfirmando(null)}
                       />

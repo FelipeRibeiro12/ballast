@@ -61,6 +61,34 @@ final class RecurrencesApi {
     return body(response).get("id").asString();
   }
 
+  // Cartão com limite de R$ 10.000,00 e saldo inicial zero, pago pela conta informada.
+  String newCard(Cookie session, String name, String paymentAccountId, int closingDay, int dueDay)
+      throws Exception {
+    String content =
+        "{\"nome\":\""
+            + name
+            + "\",\"tipo\":\"cartao_credito\",\"cartao\":{\"limiteCentavos\":1000000,"
+            + "\"diaFechamento\":"
+            + closingDay
+            + ",\"diaVencimento\":"
+            + dueDay
+            + ",\"contaPagamentoId\":\""
+            + paymentAccountId
+            + "\"}}";
+    MockHttpServletResponse response =
+        mvc.perform(
+                post("/contas")
+                    .cookie(session)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(content))
+            .andReturn()
+            .getResponse();
+    if (response.getStatus() != 201) {
+      throw new IllegalStateException("cartão de teste falhou: " + response.getStatus());
+    }
+    return body(response).get("id").asString();
+  }
+
   void setAccountArchived(Cookie session, String accountId, boolean archived) throws Exception {
     mvc.perform(
             patch("/contas/" + accountId)

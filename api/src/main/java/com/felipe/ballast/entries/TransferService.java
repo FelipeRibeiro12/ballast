@@ -26,6 +26,7 @@ class TransferService {
       ACCOUNT_NOT_FOUND,
       ACCOUNT_ARCHIVED,
       SAME_ACCOUNT,
+      CARD_AS_ORIGIN,
       BALANCE_OUT_OF_RANGE
     }
   }
@@ -88,6 +89,11 @@ class TransferService {
     if (fromArchived.get() || toArchived.get()) {
       return CreateResult.Rejected.ACCOUNT_ARCHIVED;
     }
+    // Saída do cartão não entra em nenhuma fatura, mas baixaria o saldo dele: a fatura ficaria paga
+    // com dívida no saldo. Só o pagamento (cartão como destino) é transferência.
+    if (entryQueries.findCardBilling(userId, input.fromAccountId()).isPresent()) {
+      return CreateResult.Rejected.CARD_AS_ORIGIN;
+    }
     String title = input.title() == null ? DEFAULT_TITLE : input.title();
     UUID outId = saveLeg(userId, input, title, input.fromAccountId());
     UUID inId = saveLeg(userId, input, title, input.toAccountId());
@@ -108,7 +114,8 @@ class TransferService {
         .orElseThrow(() -> new IllegalStateException("transferência gravada não encontrada"));
   }
 
-  // Perna sem categoria e com a mesma data nas duas datas, como no lançamento comum.
+  // Perna sem categoria e com a mesma data nas duas datas, também em conta de cartão: pagar a
+  // fatura é dinheiro se movendo no dia (ADR-031), sem a regra da fatura.
   private UUID saveLeg(UUID userId, TransferInput input, String title, UUID accountId) {
     EntryInput leg =
         new EntryInput(
@@ -119,7 +126,7 @@ class TransferService {
             null,
             accountId,
             input.date());
-    return entries.saveAndFlush(new Entry(userId, leg)).getId();
+    return entries.saveAndFlush(new Entry(userId, leg, input.date())).getId();
   }
 
   private EntryService.DeleteResult deleteLocked(TransactionStatus status, UUID userId, UUID id) {

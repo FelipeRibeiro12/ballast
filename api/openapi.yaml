@@ -305,7 +305,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Entrada inválida, inclusive campo não declarado"
+          description: "Entrada inválida, inclusive campo não declarado, cartao fora\
+            \ de conta de cartão (ou ausente nela) e conta de pagamento inexistente,\
+            \ de outro usuário, arquivada ou de tipo que não paga cartão"
         "401":
           content:
             application/json:
@@ -446,6 +448,73 @@ paths:
       summary: Arquiva ou desarquiva uma conta
       tags:
       - contas
+  /contas/{id}/faturas:
+    get:
+      description: "Todas as faturas com vencimento entre de e ate (pontas incluí\
+        das, no máximo 366 dias), em ordem de vencimento, inclusive as sem compra.\
+        \ pago soma as transferências realizadas para o cartão depois do fechamento\
+        \ da fatura e até o fechamento da seguinte, inclusive; pagamento feito antes\
+        \ do fechamento conta na fatura anterior. situacao é aberta até o dia do fechamento\
+        \ (inclusive, em America/Sao_Paulo), só pela data; depois dele, fechada com\
+        \ restante maior que zero e paga com restante menor ou igual a zero."
+      operationId: getContasByIdFaturas
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: de
+        required: true
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: ate
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Faturas"
+          description: Faturas do período
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "de ou ate ausente ou fora do formato AAAA-MM-DD (ano de 1900\
+            \ a 2199), de depois de ate, intervalo maior que 366 dias ou \"fatura\
+            \ fora do limite\" (algum valor sairia de ±9007199254740991 centavos)"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente, id que não é UUID ou\
+            \ conta que não é cartão; todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível; pode tentar de novo
+      security:
+      - cookieAuth: []
+      summary: Lista as faturas de um cartão por vencimento
+      tags:
+      - cartao
   /healthz:
     get:
       operationId: getHealth
@@ -1155,8 +1224,8 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "Entrada inválida, inclusive campo não declarado; \"conta nã\
             o encontrada\", \"conta arquivada\" (origem ou destino), \"contas devem\
-            \ ser diferentes\" ou \"saldo da conta fora do limite\" (em qualquer das\
-            \ duas contas)"
+            \ ser diferentes\", \"cartão não pode ser origem de transferência\" ou\
+            \ \"saldo da conta fora do limite\" (em qualquer das duas contas)"
         "401":
           content:
             application/json:
@@ -1298,6 +1367,70 @@ components:
       required:
       - email
       - senha
+    Cartao:
+      type: object
+      properties:
+        contaPagamentoId:
+          type: string
+          format: uuid
+        diaFechamento:
+          type: integer
+          format: int32
+          maximum: 31
+          minimum: 1
+        diaVencimento:
+          type: integer
+          format: int32
+          maximum: 31
+          minimum: 1
+        disponivelCentavos:
+          type: integer
+          format: int64
+          description: "Limite mais o saldo da conta, nunca acima do limite. Negativo\
+            \ quando a dívida passa do limite"
+          maximum: 9007199254740991
+          minimum: -9007199254740990
+        limiteCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real, sempre positivo"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - contaPagamentoId
+      - diaFechamento
+      - diaVencimento
+      - disponivelCentavos
+      - limiteCentavos
+    CartaoRequest:
+      type: object
+      properties:
+        contaPagamentoId:
+          type: string
+          format: uuid
+          description: "Conta corrente ou poupança ativa do usuário, de onde sai a\
+            \ fatura"
+        diaFechamento:
+          type: integer
+          format: int32
+          maximum: 31
+          minimum: 1
+        diaVencimento:
+          type: integer
+          format: int32
+          maximum: 31
+          minimum: 1
+        limiteCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real. Informativo: não bloqueia lançamento"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - contaPagamentoId
+      - diaFechamento
+      - diaVencimento
+      - limiteCentavos
     Categoria:
       type: object
       properties:
@@ -1340,6 +1473,11 @@ components:
       properties:
         arquivada:
           type: boolean
+        cartao:
+          anyOf:
+          - $ref: "#/components/schemas/Cartao"
+          - type: "null"
+          description: Dados do cartão; nulo nas contas que não são de cartão de crédito
         criadaEm:
           type: string
           format: date-time
@@ -1372,8 +1510,10 @@ components:
           - corrente
           - poupanca
           - dinheiro
+          - cartao_credito
       required:
       - arquivada
+      - cartao
       - criadaEm
       - id
       - moeda
@@ -1384,6 +1524,10 @@ components:
     CriarContaRequest:
       type: object
       properties:
+        cartao:
+          $ref: "#/components/schemas/CartaoRequest"
+          description: Obrigatório quando tipo é cartao_credito e proibido nos outros
+            tipos
         nome:
           type: string
           maxLength: 100
@@ -1400,6 +1544,7 @@ components:
           - corrente
           - poupanca
           - dinheiro
+          - cartao_credito
       required:
       - nome
       - tipo
@@ -1473,6 +1618,62 @@ components:
           type: string
       required:
       - erro
+    Fatura:
+      type: object
+      properties:
+        fechamento:
+          type: string
+          format: date
+          description: Data de fechamento
+        pagoCentavos:
+          type: integer
+          format: int64
+          description: Transferências para o cartão realizadas depois do fechamento
+            da fatura e até o da seguinte
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        restanteCentavos:
+          type: integer
+          format: int64
+          description: total menos pago; negativo quando pagou a mais
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        situacao:
+          type: string
+          enum:
+          - aberta
+          - fechada
+          - paga
+        totalCentavos:
+          type: integer
+          format: int64
+          description: Despesas menos receitas do cartão com dataCaixa no vencimento
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        vencimento:
+          type: string
+          format: date
+          description: Data de vencimento
+      required:
+      - fechamento
+      - pagoCentavos
+      - restanteCentavos
+      - situacao
+      - totalCentavos
+      - vencimento
+    Faturas:
+      type: object
+      properties:
+        contaId:
+          type: string
+          format: uuid
+        faturas:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fatura"
+      required:
+      - contaId
+      - faturas
     HealthError:
       type: object
       properties:
@@ -1600,7 +1801,8 @@ components:
         data:
           type: string
           format: date
-          description: Grava a mesma data em dataCompetencia e dataCaixa
+          description: "Grava em dataCompetencia. dataCaixa recebe a mesma data, ou\
+            \ o vencimento da fatura quando a conta é de cartão de crédito"
           example: 2026-03-10
         descricao:
           type:
@@ -1635,8 +1837,9 @@ components:
         data:
           type: string
           format: date
-          description: "Só com status realizado: data real, gravada em dataCompetencia\
-            \ e dataCaixa"
+          description: "Só com status realizado: data real, gravada em dataCompetencia;\
+            \ dataCaixa recebe a mesma data, ou o vencimento da fatura em conta de\
+            \ cartão"
           example: 2026-03-10
         status:
           type: string

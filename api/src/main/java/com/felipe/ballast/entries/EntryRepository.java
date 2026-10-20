@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 interface EntryRepository extends JpaRepository<Entry, UUID> {
 
   // Um UPDATE só, filtrado por dono e id: devolve 0 para lançamento alheio ou inexistente, sem
-  // ler a linha antes. As duas datas recebem o mesmo valor (F3).
+  // ler a linha antes. A data enviada é a competência; a caixa vem calculada (cartão, ADR-031).
   @Transactional
   @Modifying
   @Query(
@@ -20,7 +20,7 @@ interface EntryRepository extends JpaRepository<Entry, UUID> {
       update Entry e
       set e.type = :type, e.title = :title, e.description = :description,
           e.categoryId = :categoryId, e.accountId = :accountId, e.amount = :amount,
-          e.competenceDate = :date, e.cashDate = :date
+          e.competenceDate = :date, e.cashDate = :cashDate
       where e.id = :id and e.userId = :userId
       """)
   int replace(
@@ -32,7 +32,8 @@ interface EntryRepository extends JpaRepository<Entry, UUID> {
       @Param("categoryId") UUID categoryId,
       @Param("accountId") UUID accountId,
       @Param("amount") BigDecimal amount,
-      @Param("date") LocalDate date);
+      @Param("date") LocalDate date,
+      @Param("cashDate") LocalDate cashDate);
 
   @Transactional
   @Modifying

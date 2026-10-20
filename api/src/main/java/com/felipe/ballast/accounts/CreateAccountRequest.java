@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.felipe.ballast.identity.CodePointSize;
 import com.felipe.ballast.identity.NoControlCharacters;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -29,14 +30,20 @@ public record CreateAccountRequest(
             maximum = "9007199254740991")
         @Min(value = -MAX_CENTS, message = BALANCE_MESSAGE)
         @Max(value = MAX_CENTS, message = BALANCE_MESSAGE)
-        Long initialBalanceCents) {
+        Long initialBalanceCents,
+    @JsonProperty("cartao")
+        @Schema(
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+            description = "Obrigatório quando tipo é cartao_credito e proibido nos outros tipos")
+        @Valid
+        CardRequest card) {
 
   // Number.MAX_SAFE_INTEGER: acima disso o JavaScript perde o centavo (ADR-023).
   static final long MAX_CENTS = 9_007_199_254_740_991L;
 
   static final String NAME_MESSAGE =
       "nome deve ter entre 1 e 100 caracteres e não pode ter caracteres de controle";
-  static final String TYPE_MESSAGE = "tipo deve ser corrente, poupanca ou dinheiro";
+  static final String TYPE_MESSAGE = "tipo deve ser corrente, poupanca, dinheiro ou cartao_credito";
   static final String BALANCE_MESSAGE =
       "saldoInicialCentavos deve ser um inteiro entre -9007199254740991 e 9007199254740991";
 

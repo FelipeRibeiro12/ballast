@@ -1,5 +1,6 @@
 import {
   ApiError,
+  ContaInvalidaError,
   ContaNaoEncontradaError,
   EmailJaCadastradoError,
   EntradaInvalidaError,
@@ -28,6 +29,7 @@ import {
   fetchRecorrencias,
   fetchVencidos,
   fetchSaldoProjetado,
+  fetchFaturas,
   ProjecaoInvalidaError,
   patchStatusLancamento,
   postRecorrencia,
@@ -151,6 +153,7 @@ describe('rotas de contas', () => {
     saldoCentavos: 1000,
     arquivada: false,
     criadaEm: '2026-10-19T12:00:00Z',
+    cartao: null,
   }
 
   function responder(corpo: unknown, status: number): void {
@@ -191,6 +194,36 @@ describe('rotas de contas', () => {
       await expect(fetchContas(false)).rejects.toBeInstanceOf(ApiError)
     },
   )
+
+  const cartao = {
+    limiteCentavos: 500000,
+    diaFechamento: 31,
+    diaVencimento: 10,
+    contaPagamentoId: '3b1c6d52-1f0e-4c7a-8f2b-9a4d5e6f7a81',
+    disponivelCentavos: 420000,
+  }
+
+  it('fetchContas aceita conta de cartão com o objeto completo', async () => {
+    const deCartao = { ...conta, tipo: 'cartao_credito', cartao }
+    responder([deCartao], 200)
+    expect(await fetchContas(false)).toEqual([deCartao])
+  })
+
+  it.each([
+    ['cartão de crédito sem cartao', { ...conta, tipo: 'cartao_credito', cartao: null }],
+    ['corrente com cartao', { ...conta, cartao }],
+    ['sem a chave cartao', (({ cartao: _omitido, ...resto }) => resto)({ ...conta, cartao: null })],
+    ['dia de fechamento 0', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, diaFechamento: 0 } }],
+    ['dia de vencimento 32', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, diaVencimento: 32 } }],
+    ['dia fracionado', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, diaVencimento: 1.5 } }],
+    ['limite fracionado', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, limiteCentavos: 10.5 } }],
+    ['disponível em string', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, disponivelCentavos: '1' } }],
+    ['conta de pagamento não string', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, contaPagamentoId: 7 } }],
+    ['campo faltando', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, limiteCentavos: undefined } }],
+  ])('fetchContas recusa incoerência: %s', async (_nome, invalida) => {
+    responder([invalida], 200)
+    await expect(fetchContas(false)).rejects.toBeInstanceOf(ApiError)
+  })
 
   it('fetchContas recusa corpo que não é lista', async () => {
     responder(conta, 200)
@@ -830,5 +863,90 @@ describe('fetchSaldoProjetado', () => {
     const erro = await fetchSaldoProjetado(90).catch((e: unknown) => e)
     expect(erro).toBeInstanceOf(ApiError)
     expect(erro).not.toBeInstanceOf(ProjecaoInvalidaError)
+  })
+})
+
+describe('fetchFaturas', () => {
+  const contaId = '3b1c6d52-1f0e-4c7a-8f2b-9a4d5e6f7a80'
+  const fatura = {
+    vencimento: '2026-11-10',
+    fechamento: '2026-11-01',
+    totalCentavos: 15000,
+    pagoCentavos: 5000,
+    restanteCentavos: 10000,
+    situacao: 'fechada',
+  }
+  const corpo = { contaId, faturas: [fatura] }
+
+  function responder(conteudo: unknown, status: number): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(conteudo), { status, headers: { 'Content-Type': 'application/json' } }),
+        ),
+      ),
+    )
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('pede o intervalo por vencimento e lê as faturas', async () => {
+    responder(corpo, 200)
+    expect(await fetchFaturas(contaId, '2026-07-01', '2027-04-30')).toEqual(corpo)
+    expect(fetch).toHaveBeenCalledWith(`/contas/${contaId}/faturas?de=2026-07-01&ate=2027-04-30`, {
+      credentials: 'same-origin',
+    })
+  })
+
+  it('aceita total e restante negativos (estorno e pagamento a mais)', async () => {
+    const negativa = { ...fatura, totalCentavos: -300, restanteCentavos: -300, pagoCentavos: 0, situacao: 'paga' }
+    responder({ contaId, faturas: [negativa] }, 200)
+    expect((await fetchFaturas(contaId, '2026-07-01', '2027-04-30')).faturas).toEqual([negativa])
+  })
+
+  it('aceita lista vazia', async () => {
+    responder({ contaId, faturas: [] }, 200)
+    expect((await fetchFaturas(contaId, '2026-07-01', '2027-04-30')).faturas).toEqual([])
+  })
+
+  it.each([
+    ['situacao desconhecida', { ...fatura, situacao: 'vencida' }],
+    ['situacao ausente', { ...fatura, situacao: undefined }],
+    ['total decimal', { ...fatura, totalCentavos: 1.5 }],
+    ['pago em texto', { ...fatura, pagoCentavos: '0' }],
+    ['restante fora do inteiro seguro', { ...fatura, restanteCentavos: 2 ** 60 }],
+    ['vencimento fora do formato', { ...fatura, vencimento: '10/11/2026' }],
+    ['fechamento ausente', { ...fatura, fechamento: undefined }],
+  ])('recusa fatura fora do contrato: %s', async (_nome, invalida) => {
+    responder({ contaId, faturas: [invalida] }, 200)
+    await expect(fetchFaturas(contaId, '2026-07-01', '2027-04-30')).rejects.toThrow(/formato inesperado/)
+  })
+
+  it.each([
+    ['sem contaId', { faturas: [fatura] }],
+    ['faturas que não é lista', { contaId, faturas: {} }],
+    ['corpo que é lista', []],
+  ])('recusa corpo fora do contrato: %s', async (_nome, invalido) => {
+    responder(invalido, 200)
+    await expect(fetchFaturas(contaId, '2026-07-01', '2027-04-30')).rejects.toThrow(/formato inesperado/)
+  })
+
+  it('mapeia 400, 401, 404, 503 e o resto em erros tipados', async () => {
+    responder({ erro: 'fatura fora do limite' }, 400)
+    await expect(fetchFaturas(contaId, 'a', 'b')).rejects.toBeInstanceOf(ContaInvalidaError)
+    await expect(fetchFaturas(contaId, 'a', 'b')).rejects.toMatchObject({ mensagemServidor: 'fatura fora do limite' })
+    responder({ erro: 'x' }, 401)
+    await expect(fetchFaturas(contaId, 'a', 'b')).rejects.toBeInstanceOf(SessaoExpiradaError)
+    responder({ erro: 'conta não encontrada' }, 404)
+    await expect(fetchFaturas(contaId, 'a', 'b')).rejects.toBeInstanceOf(ContaNaoEncontradaError)
+    responder({ erro: 'x' }, 503)
+    await expect(fetchFaturas(contaId, 'a', 'b')).rejects.toBeInstanceOf(ServicoIndisponivelError)
+    responder({ erro: 'x' }, 500)
+    const erro = await fetchFaturas(contaId, 'a', 'b').catch((e: unknown) => e)
+    expect(erro).toBeInstanceOf(ApiError)
+    expect(erro).not.toBeInstanceOf(ContaInvalidaError)
   })
 })

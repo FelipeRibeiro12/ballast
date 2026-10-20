@@ -37,6 +37,8 @@ class TransferController {
   private static final ErrorResponse ACCOUNT_ARCHIVED = new ErrorResponse("conta arquivada");
   private static final ErrorResponse SAME_ACCOUNT =
       new ErrorResponse("contas devem ser diferentes");
+  private static final ErrorResponse CARD_AS_ORIGIN =
+      new ErrorResponse("cartão não pode ser origem de transferência");
   private static final ErrorResponse BALANCE_OUT_OF_RANGE =
       new ErrorResponse("saldo da conta fora do limite");
 
@@ -62,8 +64,9 @@ class TransferController {
       responseCode = "400",
       description =
           "Entrada inválida, inclusive campo não declarado; \"conta não encontrada\","
-              + " \"conta arquivada\" (origem ou destino), \"contas devem ser diferentes\" ou"
-              + " \"saldo da conta fora do limite\" (em qualquer das duas contas)",
+              + " \"conta arquivada\" (origem ou destino), \"contas devem ser diferentes\","
+              + " \"cartão não pode ser origem de transferência\" ou \"saldo da conta fora do"
+              + " limite\" (em qualquer das duas contas)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -109,6 +112,7 @@ class TransferController {
       case ACCOUNT_NOT_FOUND -> ResponseEntity.badRequest().body(ACCOUNT_NOT_FOUND);
       case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
       case SAME_ACCOUNT -> ResponseEntity.badRequest().body(SAME_ACCOUNT);
+      case CARD_AS_ORIGIN -> ResponseEntity.badRequest().body(CARD_AS_ORIGIN);
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
     };
   }

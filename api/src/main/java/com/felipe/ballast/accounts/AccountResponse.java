@@ -25,7 +25,12 @@ public record AccountResponse(
             maximum = "9007199254740991")
         long saldoCentavos,
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED) boolean arquivada,
-    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant criadaEm) {
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant criadaEm,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description = "Dados do cartão; nulo nas contas que não são de cartão de crédito")
+        CardResponse cartao) {
 
   // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
   // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
@@ -38,7 +43,8 @@ public record AccountResponse(
         toCents(summary.initialBalance()),
         toCents(summary.balance()),
         summary.archived(),
-        summary.createdAt());
+        summary.createdAt(),
+        summary.card() == null ? null : CardResponse.from(summary.card(), summary.balance()));
   }
 
   private static long toCents(BigDecimal amount) {

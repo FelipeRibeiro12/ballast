@@ -37,7 +37,9 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
   lançamento é serializada por conta (ADR-024): depois que o `PATCH` de arquivar
   respondeu 200, nenhum lançamento novo entra na conta.
 - O corpo do lançamento recebe uma `data` e a API grava a mesma em
-  `dataCompetencia` e `dataCaixa`. Campo não declarado dá 400.
+  `dataCompetencia` e `dataCaixa`, menos em conta de cartão de crédito, onde a
+  `dataCaixa` é o vencimento da fatura (ver Cartão de crédito). Campo não
+  declarado dá 400.
 
 ## Transferência (ADR-025)
 
@@ -53,7 +55,9 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
 - Recusas do `POST`, todas 400 sem gravar nada: `conta não encontrada` (origem
   ou destino inexistente, de outro usuário ou id inválido, a mesma mensagem
   para os dois), `conta arquivada` (origem ou destino), `contas devem ser
-  diferentes` e `saldo da conta fora do limite` (qualquer das duas contas). O
+  diferentes`, `cartão não pode ser origem de transferência` (origem em conta de
+  cartão; o cartão só entra como destino, para pagar a fatura, vindo de qualquer
+  conta do usuário) e `saldo da conta fora do limite` (qualquer das duas contas). O
   `DELETE` dá 400 `saldo da conta fora do limite` se tirar uma das contas da
   faixa.
 - Cada transferência são dois lançamentos com `tipo` `transferencia` (as
@@ -187,7 +191,8 @@ apagar uma ocorrência (seção no fim).
   "data"?}`, os dois opcionais. `valorCentavos` é inteiro de 1 a
   9007199254740991 e `data` é `AAAA-MM-DD` estrito com ano de 1900 a 2199, as
   mesmas regras e mensagens do `POST /lancamentos`; inválido dá 400 e nada muda.
-  A `data` vale para `dataCompetencia` e `dataCaixa`. Valor e data entram na mesma
+  A `data` vale para `dataCompetencia` e `dataCaixa` (em conta de cartão, a
+  `dataCaixa` é recalculada pelo vencimento). Valor e data entram na mesma
   transação da confirmação e o teto do saldo é conferido com o valor novo. A
   ocorrência sai do mês antigo da lista e aparece no novo. A chave da regra
   (`ocorrencia_data`, que a API não expõe) não muda, então o job não recria a
@@ -287,3 +292,81 @@ entra no saldo, confirmar dá 400 `conta arquivada` e cancelar funciona.
   corpo. Sem sessão, 401. Banco fora, 503.
 - Qualquer valor da resposta fora de ±9007199254740991 centavos (só acontece
   somando várias contas perto do teto) dá 400 `projeção fora do limite`.
+
+## Cartão de crédito (ADR-031)
+
+- `POST /contas` com `tipo` `cartao_credito` exige `cartao`:
+  `{"limiteCentavos" (1 a 9007199254740991), "diaFechamento" (1 a 31),
+  "diaVencimento" (1 a 31), "contaPagamentoId"}`. Campo fora do esperado, número
+  decimal ou campo faltando dá 400. `saldoInicialCentavos` do cartão é a dívida
+  que já existia, em geral negativa. Conta e cartão nascem na mesma transação.
+- 400 sem gravar nada: `cartao é obrigatório para conta de cartão de crédito`
+  (cartão sem o campo), `cartao só vale para conta de cartão de crédito` (outro
+  tipo com o campo), `conta de pagamento não encontrada` (inexistente, de outro
+  usuário ou id que não é UUID, a mesma mensagem) e `conta de pagamento deve ser
+  uma conta corrente ou poupança ativa` (cartão, dinheiro ou arquivada).
+- `Conta` (`POST`, `GET /contas`, `GET /contas/{id}`, `PATCH`) ganha `cartao`,
+  sempre presente e `null` fora de cartão: `{limiteCentavos, diaFechamento,
+  diaVencimento, contaPagamentoId, disponivelCentavos}`. A guarda de tipo do
+  cliente precisa aceitar `cartao` anulável e `tipo` `cartao_credito`.
+- `disponivelCentavos` é o limite mais o saldo da conta, **limitado ao
+  limite**: saldo positivo (fatura paga a mais) não passa dele. Negativo quando
+  a dívida passa do limite. O limite não bloqueia lançamento.
+- Fechamento, vencimento, limite e conta de pagamento não se editam na F10:
+  corrigir é arquivar o cartão e criar outro. Arquivar a conta de pagamento é
+  permitido e o cartão continua apontando para ela; pagar a fatura a partir
+  dela passa a dar 400 `conta arquivada` até desarquivar ou pagar por outra.
+- Em conta de cartão, a `data` de `POST` e `PUT /lancamentos` é a da compra:
+  `dataCompetencia` recebe a data e `dataCaixa` recebe o vencimento da fatura
+  (regra em `docs/contracts/dados.md`). Vale para despesa e receita (estorno).
+  `PUT` que move o lançamento de ou para cartão recalcula a `dataCaixa`.
+  `PATCH` realizado com `data` numa prevista de cartão grava a data em
+  `dataCompetencia` e recalcula a `dataCaixa`; sem `data`, as duas ficam.
+- Recorrência e divisão em conta de cartão: a ocorrência fica na data gerada
+  (competência e chave da regra) e a `dataCaixa` é o vencimento. O horizonte, o
+  `fim` e o filtro de desativar seguem a data gerada. `proximaOcorrencia` e
+  `GET /lancamentos/vencidos` seguem a `dataCaixa`, então numa ocorrência de
+  cartão mostram o vencimento.
+- Transferência de ou para conta de cartão (pagar a fatura) não segue a regra:
+  as duas datas são a data informada. `POST /transferencias` aceita o cartão
+  só como destino (pagamento), vindo de qualquer conta do usuário; como origem
+  dá 400 `cartão não pode ser origem de transferência`.
+- `GET /lancamentos` filtra por `dataCaixa`, então uma compra de cartão aparece
+  no mês do vencimento, não no da compra. Não existe filtro por competência
+  nessa rota (dívida: parâmetro `por=competencia`, para ver as compras do mês).
+- `GET /saldo-projetado` não muda: a saída do cartão aparece no vencimento.
+### Faturas (`GET /contas/{id}/faturas`)
+
+- `GET /contas/{id}/faturas?de=AAAA-MM-DD&ate=AAAA-MM-DD` responde 200
+  `{"contaId", "faturas": [{"vencimento", "fechamento", "totalCentavos",
+  "pagoCentavos", "restanteCentavos", "situacao"}]}`. `de` e `ate` são
+  obrigatórios, com as mesmas regras e mensagens de `GET /lancamentos` (ISO
+  estrito, ano 1900 a 2199, `de` menor ou igual a `ate`, no máximo 366 dias
+  contando as pontas).
+- Lista **toda fatura cujo vencimento cai no intervalo**, ordenada por
+  vencimento, inclusive as sem compra (total, pago e restante 0), para a tela
+  mostrar o ciclo inteiro. `fechamento` é a data em que aquela fatura fecha.
+- `totalCentavos`: despesas menos receitas (estorno) da conta com `dataCaixa`
+  igual ao vencimento, `previsto` ou `realizado`; `cancelado` fica fora, e as
+  pernas de transferência também. Pode ser negativo.
+- `pagoCentavos`: transferências **realizadas** com destino no cartão, de
+  qualquer conta do usuário (não só a de pagamento), e
+  `dataCaixa` depois do fechamento desta fatura e até o fechamento da seguinte,
+  inclusive. Assim o pagamento atrasado (depois do vencimento, antes do próximo
+  fechamento) continua na fatura que venceu. Pagamento feito antes do
+  fechamento conta na fatura **anterior**, a que já fechou; não existe
+  "pagamento antecipado" da fatura aberta. O fechamento da seguinte é o do ciclo
+  do cartão, mesmo que caia depois de `ate`.
+- `restanteCentavos` é `totalCentavos` menos `pagoCentavos`; fica negativo
+  quando se pagou a mais.
+- `situacao` depende só da data e do restante: `aberta` se hoje
+  (`America/Sao_Paulo`) é até o dia do fechamento, inclusive; depois do
+  fechamento, `fechada` com restante maior que zero e `paga` com restante menor
+  ou igual a zero. Fatura sem compra já fechada é `paga`.
+- Todo valor fica em ±9007199254740991; se algum sair disso, 400 `fatura fora do
+  limite`.
+- 404 com o mesmo corpo `{"erro":"não encontrado"}` para conta de outro
+  usuário, inexistente, id que não é UUID canônico e conta do usuário que não é
+  cartão. 401 sem sessão. 503 com o banco fora.
+- Pagar a fatura continua sendo `POST /transferencias` da conta de pagamento
+  para o cartão; o web preenche valor com o restante e data com o vencimento.

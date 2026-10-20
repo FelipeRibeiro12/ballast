@@ -11,15 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F10 — Cartão de crédito
-Conta tipo cartão, fechamento e vencimento, cálculo de `data_caixa`, fatura
-agrupada, pagamento como transferência.
-Teste obrigatório: fechamento dia 31 em fevereiro, vencimento menor que
-fechamento, compra no dia do fechamento.
-Atenção: o confirmar com ajuste da F7 grava a `data` nas duas datas. Com
-cartão, a prevista tem competência e caixa diferentes; confirmar com data tem
-de mexer só na caixa, ou o gráfico por categoria erra (revisão do PR #12).
-
 ### F11 — Compra parcelada
 N lançamentos ligados por `parcela_de_id`, mesma competência, caixa avançando.
 Editar ou cancelar a compra inteira versus uma parcela só.
@@ -149,6 +140,9 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Parâmetro de query não declarado é ignorado em silêncio em todas as listagens: `?contaid=` (caixa errada) devolve o resultado sem filtro, com 200 (QA da F8, S1). Recusar parâmetro desconhecido com 400, como já se faz com campo de corpo. Dono: backend, numa fatia de endurecimento ou na F20.5.
 - **DÍVIDA** — O saldo projetado e o saldo de `/contas` leem todo o histórico de lançamentos do usuário a cada chamada, porque o realizado vale em qualquer data (revisão e auditoria do PR #13). Hoje ~21 ms com 20 mil lançamentos. Medir com anos de histórico e, se doer, saldo base materializado com ADR (CLAUDE.md, "Saldo não é coluna") ou índice por `(usuario_id, conta_id, data_caixa)`. Dono: dba, quando o volume real passar de 100 mil lançamentos por usuário.
 - **DÍVIDA** — Na hospedagem do PWA, servir `/sw.js` com `Cache-Control: no-cache` (e HTTPS, sem o qual o service worker não registra); senão uma versão velha do worker demora a ser trocada (auditoria do PR #15). Dono: devops, na escolha da hospedagem.
+- **DÍVIDA** — `GET /lancamentos` filtra só por `data_caixa`, então a compra no cartão aparece no mês do vencimento (F10). Falta ver por competência ("o que comprei no mês"), com um parâmetro como `por=competencia` e o índice correspondente medido. Dono: backend e frontend, na fatia de gráfico por categoria, que usa competência.
+- **DÍVIDA** — Cartão com fechamento e vencimento em 29/30, 29/31 ou 30/31: em fevereiro de ano comum os dois caem no dia 28, e o pagamento feito no vencimento conta na fatura anterior, porque a janela do pago começa depois do fechamento (revisão do PR #16). Tratar a ponta (vencimento igual ao fechamento conta na própria fatura) ou o web preencher o dia seguinte. Dono: backend, na F11, que mexe na regra da fatura.
+- **DÍVIDA** — "Cartão nunca é origem de transferência" é só regra da aplicação; o banco aceitaria uma perna de saída em cartão (auditoria do PR #16). Garantir por FK composta com o tipo, como a V10 fez para a conta de pagamento. Dono: dba, na próxima migration que mexer em transferência.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

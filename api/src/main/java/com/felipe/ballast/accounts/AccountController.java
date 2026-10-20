@@ -41,6 +41,18 @@ class AccountController {
   private static final ErrorResponse NAME_TAKEN =
       new ErrorResponse("já existe uma conta com esse nome");
 
+  private static final ErrorResponse CARD_REQUIRED =
+      new ErrorResponse("cartao é obrigatório para conta de cartão de crédito");
+
+  private static final ErrorResponse CARD_NOT_ALLOWED =
+      new ErrorResponse("cartao só vale para conta de cartão de crédito");
+
+  private static final ErrorResponse PAYMENT_ACCOUNT_NOT_FOUND =
+      new ErrorResponse("conta de pagamento não encontrada");
+
+  private static final ErrorResponse PAYMENT_ACCOUNT_NOT_ELIGIBLE =
+      new ErrorResponse("conta de pagamento deve ser uma conta corrente ou poupança ativa");
+
   private static final ErrorResponse INVALID_ARCHIVED_FILTER =
       new ErrorResponse("arquivadas deve ser true ou false");
 
@@ -60,7 +72,10 @@ class AccountController {
       content = @Content(schema = @Schema(implementation = AccountResponse.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "Entrada inválida, inclusive campo não declarado",
+      description =
+          "Entrada inválida, inclusive campo não declarado, cartao fora de conta de cartão (ou"
+              + " ausente nela) e conta de pagamento inexistente, de outro usuário, arquivada ou"
+              + " de tipo que não paga cartão",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -89,15 +104,50 @@ class AccountController {
   ResponseEntity<?> create(
       @AuthenticationPrincipal AuthenticatedUser user,
       @Valid @RequestBody CreateAccountRequest request) {
-    Optional<AccountSummary> created =
-        accounts.create(user.id(), request.name(), request.type(), request.initialBalance());
-    if (created.isEmpty()) {
-      // Sem o nome no log: é dado do usuário e o motivo da recusa já está na mensagem.
-      log.warn("conta recusada: nome repetido usuario_id={}", user.id());
-      return ResponseEntity.status(HttpStatus.CONFLICT).body(NAME_TAKEN);
+    boolean isCard = request.type() == AccountType.CREDIT_CARD;
+    if (isCard && request.card() == null) {
+      return ResponseEntity.badRequest().body(CARD_REQUIRED);
     }
-    log.info("conta criada usuario_id={} conta_id={}", user.id(), created.get().id());
-    return ResponseEntity.status(HttpStatus.CREATED).body(AccountResponse.from(created.get()));
+    if (!isCard && request.card() != null) {
+      return ResponseEntity.badRequest().body(CARD_NOT_ALLOWED);
+    }
+    AccountService.CreateResult result =
+        accounts.create(
+            user.id(),
+            request.name(),
+            request.type(),
+            request.initialBalance(),
+            cardInput(request.card()));
+    return switch (result) {
+      case AccountService.CreateResult.Created created -> {
+        log.info("conta criada usuario_id={} conta_id={}", user.id(), created.account().id());
+        yield ResponseEntity.status(HttpStatus.CREATED)
+            .body(AccountResponse.from(created.account()));
+      }
+      case AccountService.CreateResult.Rejected rejected -> {
+        // Sem o nome no log: é dado do usuário e o motivo da recusa já está na mensagem.
+        log.warn("conta recusada: motivo={} usuario_id={}", rejected, user.id());
+        yield switch (rejected) {
+          case NAME_TAKEN -> ResponseEntity.status(HttpStatus.CONFLICT).body(NAME_TAKEN);
+          case PAYMENT_ACCOUNT_NOT_FOUND ->
+              ResponseEntity.badRequest().body(PAYMENT_ACCOUNT_NOT_FOUND);
+          case PAYMENT_ACCOUNT_NOT_ELIGIBLE ->
+              ResponseEntity.badRequest().body(PAYMENT_ACCOUNT_NOT_ELIGIBLE);
+        };
+      }
+    };
+  }
+
+  // O texto de contaPagamentoId que não é UUID vira nulo, e o serviço responde "não encontrada".
+  private static CardInput cardInput(CardRequest card) {
+    if (card == null) {
+      return null;
+    }
+    return new CardInput(
+        card.limit(),
+        card.closingDay(),
+        card.dueDay(),
+        CanonicalUuid.parse(card.paymentAccountId()).orElse(null));
   }
 
   @Operation(

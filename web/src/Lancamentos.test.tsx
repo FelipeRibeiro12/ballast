@@ -15,6 +15,7 @@ function conta(sobra: Partial<Record<string, unknown>> = {}): Record<string, unk
     saldoCentavos: 100000,
     arquivada: false,
     criadaEm: '2026-10-19T12:00:00Z',
+    cartao: null,
     ...sobra,
   }
 }
@@ -104,6 +105,7 @@ const transferenciaCriada = {
   saidaId: 'p1',
   entradaId: 'p2',
   criadaEm: '2026-10-19T12:00:00Z',
+  cartao: null,
 }
 
 function jsonResponse(corpo: unknown, status: number): Response {
@@ -227,6 +229,19 @@ describe('Lancamentos', () => {
     expect(area.getByText('Receitas').nextSibling).toHaveTextContent(texto('R$ 5.000,00'))
     expect(area.getByText('Despesas').nextSibling).toHaveTextContent(texto('R$ 123,45'))
     expect(area.getByText('Resultado').nextSibling).toHaveTextContent(texto('R$ 4.876,55'))
+  })
+
+  it('mostra a data da compra só quando competência e caixa diferem', async () => {
+    mockFetch({
+      ...base,
+      [MES_ATUAL]: responde([
+        lancamento({ id: 'a', titulo: 'Notebook', dataCompetencia: '2026-09-28', dataCaixa: '2026-10-10' }),
+        lancamento({ id: 'b', titulo: 'Feira' }),
+      ]),
+    })
+    render(<App />)
+    expect(await screen.findByText('compra em 28/09')).toBeVisible()
+    expect(screen.getAllByText(/compra em/)).toHaveLength(1)
   })
 
   it('mostra o mês corrente pela data local, mesmo às 23h30', async () => {

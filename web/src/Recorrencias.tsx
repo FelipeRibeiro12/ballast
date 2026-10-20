@@ -312,6 +312,9 @@ function FormularioDeRecorrencia({
             </option>
           ))}
         </select>
+        {contas.find((c) => c.id === contaId)?.cartao != null && (
+          <small>As ocorrências entram na fatura de cada mês.</small>
+        )}
       </div>
       <div className="campo">
         <label htmlFor="recorrencia-descricao">Descrição (opcional)</label>

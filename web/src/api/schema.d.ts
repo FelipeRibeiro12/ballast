@@ -143,6 +143,26 @@ export interface paths {
         patch: operations["patchContasById"];
         trace?: never;
     };
+    "/contas/{id}/faturas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as faturas de um cartão por vencimento
+         * @description Todas as faturas com vencimento entre de e ate (pontas incluídas, no máximo 366 dias), em ordem de vencimento, inclusive as sem compra. pago soma as transferências realizadas para o cartão depois do fechamento da fatura e até o fechamento da seguinte, inclusive; pagamento feito antes do fechamento conta na fatura anterior. situacao é aberta até o dia do fechamento (inclusive, em America/Sao_Paulo), só pela data; depois dele, fechada com restante maior que zero e paga com restante menor ou igual a zero.
+         */
+        get: operations["getContasByIdFaturas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -348,6 +368,40 @@ export interface components {
             nome?: string;
             senha: string;
         };
+        Cartao: {
+            /** Format: uuid */
+            contaPagamentoId: string;
+            /** Format: int32 */
+            diaFechamento: number;
+            /** Format: int32 */
+            diaVencimento: number;
+            /**
+             * Format: int64
+             * @description Limite mais o saldo da conta, nunca acima do limite. Negativo quando a dívida passa do limite
+             */
+            disponivelCentavos: number;
+            /**
+             * Format: int64
+             * @description Centavos de real, sempre positivo
+             */
+            limiteCentavos: number;
+        };
+        CartaoRequest: {
+            /**
+             * Format: uuid
+             * @description Conta corrente ou poupança ativa do usuário, de onde sai a fatura
+             */
+            contaPagamentoId: string;
+            /** Format: int32 */
+            diaFechamento: number;
+            /** Format: int32 */
+            diaVencimento: number;
+            /**
+             * Format: int64
+             * @description Centavos de real. Informativo: não bloqueia lançamento
+             */
+            limiteCentavos: number;
+        };
         Categoria: {
             cor: string | null;
             icone: string | null;
@@ -361,6 +415,8 @@ export interface components {
         };
         Conta: {
             arquivada: boolean;
+            /** @description Dados do cartão; nulo nas contas que não são de cartão de crédito */
+            cartao: components["schemas"]["Cartao"] | null;
             /** Format: date-time */
             criadaEm: string;
             /** Format: uuid */
@@ -379,9 +435,11 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito";
         };
         CriarContaRequest: {
+            /** @description Obrigatório quando tipo é cartao_credito e proibido nos outros tipos */
+            cartao?: components["schemas"]["CartaoRequest"];
             nome: string;
             /**
              * Format: int64
@@ -389,7 +447,7 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito";
         };
         DiaProjetado: {
             /** Format: date */
@@ -423,6 +481,40 @@ export interface components {
         };
         Erro: {
             erro: string;
+        };
+        Fatura: {
+            /**
+             * Format: date
+             * @description Data de fechamento
+             */
+            fechamento: string;
+            /**
+             * Format: int64
+             * @description Transferências para o cartão realizadas depois do fechamento da fatura e até o da seguinte
+             */
+            pagoCentavos: number;
+            /**
+             * Format: int64
+             * @description total menos pago; negativo quando pagou a mais
+             */
+            restanteCentavos: number;
+            /** @enum {string} */
+            situacao: "aberta" | "fechada" | "paga";
+            /**
+             * Format: int64
+             * @description Despesas menos receitas do cartão com dataCaixa no vencimento
+             */
+            totalCentavos: number;
+            /**
+             * Format: date
+             * @description Data de vencimento
+             */
+            vencimento: string;
+        };
+        Faturas: {
+            /** Format: uuid */
+            contaId: string;
+            faturas: components["schemas"]["Fatura"][];
         };
         HealthError: {
             erro: string;
@@ -491,7 +583,7 @@ export interface components {
             contaId: string;
             /**
              * Format: date
-             * @description Grava a mesma data em dataCompetencia e dataCaixa
+             * @description Grava em dataCompetencia. dataCaixa recebe a mesma data, ou o vencimento da fatura quando a conta é de cartão de crédito
              * @example 2026-03-10
              */
             data: string;
@@ -508,7 +600,7 @@ export interface components {
         LancamentoStatusRequest: {
             /**
              * Format: date
-             * @description Só com status realizado: data real, gravada em dataCompetencia e dataCaixa
+             * @description Só com status realizado: data real, gravada em dataCompetencia; dataCaixa recebe a mesma data, ou o vencimento da fatura em conta de cartão
              * @example 2026-03-10
              */
             data?: string;
@@ -1134,7 +1226,7 @@ export interface operations {
                     "application/json": components["schemas"]["Conta"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado */
+            /** @description Entrada inválida, inclusive campo não declarado, cartao fora de conta de cartão (ou ausente nela) e conta de pagamento inexistente, de outro usuário, arquivada ou de tipo que não paga cartão */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1309,6 +1401,67 @@ export interface operations {
                 };
             };
             /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getContasByIdFaturas: {
+        parameters: {
+            query: {
+                de: string;
+                ate: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Faturas do período */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Faturas"];
+                };
+            };
+            /** @description de ou ate ausente ou fora do formato AAAA-MM-DD (ano de 1900 a 2199), de depois de ate, intervalo maior que 366 dias ou "fatura fora do limite" (algum valor sairia de ±9007199254740991 centavos) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário, inexistente, id que não é UUID ou conta que não é cartão; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2091,7 +2244,7 @@ export interface operations {
                     "application/json": components["schemas"]["Transferencia"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada" (origem ou destino), "contas devem ser diferentes" ou "saldo da conta fora do limite" (em qualquer das duas contas) */
+            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada" (origem ou destino), "contas devem ser diferentes", "cartão não pode ser origem de transferência" ou "saldo da conta fora do limite" (em qualquer das duas contas) */
             400: {
                 headers: {
                     [name: string]: unknown;

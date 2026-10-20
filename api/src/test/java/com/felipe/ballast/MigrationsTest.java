@@ -53,12 +53,20 @@ class MigrationsTest {
             .query(String.class)
             .list();
 
-    assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9");
+    assertThat(versions).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10");
   }
 
   @Test
   void rejectsTipoOutsideTheAllowedList() {
     assertConstraint("conta_tipo_valido", insertConta(newUsuario(), "A", "cripto", "BRL", "0"));
+  }
+
+  @Test
+  void acceptsCartaoCreditoAndStillRejectsBeneficioAndCripto() {
+    assertThat(insertConta(newUsuario(), "Cartão", "cartao_credito", "BRL", "0").update())
+        .isEqualTo(1);
+    assertConstraint("conta_tipo_valido", insertConta(newUsuario(), "A", "beneficio", "BRL", "0"));
+    assertConstraint("conta_tipo_valido", insertConta(newUsuario(), "B", "cripto", "BRL", "0"));
   }
 
   @Test

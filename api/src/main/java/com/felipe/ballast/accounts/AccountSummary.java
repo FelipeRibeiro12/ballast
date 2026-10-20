@@ -14,4 +14,9 @@ record AccountSummary(
     BigDecimal initialBalance,
     BigDecimal balance,
     boolean archived,
-    Instant createdAt) {}
+    Instant createdAt,
+    CardSummary card) {
+
+  // Nulo fora de conta de cartão.
+  record CardSummary(BigDecimal limit, int closingDay, int dueDay, UUID paymentAccountId) {}
+}

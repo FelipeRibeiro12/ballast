@@ -82,6 +82,19 @@ class EntryQueries {
         .optional();
   }
 
+  // Fechamento e vencimento do cartão da conta; vazio quando a conta não é de cartão. Os dois dias
+  // não mudam depois que o cartão nasce (ADR-031), então não precisa travar nada para ler.
+  Optional<CardBilling> findCardBilling(UUID userId, UUID accountId) {
+    return jdbc.sql(
+            "SELECT dia_fechamento, dia_vencimento FROM cartao"
+                + " WHERE usuario_id = :userId AND conta_id = :id")
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(
+            (rs, row) -> new CardBilling(rs.getInt("dia_fechamento"), rs.getInt("dia_vencimento")))
+        .optional();
+  }
+
   record LockedEntry(UUID accountId, String status, UUID templateId) {}
 
   // Trava o lançamento do dono e devolve onde ele está agora. Vazio para lançamento alheio ou
@@ -105,21 +118,28 @@ class EntryQueries {
   // Só sai de previsto. desgarrado acompanha para a ocorrência de template: confirmar ou cancelar
   // é o usuário assumindo a linha, e a marca fica certa mesmo que alguém passe a apagar por status.
   // Valor e data nulos mantêm o que está gravado; ocorrencia_data nunca entra aqui, a chave da
-  // regra continua a original. O CAST dá tipo ao parâmetro nulo.
+  // regra continua a original. A data vira a competência e cashDate vira a caixa (igual à data fora
+  // de cartão, o vencimento da fatura em cartão). O CAST dá tipo ao parâmetro nulo.
   int changeStatus(
-      UUID userId, UUID entryId, TargetStatus target, BigDecimal amount, LocalDate date) {
+      UUID userId,
+      UUID entryId,
+      TargetStatus target,
+      BigDecimal amount,
+      LocalDate date,
+      LocalDate cashDate) {
     return jdbc.sql(
             """
             UPDATE lancamento
             SET status = :status, desgarrado = (template_id IS NOT NULL),
                 valor = COALESCE(CAST(:amount AS numeric), valor),
                 data_competencia = COALESCE(CAST(:date AS date), data_competencia),
-                data_caixa = COALESCE(CAST(:date AS date), data_caixa)
+                data_caixa = COALESCE(CAST(:cashDate AS date), data_caixa)
             WHERE usuario_id = :userId AND id = :id AND status = 'previsto'
             """)
         .param("status", target.value())
         .param("amount", amount)
         .param("date", date)
+        .param("cashDate", cashDate)
         .param("userId", userId)
         .param("id", entryId)
         .update();

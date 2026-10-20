@@ -7,7 +7,8 @@ import com.fasterxml.jackson.annotation.JsonValue;
 public enum AccountType {
   CHECKING("corrente"),
   SAVINGS("poupanca"),
-  CASH("dinheiro");
+  CASH("dinheiro"),
+  CREDIT_CARD("cartao_credito");
 
   private final String value;
 

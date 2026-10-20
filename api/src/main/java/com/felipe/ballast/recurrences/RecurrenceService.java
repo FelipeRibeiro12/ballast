@@ -1,5 +1,6 @@
 package com.felipe.ballast.recurrences;
 
+import com.felipe.ballast.entries.CardBilling;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -111,7 +112,14 @@ class RecurrenceService {
     }
     LocalDate today = today();
     int materialized =
-        materializeAhead(userId, templateId, input.rule(), input.amount(), input.division(), today);
+        materializeAhead(
+            userId,
+            templateId,
+            input.accountId(),
+            input.rule(),
+            input.amount(),
+            input.division(),
+            today);
     return queries
         .find(userId, templateId, today)
         .<CreateResult>map(found -> new CreateResult.Created(found, materialized))
@@ -170,6 +178,7 @@ class RecurrenceService {
               return materializeAhead(
                   userId,
                   templateId,
+                  template.get().accountId(),
                   template.get().rule(),
                   template.get().amount(),
                   template.get().division(),
@@ -185,17 +194,21 @@ class RecurrenceService {
   private int materializeAhead(
       UUID userId,
       UUID templateId,
+      UUID accountId,
       RecurrenceRule rule,
       BigDecimal amount,
       Division division,
       LocalDate today) {
+    Optional<CardBilling> card = queries.findCardBilling(userId, accountId);
     LocalDate from = rule.start().isAfter(today) ? rule.start() : today;
     LocalDate to = today.plusMonths(HORIZON_MONTHS);
     List<RecurrenceQueries.NewOccurrence> occurrences;
     if (division == null) {
       occurrences =
           RecurrenceSchedule.occurrences(rule, from, to).stream()
-              .map(date -> new RecurrenceQueries.NewOccurrence(date, null, null))
+              .map(
+                  date ->
+                      new RecurrenceQueries.NewOccurrence(date, cashDate(card, date), null, null))
               .toList();
     } else {
       List<BigDecimal> amounts = SalarySplit.amounts(amount, division);
@@ -205,10 +218,19 @@ class RecurrenceService {
               .map(
                   parcel ->
                       new RecurrenceQueries.NewOccurrence(
-                          parcel.date(), parcel.order(), amounts.get(parcel.order() - 1)))
+                          parcel.date(),
+                          cashDate(card, parcel.date()),
+                          parcel.order(),
+                          amounts.get(parcel.order() - 1)))
               .toList();
     }
     return queries.insertOccurrences(userId, templateId, occurrences);
+  }
+
+  // Em conta de cartão a ocorrência fica na data gerada e a caixa vai para o vencimento da fatura
+  // (ADR-031). O horizonte e a chave da regra continuam pela data gerada.
+  private static LocalDate cashDate(Optional<CardBilling> card, LocalDate date) {
+    return card.map(billing -> billing.dueDate(date)).orElse(date);
   }
 
   private LocalDate today() {

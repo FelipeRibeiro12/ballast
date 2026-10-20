@@ -2,7 +2,7 @@
 
 App de controle financeiro pessoal: fiat e cripto no mesmo lugar, com recorrência, cartão de crédito parcelado, metas e projeção de saldo.
 
-Hoje existem cadastro, login, logout, contas (criar, listar, arquivar), lançamentos realizados de receita e despesa, com categorias semeadas, transferência entre contas e recorrência (diária, semanal, mensal e anual, materializada 12 meses à frente) com divisão de salário em vários dias do mês, com saldo calculado, e o saldo projetado dia a dia pela data de caixa. Isso fecha o MVP. O web é instalável como app (PWA) no Android, no iOS e no desktop. Cartão de crédito e os demais módulos ainda não existem.
+Hoje existem cadastro, login, logout, contas (criar, listar, arquivar), lançamentos realizados de receita e despesa, com categorias semeadas, transferência entre contas e recorrência (diária, semanal, mensal e anual, materializada 12 meses à frente) com divisão de salário em vários dias do mês, com saldo calculado, e o saldo projetado dia a dia pela data de caixa. Isso fecha o MVP. O web é instalável como app (PWA) no Android, no iOS e no desktop, e há cartão de crédito com faturas. Compra parcelada, metas, orçamento e cripto ainda não existem.
 
 Visão do produto em `docs/visao.md`. Decisões em `docs/adr-*.md`.
 
@@ -108,6 +108,7 @@ Rotas atuais:
   Confirmar aceita `valorCentavos` e `data` para registrar o que de fato aconteceu.
 - `GET /lancamentos/vencidos`: previstas com data de caixa antes de hoje, da mais antiga para a mais nova, até 200.
 - `GET /saldo-projetado?dias=90`, com `contaId` opcional: um ponto por dia de hoje até `dias` (1 a 366) com realizado e previsto pela data de caixa, as vencidas no primeiro dia e o menor saldo do período.
+- Cartão: `POST /contas` com `tipo: cartao_credito` e `cartao: {limiteCentavos, diaFechamento, diaVencimento, contaPagamentoId}`. Em conta de cartão, a `data` do lançamento é a da compra e a data de caixa é o vencimento da fatura. `GET /contas/{id}/faturas?de&ate` lista as faturas com total, pago, restante e situação. Pagar a fatura é uma transferência para o cartão.
 
 Rota que não é pública responde 401 sem sessão. `POST`, `PUT` e `PATCH` exigem `Content-Type: application/json`, e corpo acima de 4 KiB dá 413. Banco fora dá 503 em qualquer rota. Valor em dinheiro vai em inteiro de centavos (ADR-005, ADR-023).
 
