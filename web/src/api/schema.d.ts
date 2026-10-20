@@ -2244,7 +2244,7 @@ export interface operations {
                     "application/json": components["schemas"]["Transferencia"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada" (origem ou destino), "contas devem ser diferentes" ou "saldo da conta fora do limite" (em qualquer das duas contas) */
+            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada" (origem ou destino), "contas devem ser diferentes", "cartão não pode ser origem de transferência" ou "saldo da conta fora do limite" (em qualquer das duas contas) */
             400: {
                 headers: {
                     [name: string]: unknown;

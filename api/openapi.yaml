@@ -1224,8 +1224,8 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "Entrada inválida, inclusive campo não declarado; \"conta nã\
             o encontrada\", \"conta arquivada\" (origem ou destino), \"contas devem\
-            \ ser diferentes\" ou \"saldo da conta fora do limite\" (em qualquer das\
-            \ duas contas)"
+            \ ser diferentes\", \"cartão não pode ser origem de transferência\" ou\
+            \ \"saldo da conta fora do limite\" (em qualquer das duas contas)"
         "401":
           content:
             application/json:

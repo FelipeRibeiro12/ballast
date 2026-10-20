@@ -96,6 +96,11 @@ componente puro, como o motor de datas da recorrência.
 - Arquivar a conta de pagamento de um cartão ativo é permitido. O cartão segue
   apontando para ela e a transferência de pagamento a partir dela é recusada
   pela F4 (`conta arquivada`) até desarquivar ou pagar por outra conta.
+- Cartão não é origem de transferência: `POST /transferencias` com origem em
+  conta de cartão dá 400 `cartão não pode ser origem de transferência` e não
+  grava nada, porque a saída baixaria o saldo sem entrar em fatura nenhuma.
+  Como destino (pagamento) o cartão aceita qualquer conta do usuário, e todo
+  pagamento conta em `pagoCentavos`.
 - A regra da fatura mora em `entries/CardBilling`, pública para a recorrência
   usar. Quem grava lançamento lê o cartão da conta por SQL no próprio pacote.
 - `GET /lancamentos` continua só por `data_caixa`. Ver compras por competência

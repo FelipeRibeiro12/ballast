@@ -297,15 +297,59 @@ class CardEntryTest {
   }
 
   @Test
-  void aTransferCanLeaveFromTheCardToo() throws Exception {
+  void aTransferCannotLeaveFromTheCardAndWritesNothing() throws Exception {
     TransfersApi transfers = new TransfersApi(mvc);
+    long entriesBefore = count("lancamento");
+    long linksBefore = count("transferencia");
 
     MockHttpServletResponse response =
         transfers.create(actor.session(), TransfersApi.body(cardId, actor.accountId(), 5_000));
 
+    assertThat(response.getStatus()).isEqualTo(400);
+    assertThat(EntriesApi.body(response).get("erro").asString())
+        .isEqualTo("cartão não pode ser origem de transferência");
+    assertThat(count("lancamento")).isEqualTo(entriesBefore);
+    assertThat(count("transferencia")).isEqualTo(linksBefore);
+    assertThat(api.accountBalance(actor.session(), cardId)).isZero();
+  }
+
+  @ParameterizedTest
+  @CsvSource({"corrente", "poupanca", "dinheiro"})
+  void anyOwnAccountCanPayTheCard(String type) throws Exception {
+    TransfersApi transfers = new TransfersApi(mvc);
+    String origin = newAccountOfType(type);
+
+    MockHttpServletResponse response =
+        transfers.create(actor.session(), TransfersApi.body(origin, cardId, 5_000));
+
     assertThat(response.getStatus()).isEqualTo(201);
-    assertThat(api.accountBalance(actor.session(), cardId)).isEqualTo(-5_000L);
-    assertThat(api.accountBalance(actor.session(), actor.accountId())).isEqualTo(5_000L);
+    assertThat(api.accountBalance(actor.session(), cardId)).isEqualTo(5_000L);
+    assertThat(api.accountBalance(actor.session(), origin)).isEqualTo(-5_000L);
+  }
+
+  private String newAccountOfType(String type) throws Exception {
+    MockHttpServletResponse response =
+        mvc.perform(
+                MockMvcRequestBuilders.post("/contas")
+                    .cookie(actor.session())
+                    .contentType("application/json")
+                    .content(
+                        "{\"nome\":\""
+                            + type
+                            + UUID.randomUUID()
+                            + "\",\"tipo\":\""
+                            + type
+                            + "\"}"))
+            .andReturn()
+            .getResponse();
+    return EntriesApi.body(response).get("id").asString();
+  }
+
+  private long count(String table) {
+    return jdbc.sql("SELECT count(*) FROM " + table + " WHERE usuario_id = :id")
+        .param("id", actor.user().id())
+        .query(Long.class)
+        .single();
   }
 
   @Test

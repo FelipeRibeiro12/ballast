@@ -55,7 +55,9 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
 - Recusas do `POST`, todas 400 sem gravar nada: `conta não encontrada` (origem
   ou destino inexistente, de outro usuário ou id inválido, a mesma mensagem
   para os dois), `conta arquivada` (origem ou destino), `contas devem ser
-  diferentes` e `saldo da conta fora do limite` (qualquer das duas contas). O
+  diferentes`, `cartão não pode ser origem de transferência` (origem em conta de
+  cartão; o cartão só entra como destino, para pagar a fatura, vindo de qualquer
+  conta do usuário) e `saldo da conta fora do limite` (qualquer das duas contas). O
   `DELETE` dá 400 `saldo da conta fora do limite` se tirar uma das contas da
   faixa.
 - Cada transferência são dois lançamentos com `tipo` `transferencia` (as
@@ -327,7 +329,8 @@ entra no saldo, confirmar dá 400 `conta arquivada` e cancelar funciona.
   cartão mostram o vencimento.
 - Transferência de ou para conta de cartão (pagar a fatura) não segue a regra:
   as duas datas são a data informada. `POST /transferencias` aceita o cartão
-  como destino (pagamento) e como origem.
+  só como destino (pagamento), vindo de qualquer conta do usuário; como origem
+  dá 400 `cartão não pode ser origem de transferência`.
 - `GET /lancamentos` filtra por `dataCaixa`, então uma compra de cartão aparece
   no mês do vencimento, não no da compra. Não existe filtro por competência
   nessa rota (dívida: parâmetro `por=competencia`, para ver as compras do mês).
@@ -346,7 +349,8 @@ entra no saldo, confirmar dá 400 `conta arquivada` e cancelar funciona.
 - `totalCentavos`: despesas menos receitas (estorno) da conta com `dataCaixa`
   igual ao vencimento, `previsto` ou `realizado`; `cancelado` fica fora, e as
   pernas de transferência também. Pode ser negativo.
-- `pagoCentavos`: transferências **realizadas** com destino no cartão e
+- `pagoCentavos`: transferências **realizadas** com destino no cartão, de
+  qualquer conta do usuário (não só a de pagamento), e
   `dataCaixa` depois do fechamento desta fatura e até o fechamento da seguinte,
   inclusive. Assim o pagamento atrasado (depois do vencimento, antes do próximo
   fechamento) continua na fatura que venceu. Pagamento feito antes do

@@ -200,7 +200,7 @@ class InvoiceTest {
   }
 
   @Test
-  void aTransferOutOfTheCardIsNotAPaymentNorAPurchase() throws Exception {
+  void aTransferOutOfTheCardIsRefusedAndTheInvoiceStaysTheSame() throws Exception {
     api.purchase(actor, "despesa", 10_000, "2026-03-10");
     String content =
         "{\"contaOrigemId\":\""
@@ -217,7 +217,7 @@ class InvoiceTest {
                     .content(content))
             .andReturn()
             .getResponse();
-    assertThat(response.getStatus()).isEqualTo(201);
+    assertThat(response.getStatus()).isEqualTo(400);
 
     JsonNode invoice = invoiceDueOn("2026-03-25");
 

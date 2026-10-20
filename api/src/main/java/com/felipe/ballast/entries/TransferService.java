@@ -26,6 +26,7 @@ class TransferService {
       ACCOUNT_NOT_FOUND,
       ACCOUNT_ARCHIVED,
       SAME_ACCOUNT,
+      CARD_AS_ORIGIN,
       BALANCE_OUT_OF_RANGE
     }
   }
@@ -87,6 +88,11 @@ class TransferService {
     }
     if (fromArchived.get() || toArchived.get()) {
       return CreateResult.Rejected.ACCOUNT_ARCHIVED;
+    }
+    // Saída do cartão não entra em nenhuma fatura, mas baixaria o saldo dele: a fatura ficaria paga
+    // com dívida no saldo. Só o pagamento (cartão como destino) é transferência.
+    if (entryQueries.findCardBilling(userId, input.fromAccountId()).isPresent()) {
+      return CreateResult.Rejected.CARD_AS_ORIGIN;
     }
     String title = input.title() == null ? DEFAULT_TITLE : input.title();
     UUID outId = saveLeg(userId, input, title, input.fromAccountId());
