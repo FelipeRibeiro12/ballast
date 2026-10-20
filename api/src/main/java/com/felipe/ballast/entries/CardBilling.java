@@ -2,6 +2,8 @@ package com.felipe.ballast.entries;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.List;
 
 // Regra da fatura (ADR-031). Dia maior que o último do mês cai no último dia: o fechamento 31 fecha
 // em 28 ou 29 em fevereiro. A comparação "vencimento maior que fechamento" usa os dias
@@ -25,6 +27,26 @@ public record CardBilling(int closingDay, int dueDay) {
     YearMonth closing = closingMonth(purchase);
     YearMonth due = dueDay > closingDay ? closing : closing.plusMonths(1);
     return clampedDay(due, dueDay);
+  }
+
+  // Uma fatura: fecha em closing, vence em due, e a seguinte fecha em nextClosing.
+  public record Cycle(LocalDate closing, LocalDate due, LocalDate nextClosing) {}
+
+  // Faturas com vencimento entre from e to, pontas incluídas, em ordem. Cada fatura é a do mês de
+  // fechamento; o vencimento nunca vem antes de um mês de fechamento anterior ao dele, então
+  // começar dois meses antes de from cobre qualquer combinação de dias.
+  public List<Cycle> cycles(LocalDate from, LocalDate to) {
+    List<Cycle> cycles = new ArrayList<>();
+    for (YearMonth month = YearMonth.from(from).minusMonths(2);
+        !month.isAfter(YearMonth.from(to));
+        month = month.plusMonths(1)) {
+      LocalDate due = dueDate(month.atDay(1));
+      if (!due.isBefore(from) && !due.isAfter(to)) {
+        cycles.add(
+            new Cycle(closingDate(month.atDay(1)), due, closingDate(month.plusMonths(1).atDay(1))));
+      }
+    }
+    return cycles;
   }
 
   private YearMonth closingMonth(LocalDate purchase) {

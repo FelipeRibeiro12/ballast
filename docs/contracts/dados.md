@@ -552,6 +552,10 @@ As demais colunas e tabelas deste bloco chegam com as suas fatias.
   `(usuario_id, conta_id, data_caixa)` experimental: 0,56 ms e 0,05 ms. Ganho de
   menos de 2 ms por consulta, pago em toda escrita de lançamento. Quem medir
   lentidão real na lista de faturas cria o índice com o `EXPLAIN` dela.
+  Conferido com a consulta real da rota (mesma massa, 12 meses): o total por
+  `data_caixa` usa `lancamento_usuario_data_caixa` (Bitmap Index Scan, 8748 linhas
+  lidas, 853 do cartão) em 1,9 ms; os pagamentos entram por
+  `lancamento_id_usuario_tipo_conta_unico` a partir de `transferencia` em 0,12 ms.
 - Query do saldo (a partir da F4): `saldo_inicial` + receitas − despesas +
   entradas − saídas, só `realizado`. A direção da perna vem de um `LEFT JOIN`
   em `transferencia` por `entrada_id`; sem ligação de entrada, a perna é saída.

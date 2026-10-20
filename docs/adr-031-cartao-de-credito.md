@@ -66,8 +66,10 @@ componente puro, como o motor de datas da recorrência.
   no máximo 366 dias) lista as faturas do cartão: `vencimento`, `fechamento`,
   `totalCentavos` (despesas menos receitas com aquele vencimento, previstas e
   realizadas, sem canceladas), `pagoCentavos` (pernas de entrada de
-  transferência na conta do cartão com `data_caixa` depois do vencimento
-  anterior e até este), `restanteCentavos` e `situacao`: `aberta` antes do
+  transferência na conta do cartão com `data_caixa` depois do fechamento desta
+  fatura e até o fechamento da seguinte, para o pagamento em dia e o
+  atrasado contarem na fatura certa; pagamento antes do fechamento conta na
+  fatura anterior), `restanteCentavos` e `situacao`: `aberta` antes do
   fechamento, `fechada` depois do fechamento com restante maior que zero,
   `paga` com restante menor ou igual a zero. Conta que não é cartão: 404.
 - Pagar a fatura é uma transferência comum (ADR-025) da conta de pagamento

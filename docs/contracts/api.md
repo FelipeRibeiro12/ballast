@@ -332,5 +332,37 @@ entra no saldo, confirmar dá 400 `conta arquivada` e cancelar funciona.
   no mês do vencimento, não no da compra. Não existe filtro por competência
   nessa rota (dívida: parâmetro `por=competencia`, para ver as compras do mês).
 - `GET /saldo-projetado` não muda: a saída do cartão aparece no vencimento.
-- A rota de faturas (`GET /contas/{id}/faturas`) é a segunda entrega da F10 e
-  ainda não existe.
+### Faturas (`GET /contas/{id}/faturas`)
+
+- `GET /contas/{id}/faturas?de=AAAA-MM-DD&ate=AAAA-MM-DD` responde 200
+  `{"contaId", "faturas": [{"vencimento", "fechamento", "totalCentavos",
+  "pagoCentavos", "restanteCentavos", "situacao"}]}`. `de` e `ate` são
+  obrigatórios, com as mesmas regras e mensagens de `GET /lancamentos` (ISO
+  estrito, ano 1900 a 2199, `de` menor ou igual a `ate`, no máximo 366 dias
+  contando as pontas).
+- Lista **toda fatura cujo vencimento cai no intervalo**, ordenada por
+  vencimento, inclusive as sem compra (total, pago e restante 0), para a tela
+  mostrar o ciclo inteiro. `fechamento` é a data em que aquela fatura fecha.
+- `totalCentavos`: despesas menos receitas (estorno) da conta com `dataCaixa`
+  igual ao vencimento, `previsto` ou `realizado`; `cancelado` fica fora, e as
+  pernas de transferência também. Pode ser negativo.
+- `pagoCentavos`: transferências **realizadas** com destino no cartão e
+  `dataCaixa` depois do fechamento desta fatura e até o fechamento da seguinte,
+  inclusive. Assim o pagamento atrasado (depois do vencimento, antes do próximo
+  fechamento) continua na fatura que venceu. Pagamento feito antes do
+  fechamento conta na fatura **anterior**, a que já fechou; não existe
+  "pagamento antecipado" da fatura aberta. O fechamento da seguinte é o do ciclo
+  do cartão, mesmo que caia depois de `ate`.
+- `restanteCentavos` é `totalCentavos` menos `pagoCentavos`; fica negativo
+  quando se pagou a mais.
+- `situacao` depende só da data e do restante: `aberta` se hoje
+  (`America/Sao_Paulo`) é até o dia do fechamento, inclusive; depois do
+  fechamento, `fechada` com restante maior que zero e `paga` com restante menor
+  ou igual a zero. Fatura sem compra já fechada é `paga`.
+- Todo valor fica em ±9007199254740991; se algum sair disso, 400 `fatura fora do
+  limite`.
+- 404 com o mesmo corpo `{"erro":"não encontrado"}` para conta de outro
+  usuário, inexistente, id que não é UUID canônico e conta do usuário que não é
+  cartão. 401 sem sessão. 503 com o banco fora.
+- Pagar a fatura continua sendo `POST /transferencias` da conta de pagamento
+  para o cartão; o web preenche valor com o restante e data com o vencimento.

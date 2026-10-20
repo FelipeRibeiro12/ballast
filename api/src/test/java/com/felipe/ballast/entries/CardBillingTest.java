@@ -77,4 +77,48 @@ class CardBillingTest {
     new CardBilling(1, 1);
     new CardBilling(31, 31);
   }
+
+  @Test
+  void listsEveryCycleWhoseDueDateFallsInTheRangeWithTheNextClosing() {
+    CardBilling billing = new CardBilling(15, 25);
+
+    assertThat(billing.cycles(LocalDate.of(2026, 2, 25), LocalDate.of(2026, 4, 25)))
+        .containsExactly(
+            new CardBilling.Cycle(
+                LocalDate.of(2026, 2, 15), LocalDate.of(2026, 2, 25), LocalDate.of(2026, 3, 15)),
+            new CardBilling.Cycle(
+                LocalDate.of(2026, 3, 15), LocalDate.of(2026, 3, 25), LocalDate.of(2026, 4, 15)),
+            new CardBilling.Cycle(
+                LocalDate.of(2026, 4, 15), LocalDate.of(2026, 4, 25), LocalDate.of(2026, 5, 15)));
+  }
+
+  @Test
+  void leavesOutADueDateOneDayOutsideTheRange() {
+    CardBilling billing = new CardBilling(15, 25);
+
+    assertThat(billing.cycles(LocalDate.of(2026, 3, 26), LocalDate.of(2026, 4, 24))).isEmpty();
+  }
+
+  @Test
+  void closingOnThe31stFallsOnTheLastDayOfFebruaryAndTheDueDateIsInMarch() {
+    CardBilling billing = new CardBilling(31, 10);
+
+    assertThat(billing.cycles(LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31)))
+        .containsExactly(
+            new CardBilling.Cycle(
+                LocalDate.of(2026, 2, 28), LocalDate.of(2026, 3, 10), LocalDate.of(2026, 3, 31)));
+    assertThat(billing.cycles(LocalDate.of(2028, 3, 1), LocalDate.of(2028, 3, 31)))
+        .extracting(CardBilling.Cycle::closing)
+        .containsExactly(LocalDate.of(2028, 2, 29));
+  }
+
+  @Test
+  void aDueDayBeforeTheClosingDayPutsTheDueDateInTheMonthAfterTheClosing() {
+    CardBilling billing = new CardBilling(25, 5);
+
+    assertThat(billing.cycles(LocalDate.of(2026, 4, 1), LocalDate.of(2026, 4, 30)))
+        .containsExactly(
+            new CardBilling.Cycle(
+                LocalDate.of(2026, 3, 25), LocalDate.of(2026, 4, 5), LocalDate.of(2026, 4, 25)));
+  }
 }

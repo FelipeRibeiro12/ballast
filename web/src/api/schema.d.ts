@@ -143,6 +143,26 @@ export interface paths {
         patch: operations["patchContasById"];
         trace?: never;
     };
+    "/contas/{id}/faturas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as faturas de um cartão por vencimento
+         * @description Todas as faturas com vencimento entre de e ate (pontas incluídas, no máximo 366 dias), em ordem de vencimento, inclusive as sem compra. pago soma as transferências realizadas para o cartão depois do fechamento da fatura e até o fechamento da seguinte, inclusive; pagamento feito antes do fechamento conta na fatura anterior. situacao é aberta até o dia do fechamento (inclusive, em America/Sao_Paulo), só pela data; depois dele, fechada com restante maior que zero e paga com restante menor ou igual a zero.
+         */
+        get: operations["getContasByIdFaturas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -461,6 +481,40 @@ export interface components {
         };
         Erro: {
             erro: string;
+        };
+        Fatura: {
+            /**
+             * Format: date
+             * @description Data de fechamento
+             */
+            fechamento: string;
+            /**
+             * Format: int64
+             * @description Transferências para o cartão realizadas depois do fechamento da fatura e até o da seguinte
+             */
+            pagoCentavos: number;
+            /**
+             * Format: int64
+             * @description total menos pago; negativo quando pagou a mais
+             */
+            restanteCentavos: number;
+            /** @enum {string} */
+            situacao: "aberta" | "fechada" | "paga";
+            /**
+             * Format: int64
+             * @description Despesas menos receitas do cartão com dataCaixa no vencimento
+             */
+            totalCentavos: number;
+            /**
+             * Format: date
+             * @description Data de vencimento
+             */
+            vencimento: string;
+        };
+        Faturas: {
+            /** Format: uuid */
+            contaId: string;
+            faturas: components["schemas"]["Fatura"][];
         };
         HealthError: {
             erro: string;
@@ -1347,6 +1401,67 @@ export interface operations {
                 };
             };
             /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getContasByIdFaturas: {
+        parameters: {
+            query: {
+                de: string;
+                ate: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Faturas do período */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Faturas"];
+                };
+            };
+            /** @description de ou ate ausente ou fora do formato AAAA-MM-DD (ano de 1900 a 2199), de depois de ate, intervalo maior que 366 dias ou "fatura fora do limite" (algum valor sairia de ±9007199254740991 centavos) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário, inexistente, id que não é UUID ou conta que não é cartão; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;
