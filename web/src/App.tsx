@@ -329,6 +329,7 @@ function App() {
   const [versaoDaLista, setVersaoDaLista] = useState(0)
   const [versaoDeRecorrencias, setVersaoDeRecorrencias] = useState(0)
   const [recorrenciasAtivas, setRecorrenciasAtivas] = useState<ReadonlySet<string>>(new Set())
+  const [parcelasPorRecorrencia, setParcelasPorRecorrencia] = useState<ReadonlyMap<string, number>>(new Map())
 
   useEffect(() => {
     let ativo = true
@@ -417,6 +418,7 @@ function App() {
             contas={contasAtivas}
             aoMudarSaldo={() => setVersaoDeSaldo((n) => n + 1)}
             recorrenciasAtivas={recorrenciasAtivas}
+            parcelasPorRecorrencia={parcelasPorRecorrencia}
             versaoDaLista={versaoDaLista}
             aoMudarOcorrencia={() => setVersaoDeRecorrencias((n) => n + 1)}
           />
@@ -425,6 +427,7 @@ function App() {
             contas={contasAtivas}
             versao={versaoDeRecorrencias}
             aoCarregarAtivas={setRecorrenciasAtivas}
+            aoCarregarParcelas={setParcelasPorRecorrencia}
             aoMudarOcorrencias={() => {
               setVersaoDaLista((n) => n + 1)
               setVersaoDeSaldo((n) => n + 1)

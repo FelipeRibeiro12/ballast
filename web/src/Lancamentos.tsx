@@ -485,6 +485,7 @@ export default function Lancamentos({
   contas,
   aoMudarSaldo,
   recorrenciasAtivas,
+  parcelasPorRecorrencia,
   versaoDaLista,
   aoMudarOcorrencia,
 }: {
@@ -495,6 +496,8 @@ export default function Lancamentos({
   aoMudarSaldo: () => void
   // Ids das recorrências ativas, para avisar que apagar uma ocorrência futura a faz voltar.
   recorrenciasAtivas: ReadonlySet<string>
+  // Quantas parcelas cada recorrência com divisão tem, para escrever "parcela 1 de 2".
+  parcelasPorRecorrencia: ReadonlyMap<string, number>
   // Sobe quando outra tela mexeu nas ocorrências (criar ou desativar recorrência).
   versaoDaLista: number
   // Avisa a tela de recorrências que a próxima ocorrência pode ter mudado.
@@ -765,6 +768,13 @@ export default function Lancamentos({
                         {' · '}
                         {nomesDeConta.get(lancamento.contaId) ?? 'Conta arquivada'}
                       </span>
+                      {lancamento.parcelaOrdem !== null && (
+                        <small>
+                          {lancamento.templateId !== null && parcelasPorRecorrencia.has(lancamento.templateId)
+                            ? `parcela ${lancamento.parcelaOrdem} de ${parcelasPorRecorrencia.get(lancamento.templateId)}`
+                            : `parcela ${lancamento.parcelaOrdem}`}
+                        </small>
+                      )}
                       {(ePrevista || eCancelada) && (
                         <span className="marca">{ePrevista ? 'Previsto' : 'Cancelado'}</span>
                       )}

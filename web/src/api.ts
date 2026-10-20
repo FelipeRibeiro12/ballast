@@ -306,6 +306,12 @@ function ligacaoCoerenteComOTipo(
   return typeof categoriaId === 'string' && transferenciaId === null && direcao === null
 }
 
+// Só a ocorrência de um template com divisão tem ordem, de 1 a 10; o resto vem null.
+function parcelaOrdemCoerente(parcelaOrdem: unknown, templateId: unknown): boolean {
+  if (parcelaOrdem === null) return true
+  return templateId !== null && Number.isInteger(parcelaOrdem) && Number(parcelaOrdem) >= 1 && Number(parcelaOrdem) <= 10
+}
+
 function isLancamento(valor: unknown): valor is Lancamento {
   return (
     typeof valor === 'object' &&
@@ -329,6 +335,8 @@ function isLancamento(valor: unknown): valor is Lancamento {
     ligacaoCoerenteComOTipo(valor.tipo, valor.categoriaId, valor.transferenciaId, valor.direcao) &&
     'templateId' in valor &&
     (valor.templateId === null || typeof valor.templateId === 'string') &&
+    'parcelaOrdem' in valor &&
+    parcelaOrdemCoerente(valor.parcelaOrdem, valor.templateId) &&
     // Só a regra gera previsto e só ela dá template; a perna é sempre um fato avulso.
     (valor.tipo !== 'transferencia' || (valor.status === 'realizado' && valor.templateId === null)) &&
     'contaId' in valor &&
@@ -569,6 +577,33 @@ function isRegraRecorrencia(valor: unknown): valor is RegraRecorrencia {
   )
 }
 
+// Cada parcela traz só o campo do modo da divisão; o do outro modo é recusado.
+function isParcelaDivisao(valor: unknown, modo: 'percentual' | 'valor'): boolean {
+  if (typeof valor !== 'object' || valor === null) return false
+  const temPercentual = 'percentualCentesimos' in valor
+  const temValor = 'valorCentavos' in valor
+  const campoDoModo = modo === 'percentual' ? (temPercentual ? valor.percentualCentesimos : undefined) : temValor ? valor.valorCentavos : undefined
+  return (
+    'ordem' in valor &&
+    Number.isSafeInteger(valor.ordem) &&
+    'diaDoMes' in valor &&
+    Number.isSafeInteger(valor.diaDoMes) &&
+    Number.isSafeInteger(campoDoModo) &&
+    // O campo do outro modo não pode vir, nem nulo.
+    !(modo === 'percentual' ? temValor : temPercentual) &&
+    'valorParcelaCentavos' in valor &&
+    Number.isSafeInteger(valor.valorParcelaCentavos)
+  )
+}
+
+function isDivisaoRecorrencia(valor: unknown): boolean {
+  if (valor === null) return true
+  if (typeof valor !== 'object' || !('modo' in valor) || !('parcelas' in valor)) return false
+  const { modo, parcelas } = valor
+  if (modo !== 'percentual' && modo !== 'valor') return false
+  return Array.isArray(parcelas) && parcelas.every((parcela) => isParcelaDivisao(parcela, modo))
+}
+
 function isRecorrencia(valor: unknown): valor is Recorrencia {
   return (
     typeof valor === 'object' &&
@@ -594,6 +629,8 @@ function isRecorrencia(valor: unknown): valor is Recorrencia {
     typeof valor.criadoEm === 'string' &&
     'regra' in valor &&
     isRegraRecorrencia(valor.regra) &&
+    'divisao' in valor &&
+    isDivisaoRecorrencia(valor.divisao) &&
     'proximaOcorrencia' in valor &&
     (valor.proximaOcorrencia === null || typeof valor.proximaOcorrencia === 'string')
   )
