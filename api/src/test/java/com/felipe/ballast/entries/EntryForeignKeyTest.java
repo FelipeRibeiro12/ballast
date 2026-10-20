@@ -4,6 +4,7 @@ import static com.felipe.ballast.entries.EntriesApi.expenseBody;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.felipe.ballast.IntegrationTest;
+import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Optional;
@@ -16,7 +17,6 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 
 // A conferência da aplicação responde "existe" para tudo, como numa corrida em que a conta ou a
@@ -28,7 +28,7 @@ class EntryForeignKeyTest {
   @Autowired MockMvc mvc;
   @Autowired JdbcClient jdbc;
   @Autowired EntryRepository repository;
-  @Autowired TransactionTemplate transaction;
+  @Autowired WriteTransaction transaction;
   private EntryService service;
   private EntriesApi.Actor a;
   private EntriesApi.Actor b;

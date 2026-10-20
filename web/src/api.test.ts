@@ -22,6 +22,12 @@ import {
   patchConta,
   postCadastro,
   postConta,
+  RecorrenciaInvalidaError,
+  RecorrenciaNaoEncontradaError,
+  desativarRecorrencia,
+  fetchRecorrencias,
+  patchStatusLancamento,
+  postRecorrencia,
 } from './api'
 import type { CadastroRequest, Conta, CriarContaRequest, Healthz, LoginRequest, Usuario } from './api'
 import type { components, paths } from './api/schema'
@@ -242,6 +248,7 @@ describe('lançamentos e categorias', () => {
     valorCentavos: 12345,
     categoriaId: 'cd1',
     transferenciaId: null,
+    templateId: null,
     direcao: null,
     contaId: 'c1',
     dataCompetencia: '2026-10-05',
@@ -291,6 +298,13 @@ describe('lançamentos e categorias', () => {
   it('fetchLancamentos aceita perna de transferência com categoria nula', async () => {
     responder([perna, { ...perna, id: 'p2', direcao: 'entrada' }], 200)
     expect(await fetchLancamentos('2026-10-01', '2026-10-31')).toHaveLength(2)
+  })
+
+  it('fetchLancamentos aceita ocorrência prevista e cancelada com templateId', async () => {
+    const prevista = { ...lancamento, id: 'o1', status: 'previsto', templateId: 'r1' }
+    const cancelada = { ...lancamento, id: 'o2', status: 'cancelado', templateId: 'r1' }
+    responder([prevista, cancelada], 200)
+    expect(await fetchLancamentos('2026-10-01', '2026-10-31')).toEqual([prevista, cancelada])
   })
 
   it('fetchCategorias lê a lista', async () => {
@@ -370,7 +384,11 @@ describe('lançamentos e categorias', () => {
     ['lista com valor decimal', () => fetchLancamentos('a', 'b'), [{ ...lancamento, valorCentavos: 1.5 }]],
     ['lista com valor fora do inteiro seguro', () => fetchLancamentos('a', 'b'), [{ ...lancamento, valorCentavos: 2 ** 60 }]],
     ['post com campo faltando', () => postLancamento(dados), { ...lancamento, contaId: undefined }],
-    ['put com status inesperado', () => putLancamento('1', dados), { ...lancamento, status: 'previsto' }],
+    ['put com status inesperado', () => putLancamento('1', dados), { ...lancamento, status: 'arquivado' }],
+    ['lançamento sem templateId', () => fetchLancamentos('a', 'b'), [{ ...lancamento, templateId: undefined }]],
+    ['templateId que não é texto', () => fetchLancamentos('a', 'b'), [{ ...lancamento, templateId: 7 }]],
+    ['perna com template', () => fetchLancamentos('a', 'b'), [{ ...perna, templateId: 'r1' }]],
+    ['perna prevista', () => fetchLancamentos('a', 'b'), [{ ...perna, status: 'previsto' }]],
   ])('recusa corpo fora do contrato: %s', async (_nome, chamar, corpo) => {
     responder(corpo, 200)
     await expect(chamar()).rejects.toThrow(/formato inesperado/)
@@ -467,6 +485,154 @@ describe('transferências', () => {
   it.each([
     ['post com campo faltando', () => postTransferencia(dados), { ...transferencia, saidaId: undefined }],
     ['get com valor decimal', () => fetchTransferencia('1'), { ...transferencia, valorCentavos: 1.5 }],
+  ])('recusa corpo fora do contrato: %s', async (_nome, chamar, corpo) => {
+    responder(corpo, 200)
+    await expect(chamar()).rejects.toThrow(/formato inesperado/)
+  })
+})
+
+describe('recorrências e ocorrências', () => {
+  const regra = {
+    frequencia: 'mensal',
+    intervalo: 1,
+    diaDoMes: 5,
+    diaDaSemana: null,
+    inicio: '2026-11-05',
+    fim: null,
+    ocorrenciasMax: null,
+  }
+  const recorrencia = {
+    id: 'r1',
+    tipo: 'despesa',
+    titulo: 'Aluguel',
+    descricao: null,
+    valorCentavos: 150000,
+    categoriaId: 'cd1',
+    contaId: 'c1',
+    ativo: true,
+    criadoEm: '2026-10-19T12:00:00Z',
+    regra,
+    proximaOcorrencia: '2026-11-05',
+  }
+  const lancamento = {
+    id: 'o1',
+    tipo: 'despesa',
+    status: 'realizado',
+    titulo: 'Aluguel',
+    descricao: null,
+    valorCentavos: 150000,
+    categoriaId: 'cd1',
+    transferenciaId: null,
+    templateId: 'r1',
+    direcao: null,
+    contaId: 'c1',
+    dataCompetencia: '2026-11-05',
+    dataCaixa: '2026-11-05',
+    criadoEm: '2026-10-19T12:00:00Z',
+  }
+  const dados = {
+    tipo: 'despesa' as const,
+    titulo: 'Aluguel',
+    valorCentavos: 150000,
+    categoriaId: 'cd1',
+    contaId: 'c1',
+    regra: { frequencia: 'mensal' as const, diaDoMes: 5, inicio: '2026-11-05' },
+  }
+
+  function responder(corpo: unknown, status: number): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } }),
+        ),
+      ),
+    )
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('fetchRecorrencias lê a lista', async () => {
+    responder([recorrencia], 200)
+    expect(await fetchRecorrencias()).toEqual([recorrencia])
+    expect(fetch).toHaveBeenCalledWith('/recorrencias', { credentials: 'same-origin' })
+  })
+
+  it('postRecorrencia envia o corpo e lê a resposta aninhada', async () => {
+    responder({ recorrencia, ocorrenciasMaterializadas: 12 }, 201)
+    expect(await postRecorrencia(dados)).toEqual({ recorrencia, ocorrenciasMaterializadas: 12 })
+    expect(fetch).toHaveBeenCalledWith('/recorrencias', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+  })
+
+  it('desativarRecorrencia manda PATCH ativo false com o id codificado', async () => {
+    responder({ ...recorrencia, ativo: false }, 200)
+    expect((await desativarRecorrencia('a/b')).ativo).toBe(false)
+    expect(fetch).toHaveBeenCalledWith('/recorrencias/a%2Fb', {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ativo: false }),
+    })
+  })
+
+  it('patchStatusLancamento manda PATCH status e lê o lançamento', async () => {
+    responder({ ...lancamento, status: 'cancelado' }, 200)
+    expect((await patchStatusLancamento('a/b', 'cancelado')).status).toBe('cancelado')
+    expect(fetch).toHaveBeenCalledWith('/lancamentos/a%2Fb', {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'cancelado' }),
+    })
+  })
+
+  it('mapeia 401, 404, 400, 503 e o resto em erros tipados', async () => {
+    const casos = [
+      { chamar: () => fetchRecorrencias(), naoEncontrado: RecorrenciaNaoEncontradaError, invalido: RecorrenciaInvalidaError },
+      { chamar: () => postRecorrencia(dados), naoEncontrado: RecorrenciaNaoEncontradaError, invalido: RecorrenciaInvalidaError },
+      { chamar: () => desativarRecorrencia('1'), naoEncontrado: RecorrenciaNaoEncontradaError, invalido: RecorrenciaInvalidaError },
+      { chamar: () => patchStatusLancamento('1', 'realizado'), naoEncontrado: LancamentoNaoEncontradoError, invalido: LancamentoInvalidoError },
+    ]
+    for (const { chamar, naoEncontrado, invalido } of casos) {
+      responder({ erro: 'x' }, 401)
+      await expect(chamar()).rejects.toBeInstanceOf(SessaoExpiradaError)
+      responder({ erro: 'x' }, 404)
+      await expect(chamar()).rejects.toBeInstanceOf(naoEncontrado)
+      responder({ erro: 'fim deve ser igual ou posterior a inicio' }, 400)
+      await expect(chamar()).rejects.toBeInstanceOf(invalido)
+      await expect(chamar()).rejects.toMatchObject({ mensagemServidor: 'fim deve ser igual ou posterior a inicio' })
+      responder('sem formato', 400)
+      await expect(chamar()).rejects.toMatchObject({ mensagemServidor: null })
+      responder({ erro: 'x' }, 503)
+      await expect(chamar()).rejects.toBeInstanceOf(ServicoIndisponivelError)
+      responder({ erro: 'x' }, 500)
+      const erro = await chamar().catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(SessaoExpiradaError)
+      expect(erro).not.toBeInstanceOf(invalido)
+    }
+  })
+
+  it.each([
+    ['lista que não é lista', () => fetchRecorrencias(), recorrencia],
+    ['sem regra', () => fetchRecorrencias(), [{ ...recorrencia, regra: undefined }]],
+    ['frequência desconhecida', () => fetchRecorrencias(), [{ ...recorrencia, regra: { ...regra, frequencia: 'quinzenal' } }]],
+    ['intervalo que não é inteiro', () => fetchRecorrencias(), [{ ...recorrencia, regra: { ...regra, intervalo: 1.5 } }]],
+    ['valor decimal', () => fetchRecorrencias(), [{ ...recorrencia, valorCentavos: 1.5 }]],
+    ['tipo transferencia', () => fetchRecorrencias(), [{ ...recorrencia, tipo: 'transferencia' }]],
+    ['ativo que não é booleano', () => fetchRecorrencias(), [{ ...recorrencia, ativo: 'sim' }]],
+    ['proximaOcorrencia ausente', () => fetchRecorrencias(), [{ ...recorrencia, proximaOcorrencia: undefined }]],
+    ['post sem o aninhamento', () => postRecorrencia(dados), recorrencia],
+    ['post sem contagem', () => postRecorrencia(dados), { recorrencia }],
+    ['patch de recorrência sem regra', () => desativarRecorrencia('1'), { ...recorrencia, regra: null }],
+    ['patch de status com status desconhecido', () => patchStatusLancamento('1', 'realizado'), { ...lancamento, status: 'x' }],
   ])('recusa corpo fora do contrato: %s', async (_nome, chamar, corpo) => {
     responder(corpo, 200)
     await expect(chamar()).rejects.toThrow(/formato inesperado/)

@@ -195,18 +195,67 @@ export interface paths {
         get: operations["getLancamentosById"];
         /**
          * Substitui um lançamento
-         * @description Mesmo corpo do POST, substitui todos os campos e grava a data nas duas colunas. Mover o lançamento para uma conta arquivada é recusado (400 "conta arquivada"). Editar sem trocar de conta vale mesmo com a conta arquivada, para corrigir lançamento antigo.
+         * @description Mesmo corpo do POST, substitui todos os campos e grava a data nas duas colunas. Mover o lançamento para uma conta arquivada é recusado (400 "conta arquivada"). Editar sem trocar de conta vale mesmo com a conta arquivada, para corrigir lançamento antigo. Numa ocorrência de recorrência marca o lançamento como desgarrado (a regra não toca mais nele) e mantém templateId; o status não muda por aqui, e uma ocorrência prevista não conta no saldo, então o teto só vale para realizada.
          */
         put: operations["putLancamentosById"];
         post?: never;
         /**
          * Apaga um lançamento
-         * @description Apaga a linha, também numa conta arquivada. O saldo deixa de somá-lo.
+         * @description Apaga a linha, também numa conta arquivada. O saldo deixa de somá-lo. Ocorrência prevista de recorrência não se apaga (400 "cancele a ocorrência"): cancele. Realizada ou cancelada pode ser apagada, e se a data é de hoje em diante e a recorrência segue ativa, o job volta a gerar a ocorrência como prevista.
          */
         delete: operations["deleteLancamentosById"];
         options?: never;
         head?: never;
+        /**
+         * Confirma ou cancela uma ocorrência prevista
+         * @description Corpo {"status": "realizado"} ou {"status": "cancelado"}, o único campo. Só uma ocorrência prevista muda de status. Confirmar passa a contar no saldo, com a trava e o teto do saldo do lançamento, e recusa conta arquivada; cancelar não mexe em saldo e vale mesmo com a conta arquivada. As duas são definitivas e deixam a ocorrência desgarrada: o job não a recria nem a altera.
+         */
+        patch: operations["patchLancamentosById"];
+        trace?: never;
+    };
+    "/recorrencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as recorrências do usuário, ativas e inativas
+         * @description Ordem por título sem diferenciar maiúscula de minúscula, depois por id.
+         */
+        get: operations["getRecorrencias"];
+        put?: never;
+        /**
+         * Cria uma recorrência e materializa as ocorrências dos próximos 12 meses
+         * @description Grava a regra, o template e, na mesma transação, as ocorrências previstas de max(inicio, hoje) até hoje mais 12 meses, as duas pontas incluídas. A data que a regra gera antes de hoje não vira lançamento. Hoje é a data em America/Sao_Paulo. Conta e categoria precisam ser do usuário e a categoria do mesmo tipo do template. Uma série que já terminou é criada com zero ocorrências.
+         */
+        post: operations["postRecorrencias"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/recorrencias/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Devolve uma recorrência do usuário */
+        get: operations["getRecorrenciasById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Desativa uma recorrência
+         * @description Só {"ativo": false}. Marca o template como inativo e apaga as ocorrências previstas, não desgarradas, de hoje em diante; as de antes de hoje e as realizadas ou editadas ficam. Repetir a chamada devolve o mesmo estado. Depois da resposta o job não gera mais nada para o template.
+         */
+        patch: operations["patchRecorrenciasById"];
         trace?: never;
     };
     "/transferencias": {
@@ -340,7 +389,12 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            status: "realizado";
+            status: "previsto" | "realizado" | "cancelado";
+            /**
+             * Format: uuid
+             * @description Id da recorrência que gerou a ocorrência; nulo nos avulsos
+             */
+            templateId: string | null;
             /** @enum {string} */
             tipo: "receita" | "despesa" | "transferencia";
             titulo: string;
@@ -376,9 +430,126 @@ export interface components {
              */
             valorCentavos: number;
         };
+        LancamentoStatusRequest: {
+            /**
+             * @description Só uma ocorrência prevista muda de status
+             * @enum {string}
+             */
+            status: "realizado" | "cancelado";
+        };
         LoginRequest: {
             email: string;
             senha: string;
+        };
+        Recorrencia: {
+            ativo: boolean;
+            /** Format: uuid */
+            categoriaId: string;
+            /** Format: uuid */
+            contaId: string;
+            /** Format: date-time */
+            criadoEm: string;
+            descricao: string | null;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: date
+             * @description Menor dataCaixa entre as previstas de hoje em diante; nula se não houver ou se inativa
+             */
+            proximaOcorrencia: string | null;
+            regra: components["schemas"]["RegraRecorrencia"];
+            /** @enum {string} */
+            tipo: "receita" | "despesa";
+            titulo: string;
+            /**
+             * Format: int64
+             * @description Centavos de real, sempre positivo; o sinal vem do tipo
+             */
+            valorCentavos: number;
+        };
+        RecorrenciaAtivoRequest: {
+            /** @description Só false é aceito: a recorrência não é reativada */
+            ativo: boolean;
+        };
+        RecorrenciaCriada: {
+            /**
+             * Format: int32
+             * @description Quantas ocorrências previstas a criação gravou (hoje até hoje mais 12 meses)
+             */
+            ocorrenciasMaterializadas: number;
+            recorrencia: components["schemas"]["Recorrencia"];
+        };
+        RecorrenciaRequest: {
+            /** Format: uuid */
+            categoriaId: string;
+            /** Format: uuid */
+            contaId: string;
+            descricao?: string | null;
+            regra: components["schemas"]["RegraRecorrenciaRequest"];
+            /** @enum {string} */
+            tipo: "receita" | "despesa";
+            titulo: string;
+            /**
+             * Format: int64
+             * @description Centavos de real, sempre positivo; o sinal vem do tipo
+             */
+            valorCentavos: number;
+        };
+        RegraRecorrencia: {
+            /**
+             * Format: int32
+             * @description Só semanal; 0 é domingo e 6 é sábado
+             */
+            diaDaSemana: number | null;
+            /**
+             * Format: int32
+             * @description Só mensal
+             */
+            diaDoMes: number | null;
+            /** Format: date */
+            fim: string | null;
+            /** @enum {string} */
+            frequencia: "diaria" | "semanal" | "mensal" | "anual";
+            /** Format: date */
+            inicio: string;
+            /** Format: int32 */
+            intervalo: number;
+            /** Format: int32 */
+            ocorrenciasMax: number | null;
+        };
+        RegraRecorrenciaRequest: {
+            /**
+             * Format: int32
+             * @description Só em semanal, e obrigatório nela. 0 é domingo e 6 é sábado
+             */
+            diaDaSemana?: number | null;
+            /**
+             * Format: int32
+             * @description Só em mensal, e obrigatório nela. Dia maior que o último do mês cai no último dia
+             */
+            diaDoMes?: number | null;
+            /**
+             * Format: date
+             * @description Última data possível, incluída; não vale junto com ocorrenciasMax
+             */
+            fim?: string | null;
+            /** @enum {string} */
+            frequencia: "diaria" | "semanal" | "mensal" | "anual";
+            /**
+             * Format: date
+             * @example 2026-11-05
+             */
+            inicio: string;
+            /**
+             * Format: int32
+             * @description A cada N períodos, contados a partir do período do início; padrão 1
+             */
+            intervalo?: number;
+            /**
+             * Format: int32
+             * @description Conta as ocorrências desde o início; não vale junto com fim
+             */
+            ocorrenciasMax?: number | null;
         };
         Transferencia: {
             /** Format: uuid */
@@ -968,7 +1139,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível */
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1048,7 +1219,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível */
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1117,7 +1288,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível */
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1166,7 +1337,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível */
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1246,7 +1417,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível */
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1277,7 +1448,7 @@ export interface operations {
                     "application/json": Record<string, never>;
                 };
             };
-            /** @description "saldo da conta fora do limite": apagar o lançamento tiraria o saldo da faixa de ±9007199254740991 centavos, e nada é apagado; "use a rota de transferência": o lançamento é perna de transferência */
+            /** @description "saldo da conta fora do limite": apagar o lançamento tiraria o saldo da faixa de ±9007199254740991 centavos, e nada é apagado; "use a rota de transferência": o lançamento é perna de transferência; "cancele a ocorrência": ocorrência prevista de recorrência */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1297,6 +1468,322 @@ export interface operations {
             };
             /** @description Lançamento de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    patchLancamentosById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LancamentoStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Lançamento com o status novo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lancamento"];
+                };
+            };
+            /** @description "status é obrigatório", "status deve ser realizado ou cancelado", campo não declarado; "só ocorrência prevista pode mudar de status" (o lançamento não está previsto); "conta arquivada" e "saldo da conta fora do limite" (só ao confirmar); "use a rota de transferência" (perna de transferência) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Lançamento de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getRecorrencias: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recorrências do usuário */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Recorrencia"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postRecorrencias: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecorrenciaRequest"];
+            };
+        };
+        responses: {
+            /** @description Recorrência criada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecorrenciaCriada"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado e combinação de campos que a frequência não aceita; "conta não encontrada", "conta arquivada" ou "categoria não encontrada" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getRecorrenciasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recorrência */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Recorrencia"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Recorrência de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    patchRecorrenciasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecorrenciaAtivoRequest"];
+            };
+        };
+        responses: {
+            /** @description Recorrência inativa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Recorrencia"];
+                };
+            };
+            /** @description Corpo inválido, inclusive campo não declarado; "reativar não é suportado" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Recorrência de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };

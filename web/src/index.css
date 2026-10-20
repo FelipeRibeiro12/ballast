@@ -144,3 +144,56 @@ select {
   color: #444;
   font-style: italic;
 }
+
+.lancamentos li.previsto {
+  opacity: 0.75;
+  border-left: 3px dashed #888;
+  padding-left: 0.5rem;
+}
+
+.lancamentos li.cancelado .lancamento-dados {
+  text-decoration: line-through;
+  color: #666;
+}
+
+.marca {
+  font-size: 0.8rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.previsto-no-mes {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+}
+
+.recorrencias {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.recorrencias li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.recorrencias li.desativada {
+  color: #666;
+}
+
+.recorrencia-dados {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+small {
+  color: #555;
+}

@@ -73,6 +73,20 @@ class TransferLegGuardTest {
   }
 
   @Test
+  void patchOnALegIs400WithTheTransferMessageForBothStatuses() throws Exception {
+    for (String id : new String[] {outId, inId}) {
+      for (String status : new String[] {"realizado", "cancelado"}) {
+        MockHttpServletResponse response =
+            api.patch(actor.session(), id, "{\"status\":\"" + status + "\"}");
+
+        assertThat(response.getStatus()).isEqualTo(400);
+        assertThat(EntriesApi.text(response)).isEqualTo(USE_TRANSFER_ROUTE);
+      }
+    }
+    assertThat(legs()).isEqualTo(2);
+  }
+
+  @Test
   void postWithTypeTransferenciaIs400() throws Exception {
     MockHttpServletResponse response =
         api.create(actor.session(), with(expenseBody(actor), "tipo", "transferencia"));

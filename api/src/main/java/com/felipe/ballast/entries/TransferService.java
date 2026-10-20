@@ -1,11 +1,11 @@
 package com.felipe.ballast.entries;
 
+import com.felipe.ballast.web.WriteTransaction;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.TransactionStatus;
-import org.springframework.transaction.support.TransactionTemplate;
 
 // Assume entrada já validada e normalizada na borda. Todo método recebe o dono vindo da sessão.
 //
@@ -34,14 +34,14 @@ class TransferService {
   private final TransferRepository transfers;
   private final EntryQueries entryQueries;
   private final TransferQueries queries;
-  private final TransactionTemplate transaction;
+  private final WriteTransaction transaction;
 
   TransferService(
       EntryRepository entries,
       TransferRepository transfers,
       EntryQueries entryQueries,
       TransferQueries queries,
-      TransactionTemplate transaction) {
+      WriteTransaction transaction) {
     this.entries = entries;
     this.transfers = transfers;
     this.entryQueries = entryQueries;

@@ -1,5 +1,6 @@
 package com.felipe.ballast.accounts;
 
+import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -16,10 +17,12 @@ class AccountService {
 
   private final AccountRepository accounts;
   private final AccountQueries queries;
+  private final WriteTransaction transaction;
 
-  AccountService(AccountRepository accounts, AccountQueries queries) {
+  AccountService(AccountRepository accounts, AccountQueries queries, WriteTransaction transaction) {
     this.accounts = accounts;
     this.queries = queries;
+    this.transaction = transaction;
   }
 
   // Vazio quando o nome já existe para o usuário. Sem @Transactional de propósito: o
@@ -47,9 +50,11 @@ class AccountService {
     return queries.find(userId, id);
   }
 
-  // Vazio para conta de outro usuário ou inexistente, sem distinguir.
+  // Vazio para conta de outro usuário ou inexistente, sem distinguir. O UPDATE espera no máximo
+  // 2 s pela trava da conta, como as outras escritas dela; estourar vira 503.
   Optional<AccountSummary> setArchived(UUID userId, UUID id, boolean archived) {
-    if (accounts.updateArchived(userId, id, archived) == 0) {
+    Integer updated = transaction.execute(status -> accounts.updateArchived(userId, id, archived));
+    if (updated == null || updated == 0) {
       return Optional.empty();
     }
     return queries.find(userId, id);

@@ -54,6 +54,12 @@ ballast:
   registration-open: ${REGISTRO_ABERTO:false}
   cookie-secure: ${COOKIE_SECURE:true}
   app-env: ${APP_ENV:}
+  recurrence:
+    # Liga o job diário que estende o horizonte das recorrências (ADR-026). Os testes de
+    # integração desligam; para desligar fora deles, BALLAST_RECURRENCE_JOB_ENABLED=false.
+    job-enabled: true
+    # Spring cron (segundos primeiro), no fuso America/Sao_Paulo: 03:00 todo dia.
+    cron: "0 0 3 * * *"
   seed:
     email: ${SEED_EMAIL:}
     password: ${SEED_SENHA:}

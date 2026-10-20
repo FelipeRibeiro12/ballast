@@ -41,6 +41,12 @@ class UnhandledConstraintViolationLogTest {
         this.jdbc = jdbc;
       }
 
+      // O cast de texto para uuid falha com 22P02 e o Postgres devolve o valor na mensagem.
+      @GetMapping("/teste/uuid-invalido")
+      void invalidUuid() {
+        jdbc.sql("SELECT CAST(:v AS uuid)").param("v", MARKER).query().singleValue();
+      }
+
       @GetMapping("/teste/lancamento-invalido")
       void insert(
           @RequestParam UUID usuario, @RequestParam UUID conta, @RequestParam UUID categoria) {
@@ -79,6 +85,22 @@ class UnhandledConstraintViolationLogTest {
         .contains("23514")
         .contains("DataIntegrityViolationException")
         .doesNotContain(MARKER)
-        .doesNotContain("Failing row");
+        .doesNotContain("Failing row")
+        .contains("at com.felipe.ballast.");
+  }
+
+  @Test
+  void anInvalidInputConversionLogsNoValueButKeepsTheStack(CapturedOutput output) throws Exception {
+    EntriesApi.Actor actor = new EntriesApi(mvc).newActor();
+
+    mvc.perform(get("/teste/uuid-invalido").cookie(actor.session()))
+        .andExpect(status().isInternalServerError())
+        .andExpect(content().json("{\"erro\":\"erro interno\"}", true));
+
+    assertThat(output.getAll())
+        .contains("22P02")
+        .contains("at com.felipe.ballast.")
+        .doesNotContain(MARKER)
+        .doesNotContain("invalid input syntax");
   }
 }

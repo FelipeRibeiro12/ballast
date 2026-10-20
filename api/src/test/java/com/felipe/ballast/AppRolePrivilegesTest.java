@@ -80,6 +80,8 @@ class AppRolePrivilegesTest {
     assertDenied("TRUNCATE categoria");
     assertDenied("TRUNCATE lancamento");
     assertDenied("TRUNCATE transferencia");
+    assertDenied("TRUNCATE regra_recorrencia");
+    assertDenied("TRUNCATE template_lancamento");
   }
 
   @Test
@@ -178,6 +180,62 @@ class AppRolePrivilegesTest {
 
     assertThat(lida).isEqualTo(saida);
     assertThat(deleted).isEqualTo(1);
+  }
+
+  @Test
+  void allowsDmlOnRegraAndTemplate() {
+    UUID usuarioId = UUID.randomUUID();
+    UUID contaId = UUID.randomUUID();
+    UUID categoriaId = UUID.randomUUID();
+    UUID regraId = UUID.randomUUID();
+    UUID templateId = UUID.randomUUID();
+    jdbc.sql("INSERT INTO usuario (id, email, senha_hash) VALUES (:id, :email, 'hash')")
+        .param("id", usuarioId)
+        .param("email", "rec-dml-" + usuarioId + "@example.com")
+        .update();
+    jdbc.sql(
+            "INSERT INTO conta (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'Caixa', 'dinheiro')")
+        .param("id", contaId)
+        .param("usuarioId", usuarioId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO categoria (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'Pets', 'despesa')")
+        .param("id", categoriaId)
+        .param("usuarioId", usuarioId)
+        .update();
+
+    jdbc.sql(
+            "INSERT INTO regra_recorrencia (id, usuario_id, frequencia, dia_do_mes, inicio)"
+                + " VALUES (:id, :usuarioId, 'mensal', 5, DATE '2026-10-19')")
+        .param("id", regraId)
+        .param("usuarioId", usuarioId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO template_lancamento (id, usuario_id, tipo, titulo, categoria_id,"
+                + " conta_id, valor_total, regra_id) VALUES (:id, :usuarioId, 'despesa', 'Ração',"
+                + " :categoriaId, :contaId, 10.00, :regraId)")
+        .param("id", templateId)
+        .param("usuarioId", usuarioId)
+        .param("categoriaId", categoriaId)
+        .param("contaId", contaId)
+        .param("regraId", regraId)
+        .update();
+    jdbc.sql("UPDATE template_lancamento SET ativo = false WHERE id = :id")
+        .param("id", templateId)
+        .update();
+    boolean ativo =
+        jdbc.sql("SELECT ativo FROM template_lancamento WHERE id = :id")
+            .param("id", templateId)
+            .query(Boolean.class)
+            .single();
+    int deletedTemplate =
+        jdbc.sql("DELETE FROM template_lancamento WHERE id = :id").param("id", templateId).update();
+    int deletedRegra =
+        jdbc.sql("DELETE FROM regra_recorrencia WHERE id = :id").param("id", regraId).update();
+
+    assertThat(ativo).isFalse();
+    assertThat(deletedTemplate).isEqualTo(1);
+    assertThat(deletedRegra).isEqualTo(1);
   }
 
   private void insertPerna(UUID usuarioId, UUID id, UUID contaId) {

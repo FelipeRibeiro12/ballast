@@ -159,6 +159,18 @@ final class EntriesApi {
     return mvc.perform(request).andReturn().getResponse();
   }
 
+  MockHttpServletResponse patch(Cookie session, String id, Object body) throws Exception {
+    var request =
+        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                "/lancamentos/" + id)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json(body));
+    if (session != null) {
+      request.cookie(session);
+    }
+    return mvc.perform(request).andReturn().getResponse();
+  }
+
   MockHttpServletResponse remove(Cookie session, String id) throws Exception {
     var request = delete("/lancamentos/" + id);
     if (session != null) {

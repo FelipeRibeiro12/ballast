@@ -313,16 +313,37 @@ regra_recorrencia
   id              uuid pk
   usuario_id      uuid fk not null
   frequencia      text not null        -- diaria | semanal | mensal | anual
-  intervalo       smallint not null default 1   -- a cada N
-  dias_do_mes     smallint[]           -- [15, 30] ou [5]
-  dia_da_semana   smallint             -- 0..6, para frequencia semanal
+  intervalo       smallint not null default 1   -- a cada N, de 1 a 99
+  dia_do_mes      smallint null        -- 1..31, só em mensal
+  dia_da_semana   smallint null        -- 0 (domingo) a 6, só em semanal
   inicio          date not null
   fim             date null
-  ocorrencias_max int null
+  ocorrencias_max int null             -- 1..10000
   check (fim is null or ocorrencias_max is null)
 ```
 
-`dias_do_mes` com valor 29, 30 ou 31 precisa de regra para mês curto. Decisão:
+**Desvio do modelo anterior (ADR-026):** `dia_do_mes` é um `smallint` escalar, não
+o array `dias_do_mes`. A F5 aceita um dia por regra, e os vários dias de um
+salário dividido ficam em `template_divisao` (F6).
+
+Migration `V8` (ADR-026):
+
+- `regra_frequencia_valida`, `regra_intervalo_faixa` (1 a 99),
+  `regra_dia_do_mes_faixa` (1 a 31), `regra_dia_da_semana_faixa` (0 a 6),
+  `regra_ocorrencias_max_faixa` (1 a 10000: uma série diária de uns 27 anos, e
+  um teto para a materialização não virar laço enorme).
+- `regra_inicio_faixa` (1900 a 2199) e `regra_fim_faixa` (`fim` entre `inicio` e
+  2199-12-31; `fim` igual a `inicio` vale uma ocorrência).
+- Invariante 6: `regra_fim_ou_ocorrencias_max`.
+- `regra_campos_conforme_frequencia` amarra os campos à frequência: `mensal`
+  exige `dia_do_mes` e não tem `dia_da_semana`; `semanal` exige `dia_da_semana` e
+  não tem `dia_do_mes`; `diaria` e `anual` não têm nenhum dos dois. Anual repete
+  dia e mês do `inicio`, então não guarda campo próprio.
+- `usuario_id` é `ON DELETE CASCADE`. `unique (id, usuario_id)`
+  (`regra_id_usuario_unico`) é o alvo da FK composta do template. Sem índice
+  por `usuario_id`: a regra é lida pelo template (`template_regra_unica`).
+
+`dia_do_mes` 29, 30 ou 31 precisa de regra para mês curto. Decisão:
 **usa o último dia do mês**. Documentado aqui porque é escolha, não óbvio.
 
 ```
@@ -338,6 +359,20 @@ template_lancamento
   regra_id      uuid fk not null
   ativo         bool not null default true
 ```
+
+Migration `V8` (ADR-026): `valor_total` mantém o nome acima e tem as mesmas
+faixas de `lancamento.valor` (`template_valor_total_faixa`, mais `template_titulo_*`
+e `template_descricao_tamanho`, iguais às de lançamento). `tipo` aceita `receita`
+e `despesa` (sem transferência recorrente). O dono é garantido pelo banco por FK
+composta, `NO ACTION`: `template_conta_mesmo_usuario`
+`(conta_id, usuario_id)`, `template_categoria_mesmo_usuario_e_tipo`
+`(categoria_id, usuario_id, tipo)` e `template_regra_mesmo_usuario`
+`(regra_id, usuario_id)`. `template_regra_unica`: uma regra por template.
+`unique (id, usuario_id)` (`template_id_usuario_unico`) é o alvo da FK de
+`lancamento`. `criado_em` tem `DEFAULT now()`. Índice `template_usuario
+(usuario_id)`: lista de `GET /recorrencias` e a checagem das FKs de conta e
+categoria no cascade da exclusão do usuário. O job que lista templates ativos
+pagina pela chave primária e não precisa de índice próprio.
 
 ### Divisão — o caso do salário em dois dias
 
@@ -384,6 +419,7 @@ lancamento
   data_caixa        date not null
   status            text not null      -- previsto | realizado | cancelado
   template_id       uuid fk null       -- de onde veio
+  ocorrencia_data   date null          -- a data que a regra gerou; nula se e só se template_id é nulo
   desgarrado        bool not null default false
   parcela_de_id     uuid fk null       -- self-fk: compra parcelada
   parcela_num       smallint null
@@ -391,21 +427,22 @@ lancamento
   hash_externo      text null          -- FITID do OFX, ou hash dos campos
   importacao_linha_id uuid fk null
   criado_em         timestamptz not null
+  unique (template_id, ocorrencia_data)
   unique (usuario_id, hash_externo)
 ```
 
 Migration `V6` (ADR-024) cria só o recorte da F3: `id`, `usuario_id`, `tipo`,
 `titulo`, `descricao`, `categoria_id`, `conta_id`, `valor`, `data_competencia`,
-`data_caixa`, `status`, `criado_em`. As demais colunas e tabelas deste bloco
-chegam com as suas fatias.
+`data_caixa`, `status`, `criado_em`. A `V7` acrescenta a transferência e a `V8` o recorte da F5, abaixo.
+As demais colunas e tabelas deste bloco chegam com as suas fatias.
 
 - `tipo` aceita `receita`, `despesa` e `transferencia` (V7). `categoria_id` é
   nulo se e somente se o tipo é `transferencia`
   (`lancamento_categoria_conforme_tipo`, `(tipo = 'transferencia') = (categoria_id
   IS NULL)`). A FK de categoria é `MATCH SIMPLE`: com `categoria_id` nulo ela não
   é checada, então a perna passa, e os outros tipos são obrigados a ter categoria
-  pelo `CHECK`. `status` aceita só `realizado` e tem
-  `DEFAULT 'realizado'` (a recorrência alarga para `previsto` e `cancelado`).
+  pelo `CHECK`. `status` tem `DEFAULT 'realizado'` e, desde a `V8`, aceita
+  `previsto`, `realizado` e `cancelado`.
 - `titulo` de 1 a 100 caracteres sem espaço nas pontas; `descricao` nula ou até
   500 caracteres (conta caracteres, não bytes).
 - `valor` entre 0.01 e 90071992547409.91 (`lancamento_valor_faixa`). As duas
@@ -485,7 +522,38 @@ Pontos que importam:
 
 A materialização roda em lote e gera previstos **12 meses à frente**, sendo
 idempotente: rodar duas vezes não duplica. A chave de idempotência é
-`(template_id, data_competencia)` para linhas não desgarradas.
+`(template_id, ocorrencia_data)` em **toda** linha com template, desgarrada ou
+não (ADR-026). Com a chave em `data_competencia`, editar a data de uma
+ocorrência deixaria a regra gerar outra no dia antigo; `ocorrencia_data` guarda
+"qual ocorrência da série" e nunca muda. A F6 alarga a chave com a ordem da
+parcela.
+
+Migration `V8` em `lancamento` (ADR-026):
+
+- Colunas novas: `template_id` e `ocorrencia_data` nulas (nulo é "avulso") e
+  `desgarrado boolean not null default false`. O `DEFAULT` constante entra só no
+  catálogo no Postgres 11+, sem reescrever a tabela. Os `CHECK` novos entram
+  `NOT VALID` e depois `VALIDATE`, como na `V7`.
+- `lancamento_template_mesmo_usuario`: FK `(template_id, usuario_id)` para
+  `template_lancamento (id, usuario_id)`, `NO ACTION`. Template com ocorrência não
+  se apaga; desativar apaga só as previstas.
+- `lancamento_template_ocorrencia_unica`: `unique (template_id, ocorrencia_data)`.
+  O Postgres ignora nulo em `unique` comum, então lançamento avulso não colide. É
+  o alvo do `ON CONFLICT (template_id, ocorrencia_data) DO NOTHING` da
+  materialização e o índice da FK e da desativação.
+- `lancamento_template_e_ocorrencia_juntos`: `(template_id IS NULL) =
+  (ocorrencia_data IS NULL)`. `lancamento_desgarrado_so_com_template`.
+  `lancamento_ocorrencia_data_faixa` (1900 a 2199).
+- `lancamento_transferencia_realizada_sem_template`: transferência só nasce
+  `realizado` e a perna não tem template.
+- Sem índice novo. Medido com 400 mil lançamentos mais 120 mil previstos (200
+  usuários, 50 templates com 12 previstas cada): saldo de um usuário com 2 mil
+  realizados passou de 2,6 ms para 2,7 ms (o filtro `status` remove as 600
+  previstas depois do índice); lista de um mês de 0,15 ms para 0,22 ms; desativar
+  (`DELETE` por `usuario_id`, `template_id`, `status`, `ocorrencia_data`) 1 ms
+  pela unique nova.
+- A `V8` também fixa `search_path = public, pg_temp` no gatilho da `V7`
+  (`transferencia_perna_em_dois_papeis`) com `ALTER FUNCTION`.
 
 ### Transferência
 

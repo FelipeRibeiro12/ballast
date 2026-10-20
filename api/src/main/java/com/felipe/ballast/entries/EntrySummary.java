@@ -6,7 +6,8 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 // Linha da consulta. O valor fica em BigDecimal com escala 2; a conversão para centavos
-// acontece só na saída (EntryResponse). transferId e direction são nulos fora de transferência.
+// acontece só na saída (EntryResponse). transferId e direction são nulos fora de transferência;
+// templateId é nulo no avulso.
 record EntrySummary(
     UUID id,
     EntryType type,
@@ -20,4 +21,5 @@ record EntrySummary(
     String status,
     Instant createdAt,
     UUID transferId,
-    EntryDirection direction) {}
+    EntryDirection direction,
+    UUID templateId) {}

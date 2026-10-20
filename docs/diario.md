@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-20 — F5: recorrência (PR #10)
+
+O que entrou: migration V8 com regra, template e o lançamento alargado (`template_id`, `desgarrado`, `ocorrencia_data`, status previsto e cancelado); motor de datas puro para diária, semanal, mensal e anual com intervalo, fim e número de vezes; materialização idempotente de hoje a 12 meses na criação e num job diário; confirmar, cancelar e desgarrar ocorrência; `lock_timeout` em toda escrita de dinheiro; tela de recorrências e previstas na lista do mês.
+Decisões: ADR-026, emendado depois do QA (o job trava só o template e usa 200 ms de espera). Chave de idempotência em `ocorrencia_data`, desviando de `dados.md`, para editar a data de uma prevista não gerar duplicata. Sem editar regra nem reativar.
+Dívida registrada: deadlock como 503, apagar cancelada faz a data voltar, log do job, teto de recorrências por usuário (F20.5), prevista em conta arquivada por corrida, prevista vencida (na F7).
+Achados do QA: 2 bloquearam (ciclo de trava do job com PUT, que estourava os 2 s; senha gerada pelo Spring Security no log de arranque, sem uso e sem commit, corrigida e avisada ao dono), 2 dívidas corrigidas junto, 4 sugestões (2 corrigidas, 2 no backlog).
+Achados do revisor: 0 bloquearam, 3 dívidas (1 era decisão desta fatia, 2 registradas), 4 sugestões sem ação. Security: 0 críticos, 0 altos, 1 médio (teto por usuário, F20.5), 2 baixos (job ligado por padrão, documentado no `.env.example`; log do 503 de trava).
+Pipeline: verde na primeira tentativa, os 7 checks obrigatórios; nenhum alerta do CodeQL.
+Em aberto: interrupção por limite de uso no meio da fatia, retomada sem perda. Conferência em navegador das telas em 360px.
+
 ## 2026-10-19 — F4: transferência entre contas (PR #9)
 
 O que entrou: migration V7 com `transferencia` e o `lancamento` alargado para o tipo `transferencia` com categoria nula; o banco garante dono, tipo e contas diferentes por FK composta e um gatilho só para o mesmo lançamento não ser saída de uma e entrada de outra. `POST`, `GET` e `DELETE /transferencias`, pernas com `transferenciaId` e `direcao` na lista e protegidas em `/lancamentos`, saldo com entradas e saídas, tela com formulário de transferência e totais sem ela. O log do 500 deixou de gravar o conteúdo da linha recusada (dívida que apareceu três vezes).

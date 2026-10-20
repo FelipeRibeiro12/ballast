@@ -78,13 +78,13 @@ class CategoriaLancamentoMigrationTest {
   }
 
   @Test
-  void rejectsStatusOtherThanRealizado() {
+  void rejectsStatusOutsideTheAllowedList() {
     Fixture f = fixture();
 
     assertConstraint(
         "lancamento_status_valido",
         lancamento(f, "despesa", "Mercado", null, f.categoriaDespesa, f.conta, "10", "2026-10-19")
-            .param("status", "previsto"));
+            .param("status", "pago"));
   }
 
   @Test

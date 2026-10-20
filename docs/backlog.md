@@ -7,12 +7,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
-### F5 — Recorrência
-A fatia mais difícil do projeto. Regra, template, materialização 12 meses à
-frente, idempotente.
-Teste obrigatório: dia 31 em fevereiro, ano bissexto, intervalo maior que 1,
-rodar a materialização duas vezes.
-
 ### F6 — Divisão de salário
 `template_divisao` por percentual e por valor fixo, com mais de dois dias.
 Teste obrigatório: a regra do centavo — três partes de 33,33% de R$ 1.000
@@ -21,6 +15,9 @@ precisam somar exatamente R$ 1.000.
 ### F7 — Previsto × realizado
 Marcar um previsto como realizado (ajustando valor e data se vier diferente).
 Editar uma ocorrência marca `desgarrado` e a materialização passa a respeitar.
+A F5 já entregou confirmar, cancelar e o `desgarrado` no PUT. Falta confirmar
+ajustando valor e data, e decidir o que fazer com prevista vencida (data antes de
+hoje e ainda `previsto`): hoje ela fica assim para sempre (revisão do PR #10).
 
 ### F8 — Saldo projetado
 Fluxo de caixa dos próximos 90 dias por `data_caixa`. É o primeiro momento em
@@ -158,14 +155,15 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — `%2F` ou `{}` no caminho recebem a página de erro HTML do Tomcat, não `{"erro": ...}` (QA da F2, D5). Sem vazamento além de ser Tomcat. Dono: backend, na F20.5 junto com os cabeçalhos.
 - **DÍVIDA** — Chave JSON repetida no corpo: a última vence sem aviso (QA da F2, S3). Ligar `STRICT_DUPLICATE_DETECTION` do Jackson e testar. Dono: backend, na próxima fatia com rota de escrita.
 - **DÍVIDA** — O `HealthRepository` restaura o `setNetworkTimeout` no `finally` sem tolerar conexão já fechada pelo Hikari, o caso que dava 500 no `SessionQueries` (F2). Conferir com teste de banco congelado sem espera e unificar os dois num utilitário. Dono: backend, na F20.5 junto com liveness e readiness.
-- **DÍVIDA** — Sem teto de contas por usuário e sem paginação em `GET /contas` (auditoria do PR #7, B1). Só afeta a própria conta. Dono: backend, na F20.5 junto com o rate limit. O mesmo vale para `GET /lancamentos`, cujo teto é só a janela de 366 dias (revisão do PR #8); paginar na fatia que trouxer importação.
+- **DÍVIDA** — Sem teto de contas por usuário e sem paginação em `GET /contas` (auditoria do PR #7, B1). Só afeta a própria conta. Dono: backend, na F20.5 junto com o rate limit. O mesmo vale para `GET /lancamentos`, cujo teto é só a janela de 366 dias (revisão do PR #8); paginar na fatia que trouxer importação. Vale também para recorrências: sem teto de templates ativos por usuário, cada diária grava ~366 previstas e o job refaz todas por dia (auditoria do PR #10, M1).
 - **DÍVIDA** — O teto de 2 s da consulta de sessão (`SessionQueries`) só tem teste de banco congelado. Falta um que confira que o `networkTimeout` da conexão volta ao valor do pool depois de uma consulta normal (revisão do PR #7). Dono: backend, na fatia que mexer no pool.
 - **DÍVIDA** — Categoria filha pode ter tipo diferente do pai: a V6 garante um nível só, mas não o mesmo tipo (F3). Um `CHECK` junto com a FK do pai fecha isso. Dono: dba, na fatia que trouxer o CRUD de categoria.
-- **DÍVIDA** — A trava da conta na escrita de lançamento (ADR-024) espera sem prazo próprio: uma transação presa segura as outras até o `socketTimeout` de 30 s. Definir `lock_timeout` curto na transação de escrita e responder 503. Dono: backend, na F5, que vai escrever lançamento em lote.
 - **DÍVIDA** — Sem idempotência na escrita de dinheiro: dois `POST /transferencias` (ou `/lancamentos`) idênticos gravam duas vezes (QA da F4, S2). O web barra o submit duplo, mas rede instável com retentativa não. Chave de idempotência por requisição. Dono: backend, antes do PWA offline ou da importação.
 - **DÍVIDA** — `POST /lancamentos` com `tipo: transferencia` é recusado com "categoriaId é obrigatório" ou "requisição inválida", não com uma mensagem que aponte para `/transferencias` (QA da F4, S1). Dono: backend, na próxima fatia que mexer em `EntryController`.
-- **DÍVIDA** — O `UnexpectedErrorLog` tira mensagem e stack de toda `PSQLException`, não só das que carregam valor da linha: deadlock (40P01) ou erro de SQL vira uma linha sem onde (revisão do PR #9). Sanitizar só SQLState das classes 22 e 23 (que trazem o valor) e manter o stack, sem mensagem, nas duas; o resto loga completo. **Paga no começo da F5**, que mexe em escrita concorrente.
-- **DÍVIDA** — A função do gatilho `transferencia_perna_em_dois_papeis` (V7) não fixa `search_path`. É `SECURITY INVOKER` e o papel da aplicação não cria objeto no schema, então não há caminho hoje (auditoria do PR #9, B2). Dono: dba, na próxima migration com função.
+- **DÍVIDA** — Deadlock (SQLState 40P01) responde 500, não 503 com "tente de novo" (F5). A ordem das travas do ADR-026 não forma ciclo hoje, então só apareceria com caminho novo fora da ordem. Tratar 40P01 junto com o 55P03 do `lock_timeout`. Dono: backend, na próxima fatia que mexer em `ApiExceptionHandler`.
+- **DÍVIDA** — Cancelar uma ocorrência de template e depois apagá-la faz a data voltar como prevista se for de hoje em diante (QA da F5, S2). É o contrato do ADR-026, mas surpreende. Decidir se apagar cancelada some de vez (manter a linha oculta) quando houver pedido. Dono: tech-lead, com o dono do produto.
+- **DÍVIDA** — O job de recorrência só loga pulo e falha; não loga quantas previstas inseriu por template, e uma falha de banco aborta a rodada sem resumo (QA da F5, S4). Dono: backend, junto com a observabilidade da F20.5.
+- **DÍVIDA** — O job de recorrência não trava a conta (ADR-026): numa corrida com arquivar, pode sobrar prevista em conta arquivada. Não entra no saldo e não confirma, mas aparece na lista. Rever se arquivar passar a apagar as previstas da conta. Dono: backend, na fatia que mexer em arquivar conta.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

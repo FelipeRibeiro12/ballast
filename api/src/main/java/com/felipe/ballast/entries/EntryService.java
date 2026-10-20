@@ -1,5 +1,6 @@
 package com.felipe.ballast.entries;
 
+import com.felipe.ballast.web.WriteTransaction;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -7,7 +8,6 @@ import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.TransactionStatus;
-import org.springframework.transaction.support.TransactionTemplate;
 
 // Assume entrada já validada e normalizada na borda. Todo método recebe o dono vindo da sessão.
 //
@@ -17,6 +17,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 // um PUT que troca de conta seguem a ordem de id, para trocas cruzadas não se travarem.
 @Service
 class EntryService {
+
+  private static final String PLANNED = "previsto";
 
   private static final String ACCOUNT_FK = "lancamento_conta_mesmo_usuario";
   private static final String CATEGORY_FK = "lancamento_categoria_mesmo_usuario_e_tipo";
@@ -35,7 +37,8 @@ class EntryService {
       ACCOUNT_ARCHIVED,
       CATEGORY_NOT_FOUND,
       BALANCE_OUT_OF_RANGE,
-      TRANSFER_LEG
+      TRANSFER_LEG,
+      NOT_PLANNED
     }
   }
 
@@ -43,14 +46,15 @@ class EntryService {
     DELETED,
     NOT_FOUND,
     BALANCE_OUT_OF_RANGE,
-    TRANSFER_LEG
+    TRANSFER_LEG,
+    CANCEL_OCCURRENCE
   }
 
   private final EntryRepository entries;
   private final EntryQueries queries;
-  private final TransactionTemplate transaction;
+  private final WriteTransaction transaction;
 
-  EntryService(EntryRepository entries, EntryQueries queries, TransactionTemplate transaction) {
+  EntryService(EntryRepository entries, EntryQueries queries, WriteTransaction transaction) {
     this.entries = entries;
     this.queries = queries;
     this.transaction = transaction;
@@ -76,6 +80,13 @@ class EntryService {
     } catch (DataIntegrityViolationException e) {
       return rejectionOf(e).orElseThrow(() -> e);
     }
+  }
+
+  // Confirmar ou cancelar uma ocorrência prevista. Ordem de travas: o lançamento, depois a conta
+  // (só ao confirmar; cancelar não mexe em saldo). Nenhum caminho trava template aqui, então não
+  // há ciclo com o job (template, depois conta) nem com desativar (template, depois a linha).
+  SaveResult changeStatus(UUID userId, UUID id, TargetStatus target) {
+    return transaction.execute(status -> changeStatusLocked(status, userId, id, target));
   }
 
   // NOT_FOUND para lançamento de outro usuário ou inexistente, sem distinguir. Apagar uma
@@ -108,11 +119,43 @@ class EntryService {
     return saved(userId, id);
   }
 
+  private SaveResult changeStatusLocked(
+      TransactionStatus status, UUID userId, UUID id, TargetStatus target) {
+    Optional<EntryQueries.LockedEntry> entry = queries.lockEntry(userId, id);
+    if (entry.isEmpty()) {
+      return SaveResult.Rejected.ENTRY_NOT_FOUND;
+    }
+    // Antes do status: a perna é realizada, e a resposta certa para ela é a rota de transferência.
+    if (queries.isTransferLeg(userId, id)) {
+      return SaveResult.Rejected.TRANSFER_LEG;
+    }
+    if (!PLANNED.equals(entry.get().status())) {
+      return SaveResult.Rejected.NOT_PLANNED;
+    }
+    if (target == TargetStatus.REALIZED) {
+      Optional<Boolean> archived = queries.lockAccount(userId, entry.get().accountId());
+      if (archived.isEmpty()) {
+        return SaveResult.Rejected.ENTRY_NOT_FOUND;
+      }
+      if (archived.get()) {
+        return SaveResult.Rejected.ACCOUNT_ARCHIVED;
+      }
+    }
+    if (queries.changeStatus(userId, id, target) == 0) {
+      return SaveResult.Rejected.ENTRY_NOT_FOUND;
+    }
+    if (target == TargetStatus.REALIZED && !balanceFits(userId, entry.get().accountId())) {
+      status.setRollbackOnly();
+      return SaveResult.Rejected.BALANCE_OUT_OF_RANGE;
+    }
+    return saved(userId, id);
+  }
+
   private SaveResult updateLocked(
       TransactionStatus status, UUID userId, UUID id, EntryInput input) {
     // O lançamento é travado primeiro para a conta de origem não mudar entre a leitura e o
     // travamento dela. Nenhum outro caminho trava lançamento depois de travar conta.
-    Optional<UUID> currentAccount = queries.lockEntryAccount(userId, id);
+    Optional<UUID> currentAccount = queries.lockEntry(userId, id).map(e -> e.accountId());
     if (currentAccount.isEmpty()) {
       return SaveResult.Rejected.ENTRY_NOT_FOUND;
     }
@@ -151,6 +194,7 @@ class EntryService {
     if (changed == 0) {
       return SaveResult.Rejected.ENTRY_NOT_FOUND;
     }
+    queries.markDetached(userId, id);
     if (!balanceFits(userId, currentAccount.get()) || !balanceFits(userId, input.accountId())) {
       status.setRollbackOnly();
       return SaveResult.Rejected.BALANCE_OUT_OF_RANGE;
@@ -159,18 +203,24 @@ class EntryService {
   }
 
   private DeleteResult deleteLocked(TransactionStatus status, UUID userId, UUID id) {
-    Optional<UUID> account = queries.lockEntryAccount(userId, id);
-    if (account.isEmpty()) {
+    Optional<EntryQueries.LockedEntry> entry = queries.lockEntry(userId, id);
+    if (entry.isEmpty()) {
       return DeleteResult.NOT_FOUND;
     }
     if (queries.isTransferLeg(userId, id)) {
       return DeleteResult.TRANSFER_LEG;
     }
-    queries.lockAccount(userId, account.get());
+    // Apagar uma prevista liberaria a chave (template, data) e a regra geraria a mesma ocorrência
+    // de novo. Cancelar guarda a linha e a chave. Realizada e cancelada podem sair.
+    if (entry.get().templateId() != null && PLANNED.equals(entry.get().status())) {
+      return DeleteResult.CANCEL_OCCURRENCE;
+    }
+    UUID account = entry.get().accountId();
+    queries.lockAccount(userId, account);
     if (entries.deleteOwned(userId, id) == 0) {
       return DeleteResult.NOT_FOUND;
     }
-    if (!balanceFits(userId, account.get())) {
+    if (!balanceFits(userId, account)) {
       status.setRollbackOnly();
       return DeleteResult.BALANCE_OUT_OF_RANGE;
     }

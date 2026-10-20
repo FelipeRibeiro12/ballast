@@ -440,7 +440,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou conta travada por mais de 2 s
       security:
       - cookieAuth: []
       summary: Arquiva ou desarquiva uma conta
@@ -520,7 +520,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
       security:
       - cookieAuth: []
       summary: Lista os lançamentos do usuário num período
@@ -577,7 +578,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
       security:
       - cookieAuth: []
       summary: Cria um lançamento realizado
@@ -586,7 +588,10 @@ paths:
   /lancamentos/{id}:
     delete:
       description: "Apaga a linha, também numa conta arquivada. O saldo deixa de somá\
-        -lo."
+        -lo. Ocorrência prevista de recorrência não se apaga (400 \"cancele a ocorrê\
+        ncia\"): cancele. Realizada ou cancelada pode ser apagada, e se a data é de\
+        \ hoje em diante e a recorrência segue ativa, o job volta a gerar a ocorrê\
+        ncia como prevista."
       operationId: deleteLancamentosById
       parameters:
       - in: path
@@ -608,7 +613,8 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "\"saldo da conta fora do limite\": apagar o lançamento tiraria\
             \ o saldo da faixa de ±9007199254740991 centavos, e nada é apagado; \"\
-            use a rota de transferência\": o lançamento é perna de transferência"
+            use a rota de transferência\": o lançamento é perna de transferência;\
+            \ \"cancele a ocorrência\": ocorrência prevista de recorrência"
         "401":
           content:
             application/json:
@@ -627,7 +633,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
       security:
       - cookieAuth: []
       summary: Apaga um lançamento
@@ -666,17 +673,95 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
       security:
       - cookieAuth: []
       summary: Devolve um lançamento do usuário
+      tags:
+      - lancamentos
+    patch:
+      description: "Corpo {\"status\": \"realizado\"} ou {\"status\": \"cancelado\"\
+        }, o único campo. Só uma ocorrência prevista muda de status. Confirmar passa\
+        \ a contar no saldo, com a trava e o teto do saldo do lançamento, e recusa\
+        \ conta arquivada; cancelar não mexe em saldo e vale mesmo com a conta arquivada.\
+        \ As duas são definitivas e deixam a ocorrência desgarrada: o job não a recria\
+        \ nem a altera."
+      operationId: patchLancamentosById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LancamentoStatusRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lancamento"
+          description: Lançamento com o status novo
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "\"status é obrigatório\", \"status deve ser realizado ou cancelado\"\
+            , campo não declarado; \"só ocorrência prevista pode mudar de status\"\
+            \ (o lançamento não está previsto); \"conta arquivada\" e \"saldo da conta\
+            \ fora do limite\" (só ao confirmar); \"use a rota de transferência\"\
+            \ (perna de transferência)"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Lançamento de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
+      security:
+      - cookieAuth: []
+      summary: Confirma ou cancela uma ocorrência prevista
       tags:
       - lancamentos
     put:
       description: "Mesmo corpo do POST, substitui todos os campos e grava a data\
         \ nas duas colunas. Mover o lançamento para uma conta arquivada é recusado\
         \ (400 \"conta arquivada\"). Editar sem trocar de conta vale mesmo com a conta\
-        \ arquivada, para corrigir lançamento antigo."
+        \ arquivada, para corrigir lançamento antigo. Numa ocorrência de recorrência\
+        \ marca o lançamento como desgarrado (a regra não toca mais nele) e manté\
+        m templateId; o status não muda por aqui, e uma ocorrência prevista não conta\
+        \ no saldo, então o teto só vale para realizada."
       operationId: putLancamentosById
       parameters:
       - in: path
@@ -737,12 +822,210 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
       security:
       - cookieAuth: []
       summary: Substitui um lançamento
       tags:
       - lancamentos
+  /recorrencias:
+    get:
+      description: "Ordem por título sem diferenciar maiúscula de minúscula, depois\
+        \ por id."
+      operationId: getRecorrencias
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Recorrencia"
+          description: Recorrências do usuário
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: "Lista as recorrências do usuário, ativas e inativas"
+      tags:
+      - recorrencias
+    post:
+      description: "Grava a regra, o template e, na mesma transação, as ocorrências\
+        \ previstas de max(inicio, hoje) até hoje mais 12 meses, as duas pontas incluí\
+        das. A data que a regra gera antes de hoje não vira lançamento. Hoje é a data\
+        \ em America/Sao_Paulo. Conta e categoria precisam ser do usuário e a categoria\
+        \ do mesmo tipo do template. Uma série que já terminou é criada com zero ocorrê\
+        ncias."
+      operationId: postRecorrencias
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecorrenciaRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecorrenciaCriada"
+          description: Recorrência criada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado e combinaç\
+            ão de campos que a frequência não aceita; \"conta não encontrada\", \"\
+            conta arquivada\" ou \"categoria não encontrada\""
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Cria uma recorrência e materializa as ocorrências dos próximos 12 meses
+      tags:
+      - recorrencias
+  /recorrencias/{id}:
+    get:
+      operationId: getRecorrenciasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recorrencia"
+          description: Recorrência
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Recorrência de outro usuário, inexistente ou id que não é\
+            \ UUID; todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Devolve uma recorrência do usuário
+      tags:
+      - recorrencias
+    patch:
+      description: "Só {\"ativo\": false}. Marca o template como inativo e apaga as\
+        \ ocorrências previstas, não desgarradas, de hoje em diante; as de antes de\
+        \ hoje e as realizadas ou editadas ficam. Repetir a chamada devolve o mesmo\
+        \ estado. Depois da resposta o job não gera mais nada para o template."
+      operationId: patchRecorrenciasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecorrenciaAtivoRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recorrencia"
+          description: Recorrência inativa
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Corpo inválido, inclusive campo não declarado; \"reativar\
+            \ não é suportado\""
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Recorrência de outro usuário, inexistente ou id que não é\
+            \ UUID; todos com o mesmo corpo"
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Desativa uma recorrência
+      tags:
+      - recorrencias
   /transferencias:
     post:
       description: "Cria as duas pernas (tipo transferencia, sem categoria, mesmo\
@@ -1083,7 +1366,15 @@ components:
         status:
           type: string
           enum:
+          - previsto
           - realizado
+          - cancelado
+        templateId:
+          type:
+          - string
+          - "null"
+          format: uuid
+          description: Id da recorrência que gerou a ocorrência; nulo nos avulsos
         tipo:
           type: string
           enum:
@@ -1117,6 +1408,7 @@ components:
       - direcao
       - id
       - status
+      - templateId
       - tipo
       - titulo
       - transferenciaId
@@ -1162,6 +1454,17 @@ components:
       - tipo
       - titulo
       - valorCentavos
+    LancamentoStatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Só uma ocorrência prevista muda de status
+          enum:
+          - realizado
+          - cancelado
+      required:
+      - status
     LoginRequest:
       type: object
       properties:
@@ -1176,6 +1479,226 @@ components:
       required:
       - email
       - senha
+    Recorrencia:
+      type: object
+      properties:
+        ativo:
+          type: boolean
+        categoriaId:
+          type: string
+          format: uuid
+        contaId:
+          type: string
+          format: uuid
+        criadoEm:
+          type: string
+          format: date-time
+        descricao:
+          type:
+          - string
+          - "null"
+          maxLength: 500
+        id:
+          type: string
+          format: uuid
+        proximaOcorrencia:
+          type:
+          - string
+          - "null"
+          format: date
+          description: Menor dataCaixa entre as previstas de hoje em diante; nula
+            se não houver ou se inativa
+        regra:
+          $ref: "#/components/schemas/RegraRecorrencia"
+        tipo:
+          type: string
+          enum:
+          - receita
+          - despesa
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+        valorCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real, sempre positivo; o sinal vem do tipo"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - ativo
+      - categoriaId
+      - contaId
+      - criadoEm
+      - descricao
+      - id
+      - proximaOcorrencia
+      - regra
+      - tipo
+      - titulo
+      - valorCentavos
+    RecorrenciaAtivoRequest:
+      type: object
+      properties:
+        ativo:
+          type: boolean
+          description: "Só false é aceito: a recorrência não é reativada"
+      required:
+      - ativo
+    RecorrenciaCriada:
+      type: object
+      properties:
+        ocorrenciasMaterializadas:
+          type: integer
+          format: int32
+          description: Quantas ocorrências previstas a criação gravou (hoje até hoje
+            mais 12 meses)
+        recorrencia:
+          $ref: "#/components/schemas/Recorrencia"
+      required:
+      - ocorrenciasMaterializadas
+      - recorrencia
+    RecorrenciaRequest:
+      type: object
+      properties:
+        categoriaId:
+          type: string
+          format: uuid
+        contaId:
+          type: string
+          format: uuid
+        descricao:
+          type:
+          - string
+          - "null"
+          maxLength: 500
+        regra:
+          $ref: "#/components/schemas/RegraRecorrenciaRequest"
+        tipo:
+          type: string
+          enum:
+          - receita
+          - despesa
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+        valorCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real, sempre positivo; o sinal vem do tipo"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - categoriaId
+      - contaId
+      - regra
+      - tipo
+      - titulo
+      - valorCentavos
+    RegraRecorrencia:
+      type: object
+      properties:
+        diaDaSemana:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: Só semanal; 0 é domingo e 6 é sábado
+        diaDoMes:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: Só mensal
+        fim:
+          type:
+          - string
+          - "null"
+          format: date
+        frequencia:
+          type: string
+          enum:
+          - diaria
+          - semanal
+          - mensal
+          - anual
+        inicio:
+          type: string
+          format: date
+        intervalo:
+          type: integer
+          format: int32
+          maximum: 99
+          minimum: 1
+        ocorrenciasMax:
+          type:
+          - integer
+          - "null"
+          format: int32
+      required:
+      - diaDaSemana
+      - diaDoMes
+      - fim
+      - frequencia
+      - inicio
+      - intervalo
+      - ocorrenciasMax
+    RegraRecorrenciaRequest:
+      type: object
+      properties:
+        diaDaSemana:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: "Só em semanal, e obrigatório nela. 0 é domingo e 6 é sábado"
+          maximum: 6
+          minimum: 0
+        diaDoMes:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: "Só em mensal, e obrigatório nela. Dia maior que o último do\
+            \ mês cai no último dia"
+          maximum: 31
+          minimum: 1
+        fim:
+          type:
+          - string
+          - "null"
+          format: date
+          description: "Última data possível, incluída; não vale junto com ocorrenciasMax"
+        frequencia:
+          type: string
+          enum:
+          - diaria
+          - semanal
+          - mensal
+          - anual
+        inicio:
+          type: string
+          format: date
+          example: 2026-11-05
+        intervalo:
+          type: integer
+          format: int32
+          description: "A cada N períodos, contados a partir do período do início;\
+            \ padrão 1"
+          maximum: 99
+          minimum: 1
+        ocorrenciasMax:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: Conta as ocorrências desde o início; não vale junto com fim
+          maximum: 10000
+          minimum: 1
+      required:
+      - frequencia
+      - inicio
     Transferencia:
       type: object
       properties:

@@ -34,7 +34,9 @@ public record EntryResponse(
             requiredMode = Schema.RequiredMode.REQUIRED,
             description = "Quando o dinheiro se move; saldo e fluxo de caixa usam esta")
         LocalDate dataCaixa,
-    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, allowableValues = "realizado")
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            allowableValues = {"previsto", "realizado", "cancelado"})
         String status,
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant criadoEm,
     @Schema(
@@ -47,7 +49,12 @@ public record EntryResponse(
             nullable = true,
             description =
                 "Lado da perna: saida subtrai do saldo, entrada soma; nulo nos outros tipos")
-        EntryDirection direcao) {
+        EntryDirection direcao,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description = "Id da recorrência que gerou a ocorrência; nulo nos avulsos")
+        UUID templateId) {
 
   // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
   // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
@@ -65,7 +72,8 @@ public record EntryResponse(
         summary.status(),
         summary.createdAt(),
         summary.transferId(),
-        summary.direction());
+        summary.direction(),
+        summary.templateId());
   }
 
   private static long toCents(BigDecimal amount) {
