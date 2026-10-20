@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-20 — F11: compra parcelada (PR #17)
+
+O que entrou: migration V11 com `parcela_de_id`, `parcela_num` e `parcela_total`, com uma FK composta que garante dono, primeira parcela e total, e uma coluna gerada que garante parcela só em cartão; rotas de compra parcelada (criar, ver, editar texto e categoria, apagar) e as regras de uma parcela só em `/lancamentos`; prévia das parcelas e dos vencimentos no web, "parcela k de N" na lista e as ações por compra e por parcela. A janela do pago passou a incluir o dia do vencimento quando ele cai no mesmo dia do fechamento (dívida da F10).
+Decisões: ADR-032. Só cartão e só despesa; todas realizadas; a primeira parcela aponta para si mesma; valor, número de parcelas, data e conta não se editam.
+Dívida registrada: `descricao` nula no PATCH da compra.
+Achados do QA: 0 bloquearam; 1 dívida (soma da compra acima da faixa do JSON com 200) tratada como contrato violado e corrigida na fatia; 3 sugestões sem ação (título de uma parcela diferente do da compra, documentado; bidi, já na dívida dos invisíveis; ordem das mensagens).
+Achados do revisor: PENDENTE
+Pipeline: PENDENTE
+Em aberto: o backend parou uma vez pelo limite de uso, com um laço de espera que nunca terminaria por causa do mvnw do make dev; encerrado sem tocar no make dev. O teste que compara o proxy com a spec pegou a rota nova esquecida.
+
 ## 2026-10-20 — F10: cartão de crédito (PR #16)
 
 O que entrou: migration V10 com `cartao` 1:1 e o tipo `cartao_credito`, com o banco garantindo por coluna gerada e FK composta que só conta de cartão tem cartão e que a conta de pagamento é corrente ou poupança; regra da fatura num componente puro (até o fechamento, inclusive; vencimento menor ou igual ao fechamento vira o mês) aplicada em lançamento, PUT, recorrência, divisão e confirmar com ajuste; `GET /contas/{id}/faturas` derivado dos lançamentos; tela de cartão com limite, disponível, faturas e pagar fatura preenchido; data da compra e dica do vencimento nos formulários.
