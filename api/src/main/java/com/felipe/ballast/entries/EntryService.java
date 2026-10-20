@@ -128,7 +128,11 @@ class EntryService {
     if (rejected.isPresent()) {
       return rejected.get();
     }
-    UUID id = entries.saveAndFlush(new Entry(userId, input)).getId();
+    UUID id =
+        entries
+            .saveAndFlush(
+                new Entry(userId, input, cashDate(userId, input.accountId(), input.date())))
+            .getId();
     if (!balanceFits(userId, input.accountId())) {
       status.setRollbackOnly();
       return SaveResult.Rejected.BALANCE_OUT_OF_RANGE;
@@ -163,7 +167,9 @@ class EntryService {
         return SaveResult.Rejected.ACCOUNT_ARCHIVED;
       }
     }
-    if (queries.changeStatus(userId, id, target, amount, date) == 0) {
+    // Com data nova em conta de cartão, a data vira a competência e a caixa é o vencimento dela.
+    LocalDate cashDate = date == null ? null : cashDate(userId, entry.get().accountId(), date);
+    if (queries.changeStatus(userId, id, target, amount, date, cashDate) == 0) {
       return SaveResult.Rejected.ENTRY_NOT_FOUND;
     }
     if (target == TargetStatus.REALIZED && !balanceFits(userId, entry.get().accountId())) {
@@ -212,7 +218,8 @@ class EntryService {
             input.categoryId(),
             input.accountId(),
             input.amount(),
-            input.date());
+            input.date(),
+            cashDate(userId, input.accountId(), input.date()));
     if (changed == 0) {
       return SaveResult.Rejected.ENTRY_NOT_FOUND;
     }
@@ -255,6 +262,11 @@ class EntryService {
 
   List<EntrySummary> list(UUID userId, LocalDate from, LocalDate to, UUID accountId) {
     return queries.list(userId, from, to, accountId);
+  }
+
+  // data_caixa do lançamento: a própria data fora de cartão, o vencimento da fatura em cartão.
+  private LocalDate cashDate(UUID userId, UUID accountId, LocalDate date) {
+    return queries.findCardBilling(userId, accountId).map(card -> card.dueDate(date)).orElse(date);
   }
 
   private SaveResult saved(UUID userId, UUID id) {

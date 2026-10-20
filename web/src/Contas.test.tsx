@@ -15,6 +15,7 @@ function conta(sobra: Partial<Record<string, unknown>> = {}): Record<string, unk
     saldoCentavos: 123456,
     arquivada: false,
     criadaEm: '2026-10-19T12:00:00Z',
+    cartao: null,
     ...sobra,
   }
 }

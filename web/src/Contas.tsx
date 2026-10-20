@@ -24,8 +24,10 @@ const ROTULO_DO_TIPO: Record<TipoDeConta, string> = {
   corrente: 'Corrente',
   poupanca: 'Poupança',
   dinheiro: 'Dinheiro',
+  cartao_credito: 'Cartão de crédito',
 }
 
+// O cartão ganha formulário próprio numa fatia à parte.
 const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro']
 
 // Mesma ordem do servidor: nome sem diferenciar caixa nem acento, id para desempatar.

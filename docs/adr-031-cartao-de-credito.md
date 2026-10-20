@@ -84,6 +84,21 @@ componente puro, como o motor de datas da recorrência.
 - O limite **não** bloqueia lançamento. O app registra o que aconteceu; o
   banco do cartão é quem recusa a compra.
 
+## Decisões da implementação
+
+- `disponivelCentavos` fica **limitado ao limite**: saldo positivo não o
+  aumenta. Limite mais saldo chegaria a 2 x 9007199254740991, fora do inteiro
+  seguro do JavaScript, e o app mostra o que o usuário compara com o aplicativo
+  do banco. A dívida acima do limite continua aparecendo, como disponível
+  negativo.
+- Arquivar a conta de pagamento de um cartão ativo é permitido. O cartão segue
+  apontando para ela e a transferência de pagamento a partir dela é recusada
+  pela F4 (`conta arquivada`) até desarquivar ou pagar por outra conta.
+- A regra da fatura mora em `entries/CardBilling`, pública para a recorrência
+  usar. Quem grava lançamento lê o cartão da conta por SQL no próprio pacote.
+- `GET /lancamentos` continua só por `data_caixa`. Ver compras por competência
+  pede um parâmetro novo, que fica como dívida.
+
 ## Justificativa
 
 Tratar a data informada como data da compra é o que o usuário sabe: ele

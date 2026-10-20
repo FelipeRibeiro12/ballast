@@ -39,6 +39,7 @@ class OpenApiConfig {
     return openApi -> {
       makeNullable(openApi, "Recorrencia", "divisao", "DivisaoRecorrencia");
       makeNullable(openApi, "RecorrenciaRequest", "divisao", "DivisaoRequest");
+      makeNullable(openApi, "Conta", "cartao", "Cartao");
     };
   }
 

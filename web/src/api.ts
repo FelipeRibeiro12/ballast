@@ -174,7 +174,33 @@ export class ContaInvalidaError extends ApiError {
   }
 }
 
-const TIPOS_DE_CONTA: readonly string[] = ['corrente', 'poupanca', 'dinheiro']
+const TIPOS_DE_CONTA: readonly string[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito']
+
+function isDiaDoMes(valor: unknown): boolean {
+  return Number.isSafeInteger(valor) && (valor as number) >= 1 && (valor as number) <= 31
+}
+
+function isCartao(valor: unknown): boolean {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'limiteCentavos' in valor &&
+    Number.isSafeInteger(valor.limiteCentavos) &&
+    'disponivelCentavos' in valor &&
+    Number.isSafeInteger(valor.disponivelCentavos) &&
+    'diaFechamento' in valor &&
+    isDiaDoMes(valor.diaFechamento) &&
+    'diaVencimento' in valor &&
+    isDiaDoMes(valor.diaVencimento) &&
+    'contaPagamentoId' in valor &&
+    typeof valor.contaPagamentoId === 'string'
+  )
+}
+
+// O servidor sempre manda a chave: objeto só em cartão de crédito, null nos outros tipos.
+function cartaoCoerenteComOTipo(tipo: unknown, cartao: unknown): boolean {
+  return tipo === 'cartao_credito' ? isCartao(cartao) : cartao === null
+}
 
 function isConta(valor: unknown): valor is Conta {
   return (
@@ -197,7 +223,9 @@ function isConta(valor: unknown): valor is Conta {
     'arquivada' in valor &&
     typeof valor.arquivada === 'boolean' &&
     'criadaEm' in valor &&
-    typeof valor.criadaEm === 'string'
+    typeof valor.criadaEm === 'string' &&
+    'cartao' in valor &&
+    cartaoCoerenteComOTipo(valor.tipo, valor.cartao)
   )
 }
 

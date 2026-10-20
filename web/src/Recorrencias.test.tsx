@@ -14,6 +14,7 @@ const conta = {
   saldoCentavos: 100000,
   arquivada: false,
   criadaEm: '2026-10-19T12:00:00Z',
+  cartao: null,
 }
 
 const categorias = [

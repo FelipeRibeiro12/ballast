@@ -33,7 +33,8 @@ public record StatusRequest(
         @Schema(
             requiredMode = Schema.RequiredMode.NOT_REQUIRED,
             description =
-                "Só com status realizado: data real, gravada em dataCompetencia e dataCaixa",
+                "Só com status realizado: data real, gravada em dataCompetencia; dataCaixa recebe a mesma data,"
+                    + " ou o vencimento da fatura em conta de cartão",
             type = "string",
             format = "date",
             example = "2026-03-10")

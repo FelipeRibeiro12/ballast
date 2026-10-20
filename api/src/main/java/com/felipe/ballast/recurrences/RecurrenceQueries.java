@@ -1,5 +1,6 @@
 package com.felipe.ballast.recurrences;
 
+import com.felipe.ballast.entries.CardBilling;
 import com.felipe.ballast.entries.EntryType;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
@@ -23,7 +24,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 class RecurrenceQueries {
 
-  // Linhas por INSERT: cada data usa até 4 parâmetros, e uma série diária de 12 meses cabe em uma
+  // Linhas por INSERT: cada data usa até 5 parâmetros, e uma série diária de 12 meses cabe em uma
   // ida.
   private static final int INSERT_CHUNK = 250;
 
@@ -33,13 +34,13 @@ class RecurrenceQueries {
                               conta_id, data_competencia, data_caixa, status, template_id,
                               ocorrencia_data, desgarrado, parcela_ordem)
       SELECT o.id, t.usuario_id, t.tipo, t.titulo, t.descricao, COALESCE(o.valor, t.valor_total),
-             t.categoria_id, t.conta_id, o.dia, o.dia, 'previsto', t.id, o.dia, false, o.ordem
+             t.categoria_id, t.conta_id, o.dia, o.caixa, 'previsto', t.id, o.dia, false, o.ordem
       FROM template_lancamento t
       CROSS JOIN (VALUES """;
 
   private static final String INSERT_TAIL =
       """
-      ) AS o(id, dia, ordem, valor)
+      ) AS o(id, dia, caixa, ordem, valor)
       WHERE t.id = :templateId AND t.usuario_id = :userId
       ON CONFLICT (template_id, ocorrencia_data, parcela_ordem)
       WHERE template_id IS NOT NULL DO NOTHING
@@ -61,9 +62,11 @@ class RecurrenceQueries {
   record LockedTemplate(
       boolean active, UUID accountId, BigDecimal amount, RecurrenceRule rule, Division division) {}
 
-  // Ocorrência a gravar. Sem divisão, parcelOrder e amount são nulos e o INSERT usa o valor do
-  // template.
-  record NewOccurrence(LocalDate date, Integer parcelOrder, BigDecimal amount) {}
+  // Ocorrência a gravar. date é a data gerada pela regra (chave e competência); cashDate é a caixa,
+  // igual a ela fora de cartão. Sem divisão, parcelOrder e amount são nulos e o INSERT usa o valor
+  // do template.
+  record NewOccurrence(
+      LocalDate date, LocalDate cashDate, Integer parcelOrder, BigDecimal amount) {}
 
   record TemplateRef(UUID userId, UUID templateId) {}
 
@@ -156,6 +159,19 @@ class RecurrenceQueries {
   // Trava a linha da conta até o fim da transação. Vazio quando a conta não existe ou é de outro
   // usuário; senão, se está arquivada. Quem arquiva faz UPDATE nesta linha e espera na fila, então
   // nenhuma ocorrência nova entra depois de o arquivar responder 200.
+  // Fechamento e vencimento do cartão da conta; vazio quando a conta não é de cartão. Os dois dias
+  // não mudam depois que o cartão nasce (ADR-031), então o job lê sem travar a conta.
+  Optional<CardBilling> findCardBilling(UUID userId, UUID accountId) {
+    return jdbc.sql(
+            "SELECT dia_fechamento, dia_vencimento FROM cartao"
+                + " WHERE usuario_id = :userId AND conta_id = :id")
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(
+            (rs, row) -> new CardBilling(rs.getInt("dia_fechamento"), rs.getInt("dia_vencimento")))
+        .optional();
+  }
+
   Optional<Boolean> lockAccount(UUID userId, UUID accountId) {
     return jdbc.sql(
             "SELECT arquivada FROM conta WHERE usuario_id = :userId AND id = :id FOR UPDATE")
@@ -288,9 +304,12 @@ class RecurrenceQueries {
             .append(i)
             .append(" AS uuid), CAST(:d")
             .append(i)
+            .append(" AS date), CAST(:c")
+            .append(i)
             .append(" AS date), ");
         params.put("id" + i, newId());
         params.put("d" + i, occurrence.date());
+        params.put("c" + i, occurrence.cashDate());
         if (occurrence.parcelOrder() == null) {
           values.append("CAST(NULL AS smallint), CAST(NULL AS numeric))");
         } else {

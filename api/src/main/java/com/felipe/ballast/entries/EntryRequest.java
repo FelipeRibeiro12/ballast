@@ -50,7 +50,9 @@ public record EntryRequest(
     @JsonProperty("data")
         @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
-            description = "Grava a mesma data em dataCompetencia e dataCaixa",
+            description =
+                "Grava em dataCompetencia. dataCaixa recebe a mesma data, ou o vencimento da fatura"
+                    + " quando a conta é de cartão de crédito",
             type = "string",
             format = "date",
             example = "2026-03-10")

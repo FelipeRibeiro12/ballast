@@ -50,8 +50,8 @@ class Entry {
 
   protected Entry() {}
 
-  // A F3 grava a mesma data nas duas colunas; elas só divergem com o cartão.
-  Entry(UUID userId, EntryInput input) {
+  // As duas datas só divergem em conta de cartão (ADR-031); quem chama calcula a caixa.
+  Entry(UUID userId, EntryInput input, LocalDate cashDate) {
     this.userId = userId;
     this.type = input.type().value();
     this.title = input.title();
@@ -60,7 +60,7 @@ class Entry {
     this.accountId = input.accountId();
     this.amount = input.amount();
     this.competenceDate = input.date();
-    this.cashDate = input.date();
+    this.cashDate = cashDate;
   }
 
   UUID getId() {

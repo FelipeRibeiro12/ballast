@@ -305,7 +305,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Entrada inválida, inclusive campo não declarado"
+          description: "Entrada inválida, inclusive campo não declarado, cartao fora\
+            \ de conta de cartão (ou ausente nela) e conta de pagamento inexistente,\
+            \ de outro usuário, arquivada ou de tipo que não paga cartão"
         "401":
           content:
             application/json:
@@ -1298,6 +1300,70 @@ components:
       required:
       - email
       - senha
+    Cartao:
+      type: object
+      properties:
+        contaPagamentoId:
+          type: string
+          format: uuid
+        diaFechamento:
+          type: integer
+          format: int32
+          maximum: 31
+          minimum: 1
+        diaVencimento:
+          type: integer
+          format: int32
+          maximum: 31
+          minimum: 1
+        disponivelCentavos:
+          type: integer
+          format: int64
+          description: "Limite mais o saldo da conta, nunca acima do limite. Negativo\
+            \ quando a dívida passa do limite"
+          maximum: 9007199254740991
+          minimum: -9007199254740990
+        limiteCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real, sempre positivo"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - contaPagamentoId
+      - diaFechamento
+      - diaVencimento
+      - disponivelCentavos
+      - limiteCentavos
+    CartaoRequest:
+      type: object
+      properties:
+        contaPagamentoId:
+          type: string
+          format: uuid
+          description: "Conta corrente ou poupança ativa do usuário, de onde sai a\
+            \ fatura"
+        diaFechamento:
+          type: integer
+          format: int32
+          maximum: 31
+          minimum: 1
+        diaVencimento:
+          type: integer
+          format: int32
+          maximum: 31
+          minimum: 1
+        limiteCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real. Informativo: não bloqueia lançamento"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - contaPagamentoId
+      - diaFechamento
+      - diaVencimento
+      - limiteCentavos
     Categoria:
       type: object
       properties:
@@ -1340,6 +1406,11 @@ components:
       properties:
         arquivada:
           type: boolean
+        cartao:
+          anyOf:
+          - $ref: "#/components/schemas/Cartao"
+          - type: "null"
+          description: Dados do cartão; nulo nas contas que não são de cartão de crédito
         criadaEm:
           type: string
           format: date-time
@@ -1372,8 +1443,10 @@ components:
           - corrente
           - poupanca
           - dinheiro
+          - cartao_credito
       required:
       - arquivada
+      - cartao
       - criadaEm
       - id
       - moeda
@@ -1384,6 +1457,10 @@ components:
     CriarContaRequest:
       type: object
       properties:
+        cartao:
+          $ref: "#/components/schemas/CartaoRequest"
+          description: Obrigatório quando tipo é cartao_credito e proibido nos outros
+            tipos
         nome:
           type: string
           maxLength: 100
@@ -1400,6 +1477,7 @@ components:
           - corrente
           - poupanca
           - dinheiro
+          - cartao_credito
       required:
       - nome
       - tipo
@@ -1600,7 +1678,8 @@ components:
         data:
           type: string
           format: date
-          description: Grava a mesma data em dataCompetencia e dataCaixa
+          description: "Grava em dataCompetencia. dataCaixa recebe a mesma data, ou\
+            \ o vencimento da fatura quando a conta é de cartão de crédito"
           example: 2026-03-10
         descricao:
           type:
@@ -1635,8 +1714,9 @@ components:
         data:
           type: string
           format: date
-          description: "Só com status realizado: data real, gravada em dataCompetencia\
-            \ e dataCaixa"
+          description: "Só com status realizado: data real, gravada em dataCompetencia;\
+            \ dataCaixa recebe a mesma data, ou o vencimento da fatura em conta de\
+            \ cartão"
           example: 2026-03-10
         status:
           type: string

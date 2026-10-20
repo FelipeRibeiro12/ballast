@@ -64,7 +64,9 @@ class AccountCreationTest {
             "saldoInicialCentavos",
             "saldoCentavos",
             "arquivada",
-            "criadaEm");
+            "criadaEm",
+            "cartao");
+    assertThat(body.get("cartao").isNull()).isTrue();
     assertThat(body.get("nome").asString()).isEqualTo("Nubank");
     assertThat(body.get("tipo").asString()).isEqualTo("corrente");
     assertThat(body.get("moeda").asString()).isEqualTo("BRL");

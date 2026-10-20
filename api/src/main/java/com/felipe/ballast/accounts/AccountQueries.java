@@ -1,5 +1,6 @@
 package com.felipe.ballast.accounts;
 
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -39,9 +40,11 @@ class AccountQueries {
       )
       SELECT c.id, c.nome, c.tipo, c.moeda, c.saldo_inicial,
              c.saldo_inicial + COALESCE(m.movimento, 0) AS saldo,
-             c.arquivada, c.criada_em
+             c.arquivada, c.criada_em,
+             ca.limite, ca.dia_fechamento, ca.dia_vencimento, ca.conta_pagamento_id
       FROM conta c
       LEFT JOIN movement m ON m.conta_id = c.id
+      LEFT JOIN cartao ca ON ca.conta_id = c.id AND ca.usuario_id = c.usuario_id
       """;
 
   private static final String LIST_COLUMNS = MOVEMENT_START + MOVEMENT_END;
@@ -80,6 +83,37 @@ class AccountQueries {
         .optional();
   }
 
+  record PaymentAccount(boolean eligible) {}
+
+  // Conta de pagamento do cartão, lida só pelo dono. Elegível é corrente ou poupança ativa
+  // (aceita_pagamento_cartao é coluna gerada). A FK da V10 segura a corrida; isto dá a mensagem.
+  Optional<PaymentAccount> findPaymentAccount(UUID userId, UUID id) {
+    return jdbc.sql(
+            "SELECT aceita_pagamento_cartao AND NOT arquivada FROM conta"
+                + " WHERE usuario_id = :userId AND id = :id")
+        .param("userId", userId)
+        .param("id", id)
+        .query((rs, row) -> new PaymentAccount(rs.getBoolean(1)))
+        .optional();
+  }
+
+  // tipo_conta e pagamento_aceito são colunas geradas: o INSERT não as cita.
+  void insertCard(UUID userId, UUID accountId, CardInput card) {
+    jdbc.sql(
+            """
+            INSERT INTO cartao (conta_id, usuario_id, limite, dia_fechamento, dia_vencimento,
+                                conta_pagamento_id)
+            VALUES (:accountId, :userId, :limit, :closingDay, :dueDay, :paymentAccountId)
+            """)
+        .param("accountId", accountId)
+        .param("userId", userId)
+        .param("limit", card.limit())
+        .param("closingDay", card.closingDay())
+        .param("dueDay", card.dueDay())
+        .param("paymentAccountId", card.paymentAccountId())
+        .update();
+  }
+
   private static AccountSummary map(ResultSet rs, int row) throws SQLException {
     return new AccountSummary(
         rs.getObject("id", UUID.class),
@@ -89,6 +123,19 @@ class AccountQueries {
         rs.getBigDecimal("saldo_inicial"),
         rs.getBigDecimal("saldo"),
         rs.getBoolean("arquivada"),
-        rs.getObject("criada_em", OffsetDateTime.class).toInstant());
+        rs.getObject("criada_em", OffsetDateTime.class).toInstant(),
+        mapCard(rs));
+  }
+
+  private static AccountSummary.CardSummary mapCard(ResultSet rs) throws SQLException {
+    BigDecimal limit = rs.getBigDecimal("limite");
+    if (limit == null) {
+      return null;
+    }
+    return new AccountSummary.CardSummary(
+        limit,
+        rs.getInt("dia_fechamento"),
+        rs.getInt("dia_vencimento"),
+        rs.getObject("conta_pagamento_id", UUID.class));
   }
 }

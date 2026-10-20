@@ -348,6 +348,40 @@ export interface components {
             nome?: string;
             senha: string;
         };
+        Cartao: {
+            /** Format: uuid */
+            contaPagamentoId: string;
+            /** Format: int32 */
+            diaFechamento: number;
+            /** Format: int32 */
+            diaVencimento: number;
+            /**
+             * Format: int64
+             * @description Limite mais o saldo da conta, nunca acima do limite. Negativo quando a dívida passa do limite
+             */
+            disponivelCentavos: number;
+            /**
+             * Format: int64
+             * @description Centavos de real, sempre positivo
+             */
+            limiteCentavos: number;
+        };
+        CartaoRequest: {
+            /**
+             * Format: uuid
+             * @description Conta corrente ou poupança ativa do usuário, de onde sai a fatura
+             */
+            contaPagamentoId: string;
+            /** Format: int32 */
+            diaFechamento: number;
+            /** Format: int32 */
+            diaVencimento: number;
+            /**
+             * Format: int64
+             * @description Centavos de real. Informativo: não bloqueia lançamento
+             */
+            limiteCentavos: number;
+        };
         Categoria: {
             cor: string | null;
             icone: string | null;
@@ -361,6 +395,8 @@ export interface components {
         };
         Conta: {
             arquivada: boolean;
+            /** @description Dados do cartão; nulo nas contas que não são de cartão de crédito */
+            cartao: components["schemas"]["Cartao"] | null;
             /** Format: date-time */
             criadaEm: string;
             /** Format: uuid */
@@ -379,9 +415,11 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito";
         };
         CriarContaRequest: {
+            /** @description Obrigatório quando tipo é cartao_credito e proibido nos outros tipos */
+            cartao?: components["schemas"]["CartaoRequest"];
             nome: string;
             /**
              * Format: int64
@@ -389,7 +427,7 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito";
         };
         DiaProjetado: {
             /** Format: date */
@@ -491,7 +529,7 @@ export interface components {
             contaId: string;
             /**
              * Format: date
-             * @description Grava a mesma data em dataCompetencia e dataCaixa
+             * @description Grava em dataCompetencia. dataCaixa recebe a mesma data, ou o vencimento da fatura quando a conta é de cartão de crédito
              * @example 2026-03-10
              */
             data: string;
@@ -508,7 +546,7 @@ export interface components {
         LancamentoStatusRequest: {
             /**
              * Format: date
-             * @description Só com status realizado: data real, gravada em dataCompetencia e dataCaixa
+             * @description Só com status realizado: data real, gravada em dataCompetencia; dataCaixa recebe a mesma data, ou o vencimento da fatura em conta de cartão
              * @example 2026-03-10
              */
             data?: string;
@@ -1134,7 +1172,7 @@ export interface operations {
                     "application/json": components["schemas"]["Conta"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado */
+            /** @description Entrada inválida, inclusive campo não declarado, cartao fora de conta de cartão (ou ausente nela) e conta de pagamento inexistente, de outro usuário, arquivada ou de tipo que não paga cartão */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -108,7 +108,8 @@ class TransferService {
         .orElseThrow(() -> new IllegalStateException("transferência gravada não encontrada"));
   }
 
-  // Perna sem categoria e com a mesma data nas duas datas, como no lançamento comum.
+  // Perna sem categoria e com a mesma data nas duas datas, também em conta de cartão: pagar a
+  // fatura é dinheiro se movendo no dia (ADR-031), sem a regra da fatura.
   private UUID saveLeg(UUID userId, TransferInput input, String title, UUID accountId) {
     EntryInput leg =
         new EntryInput(
@@ -119,7 +120,7 @@ class TransferService {
             null,
             accountId,
             input.date());
-    return entries.saveAndFlush(new Entry(userId, leg)).getId();
+    return entries.saveAndFlush(new Entry(userId, leg, input.date())).getId();
   }
 
   private EntryService.DeleteResult deleteLocked(TransactionStatus status, UUID userId, UUID id) {

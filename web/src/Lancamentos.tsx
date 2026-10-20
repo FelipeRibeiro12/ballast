@@ -1027,6 +1027,10 @@ export default function Lancamentos({
                     <div className="lancamento-dados">
                       <span>{formatarDiaMes(lancamento.dataCaixa)}</span>
                       <strong>{lancamento.titulo}</strong>
+                      {/* Na fatura do cartão o caixa cai depois da compra; mostra as duas. */}
+                      {lancamento.dataCompetencia !== lancamento.dataCaixa && (
+                        <small>compra em {formatarDiaMes(lancamento.dataCompetencia)}</small>
+                      )}
                       <span>
                         {ePerna
                           ? 'Transferência'

@@ -151,6 +151,7 @@ describe('rotas de contas', () => {
     saldoCentavos: 1000,
     arquivada: false,
     criadaEm: '2026-10-19T12:00:00Z',
+    cartao: null,
   }
 
   function responder(corpo: unknown, status: number): void {
@@ -191,6 +192,36 @@ describe('rotas de contas', () => {
       await expect(fetchContas(false)).rejects.toBeInstanceOf(ApiError)
     },
   )
+
+  const cartao = {
+    limiteCentavos: 500000,
+    diaFechamento: 31,
+    diaVencimento: 10,
+    contaPagamentoId: '3b1c6d52-1f0e-4c7a-8f2b-9a4d5e6f7a81',
+    disponivelCentavos: 420000,
+  }
+
+  it('fetchContas aceita conta de cartão com o objeto completo', async () => {
+    const deCartao = { ...conta, tipo: 'cartao_credito', cartao }
+    responder([deCartao], 200)
+    expect(await fetchContas(false)).toEqual([deCartao])
+  })
+
+  it.each([
+    ['cartão de crédito sem cartao', { ...conta, tipo: 'cartao_credito', cartao: null }],
+    ['corrente com cartao', { ...conta, cartao }],
+    ['sem a chave cartao', (({ cartao: _omitido, ...resto }) => resto)({ ...conta, cartao: null })],
+    ['dia de fechamento 0', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, diaFechamento: 0 } }],
+    ['dia de vencimento 32', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, diaVencimento: 32 } }],
+    ['dia fracionado', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, diaVencimento: 1.5 } }],
+    ['limite fracionado', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, limiteCentavos: 10.5 } }],
+    ['disponível em string', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, disponivelCentavos: '1' } }],
+    ['conta de pagamento não string', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, contaPagamentoId: 7 } }],
+    ['campo faltando', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, limiteCentavos: undefined } }],
+  ])('fetchContas recusa incoerência: %s', async (_nome, invalida) => {
+    responder([invalida], 200)
+    await expect(fetchContas(false)).rejects.toBeInstanceOf(ApiError)
+  })
 
   it('fetchContas recusa corpo que não é lista', async () => {
     responder(conta, 200)
