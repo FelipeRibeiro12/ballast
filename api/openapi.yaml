@@ -440,7 +440,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou conta travada por mais de 2 s
       security:
       - cookieAuth: []
       summary: Arquiva ou desarquiva uma conta
@@ -1506,7 +1506,8 @@ components:
           - string
           - "null"
           format: date
-          description: Menor data prevista de hoje em diante; nula se não houver
+          description: Menor dataCaixa entre as previstas de hoje em diante; nula
+            se não houver ou se inativa
         regra:
           $ref: "#/components/schemas/RegraRecorrencia"
         tipo:

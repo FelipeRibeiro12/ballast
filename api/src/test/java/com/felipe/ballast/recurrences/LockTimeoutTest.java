@@ -5,6 +5,7 @@ import static com.felipe.ballast.recurrences.RecurrencesApi.rule;
 import static com.felipe.ballast.recurrences.RecurrencesApi.withRule;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.felipe.ballast.IntegrationTest;
@@ -90,6 +91,11 @@ class LockTimeoutTest {
   // teste falhar em vez de esperar o socketTimeout se o prazo não existir.
   private void assertUnavailableAfterAboutTwoSeconds(Callable<MockHttpServletResponse> call)
       throws Exception {
+    assertUnavailableBetween(call, 1_800L, 6_000L);
+  }
+
+  private void assertUnavailableBetween(
+      Callable<MockHttpServletResponse> call, long minMs, long maxMs) throws Exception {
     long started = System.nanoTime();
     CompletableFuture<MockHttpServletResponse> future =
         CompletableFuture.supplyAsync(
@@ -107,7 +113,7 @@ class LockTimeoutTest {
     long elapsedMs = Duration.ofNanos(System.nanoTime() - started).toMillis();
     assertThat(response.getStatus()).isEqualTo(503);
     assertThat(RecurrencesApi.text(response)).isEqualTo(UNAVAILABLE);
-    assertThat(elapsedMs).isBetween(1_800L, 6_000L);
+    assertThat(elapsedMs).isBetween(minMs, maxMs);
   }
 
   private long entriesOfAccount() {
@@ -259,6 +265,86 @@ class LockTimeoutTest {
     }
     assertThat(db.countTemplates(actor.user().id())).isEqualTo(templatesBefore);
     assertThat(db.countRules(actor.user().id())).isEqualTo(templatesBefore);
+  }
+
+  private boolean accountArchived() {
+    return jdbc.sql("SELECT arquivada FROM conta WHERE id = :id")
+        .param("id", UUID.fromString(actor.accountId()))
+        .query(Boolean.class)
+        .single();
+  }
+
+  private MockHttpServletResponse patchAccount(boolean archived) throws Exception {
+    return mvc.perform(
+            patch("/contas/" + actor.accountId())
+                .cookie(actor.session())
+                .contentType("application/json")
+                .content("{\"arquivada\":" + archived + "}"))
+        .andReturn()
+        .getResponse();
+  }
+
+  @Test
+  void archivingAndUnarchivingGive503WhenTheAccountIsBusyAndChangeNothing() throws Exception {
+    try (Connection holder = dataSource.getConnection()) {
+      hold(holder, "conta", "FOR UPDATE", actor.accountId());
+
+      assertUnavailableAfterAboutTwoSeconds(() -> patchAccount(true));
+    }
+    assertThat(accountArchived()).isFalse();
+    assertThat(patchAccount(true).getStatus()).isEqualTo(200);
+    try (Connection holder = dataSource.getConnection()) {
+      hold(holder, "conta", "FOR UPDATE", actor.accountId());
+
+      assertUnavailableAfterAboutTwoSeconds(() -> patchAccount(false));
+    }
+    assertThat(accountArchived()).isTrue();
+  }
+
+  // O job insere em conta com a trava ocupada: o FK do INSERT também espera a conta. A espera do
+  // job não pode empurrar a da escrita do usuário para além do prazo (B1 do QA da F5).
+  @Test
+  void aWriteGives503InAboutTwoSecondsEvenWithTheJobWaitingOnTheSameAccount() throws Exception {
+    Map<String, Object> daily =
+        withRule(monthlyBody(actor), rule("diaria", Map.of("inicio", "2026-10-19")));
+    api.createOk(actor.session(), daily);
+    clock.advance(Duration.ofDays(1));
+    try (Connection holder = dataSource.getConnection()) {
+      hold(holder, "conta", "FOR UPDATE", actor.accountId());
+      CompletableFuture<Void> running = CompletableFuture.runAsync(job::run, pool);
+      awaitBlockedSessions(1);
+
+      assertUnavailableBetween(
+          () ->
+              mvc.perform(
+                      post("/lancamentos")
+                          .cookie(actor.session())
+                          .contentType("application/json")
+                          .content(entryJson()))
+                  .andReturn()
+                  .getResponse(),
+          1_800L,
+          2_300L);
+      running.get(30, TimeUnit.SECONDS);
+    }
+    assertThat(entriesOfAccount()).isZero();
+  }
+
+  private void awaitBlockedSessions(int expected) throws Exception {
+    long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+    while (System.nanoTime() < deadline) {
+      Long blocked =
+          jdbc.sql(
+                  "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()"
+                      + " AND wait_event_type = 'Lock'")
+              .query(Long.class)
+              .single();
+      if (blocked >= expected) {
+        return;
+      }
+      Thread.sleep(20);
+    }
+    throw new IllegalStateException("esperava " + expected + " sessões na fila de trava");
   }
 
   @Test

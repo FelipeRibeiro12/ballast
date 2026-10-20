@@ -100,7 +100,9 @@ apagar uma ocorrência (seção no fim).
   valorCentavos, categoriaId, contaId, ativo, criadoEm, regra: {frequencia,
   intervalo, diaDoMes, diaDaSemana, inicio, fim, ocorrenciasMax},
   proximaOcorrencia}`. Campos da regra que a frequência não usa vêm `null`.
-  `proximaOcorrencia` é a menor data prevista de hoje em diante, ou `null`.
+  `proximaOcorrencia` é a menor `dataCaixa` entre as ocorrências previstas de hoje
+  em diante (a data que a lista mostra, também para prevista editada), ou `null`
+  quando não há ou a recorrência está inativa.
 - Recusas do `POST`, todas 400 sem gravar nada, com mensagem fixa e sem o valor
   enviado: campos fora da faixa ou combinação que a frequência não aceita (por
   exemplo `mensal exige diaDoMes`, `informe fim ou ocorrenciasMax, não os dois`,
@@ -166,7 +168,10 @@ apagar uma ocorrência (seção no fim).
 
 Toda escrita de lançamento, transferência e recorrência (`POST`, `PUT`,
 `PATCH`, `DELETE` de `/lancamentos`; `POST` e `DELETE` de `/transferencias`;
-`POST` e `PATCH` de `/recorrencias`) espera no máximo 2 s por trava de conta,
+`POST` e `PATCH` de `/recorrencias`; `PATCH` de `/contas/{id}`, que arquiva e
+desarquiva) espera no máximo 2 s por trava de conta,
 lançamento ou template. Estourar dá 503 `serviço indisponível` sem gravar nada,
 o mesmo corpo de banco fora, e o cliente pode tentar de novo. O job pula o
-template travado e o pega na rodada seguinte.
+template travado e o pega na rodada seguinte. O job não trava a conta: numa
+corrida com arquivar, pode sobrar uma prevista numa conta arquivada. Ela não
+entra no saldo, confirmar dá 400 `conta arquivada` e cancelar funciona.

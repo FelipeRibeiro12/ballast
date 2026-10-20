@@ -4,6 +4,8 @@ import static com.felipe.ballast.recurrences.RecurrencesApi.monthlyBody;
 import static com.felipe.ballast.recurrences.RecurrencesApi.rule;
 import static com.felipe.ballast.recurrences.RecurrencesApi.withRule;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.felipe.ballast.IntegrationTest;
 import com.felipe.ballast.TestClock;
@@ -131,35 +133,90 @@ class RecurrenceConcurrencyTest {
     }
   }
 
-  @Test
-  void aJobQueuedBehindAnArchiveDoesNotWriteIntoTheArchivedAccount() throws Exception {
-    // A conta fica travada pelo teste; o arquivar entra na fila e o job depois dele.
-    try (Connection holder = dataSource.getConnection()) {
-      holder.setAutoCommit(false);
-      try (var statement =
-          holder.prepareStatement("SELECT id FROM conta WHERE id = ? FOR UPDATE")) {
-        statement.setObject(1, UUID.fromString(actor.accountId()));
-        statement.executeQuery().close();
-      }
-      CompletableFuture<Void> archiving =
-          CompletableFuture.runAsync(
-              () ->
-                  call(
-                      () -> {
-                        api.setAccountArchived(actor.session(), actor.accountId(), true);
-                        return null;
-                      }),
-              pool);
-      awaitBlockedSessions(1);
-      CompletableFuture<Void> running = CompletableFuture.runAsync(job::run, pool);
-      awaitBlockedSessions(2);
-
-      holder.commit();
-
-      archiving.get(20, TimeUnit.SECONDS);
-      running.get(20, TimeUnit.SECONDS);
-      assertThat(db.countOccurrences(templateId)).isEqualTo(366);
+  // UPDATE comum, como o de um PUT: a linha fica com escritor em andamento e o INSERT ... ON
+  // CONFLICT do job espera por ela. Só FOR UPDATE não bastaria, o DO NOTHING não espera locker.
+  private void holdOccurrenceRow(Connection holder, String occurrenceId) throws Exception {
+    holder.setAutoCommit(false);
+    try (var statement =
+        holder.prepareStatement("UPDATE lancamento SET descricao = 'trava' WHERE id = ?")) {
+      statement.setObject(1, UUID.fromString(occurrenceId));
+      statement.executeUpdate();
     }
+  }
+
+  private MockHttpServletResponse postEntry() throws Exception {
+    return mvc.perform(
+            post("/lancamentos")
+                .cookie(actor.session())
+                .contentType("application/json")
+                .content(
+                    "{\"tipo\":\"despesa\",\"titulo\":\"x\",\"valorCentavos\":100,\"categoriaId\":\""
+                        + actor.expenseCategoryId()
+                        + "\",\"contaId\":\""
+                        + actor.accountId()
+                        + "\",\"data\":\"2026-10-20\"}"))
+        .andReturn()
+        .getResponse();
+  }
+
+  @Test
+  void aJobWaitingForAnOccurrenceRowDoesNotHoldTheAccount() throws Exception {
+    String busyRow = db.byKey(templateId, LocalDate.of(2026, 10, 25)).orElseThrow().id();
+    String otherRow = db.byKey(templateId, LocalDate.of(2026, 10, 26)).orElseThrow().id();
+    try (Connection holder = dataSource.getConnection()) {
+      holdOccurrenceRow(holder, busyRow);
+      CompletableFuture<Void> running = CompletableFuture.runAsync(job::run, pool);
+      awaitBlockedSessions(1);
+
+      // Com o job parado na linha, quem precisa da conta passa na hora. Antes, o job segurava a
+      // conta e a escrita esperava os 2 s dele.
+      long started = System.nanoTime();
+      MockHttpServletResponse created = postEntry();
+      MockHttpServletResponse confirmed = api.confirm(actor.session(), otherRow);
+      long elapsedMs = Duration.ofNanos(System.nanoTime() - started).toMillis();
+
+      assertThat(created.getStatus()).isEqualTo(201);
+      assertThat(confirmed.getStatus()).isEqualTo(200);
+      assertThat(elapsedMs).isLessThan(1_000);
+      holder.commit();
+      running.get(20, TimeUnit.SECONDS);
+    }
+    assertThat(db.countOccurrences(templateId)).isEqualTo(367);
+  }
+
+  // Consequência aceita do job não travar a conta: arquivar entre a leitura e o INSERT deixa uma
+  // prevista na conta arquivada. Ela fica fora do saldo, não confirma e pode ser cancelada.
+  @Test
+  void aPlannedLeftByTheJobOnAnArchivedAccountCannotBeConfirmedButCanBeCancelled()
+      throws Exception {
+    String busyRow = db.byKey(templateId, LocalDate.of(2026, 10, 25)).orElseThrow().id();
+    try (Connection holder = dataSource.getConnection()) {
+      holdOccurrenceRow(holder, busyRow);
+      CompletableFuture<Void> running = CompletableFuture.runAsync(job::run, pool);
+      awaitBlockedSessions(1);
+
+      MockHttpServletResponse archived =
+          mvc.perform(
+                  patch("/contas/" + actor.accountId())
+                      .cookie(actor.session())
+                      .contentType("application/json")
+                      .content("{\"arquivada\":true}"))
+              .andReturn()
+              .getResponse();
+      assertThat(archived.getStatus()).isEqualTo(200);
+      holder.commit();
+      running.get(20, TimeUnit.SECONDS);
+    }
+
+    LocalDate leftover = LocalDate.of(2027, 10, 20);
+    RecurrenceTestSupport.Row row = db.byKey(templateId, leftover).orElseThrow();
+    assertThat(row.status()).isEqualTo("previsto");
+    MockHttpServletResponse confirmed = api.confirm(actor.session(), row.id());
+    assertThat(confirmed.getStatus()).isEqualTo(400);
+    assertThat(RecurrencesApi.text(confirmed)).isEqualTo("{\"erro\":\"conta arquivada\"}");
+    assertThat(db.byKey(templateId, leftover).orElseThrow().status()).isEqualTo("previsto");
+    assertThat(api.cancel(actor.session(), row.id()).getStatus()).isEqualTo(200);
+    assertThat(db.byKey(templateId, leftover).orElseThrow().status()).isEqualTo("cancelado");
   }
 
   private interface Call<T> {

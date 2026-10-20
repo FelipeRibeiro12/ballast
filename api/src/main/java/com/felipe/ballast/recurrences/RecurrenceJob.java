@@ -54,7 +54,7 @@ class RecurrenceJob {
           inserted += recurrences.materialize(ref.userId(), ref.templateId());
         } catch (RuntimeException e) {
           if (LockTimeouts.isLockTimeout(e)) {
-            // Trava ocupada por mais de 2 s: o template fica para a próxima rodada, sem stack.
+            // Trava ocupada além do prazo do job: o template fica para a próxima rodada, sem stack.
             skipped++;
             log.warn(
                 "recorrência pulada por trava ocupada usuario_id={} template_id={}",

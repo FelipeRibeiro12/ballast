@@ -32,7 +32,8 @@ public record RecurrenceResponse(
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
-            description = "Menor data prevista de hoje em diante; nula se não houver")
+            description =
+                "Menor dataCaixa entre as previstas de hoje em diante; nula se não houver ou se inativa")
         LocalDate proximaOcorrencia) {
 
   // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco

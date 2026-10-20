@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.JsonNode;
 
 // PUT e DELETE em ocorrência de template (ADR-026). Hoje fixo em 2026-10-19; a série mensal do
 // dia 5 materializa de 2026-11-05 a 2027-10-05.
@@ -79,6 +80,45 @@ class OccurrenceEditTest {
     assertThat(row.cashDate()).isEqualTo(LocalDate.of(2026, 11, 20));
     assertThat(row.occurrenceDate()).isEqualTo(FIRST);
     assertThat(row.status()).isEqualTo("previsto");
+  }
+
+  private String nextOccurrence() throws Exception {
+    JsonNode next =
+        RecurrencesApi.body(api.find(actor.session(), templateId)).get("proximaOcorrencia");
+    return next.isNull() ? null : next.asString();
+  }
+
+  @Test
+  void theNextOccurrenceFollowsTheCashDateOfAMovedPlannedOccurrence() throws Exception {
+    assertThat(nextOccurrence()).isEqualTo("2026-11-05");
+
+    api.putEntry(
+        actor.session(),
+        occurrenceId(LocalDate.of(2026, 12, 5)),
+        putBody(actor, "2026-10-25", "Adiantada"));
+    assertThat(nextOccurrence()).isEqualTo("2026-10-25");
+
+    api.putEntry(actor.session(), occurrenceId(FIRST), putBody(actor, "2026-12-20", "Atrasada"));
+    assertThat(nextOccurrence()).isEqualTo("2026-10-25");
+  }
+
+  @Test
+  void aPlannedOccurrenceMovedBeforeTodayIsNotTheNextOne() throws Exception {
+    api.putEntry(actor.session(), occurrenceId(FIRST), putBody(actor, "2026-10-01", "Antiga"));
+
+    assertThat(nextOccurrence()).isEqualTo("2026-12-05");
+  }
+
+  @Test
+  void aDeactivatedTemplateHasNoNextOccurrenceEvenWithADetachedPlannedOne() throws Exception {
+    api.putEntry(actor.session(), occurrenceId(FIRST), putBody(actor, "2026-10-25", "Editada"));
+
+    MockHttpServletResponse response = api.deactivate(actor.session(), templateId);
+
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(db.byKey(templateId, FIRST).orElseThrow().status()).isEqualTo("previsto");
+    assertThat(RecurrencesApi.body(response).get("proximaOcorrencia").isNull()).isTrue();
+    assertThat(nextOccurrence()).isNull();
   }
 
   @Test

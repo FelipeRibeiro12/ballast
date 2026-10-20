@@ -257,6 +257,12 @@ class RecurrenceCreationTest {
             false,
             "frequencia deve ser diaria, semanal, mensal ou anual"),
         Arguments.of(
+            "frequencia desconhecida",
+            "regra",
+            rule("quinzenal", Map.of("diaDoMes", 5, "inicio", "2026-01-01")),
+            false,
+            "frequencia deve ser diaria, semanal, mensal ou anual"),
+        Arguments.of(
             "intervalo zero",
             "regra",
             rule("mensal", Map.of("diaDoMes", 5, "inicio", "2026-01-01", "intervalo", 0)),

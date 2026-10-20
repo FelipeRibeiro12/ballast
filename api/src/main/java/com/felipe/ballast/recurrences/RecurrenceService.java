@@ -2,6 +2,7 @@ package com.felipe.ballast.recurrences;
 
 import com.felipe.ballast.web.WriteTransaction;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -14,12 +15,14 @@ import org.springframework.stereotype.Service;
 // Assume entrada já validada e normalizada na borda. Todo método recebe o dono vindo da sessão,
 // menos os do job, que recebem o dono lido do próprio template.
 //
-// Ordem de travas: template e depois conta. Desativar trava só o template; arquivar trava só a
-// conta. Quem materializa (criar e job) trava o template, confere que continua ativo e trava a
-// conta para ler "arquivada": depois que desativar ou arquivar respondeu 200, nenhuma ocorrência
-// nova entra (ADR-026). Criar trava só a conta, porque o template ainda não existe. Confirmar,
-// cancelar, editar e apagar ocorrência (EntryService) travam o lançamento e depois a conta, nunca
-// o template, então não fecham ciclo com este serviço.
+// Ordem de travas: template, só ele, no job. Desativar trava só o template; arquivar trava só a
+// conta. O job trava o template, confere que continua ativo, lê "arquivada" sem travar a conta e
+// insere. Travar a conta aqui fechava ciclo com PUT e confirmar (lançamento, depois conta) quando o
+// INSERT esperava a linha deles. Custo aceito: numa corrida com arquivar pode sobrar prevista na
+// conta arquivada, que fica fora do saldo, não confirma e pode ser cancelada (ADR-026). Criar trava
+// só a conta, porque o template ainda não existe e o INSERT não colide com linha de ninguém.
+// Confirmar, cancelar, editar e apagar ocorrência (EntryService) travam o lançamento e depois a
+// conta, nunca o template, então não fecham ciclo com este serviço.
 @Service
 class RecurrenceService {
 
@@ -28,6 +31,11 @@ class RecurrenceService {
 
   // Até onde a materialização enxerga à frente, em meses contados de hoje, ponta incluída.
   static final int HORIZON_MONTHS = 12;
+
+  // O INSERT do job ainda espera a conta no fim (a FK pede KEY SHARE, que a trava FOR UPDATE das
+  // escritas bloqueia). Com 2 s, o job na frente da fila dobrava a espera da escrita do usuário.
+  // O que o job pula hoje ele pega na rodada de amanhã, o horizonte tem 12 meses.
+  private static final Duration JOB_LOCK_TIMEOUT = Duration.ofMillis(200);
 
   private static final String ACCOUNT_FK = "template_conta_mesmo_usuario";
   private static final String CATEGORY_FK = "template_categoria_mesmo_usuario_e_tipo";
@@ -141,13 +149,16 @@ class RecurrenceService {
   int materialize(UUID userId, UUID templateId) {
     Integer inserted =
         transaction.execute(
+            JOB_LOCK_TIMEOUT,
             status -> {
               Optional<RecurrenceQueries.LockedTemplate> template =
                   queries.lockTemplate(userId, templateId);
               if (template.isEmpty() || !template.get().active()) {
                 return 0;
               }
-              Optional<Boolean> archived = queries.lockAccount(userId, template.get().accountId());
+              // Sem trava de conta: ver a ordem de travas no topo da classe.
+              Optional<Boolean> archived =
+                  queries.isAccountArchived(userId, template.get().accountId());
               if (archived.isEmpty() || archived.get()) {
                 return 0;
               }

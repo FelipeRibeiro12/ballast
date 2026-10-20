@@ -48,9 +48,9 @@ class RecurrenceQueries {
              t.ativo, t.criado_em,
              r.frequencia, r.intervalo, r.dia_do_mes, r.dia_da_semana, r.inicio, r.fim,
              r.ocorrencias_max,
-             (SELECT min(l.ocorrencia_data) FROM lancamento l
-               WHERE l.usuario_id = t.usuario_id AND l.template_id = t.id
-                 AND l.status = 'previsto' AND l.ocorrencia_data >= :today) AS proxima
+             (SELECT min(l.data_caixa) FROM lancamento l
+               WHERE t.ativo AND l.usuario_id = t.usuario_id AND l.template_id = t.id
+                 AND l.status = 'previsto' AND l.data_caixa >= :today) AS proxima
       FROM template_lancamento t
       JOIN regra_recorrencia r ON r.id = t.regra_id AND r.usuario_id = t.usuario_id
       """;
@@ -89,6 +89,16 @@ class RecurrenceQueries {
   Optional<Boolean> lockAccount(UUID userId, UUID accountId) {
     return jdbc.sql(
             "SELECT arquivada FROM conta WHERE usuario_id = :userId AND id = :id FOR UPDATE")
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(Boolean.class)
+        .optional();
+  }
+
+  // Lê "arquivada" sem travar a conta: o job não pode segurar a conta enquanto espera linha de
+  // lançamento, que é a ordem inversa de PUT e confirmar. Vazio quando a conta não existe.
+  Optional<Boolean> isAccountArchived(UUID userId, UUID accountId) {
+    return jdbc.sql("SELECT arquivada FROM conta WHERE usuario_id = :userId AND id = :id")
         .param("userId", userId)
         .param("id", accountId)
         .query(Boolean.class)

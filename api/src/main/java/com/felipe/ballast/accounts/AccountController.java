@@ -207,7 +207,7 @@ class AccountController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "503",
-      description = "Banco indisponível",
+      description = "Banco indisponível ou conta travada por mais de 2 s",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @PatchMapping(
       path = "/contas/{id}",

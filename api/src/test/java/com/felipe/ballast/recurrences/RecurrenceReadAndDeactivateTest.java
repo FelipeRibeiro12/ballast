@@ -136,7 +136,8 @@ class RecurrenceReadAndDeactivateTest {
     assertThat(response.getStatus()).isEqualTo(200);
     JsonNode body = RecurrencesApi.body(response);
     assertThat(body.get("ativo").asBoolean()).isFalse();
-    assertThat(body.get("proximaOcorrencia").asString()).isEqualTo("2026-10-25");
+    // Inativo não tem próxima, mesmo com uma prevista desgarrada que ficou.
+    assertThat(body.get("proximaOcorrencia").isNull()).isTrue();
     assertThat(db.occurrenceDates(id))
         .containsExactly(d("2026-10-05"), d("2026-10-25"), d("2026-10-26"), d("2026-10-27"));
   }

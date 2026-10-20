@@ -1,5 +1,6 @@
 package com.felipe.ballast.web;
 
+import java.time.Duration;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionCallback;
@@ -13,6 +14,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Component
 public class WriteTransaction {
 
+  static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofSeconds(2);
+
   private final TransactionTemplate transaction;
   private final JdbcClient jdbc;
 
@@ -22,9 +25,16 @@ public class WriteTransaction {
   }
 
   public <T> T execute(TransactionCallback<T> action) {
+    return execute(DEFAULT_LOCK_TIMEOUT, action);
+  }
+
+  // Prazo menor que 2 s para quem não deve atrasar a escrita do usuário: a espera de quem chega
+  // primeiro na fila de uma trava soma com a de quem chega depois (cada espera tem o prazo cheio).
+  public <T> T execute(Duration lockTimeout, TransactionCallback<T> action) {
     return transaction.execute(
         status -> {
-          jdbc.sql("SET LOCAL lock_timeout = '2s'").update();
+          // O valor é um número nosso, em milissegundos, nunca texto do cliente.
+          jdbc.sql("SET LOCAL lock_timeout = '" + lockTimeout.toMillis() + "ms'").update();
           return action.doInTransaction(status);
         });
   }

@@ -454,7 +454,7 @@ export interface components {
             id: string;
             /**
              * Format: date
-             * @description Menor data prevista de hoje em diante; nula se não houver
+             * @description Menor dataCaixa entre as previstas de hoje em diante; nula se não houver ou se inativa
              */
             proximaOcorrencia: string | null;
             regra: components["schemas"]["RegraRecorrencia"];
@@ -1139,7 +1139,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível */
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
             503: {
                 headers: {
                     [name: string]: unknown;

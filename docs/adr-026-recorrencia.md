@@ -70,12 +70,25 @@ e o que acontece com cada ocorrência.
   Data de hoje em diante com o template ativo volta como `previsto` na próxima
   rodada do job; com o template inativo, não volta. Quem quer manter a
   ocorrência fora do saldo e da lista de previstas cancela, não apaga.
-- Ordem de travas, para não haver deadlock: template, depois conta (criar
-  recorrência trava só a conta, o template ainda não existe; job); lançamento,
-  depois conta (`PUT`, `DELETE`, confirmar); cancelar trava só o lançamento;
-  transferência, depois lançamento, depois conta. Desativar trava o template e
-  depois pega a linha de cada prevista no `DELETE`; confirmar não trava template,
-  então não há ciclo com ele.
+- Ordem de travas, para não haver deadlock: lançamento, depois conta (`PUT`,
+  `DELETE`, confirmar); cancelar trava só o lançamento; transferência, depois
+  lançamento, depois conta. Criar recorrência trava só a conta, o template ainda
+  não existe e o `INSERT` não colide com linha de ninguém. Desativar trava o
+  template e depois pega a linha de cada prevista no `DELETE`. O job trava só o
+  template (`FOR UPDATE`), lê `arquivada` da conta sem travar e insere; confirmar
+  não trava template, então não há ciclo com ele.
+- O job não trava a conta porque o `INSERT ... ON CONFLICT` espera a linha que
+  um `PUT` ou confirmar está editando, e esses dois seguram a linha e pedem a
+  conta: travar a conta no job fechava o ciclo (achado D1 do QA). Consequência
+  aceita: numa corrida com arquivar, o job pode inserir prevista numa conta que
+  acabou de ser arquivada. Essa prevista não entra no saldo, não confirma (400
+  `conta arquivada`) e pode ser cancelada. Arquivar não deixa de valer para
+  lançamento, confirmar e transferência, que continuam travando a conta.
+- A FK do `INSERT` do job ainda pede `KEY SHARE` na conta no fim da instrução, e
+  a trava `FOR UPDATE` das escritas a bloqueia. Para o job não ficar na frente
+  da fila e dobrar a espera da escrita do usuário (cada espera tem o prazo
+  cheio), a transação do job usa `lock_timeout` de 200 ms. O template que estourar
+  é pulado e entra na rodada seguinte.
 
 ### Materialização
 
@@ -86,14 +99,16 @@ e o que acontece com cada ocorrência.
 - Roda na criação do template, na mesma transação, e num `@Scheduled` diário
   que estende o horizonte de todos os templates ativos, um template por
   transação. A cada rodada, o template é travado com `FOR UPDATE`, para
-  desativar e materializar não se cruzarem.
+  desativar e materializar não se cruzarem. O job pula template de conta
+  arquivada, lida sem trava (ver ordem de travas).
 - O job roda por template com o `usuario_id` do próprio template; nenhuma
   escrita cruza usuário.
 
 ### Espera de trava
 
-- Toda transação de escrita de lançamento, transferência e recorrência faz
-  `SET LOCAL lock_timeout = '2s'`, antes da primeira trava. Estourar dá 503
+- Toda transação de escrita de lançamento, transferência, recorrência e de
+  arquivar conta faz `SET LOCAL lock_timeout = '2s'`, antes da primeira trava. A
+  transação do job usa 200 ms (ver ordem de travas). Estourar dá 503
   `serviço indisponível`. Fecha a dívida da F3. O job pula o template travado e
   loga, sem stack. O Postgres devolve SQLState 55P03; o Spring não o traduz
   pelo `JdbcClient` (chega como `UncategorizedSQLException`), então a
