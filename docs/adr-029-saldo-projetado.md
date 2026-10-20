@@ -26,6 +26,11 @@ a prevista vencida e o formato da resposta.
 - **Contas.** Todas as contas ativas do usuário por padrão. Com `contaId`,
   só aquela (inclusive arquivada, se for dele). Transferência entre duas
   contas ativas se anula no total.
+- **Entradas e saídas do dia.** Uma perna de transferência só conta em
+  entradas ou saídas quando a outra perna está fora das contas do filtro. Sem
+  `contaId`, transferência entre duas ativas não aparece como movimento; para
+  conta arquivada, aparece como saída. Com `contaId`, toda perna da conta
+  conta.
 - **Rota.** `GET /saldo-projetado?dias=90[&contaId=]`, `dias` de 1 a 366
   (padrão 90). A série começa hoje (`America/Sao_Paulo`) e tem um ponto por
   dia: `{data, entradasCentavos, saidasCentavos, saldoCentavos}`. A resposta
