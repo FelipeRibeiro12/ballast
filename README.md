@@ -2,7 +2,7 @@
 
 App de controle financeiro pessoal: fiat e cripto no mesmo lugar, com recorrência, cartão de crédito parcelado, metas e projeção de saldo.
 
-Hoje existem cadastro, login, logout, contas (criar, listar, arquivar) lançamentos realizados de receita e despesa, com categorias semeadas, e transferência entre contas, com saldo calculado. Recorrência e os demais módulos ainda não existem.
+Hoje existem cadastro, login, logout, contas (criar, listar, arquivar) lançamentos realizados de receita e despesa, com categorias semeadas, transferência entre contas e recorrência (diária, semanal, mensal e anual, materializada 12 meses à frente), com saldo calculado. Divisão de salário, saldo projetado e os demais módulos ainda não existem.
 
 Visão do produto em `docs/visao.md`. Decisões em `docs/adr-*.md`.
 
@@ -101,6 +101,9 @@ Rotas atuais:
 - `GET`, `PUT` e `DELETE /lancamentos/{id}`. Lançamento de outro usuário dá 404.
 - `POST /transferencias`: corpo `{"contaOrigemId", "contaDestinoId", "valorCentavos", "data", "titulo", "descricao"}`. Cria as duas pernas e a ligação. Contas iguais, arquivadas ou de outro usuário dão 400.
 - `GET` e `DELETE /transferencias/{id}`. Apagar remove as duas pernas. Em `/lancamentos`, a perna traz `transferenciaId` e `direcao` e não se edita nem apaga por lá.
+- `POST /recorrencias`: template com a regra (`frequencia`, `intervalo`, `diaDoMes` ou `diaDaSemana`, `inicio`, `fim` ou `ocorrenciasMax`). Gera as ocorrências previstas de hoje até 12 meses à frente, e um job diário estende o horizonte.
+- `GET /recorrencias`, `GET /recorrencias/{id}` e `PATCH /recorrencias/{id}` com `{"ativo": false}`, que apaga as previstas de hoje em diante.
+- `PATCH /lancamentos/{id}` com `{"status": "realizado"}` confirma uma prevista e `{"status": "cancelado"}` cancela. Prevista não entra no saldo e não se apaga: cancela-se.
 
 Rota que não é pública responde 401 sem sessão. `POST`, `PUT` e `PATCH` exigem `Content-Type: application/json`, e corpo acima de 4 KiB dá 413. Banco fora dá 503 em qualquer rota. Valor em dinheiro vai em inteiro de centavos (ADR-005, ADR-023).
 

@@ -7,12 +7,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
-### F5 — Recorrência
-A fatia mais difícil do projeto. Regra, template, materialização 12 meses à
-frente, idempotente.
-Teste obrigatório: dia 31 em fevereiro, ano bissexto, intervalo maior que 1,
-rodar a materialização duas vezes.
-
 ### F6 — Divisão de salário
 `template_divisao` por percentual e por valor fixo, com mais de dois dias.
 Teste obrigatório: a regra do centavo — três partes de 33,33% de R$ 1.000
