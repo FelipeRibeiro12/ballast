@@ -8,8 +8,8 @@ O que entrou: confirmar uma prevista ajustando valor e data no mesmo `PATCH`, co
 Decisões: ADR-028. Prevista vencida nunca confirma nem cancela sozinha. Ajuste numa parcela de divisão não rebalanceia as outras.
 Dívida registrada: nenhuma.
 Achados do QA: 0 bloquearam, 0 dívidas, 1 sugestão (soma da divisão depois de ajuste), registrada no contrato.
-Achados do revisor: PENDENTE
-Pipeline: PENDENTE
+Achados do revisor: 0 bloquearam, 1 dívida (as duas datas no confirmar com data, anotada na F10), 3 sugestões sem ação. Security: 0 críticos, 0 altos, 0 médios, 2 baixos sem ação.
+Pipeline: verde na primeira tentativa, os 7 checks obrigatórios; nenhum alerta do CodeQL.
 Em aberto: o QA foi interrompido duas vezes porque o computador dormiu; retomado com o mesmo container, contagem refeita do zero. A API do `make dev` do dono seguiu na 8080 o tempo todo.
 
 ## 2026-10-20 — F6: divisão de salário (PR #11)

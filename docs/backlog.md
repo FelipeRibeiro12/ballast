@@ -26,6 +26,9 @@ Conta tipo cartão, fechamento e vencimento, cálculo de `data_caixa`, fatura
 agrupada, pagamento como transferência.
 Teste obrigatório: fechamento dia 31 em fevereiro, vencimento menor que
 fechamento, compra no dia do fechamento.
+Atenção: o confirmar com ajuste da F7 grava a `data` nas duas datas. Com
+cartão, a prevista tem competência e caixa diferentes; confirmar com data tem
+de mexer só na caixa, ou o gráfico por categoria erra (revisão do PR #12).
 
 ### F11 — Compra parcelada
 N lançamentos ligados por `parcela_de_id`, mesma competência, caixa avançando.
