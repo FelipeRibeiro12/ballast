@@ -63,6 +63,9 @@ function mockFetch(rotas: Rotas): void {
       const rota = rotas[chave]
       if (rota) return rota(init?.body)
       if (chave === 'GET /healthz') return Promise.resolve(jsonResponse({ mensagem: 'ok' }, 200))
+      if (chave === 'GET /lancamentos/vencidos') {
+        return Promise.resolve(jsonResponse({ lancamentos: [], maisAlgum: false }, 200))
+      }
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),
   )

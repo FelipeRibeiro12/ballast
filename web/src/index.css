@@ -204,3 +204,17 @@ select {
 small {
   color: #555;
 }
+
+.vencidas {
+  margin: 0 0 1rem;
+}
+
+.vencidas-aviso {
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+
+.confirmacao {
+  flex-basis: 100%;
+  min-width: 0;
+}

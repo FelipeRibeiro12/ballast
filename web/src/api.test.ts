@@ -26,6 +26,7 @@ import {
   RecorrenciaNaoEncontradaError,
   desativarRecorrencia,
   fetchRecorrencias,
+  fetchVencidos,
   patchStatusLancamento,
   postRecorrencia,
 } from './api'
@@ -655,12 +656,46 @@ describe('recorrências e ocorrências', () => {
     })
   })
 
+  it('patchStatusLancamento manda valor e data do ajuste só quando vêm', async () => {
+    responder({ ...lancamento, status: 'realizado' }, 200)
+    await patchStatusLancamento('o1', 'realizado', { valorCentavos: 9900, data: '2026-10-12' })
+    expect(vi.mocked(fetch).mock.calls[0]?.[1]?.body).toBe(
+      JSON.stringify({ status: 'realizado', valorCentavos: 9900, data: '2026-10-12' }),
+    )
+    await patchStatusLancamento('o1', 'realizado', { data: '2026-10-12' })
+    expect(vi.mocked(fetch).mock.calls[1]?.[1]?.body).toBe(
+      JSON.stringify({ status: 'realizado', data: '2026-10-12' }),
+    )
+    await patchStatusLancamento('o1', 'realizado')
+    expect(vi.mocked(fetch).mock.calls[2]?.[1]?.body).toBe(JSON.stringify({ status: 'realizado' }))
+  })
+
+  it('fetchVencidos lê a lista e o corte', async () => {
+    responder({ lancamentos: [{ ...lancamento, status: 'previsto' }], maisAlgum: true }, 200)
+    const vencidas = await fetchVencidos()
+    expect(vencidas.maisAlgum).toBe(true)
+    expect(vencidas.lancamentos).toHaveLength(1)
+    expect(fetch).toHaveBeenCalledWith('/lancamentos/vencidos', { credentials: 'same-origin' })
+  })
+
+  it.each([
+    ['sem maisAlgum', { lancamentos: [] }],
+    ['maisAlgum que não é booleano', { lancamentos: [], maisAlgum: 'sim' }],
+    ['lista que não é lista', { lancamentos: {}, maisAlgum: false }],
+    ['item sem formato de lançamento', { lancamentos: [{ id: 'x' }], maisAlgum: false }],
+    ['corpo que é lista', []],
+  ])('fetchVencidos recusa %s', async (_nome, corpo) => {
+    responder(corpo, 200)
+    await expect(fetchVencidos()).rejects.toBeInstanceOf(ApiError)
+  })
+
   it('mapeia 401, 404, 400, 503 e o resto em erros tipados', async () => {
     const casos = [
       { chamar: () => fetchRecorrencias(), naoEncontrado: RecorrenciaNaoEncontradaError, invalido: RecorrenciaInvalidaError },
       { chamar: () => postRecorrencia(dados), naoEncontrado: RecorrenciaNaoEncontradaError, invalido: RecorrenciaInvalidaError },
       { chamar: () => desativarRecorrencia('1'), naoEncontrado: RecorrenciaNaoEncontradaError, invalido: RecorrenciaInvalidaError },
       { chamar: () => patchStatusLancamento('1', 'realizado'), naoEncontrado: LancamentoNaoEncontradoError, invalido: LancamentoInvalidoError },
+      { chamar: () => fetchVencidos(), naoEncontrado: LancamentoNaoEncontradoError, invalido: LancamentoInvalidoError },
     ]
     for (const { chamar, naoEncontrado, invalido } of casos) {
       responder({ erro: 'x' }, 401)
