@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-20 — F6: divisão de salário (PR #11)
+
+O que entrou: migration V9 com `template_divisao` e `parcela_ordem`, com a chave de idempotência alargada pela ordem da parcela num índice parcial; `divisao` no `POST /recorrencias` mensal, por percentual em centésimos ou por valor fixo, de 2 a 10 dias; regra do centavo num componente puro (trunca todas, a última leva o resto); uma ocorrência por parcela por mês; formulário com soma e valores ao vivo no web pela mesma regra.
+Decisões: ADR-027, ajustado durante a fatia pelo dba (o `NULLS NOT DISTINCT` simples faria lançamentos avulsos colidirem, daí o índice parcial). Fora de ADR: parcela de zero centavos é recusada; `ocorrenciasMax` conta meses.
+Dívida registrada: leitura do template em duas consultas no `lockTemplate`.
+Achados do QA: 0 bloquearam, 0 dívidas, 2 sugestões de texto corrigidas no contrato (espera de cerca de 2 s; 10000 centésimos em `dados.md`).
+Achados do revisor: 0 bloquearam, 2 dívidas (1 registrada, 1 só se vier edição de divisão), 3 sugestões sem ação. Security: 0 críticos, 0 altos, 0 médios, 2 baixos sem ação (a divisão não muda a amplificação do job; IP fora do log de criação).
+Pipeline: verde na primeira tentativa, os 7 checks obrigatórios; nenhum alerta do CodeQL.
+Em aberto: conferência em navegador das telas em 360px.
+
 ## 2026-10-20 — F5: recorrência (PR #10)
 
 O que entrou: migration V8 com regra, template e o lançamento alargado (`template_id`, `desgarrado`, `ocorrencia_data`, status previsto e cancelado); motor de datas puro para diária, semanal, mensal e anual com intervalo, fim e número de vezes; materialização idempotente de hoje a 12 meses na criação e num job diário; confirmar, cancelar e desgarrar ocorrência; `lock_timeout` em toda escrita de dinheiro; tela de recorrências e previstas na lista do mês.

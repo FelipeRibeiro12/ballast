@@ -2,7 +2,7 @@
 
 App de controle financeiro pessoal: fiat e cripto no mesmo lugar, com recorrência, cartão de crédito parcelado, metas e projeção de saldo.
 
-Hoje existem cadastro, login, logout, contas (criar, listar, arquivar) lançamentos realizados de receita e despesa, com categorias semeadas, transferência entre contas e recorrência (diária, semanal, mensal e anual, materializada 12 meses à frente) com divisão de salário em vários dias do mês, com saldo calculado. Saldo projetado e os demais módulos ainda não existem.
+Hoje existem cadastro, login, logout, contas (criar, listar, arquivar), lançamentos realizados de receita e despesa, com categorias semeadas, transferência entre contas e recorrência (diária, semanal, mensal e anual, materializada 12 meses à frente) com divisão de salário em vários dias do mês, com saldo calculado. Saldo projetado e os demais módulos ainda não existem.
 
 Visão do produto em `docs/visao.md`. Decisões em `docs/adr-*.md`.
 
