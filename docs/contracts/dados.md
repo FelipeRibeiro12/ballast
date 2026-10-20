@@ -431,6 +431,59 @@ Migration `V9` em `lancamento` (ADR-027):
   parcela_ordem) WHERE template_id IS NOT NULL DO NOTHING`. Sem o `WHERE` o
   Postgres não infere o índice parcial e recusa o comando.
 
+Migration `V11` em `lancamento` (ADR-032): compra parcelada. Nulo nas três
+colunas é "não é parcela". Todos os `CHECK` entram `NOT VALID` e são validados
+em seguida.
+
+- Colunas: `parcela_de_id uuid`, `parcela_num smallint`, `parcela_total
+  smallint`, nulas, e `parcela_tipo_conta text` gerada `STORED`
+  (`'cartao_credito'` quando `parcela_de_id` não é nulo, nula no resto). O
+  `INSERT` não cita a coluna gerada.
+- `lancamento_parcela_colunas_juntas`: as três nulas ou as três preenchidas.
+  `lancamento_parcela_total_faixa`: `parcela_total` de 2 a 48.
+  `lancamento_parcela_num_faixa`: `parcela_num` de 1 a `parcela_total`.
+- `lancamento_parcela_primeira_aponta_para_si`: `(parcela_de_id = id) =
+  (parcela_num = 1)`. Só a primeira tem `parcela_num` 1, e ela é a que aponta
+  para si.
+- `lancamento_parcela_sem_template`: parcela sem `template_id` e sem
+  `parcela_ordem`. `lancamento_parcela_so_despesa_realizada`: parcela só com
+  `tipo = 'despesa'` e `status = 'realizado'`.
+- **Dono, primeira e total numa FK só.** `lancamento_parcela_mesma_compra`: FK
+  `(parcela_de_id, usuario_id, parcela_de_id, parcela_total)` para
+  `lancamento (id, usuario_id, parcela_de_id, parcela_total)`, `NO ACTION`. O
+  alvo precisa ter `id` igual ao `parcela_de_id` da parcela e também
+  `parcela_de_id` igual a ele mesmo, então é uma primeira (com o `CHECK` acima,
+  a parcela 1), do mesmo usuário e com o mesmo `parcela_total`. Parcela
+  apontando para outra parcela que não é a primeira, para outro usuário ou com
+  total diferente é recusada. O alvo é o `unique`
+  `lancamento_parcela_id_usuario_origem_total_unico`; o unique de 4 colunas da
+  V7 não serve porque a FK exige as mesmas colunas. A mesma conta em todas as
+  parcelas da compra fica com a aplicação (a conta não se edita, ADR-032).
+- **Delete.** `NO ACTION` checa no fim do comando: apagar a primeira com outras
+  apontando para ela é recusado; `DELETE ... WHERE parcela_de_id = :id` apaga a
+  compra inteira, porque a primeira apontar para si não conta quando ela também
+  sai; uma parcela que não é a primeira se apaga sozinha. A exclusão do usuário
+  limpa tudo no cascade.
+- **Parcela só em cartão de crédito, sem gatilho.**
+  `lancamento_parcela_conta_cartao`: FK `(conta_id, usuario_id,
+  parcela_tipo_conta)` para `conta (id, usuario_id, tipo)`
+  (`conta_id_usuario_tipo_unico`, V10). É `MATCH SIMPLE`: com a coluna gerada
+  nula (não parcela) a FK não é checada. Também impede mudar o tipo de uma conta
+  que tem parcelas. Custo medido, Postgres 17 descartável com 400 mil linhas:
+  a coluna `STORED` reescreve `lancamento` sob lock exclusivo em 1,1 s; o
+  `unique` novo levou 0,24 s e a validação das FKs menos de 0,05 s cada.
+  Migration inteira por volta de 1,5 s. Aceito por ser uma vez.
+- Índice `lancamento_parcela_de (parcela_de_id) WHERE parcela_de_id IS NOT
+  NULL`: busca das parcelas da compra (`WHERE usuario_id = :userId AND
+  parcela_de_id = :id`) e checagem da FK ao apagar a primeira. Medido com 640
+  mil linhas (240 mil parcelas, compras de 12x), compra de 12 parcelas: sem
+  índice 49 ms (Bitmap Scan por `lancamento_usuario_data_caixa` lendo 3200
+  linhas do usuário e filtrando) e 37 ms só por `parcela_de_id` (seq scan
+  paralelo); com índice 0,16 ms e 0,02 ms. `DELETE ... WHERE parcela_de_id`
+  da compra: 63 ms sem índice, 0,86 ms com. Criado sem `CONCURRENTLY` porque o
+  Flyway roda em transação (30 ms de varredura).
+- Desfazer: bloco comentado no fim da `V11`. Apaga as parcelas.
+
 ### Divisão — o caso do salário em dois dias
 
 ```
@@ -501,9 +554,10 @@ lancamento
   ocorrencia_data   date null          -- a data que a regra gerou; nula se e só se template_id é nulo
   parcela_ordem     smallint null      -- 1..10; a ordem da parcela da divisão, nula sem divisão
   desgarrado        bool not null default false
-  parcela_de_id     uuid fk null       -- self-fk: compra parcelada
-  parcela_num       smallint null
-  parcela_total     smallint null
+  parcela_de_id     uuid fk null       -- self-fk: a primeira parcela da compra; a primeira aponta para si
+  parcela_num       smallint null      -- 1..parcela_total
+  parcela_total     smallint null      -- 2..48
+  parcela_tipo_conta text null gerada  -- 'cartao_credito' se parcela_de_id não é nulo; a app não escreve
   hash_externo      text null          -- FITID do OFX, ou hash dos campos
   importacao_linha_id uuid fk null
   criado_em         timestamptz not null
@@ -515,6 +569,7 @@ Migration `V6` (ADR-024) cria só o recorte da F3: `id`, `usuario_id`, `tipo`,
 `titulo`, `descricao`, `categoria_id`, `conta_id`, `valor`, `data_competencia`,
 `data_caixa`, `status`, `criado_em`. A `V7` acrescenta a transferência e a `V8` o recorte da F5, abaixo.
 A `V9` acrescenta `parcela_ordem` e troca a chave de idempotência (abaixo).
+A `V11` acrescenta a compra parcelada (abaixo).
 As demais colunas e tabelas deste bloco chegam com as suas fatias.
 
 - `tipo` aceita `receita`, `despesa` e `transferencia` (V7). `categoria_id` é
@@ -609,9 +664,10 @@ Pontos que importam:
   que aconteceu. Saldo soma só `realizado`; saldo projetado soma os dois.
 - **`desgarrado`**: você editou essa ocorrência. A materialização nunca
   sobrescreve linha desgarrada. É o que permite "em março veio com bônus".
-- **`parcela_de_id`**: compra em 12x gera 12 linhas apontando para a primeira,
-  com `parcela_num` 1..12 e a mesma `data_competencia`, mas `data_caixa`
-  avançando um mês por parcela.
+- **`parcela_de_id`**: compra em 12x gera 12 linhas apontando para a primeira
+  (a primeira aponta para si), com `parcela_num` 1..12 e a mesma
+  `data_competencia`, mas `data_caixa` avançando um mês por parcela. Garantias
+  do banco na seção "Migration `V11`" abaixo.
 
 A materialização roda em lote e gera previstos **12 meses à frente**, sendo
 idempotente: rodar duas vezes não duplica. A chave de idempotência é
@@ -815,7 +871,7 @@ apenas em código:
 2. `percentual` e `valor_fixo` mutuamente exclusivos (`CHECK` já acima)
 3. `valor > 0` em todo lançamento
 4. Lançamento em conta de benefício só com categoria permitida (trigger)
-5. `parcela_num` ≤ `parcela_total`
+5. Compra parcelada (V11, ADR-032): `parcela_num` entre 1 e `parcela_total`, `parcela_total` entre 2 e 48, as três colunas juntas, parcela só em cartão, só despesa realizada, e toda parcela aponta para uma primeira do mesmo usuário e do mesmo total (FK composta)
 6. `regra_recorrencia`: `fim` e `ocorrencias_max` não coexistem
 7. Transferência: `saida_id` e `entrada_id` em contas diferentes (V7, `CHECK` mais FKs compostas)
 8. `hash_externo` único por usuário (deduplicação de importação)
@@ -839,7 +895,7 @@ create index on lancamento (usuario_id, hash_externo) where hash_externo is not 
 create index on importacao_linha (importacao_id, decisao);
 ```
 
-Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum.
+Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`.
 O primeiro serve saldo e fluxo de caixa; o segundo, gráfico por categoria e
 orçamento. Antes de adicionar qualquer outro, rode `EXPLAIN ANALYZE` e mostre o
 antes e o depois.
