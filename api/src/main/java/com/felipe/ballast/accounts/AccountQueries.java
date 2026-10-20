@@ -10,8 +10,9 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 // Leitura com saldo, em SQL (ADR-017). Toda consulta filtra por usuario_id.
-// Saldo: saldo_inicial mais receitas realizadas menos despesas realizadas (ADR-024), calculado
-// aqui para a listagem fazer uma ida ao banco só. Nunca é coluna.
+// Saldo: saldo_inicial mais receitas menos despesas, mais entradas menos saídas de transferência
+// (ADR-024, ADR-025), só realizados, calculado aqui para a listagem fazer uma ida ao banco só.
+// Nunca é coluna. Sem ligação de entrada, a perna de transferência é saída.
 @Repository
 class AccountQueries {
 
@@ -20,15 +21,21 @@ class AccountQueries {
   private static final String MOVEMENT_START =
       """
       WITH movement AS MATERIALIZED (
-        SELECT conta_id,
-               SUM(CASE WHEN tipo = 'receita' THEN valor ELSE -valor END) AS movimento
-        FROM lancamento
-        WHERE usuario_id = :userId AND status = 'realizado'
+        SELECT l.conta_id,
+               SUM(CASE l.tipo
+                     WHEN 'receita' THEN l.valor
+                     WHEN 'despesa' THEN -l.valor
+                     WHEN 'transferencia' THEN
+                       CASE WHEN te.id IS NOT NULL THEN l.valor ELSE -l.valor END
+                   END) AS movimento
+        FROM lancamento l
+        LEFT JOIN transferencia te ON te.entrada_id = l.id AND te.usuario_id = l.usuario_id
+        WHERE l.usuario_id = :userId AND l.status = 'realizado'
       """;
 
   private static final String MOVEMENT_END =
       """
-        GROUP BY conta_id
+        GROUP BY l.conta_id
       )
       SELECT c.id, c.nome, c.tipo, c.moeda, c.saldo_inicial,
              c.saldo_inicial + COALESCE(m.movimento, 0) AS saldo,
@@ -40,7 +47,7 @@ class AccountQueries {
   private static final String LIST_COLUMNS = MOVEMENT_START + MOVEMENT_END;
   // O detalhe filtra o agregado também pela conta pedida, para não somar o usuário inteiro.
   private static final String FIND_COLUMNS =
-      MOVEMENT_START + "  AND conta_id = :id\n" + MOVEMENT_END;
+      MOVEMENT_START + "  AND l.conta_id = :id\n" + MOVEMENT_END;
 
   private final JdbcClient jdbc;
 

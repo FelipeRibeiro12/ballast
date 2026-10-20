@@ -8,7 +8,12 @@ import {
   SessaoExpiradaError,
   LancamentoInvalidoError,
   LancamentoNaoEncontradoError,
+  TransferenciaInvalidaError,
+  TransferenciaNaoEncontradaError,
   deleteLancamento,
+  deleteTransferencia,
+  fetchTransferencia,
+  postTransferencia,
   fetchCategorias,
   fetchContas,
   fetchLancamentos,
@@ -236,11 +241,14 @@ describe('lançamentos e categorias', () => {
     descricao: null,
     valorCentavos: 12345,
     categoriaId: 'cd1',
+    transferenciaId: null,
+    direcao: null,
     contaId: 'c1',
     dataCompetencia: '2026-10-05',
     dataCaixa: '2026-10-05',
     criadoEm: '2026-10-05T12:00:00Z',
   }
+  const perna = { ...lancamento, id: 'p1', tipo: 'transferencia', categoriaId: null, transferenciaId: 't1', direcao: 'saida' }
   const categoria = { id: 'cd1', nome: 'Mercado', tipo: 'despesa', paiId: null, cor: null, icone: null }
   const dados = {
     tipo: 'despesa' as const,
@@ -278,6 +286,11 @@ describe('lançamentos e categorias', () => {
     expect(fetch).toHaveBeenLastCalledWith('/lancamentos?de=2026-10-01&ate=2026-10-31&contaId=c+1', {
       credentials: 'same-origin',
     })
+  })
+
+  it('fetchLancamentos aceita perna de transferência com categoria nula', async () => {
+    responder([perna, { ...perna, id: 'p2', direcao: 'entrada' }], 200)
+    expect(await fetchLancamentos('2026-10-01', '2026-10-31')).toHaveLength(2)
   })
 
   it('fetchCategorias lê a lista', async () => {
@@ -345,11 +358,115 @@ describe('lançamentos e categorias', () => {
   it.each([
     ['categorias com campo faltando', () => fetchCategorias(), [{ ...categoria, nome: undefined }]],
     ['categorias que não é lista', () => fetchCategorias(), categoria],
-    ['lista com tipo desconhecido', () => fetchLancamentos('a', 'b'), [{ ...lancamento, tipo: 'transferencia' }]],
+    ['lista com tipo desconhecido', () => fetchLancamentos('a', 'b'), [{ ...lancamento, tipo: 'investimento' }]],
+    ['despesa sem categoria', () => fetchLancamentos('a', 'b'), [{ ...lancamento, categoriaId: null }]],
+    ['despesa com direção', () => fetchLancamentos('a', 'b'), [{ ...lancamento, direcao: 'saida' }]],
+    ['despesa com transferenciaId', () => fetchLancamentos('a', 'b'), [{ ...lancamento, transferenciaId: 't1' }]],
+    ['lançamento sem os campos de transferência', () => fetchLancamentos('a', 'b'), [{ ...lancamento, direcao: undefined }]],
+    ['perna com categoria', () => fetchLancamentos('a', 'b'), [{ ...perna, categoriaId: 'cd1' }]],
+    ['perna sem transferenciaId', () => fetchLancamentos('a', 'b'), [{ ...perna, transferenciaId: null }]],
+    ['perna sem direção', () => fetchLancamentos('a', 'b'), [{ ...perna, direcao: null }]],
+    ['perna com direção desconhecida', () => fetchLancamentos('a', 'b'), [{ ...perna, direcao: 'lado' }]],
     ['lista com valor decimal', () => fetchLancamentos('a', 'b'), [{ ...lancamento, valorCentavos: 1.5 }]],
     ['lista com valor fora do inteiro seguro', () => fetchLancamentos('a', 'b'), [{ ...lancamento, valorCentavos: 2 ** 60 }]],
     ['post com campo faltando', () => postLancamento(dados), { ...lancamento, contaId: undefined }],
     ['put com status inesperado', () => putLancamento('1', dados), { ...lancamento, status: 'previsto' }],
+  ])('recusa corpo fora do contrato: %s', async (_nome, chamar, corpo) => {
+    responder(corpo, 200)
+    await expect(chamar()).rejects.toThrow(/formato inesperado/)
+  })
+})
+
+describe('transferências', () => {
+  const transferencia = {
+    id: 't1',
+    contaOrigemId: 'c1',
+    contaDestinoId: 'c2',
+    valorCentavos: 5000,
+    data: '2026-10-05',
+    titulo: 'Transferência',
+    descricao: null,
+    saidaId: 'l1',
+    entradaId: 'l2',
+    criadaEm: '2026-10-05T12:00:00Z',
+  }
+  const dados = { contaOrigemId: 'c1', contaDestinoId: 'c2', valorCentavos: 5000, data: '2026-10-05' }
+
+  function responder(corpo: unknown, status: number): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          status === 204
+            ? new Response(null, { status })
+            : new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } }),
+        ),
+      ),
+    )
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('postTransferencia envia o corpo e devolve a transferência', async () => {
+    responder(transferencia, 201)
+    expect(await postTransferencia(dados)).toEqual(transferencia)
+    expect(fetch).toHaveBeenCalledWith('/transferencias', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+  })
+
+  it('fetchTransferencia e deleteTransferencia codificam o id', async () => {
+    responder(transferencia, 200)
+    expect(await fetchTransferencia('a/b')).toEqual(transferencia)
+    expect(fetch).toHaveBeenCalledWith('/transferencias/a%2Fb', { credentials: 'same-origin' })
+    responder(null, 204)
+    await deleteTransferencia('a/b')
+    expect(fetch).toHaveBeenCalledWith('/transferencias/a%2Fb', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    })
+  })
+
+  it('mapeia 401, 404, 400, 503 e o resto em erros tipados', async () => {
+    const chamadas = [
+      () => postTransferencia(dados),
+      () => fetchTransferencia('1'),
+      () => deleteTransferencia('1'),
+    ]
+    for (const chamar of chamadas) {
+      responder({ erro: 'x' }, 401)
+      await expect(chamar()).rejects.toBeInstanceOf(SessaoExpiradaError)
+      responder({ erro: 'x' }, 404)
+      await expect(chamar()).rejects.toBeInstanceOf(TransferenciaNaoEncontradaError)
+      for (const mensagem of [
+        'conta não encontrada',
+        'conta arquivada',
+        'contas devem ser diferentes',
+        'saldo da conta fora do limite',
+      ]) {
+        responder({ erro: mensagem }, 400)
+        await expect(chamar()).rejects.toBeInstanceOf(TransferenciaInvalidaError)
+        await expect(chamar()).rejects.toMatchObject({ mensagemServidor: mensagem })
+      }
+      responder('sem formato', 400)
+      await expect(chamar()).rejects.toMatchObject({ mensagemServidor: null })
+      responder({ erro: 'x' }, 503)
+      await expect(chamar()).rejects.toBeInstanceOf(ServicoIndisponivelError)
+      responder({ erro: 'x' }, 500)
+      const erro = await chamar().catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(TransferenciaInvalidaError)
+    }
+  })
+
+  it.each([
+    ['post com campo faltando', () => postTransferencia(dados), { ...transferencia, saidaId: undefined }],
+    ['get com valor decimal', () => fetchTransferencia('1'), { ...transferencia, valorCentavos: 1.5 }],
   ])('recusa corpo fora do contrato: %s', async (_nome, chamar, corpo) => {
     responder(corpo, 200)
     await expect(chamar()).rejects.toThrow(/formato inesperado/)

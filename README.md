@@ -2,7 +2,7 @@
 
 App de controle financeiro pessoal: fiat e cripto no mesmo lugar, com recorrência, cartão de crédito parcelado, metas e projeção de saldo.
 
-Hoje existem cadastro, login, logout, contas (criar, listar, arquivar) e lançamentos realizados de receita e despesa, com categorias semeadas e saldo calculado. Transferência, recorrência e os demais módulos ainda não existem.
+Hoje existem cadastro, login, logout, contas (criar, listar, arquivar) lançamentos realizados de receita e despesa, com categorias semeadas, e transferência entre contas, com saldo calculado. Recorrência e os demais módulos ainda não existem.
 
 Visão do produto em `docs/visao.md`. Decisões em `docs/adr-*.md`.
 
@@ -99,6 +99,8 @@ Rotas atuais:
 - `POST /lancamentos`: corpo `{"tipo", "titulo", "descricao", "valorCentavos", "categoriaId", "contaId", "data"}`. A `data` vale para competência e caixa. Conta arquivada, conta ou categoria de outro usuário e saldo que sairia da faixa do JSON dão 400.
 - `GET /lancamentos?de=AAAA-MM-DD&ate=AAAA-MM-DD`, com `contaId` opcional: período obrigatório de até 366 dias, por data de caixa.
 - `GET`, `PUT` e `DELETE /lancamentos/{id}`. Lançamento de outro usuário dá 404.
+- `POST /transferencias`: corpo `{"contaOrigemId", "contaDestinoId", "valorCentavos", "data", "titulo", "descricao"}`. Cria as duas pernas e a ligação. Contas iguais, arquivadas ou de outro usuário dão 400.
+- `GET` e `DELETE /transferencias/{id}`. Apagar remove as duas pernas. Em `/lancamentos`, a perna traz `transferenciaId` e `direcao` e não se edita nem apaga por lá.
 
 Rota que não é pública responde 401 sem sessão. `POST`, `PUT` e `PATCH` exigem `Content-Type: application/json`, e corpo acima de 4 KiB dá 413. Banco fora dá 503 em qualquer rota. Valor em dinheiro vai em inteiro de centavos (ADR-005, ADR-023).
 

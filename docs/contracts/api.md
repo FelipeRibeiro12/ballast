@@ -38,3 +38,31 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
   respondeu 200, nenhum lançamento novo entra na conta.
 - O corpo do lançamento recebe uma `data` e a API grava a mesma em
   `dataCompetencia` e `dataCaixa`. Campo não declarado dá 400.
+
+## Transferência (ADR-025)
+
+- `POST /transferencias` recebe `{"contaOrigemId", "contaDestinoId",
+  "valorCentavos", "data", "titulo"?, "descricao"?}` e responde 201 `{id,
+  contaOrigemId, contaDestinoId, valorCentavos, data, titulo, descricao,
+  saidaId, entradaId, criadaEm}`. Título ausente, nulo ou em branco vira
+  `Transferência`. `GET /transferencias/{id}` devolve o mesmo corpo e
+  `DELETE /transferencias/{id}` responde 204 e apaga a ligação e as duas pernas.
+  Não existe `PUT`: corrigir é apagar e criar de novo.
+- Em `/transferencias/{id}`, outro usuário, inexistente e id que não é UUID
+  dão 404 com o mesmo corpo.
+- Recusas do `POST`, todas 400 sem gravar nada: `conta não encontrada` (origem
+  ou destino inexistente, de outro usuário ou id inválido, a mesma mensagem
+  para os dois), `conta arquivada` (origem ou destino), `contas devem ser
+  diferentes` e `saldo da conta fora do limite` (qualquer das duas contas). O
+  `DELETE` dá 400 `saldo da conta fora do limite` se tirar uma das contas da
+  faixa.
+- Cada transferência são dois lançamentos com `tipo` `transferencia` (as
+  pernas), sem categoria, com o mesmo valor, título, descrição e data nas duas
+  datas. A de saída subtrai do saldo da origem, a de entrada soma no destino.
+- `GET /lancamentos` e `GET /lancamentos/{id}` ganham `transferenciaId` e
+  `direcao` (`saida` ou `entrada`), nulos nos outros tipos. Nas pernas,
+  `categoriaId` vem nulo. O cliente tira `transferencia` dos totais de receita
+  e despesa e mostra as pernas na lista.
+- `POST` e `PUT /lancamentos` só aceitam `tipo` `receita` ou `despesa`:
+  `transferencia` dá 400. `PUT` e `DELETE /lancamentos/{id}` numa perna dão 400
+  `use a rota de transferência` e não mudam nada.

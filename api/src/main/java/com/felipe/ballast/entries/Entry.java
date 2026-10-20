@@ -32,7 +32,8 @@ class Entry {
   @Column(name = "descricao")
   private String description;
 
-  @Column(name = "categoria_id", nullable = false)
+  // Nulo só na perna de transferência (CHECK lancamento_categoria_conforme_tipo).
+  @Column(name = "categoria_id")
   private UUID categoryId;
 
   @Column(name = "conta_id", nullable = false)

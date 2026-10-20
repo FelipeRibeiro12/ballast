@@ -74,8 +74,7 @@ class CategoriaLancamentoMigrationTest {
     Fixture f = fixture();
 
     assertConstraint(
-        "lancamento_tipo_valido",
-        insertLancamento(f, "transferencia", f.categoriaDespesa, f.conta));
+        "lancamento_tipo_valido", insertLancamento(f, "saque", f.categoriaDespesa, f.conta));
   }
 
   @Test

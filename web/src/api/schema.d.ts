@@ -209,6 +209,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/transferencias": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move dinheiro entre duas contas do usuário
+         * @description Cria as duas pernas (tipo transferencia, sem categoria, mesmo valor, título, descrição e data nas duas datas) e a ligação numa transação. Origem e destino inexistentes, de outro usuário ou com id inválido têm a mesma mensagem.
+         */
+        post: operations["postTransferencias"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transferencias/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Devolve uma transferência do usuário */
+        get: operations["getTransferenciasById"];
+        put?: never;
+        post?: never;
+        /** Apaga uma transferência e as duas pernas */
+        delete: operations["deleteTransferenciasById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -274,8 +312,11 @@ export interface components {
             mensagem: string;
         };
         Lancamento: {
-            /** Format: uuid */
-            categoriaId: string;
+            /**
+             * Format: uuid
+             * @description Nulo só nas pernas de transferência
+             */
+            categoriaId: string | null;
             /** Format: uuid */
             contaId: string;
             /** Format: date-time */
@@ -291,13 +332,23 @@ export interface components {
              */
             dataCompetencia: string;
             descricao: string | null;
+            /**
+             * @description Lado da perna: saida subtrai do saldo, entrada soma; nulo nos outros tipos
+             * @enum {string|null}
+             */
+            direcao: "saida" | "entrada" | null;
             /** Format: uuid */
             id: string;
             /** @enum {string} */
             status: "realizado";
             /** @enum {string} */
-            tipo: "receita" | "despesa";
+            tipo: "receita" | "despesa" | "transferencia";
             titulo: string;
+            /**
+             * Format: uuid
+             * @description Id da transferência a que a perna pertence; nulo nos outros tipos
+             */
+            transferenciaId: string | null;
             /**
              * Format: int64
              * @description Centavos de real, sempre positivo; o sinal vem do tipo
@@ -328,6 +379,58 @@ export interface components {
         LoginRequest: {
             email: string;
             senha: string;
+        };
+        Transferencia: {
+            /** Format: uuid */
+            contaDestinoId: string;
+            /** Format: uuid */
+            contaOrigemId: string;
+            /** Format: date-time */
+            criadaEm: string;
+            /**
+             * Format: date
+             * @description Data das duas pernas, em dataCompetencia e em dataCaixa
+             */
+            data: string;
+            descricao: string | null;
+            /**
+             * Format: uuid
+             * @description Perna que soma na conta de destino
+             */
+            entradaId: string;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Perna que subtrai da conta de origem
+             */
+            saidaId: string;
+            titulo: string;
+            /**
+             * Format: int64
+             * @description Centavos de real, sempre positivo
+             */
+            valorCentavos: number;
+        };
+        TransferenciaRequest: {
+            /** Format: uuid */
+            contaDestinoId: string;
+            /** Format: uuid */
+            contaOrigemId: string;
+            /**
+             * Format: date
+             * @description Grava a mesma data em dataCompetencia e dataCaixa das duas pernas
+             * @example 2026-03-10
+             */
+            data: string;
+            descricao?: string | null;
+            /** @description Ausente, nulo ou em branco vira "Transferência" */
+            titulo?: string | null;
+            /**
+             * Format: int64
+             * @description Centavos de real, sempre positivo
+             */
+            valorCentavos: number;
         };
         Usuario: {
             email: string;
@@ -1098,7 +1201,7 @@ export interface operations {
                     "application/json": components["schemas"]["Lancamento"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada" (só ao trocar de conta), "categoria não encontrada" ou "saldo da conta fora do limite" (em qualquer das contas afetadas) */
+            /** @description Entrada inválida, inclusive campo não declarado e tipo transferencia; "conta não encontrada", "conta arquivada" (só ao trocar de conta), "categoria não encontrada", "saldo da conta fora do limite" (em qualquer das contas afetadas) ou "use a rota de transferência" (o lançamento é perna de transferência) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1174,7 +1277,7 @@ export interface operations {
                     "application/json": Record<string, never>;
                 };
             };
-            /** @description "saldo da conta fora do limite": apagar o lançamento tiraria o saldo da faixa de ±9007199254740991 centavos, e nada é apagado */
+            /** @description "saldo da conta fora do limite": apagar o lançamento tiraria o saldo da faixa de ±9007199254740991 centavos, e nada é apagado; "use a rota de transferência": o lançamento é perna de transferência */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1193,6 +1296,182 @@ export interface operations {
                 };
             };
             /** @description Lançamento de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postTransferencias: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferenciaRequest"];
+            };
+        };
+        responses: {
+            /** @description Transferência criada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Transferencia"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada" (origem ou destino), "contas devem ser diferentes" ou "saldo da conta fora do limite" (em qualquer das duas contas) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getTransferenciasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transferência */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Transferencia"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Transferência de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteTransferenciasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Apagada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description "saldo da conta fora do limite": apagar tiraria o saldo de uma das contas da faixa de ±9007199254740991 centavos, e nada é apagado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Transferência de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
             404: {
                 headers: {
                     [name: string]: unknown;

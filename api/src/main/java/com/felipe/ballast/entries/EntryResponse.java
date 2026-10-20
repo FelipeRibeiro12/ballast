@@ -20,7 +20,11 @@ public record EntryResponse(
             minimum = "1",
             maximum = "9007199254740991")
         long valorCentavos,
-    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID categoriaId,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description = "Nulo só nas pernas de transferência")
+        UUID categoriaId,
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID contaId,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
@@ -32,7 +36,18 @@ public record EntryResponse(
         LocalDate dataCaixa,
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED, allowableValues = "realizado")
         String status,
-    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant criadoEm) {
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant criadoEm,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description = "Id da transferência a que a perna pertence; nulo nos outros tipos")
+        UUID transferenciaId,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Lado da perna: saida subtrai do saldo, entrada soma; nulo nos outros tipos")
+        EntryDirection direcao) {
 
   // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
   // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
@@ -48,7 +63,9 @@ public record EntryResponse(
         summary.competenceDate(),
         summary.cashDate(),
         summary.status(),
-        summary.createdAt());
+        summary.createdAt(),
+        summary.transferId(),
+        summary.direction());
   }
 
   private static long toCents(BigDecimal amount) {

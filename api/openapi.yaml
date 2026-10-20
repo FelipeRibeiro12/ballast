@@ -607,7 +607,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: "\"saldo da conta fora do limite\": apagar o lançamento tiraria\
-            \ o saldo da faixa de ±9007199254740991 centavos, e nada é apagado"
+            \ o saldo da faixa de ±9007199254740991 centavos, e nada é apagado; \"\
+            use a rota de transferência\": o lançamento é perna de transferência"
         "401":
           content:
             application/json:
@@ -701,10 +702,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Entrada inválida, inclusive campo não declarado; \"conta nã\
-            o encontrada\", \"conta arquivada\" (só ao trocar de conta), \"categoria\
-            \ não encontrada\" ou \"saldo da conta fora do limite\" (em qualquer das\
-            \ contas afetadas)"
+          description: "Entrada inválida, inclusive campo não declarado e tipo transferencia;\
+            \ \"conta não encontrada\", \"conta arquivada\" (só ao trocar de conta),\
+            \ \"categoria não encontrada\", \"saldo da conta fora do limite\" (em\
+            \ qualquer das contas afetadas) ou \"use a rota de transferência\" (o\
+            \ lançamento é perna de transferência)"
         "401":
           content:
             application/json:
@@ -741,6 +743,150 @@ paths:
       summary: Substitui um lançamento
       tags:
       - lancamentos
+  /transferencias:
+    post:
+      description: "Cria as duas pernas (tipo transferencia, sem categoria, mesmo\
+        \ valor, título, descrição e data nas duas datas) e a ligação numa transaç\
+        ão. Origem e destino inexistentes, de outro usuário ou com id inválido tê\
+        m a mesma mensagem."
+      operationId: postTransferencias
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferenciaRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transferencia"
+          description: Transferência criada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado; \"conta nã\
+            o encontrada\", \"conta arquivada\" (origem ou destino), \"contas devem\
+            \ ser diferentes\" ou \"saldo da conta fora do limite\" (em qualquer das\
+            \ duas contas)"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Move dinheiro entre duas contas do usuário
+      tags:
+      - transferencias
+  /transferencias/{id}:
+    delete:
+      operationId: deleteTransferenciasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Apagada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "\"saldo da conta fora do limite\": apagar tiraria o saldo\
+            \ de uma das contas da faixa de ±9007199254740991 centavos, e nada é apagado"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Transferência de outro usuário, inexistente ou id que não\
+            \ é UUID; todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Apaga uma transferência e as duas pernas
+      tags:
+      - transferencias
+    get:
+      operationId: getTransferenciasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transferencia"
+          description: Transferência
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Transferência de outro usuário, inexistente ou id que não\
+            \ é UUID; todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Devolve uma transferência do usuário
+      tags:
+      - transferencias
 components:
   schemas:
     AtualizarContaRequest:
@@ -897,8 +1043,11 @@ components:
       type: object
       properties:
         categoriaId:
-          type: string
+          type:
+          - string
+          - "null"
           format: uuid
+          description: Nulo só nas pernas de transferência
         contaId:
           type: string
           format: uuid
@@ -919,6 +1068,15 @@ components:
           - string
           - "null"
           maxLength: 500
+        direcao:
+          type:
+          - string
+          - "null"
+          description: "Lado da perna: saida subtrai do saldo, entrada soma; nulo\
+            \ nos outros tipos"
+          enum:
+          - saida
+          - entrada
         id:
           type: string
           format: uuid
@@ -931,10 +1089,18 @@ components:
           enum:
           - receita
           - despesa
+          - transferencia
         titulo:
           type: string
           maxLength: 100
           minLength: 1
+        transferenciaId:
+          type:
+          - string
+          - "null"
+          format: uuid
+          description: Id da transferência a que a perna pertence; nulo nos outros
+            tipos
         valorCentavos:
           type: integer
           format: int64
@@ -948,10 +1114,12 @@ components:
       - dataCaixa
       - dataCompetencia
       - descricao
+      - direcao
       - id
       - status
       - tipo
       - titulo
+      - transferenciaId
       - valorCentavos
     LancamentoRequest:
       type: object
@@ -1008,6 +1176,97 @@ components:
       required:
       - email
       - senha
+    Transferencia:
+      type: object
+      properties:
+        contaDestinoId:
+          type: string
+          format: uuid
+        contaOrigemId:
+          type: string
+          format: uuid
+        criadaEm:
+          type: string
+          format: date-time
+        data:
+          type: string
+          format: date
+          description: "Data das duas pernas, em dataCompetencia e em dataCaixa"
+        descricao:
+          type:
+          - string
+          - "null"
+          maxLength: 500
+        entradaId:
+          type: string
+          format: uuid
+          description: Perna que soma na conta de destino
+        id:
+          type: string
+          format: uuid
+        saidaId:
+          type: string
+          format: uuid
+          description: Perna que subtrai da conta de origem
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+        valorCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real, sempre positivo"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - contaDestinoId
+      - contaOrigemId
+      - criadaEm
+      - data
+      - descricao
+      - entradaId
+      - id
+      - saidaId
+      - titulo
+      - valorCentavos
+    TransferenciaRequest:
+      type: object
+      properties:
+        contaDestinoId:
+          type: string
+          format: uuid
+        contaOrigemId:
+          type: string
+          format: uuid
+        data:
+          type: string
+          format: date
+          description: Grava a mesma data em dataCompetencia e dataCaixa das duas
+            pernas
+          example: 2026-03-10
+        descricao:
+          type:
+          - string
+          - "null"
+          maxLength: 500
+        titulo:
+          type:
+          - string
+          - "null"
+          description: "Ausente, nulo ou em branco vira \"Transferência\""
+          maxLength: 100
+          minLength: 1
+        valorCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real, sempre positivo"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - contaDestinoId
+      - contaOrigemId
+      - data
+      - valorCentavos
     Usuario:
       type: object
       properties:

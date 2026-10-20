@@ -2,11 +2,12 @@ package com.felipe.ballast.entries;
 
 import com.fasterxml.jackson.annotation.JsonValue;
 
-// O valor do JSON é o mesmo do CHECK lancamento_tipo_valido. A F4 acrescenta transferencia aqui
-// junto com a migration que alarga o CHECK.
+// O valor do JSON é o mesmo do CHECK lancamento_tipo_valido. Transferência só nasce pela rota
+// de transferência (ADR-025): o corpo de /lancamentos recusa esse valor.
 public enum EntryType {
   INCOME("receita"),
-  EXPENSE("despesa");
+  EXPENSE("despesa"),
+  TRANSFER("transferencia");
 
   private final String value;
 

@@ -377,7 +377,7 @@ lancamento
   tipo              text not null      -- receita | despesa | transferencia
   titulo            text not null
   descricao         text
-  categoria_id      uuid fk
+  categoria_id      uuid fk null       -- nulo se e só se tipo = transferencia
   conta_id          uuid fk not null
   valor             numeric(18,2) not null  -- sempre positivo
   data_competencia  date not null
@@ -399,8 +399,12 @@ Migration `V6` (ADR-024) cria só o recorte da F3: `id`, `usuario_id`, `tipo`,
 `data_caixa`, `status`, `criado_em`. As demais colunas e tabelas deste bloco
 chegam com as suas fatias.
 
-- `tipo` aceita só `receita` e `despesa` (a F4 alarga para `transferencia` e
-  permite `categoria_id` nulo só nela). `status` aceita só `realizado` e tem
+- `tipo` aceita `receita`, `despesa` e `transferencia` (V7). `categoria_id` é
+  nulo se e somente se o tipo é `transferencia`
+  (`lancamento_categoria_conforme_tipo`, `(tipo = 'transferencia') = (categoria_id
+  IS NULL)`). A FK de categoria é `MATCH SIMPLE`: com `categoria_id` nulo ela não
+  é checada, então a perna passa, e os outros tipos são obrigados a ter categoria
+  pelo `CHECK`. `status` aceita só `realizado` e tem
   `DEFAULT 'realizado'` (a recorrência alarga para `previsto` e `cancelado`).
 - `titulo` de 1 a 100 caracteres sem espaço nas pontas; `descricao` nula ou até
   500 caracteres (conta caracteres, não bytes).
@@ -422,8 +426,50 @@ chegam com as suas fatias.
   `conta_id` ou `categoria_id` ficou de fora: ganhou 0,3 ms no saldo e a
   checagem das FKs na exclusão do usuário caiu de 5 ms para 2 ms. Quem trouxer
   CRUD de categoria ou relatório cria o dele com o `EXPLAIN`.
-- Query do saldo: `sum` por `conta_id` filtrando `usuario_id` e
-  `status = 'realizado'`, com receita somando e despesa subtraindo.
+- Query do saldo (a partir da F4): `saldo_inicial` + receitas − despesas +
+  entradas − saídas, só `realizado`. A direção da perna vem de um `LEFT JOIN`
+  em `transferencia` por `entrada_id`; sem ligação de entrada, a perna é saída.
+  Filtrar `te.usuario_id = l.usuario_id` no `ON` deixa o planejador usar
+  `transferencia_usuario` em vez de ler a tabela toda.
+
+```sql
+WITH movement AS MATERIALIZED (
+  SELECT l.conta_id,
+         SUM(CASE l.tipo
+               WHEN 'receita' THEN l.valor
+               WHEN 'despesa' THEN -l.valor
+               WHEN 'transferencia' THEN CASE WHEN te.id IS NOT NULL THEN l.valor ELSE -l.valor END
+             END) AS movimento
+  FROM lancamento l
+  LEFT JOIN transferencia te ON te.entrada_id = l.id AND te.usuario_id = l.usuario_id
+  WHERE l.usuario_id = :userId AND l.status = 'realizado'
+  GROUP BY l.conta_id
+)
+SELECT c.id, c.saldo_inicial + COALESCE(m.movimento, 0) AS saldo
+FROM conta c LEFT JOIN movement m ON m.conta_id = c.id
+WHERE c.usuario_id = :userId;
+```
+
+- Lista do mês com `transferenciaId` e `direcao` (nulos fora de transferência):
+
+```sql
+SELECT l.id, l.tipo, l.titulo, l.descricao, l.valor, l.categoria_id, l.conta_id,
+       l.data_competencia, l.data_caixa, l.status, l.criado_em,
+       COALESCE(ts.id, te.id) AS transferencia_id,
+       CASE WHEN ts.id IS NOT NULL THEN 'saida'
+            WHEN te.id IS NOT NULL THEN 'entrada' END AS direcao
+FROM lancamento l
+LEFT JOIN transferencia ts ON ts.saida_id = l.id
+LEFT JOIN transferencia te ON te.entrada_id = l.id
+WHERE l.usuario_id = :userId AND l.data_caixa >= :from AND l.data_caixa < :to
+ORDER BY l.data_caixa DESC, l.criado_em DESC, l.id DESC;
+```
+
+  Medido com 480 mil lançamentos e 40 mil transferências: mês de um usuário
+  (76 linhas) em 0,8 ms, com as duas junções por `index scan` nos `UNIQUE`.
+  Busca da transferência: `WHERE usuario_id = :userId AND id = :id`, pela chave
+  primária.
+- Relatório de receita ou despesa exclui `tipo = 'transferencia'`.
 
 Pontos que importam:
 
@@ -447,17 +493,52 @@ Transferência não é receita nem despesa. Esquecer isso duplica o patrimônio.
 
 ```
 transferencia
-  id              uuid pk
-  usuario_id      uuid fk not null
-  saida_id        uuid fk not null unique    -- lancamento na conta origem
-  entrada_id      uuid fk not null unique    -- lancamento na conta destino
+  id                uuid pk
+  usuario_id        uuid fk not null
+  saida_id          uuid fk not null unique    -- lancamento na conta origem
+  entrada_id        uuid fk not null unique    -- lancamento na conta destino
+  conta_saida_id    uuid not null              -- conta da perna de saída
+  conta_entrada_id  uuid not null              -- conta da perna de entrada
+  tipo              text                       -- gerada, sempre 'transferencia'; não se insere
 ```
 
 Duas linhas de `lancamento` com `tipo = transferencia`, ligadas. Todo
-relatório de receita ou despesa **exclui** esse tipo.
+relatório de receita ou despesa **exclui** esse tipo. A perna não tem categoria
+(`categoria_id` nulo) e a direção vem da ligação: a que está em `saida_id`
+subtrai do saldo, a que está em `entrada_id` soma (ADR-025).
 
 Pagamento de fatura de cartão é uma transferência: sai da conta corrente, entra
 na conta do cartão.
+
+Migration `V7` (ADR-025). O que o banco garante, e como:
+
+- **Dono, tipo e conta da perna, sem gatilho.** Duas FKs compostas
+  (`transferencia_saida_perna_valida`, `transferencia_entrada_perna_valida`)
+  de `(perna, usuario_id, tipo, conta da perna)` para `lancamento (id,
+  usuario_id, tipo, conta_id)`, alvo `lancamento_id_usuario_tipo_conta_unico`.
+  `tipo` é coluna gerada constante, só para a FK carregar `'transferencia'`.
+  Perna de outro usuário, perna que é receita ou despesa, ou em conta diferente
+  da declarada, o banco recusa. Mudar a `conta_id` de uma perna existente também.
+- **Contas diferentes (invariante 7), sem gatilho.** `conta_saida_id` e
+  `conta_entrada_id` existem só para isso, com `CHECK` de diferentes
+  (`transferencia_contas_diferentes`) e as FKs acima ligando-as às pernas.
+  A aplicação grava as mesmas contas que gravou nas pernas.
+- **Perna diferente.** `transferencia_pernas_diferentes`: `saida_id <> entrada_id`.
+- **Cada lançamento em no máximo uma transferência.** `transferencia_saida_unica`
+  e `transferencia_entrada_unica` cobrem o mesmo papel duas vezes. O caso do
+  mesmo lançamento como saída de uma e entrada de outra um `UNIQUE` não vê, e é
+  o único ponto com **gatilho**: `transferencia_perna_em_dois_papeis`, `BEFORE
+  INSERT OR UPDATE OF saida_id, entrada_id`. Trava as pernas com `FOR UPDATE`
+  (ordem de id) antes de conferir, para duas transações simultâneas não passarem
+  juntas. Erro com `unique_violation` e constraint com esse nome.
+- **Delete.** As FKs para `lancamento` são `NO ACTION`. Apagar a `transferencia`
+  não apaga lançamento. Apagar uma perna com a ligação viva é recusado. A
+  aplicação apaga **primeiro a transferencia, depois as duas pernas**, na mesma
+  transação. Apagar o usuário limpa as três tabelas em cascata.
+- **Não garantido pelo banco:** valor e datas iguais nas duas pernas. A aplicação
+  garante (ADR-025) e a perna não se edita por `/lancamentos`.
+- Insert, na ordem: as duas pernas em `lancamento` (sem categoria), depois a
+  `transferencia`. As FKs checam no fim do comando.
 
 ---
 
@@ -575,7 +656,7 @@ apenas em código:
 4. Lançamento em conta de benefício só com categoria permitida (trigger)
 5. `parcela_num` ≤ `parcela_total`
 6. `regra_recorrencia`: `fim` e `ocorrencias_max` não coexistem
-7. Transferência: `saida_id` e `entrada_id` em contas diferentes
+7. Transferência: `saida_id` e `entrada_id` em contas diferentes (V7, `CHECK` mais FKs compostas)
 8. `hash_externo` único por usuário (deduplicação de importação)
 9. `hash_arquivo` único por usuário (mesmo arquivo não reimporta)
 10. `hash_tx` único por posição (mesma transação não duplica)
@@ -589,6 +670,7 @@ Só o que tem query real, conforme `stacks/sql.md`:
 ```sql
 create index on lancamento (usuario_id, data_caixa);
 create index on lancamento (usuario_id, data_competencia, categoria_id);
+create index on transferencia (usuario_id);
 create index on lancamento (template_id) where template_id is not null;
 create index on lancamento (parcela_de_id) where parcela_de_id is not null;
 create index on cotacao (ativo_id, momento desc);
@@ -596,7 +678,7 @@ create index on lancamento (usuario_id, hash_externo) where hash_externo is not 
 create index on importacao_linha (importacao_id, decisao);
 ```
 
-Na `V6` só o primeiro existe; os outros chegam com as fatias que têm a query.
+Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query.
 O primeiro serve saldo e fluxo de caixa; o segundo, gráfico por categoria e
 orçamento. Antes de adicionar qualquer outro, rode `EXPLAIN ANALYZE` e mostre o
 antes e o depois.

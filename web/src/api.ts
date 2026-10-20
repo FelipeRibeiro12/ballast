@@ -288,6 +288,24 @@ function isCategoria(valor: unknown): valor is Categoria {
   )
 }
 
+// Perna de transferência não tem categoria e sempre traz a ligação e o lado.
+// Nos outros tipos é o contrário; qualquer mistura é corpo fora do contrato.
+function ligacaoCoerenteComOTipo(
+  tipo: unknown,
+  categoriaId: unknown,
+  transferenciaId: unknown,
+  direcao: unknown,
+): boolean {
+  if (tipo === 'transferencia') {
+    return (
+      categoriaId === null &&
+      typeof transferenciaId === 'string' &&
+      (direcao === 'saida' || direcao === 'entrada')
+    )
+  }
+  return typeof categoriaId === 'string' && transferenciaId === null && direcao === null
+}
+
 function isLancamento(valor: unknown): valor is Lancamento {
   return (
     typeof valor === 'object' &&
@@ -295,7 +313,7 @@ function isLancamento(valor: unknown): valor is Lancamento {
     'id' in valor &&
     typeof valor.id === 'string' &&
     'tipo' in valor &&
-    (valor.tipo === 'receita' || valor.tipo === 'despesa') &&
+    (valor.tipo === 'receita' || valor.tipo === 'despesa' || valor.tipo === 'transferencia') &&
     'status' in valor &&
     valor.status === 'realizado' &&
     'titulo' in valor &&
@@ -306,7 +324,9 @@ function isLancamento(valor: unknown): valor is Lancamento {
     'valorCentavos' in valor &&
     Number.isSafeInteger(valor.valorCentavos) &&
     'categoriaId' in valor &&
-    typeof valor.categoriaId === 'string' &&
+    'transferenciaId' in valor &&
+    'direcao' in valor &&
+    ligacaoCoerenteComOTipo(valor.tipo, valor.categoriaId, valor.transferenciaId, valor.direcao) &&
     'contaId' in valor &&
     typeof valor.contaId === 'string' &&
     'dataCompetencia' in valor &&
@@ -393,5 +413,95 @@ export async function deleteLancamento(id: string): Promise<void> {
   })
   if (resposta.status !== 204) {
     return recusarRespostaDeLancamento(resposta, 'DELETE /lancamentos/{id}')
+  }
+}
+
+export type Transferencia = components['schemas']['Transferencia']
+export type TransferenciaRequest = components['schemas']['TransferenciaRequest']
+
+export class TransferenciaNaoEncontradaError extends ApiError {}
+
+export class TransferenciaInvalidaError extends ApiError {
+  // null quando o corpo do 400 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('transferência recusada por entrada inválida')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+function isTransferencia(valor: unknown): valor is Transferencia {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'contaOrigemId' in valor &&
+    typeof valor.contaOrigemId === 'string' &&
+    'contaDestinoId' in valor &&
+    typeof valor.contaDestinoId === 'string' &&
+    // Fora do inteiro seguro o JSON já perdeu o centavo no parse.
+    'valorCentavos' in valor &&
+    Number.isSafeInteger(valor.valorCentavos) &&
+    'data' in valor &&
+    typeof valor.data === 'string' &&
+    'titulo' in valor &&
+    typeof valor.titulo === 'string' &&
+    'descricao' in valor &&
+    (valor.descricao === null || typeof valor.descricao === 'string') &&
+    'saidaId' in valor &&
+    typeof valor.saidaId === 'string' &&
+    'entradaId' in valor &&
+    typeof valor.entradaId === 'string' &&
+    'criadaEm' in valor &&
+    typeof valor.criadaEm === 'string'
+  )
+}
+
+async function lerTransferencia(resposta: Response, origem: string): Promise<Transferencia> {
+  const corpo: unknown = await resposta.json()
+  if (!isTransferencia(corpo)) {
+    throw new ApiError(`${origem} com formato inesperado`)
+  }
+  return corpo
+}
+
+async function recusarRespostaDeTransferencia(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 404) throw new TransferenciaNaoEncontradaError('transferência não encontrada')
+  if (resposta.status === 400) {
+    throw new TransferenciaInvalidaError(await lerMensagemDeErro(resposta))
+  }
+  throw new ApiError(`${origem} respondeu ${resposta.status}`)
+}
+
+export async function postTransferencia(dados: TransferenciaRequest): Promise<Transferencia> {
+  const resposta = await fetch(`${baseUrl}/transferencias`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeTransferencia(resposta, 'POST /transferencias')
+  return lerTransferencia(resposta, 'POST /transferencias')
+}
+
+export async function fetchTransferencia(id: string): Promise<Transferencia> {
+  const resposta = await fetch(`${baseUrl}/transferencias/${encodeURIComponent(id)}`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarRespostaDeTransferencia(resposta, 'GET /transferencias/{id}')
+  return lerTransferencia(resposta, 'GET /transferencias/{id}')
+}
+
+export async function deleteTransferencia(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/transferencias/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) {
+    return recusarRespostaDeTransferencia(resposta, 'DELETE /transferencias/{id}')
   }
 }

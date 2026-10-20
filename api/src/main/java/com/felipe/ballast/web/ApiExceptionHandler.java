@@ -83,7 +83,7 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<Object> handleUnexpected(Exception ex) {
-    log.error("erro não tratado", ex);
+    UnexpectedErrorLog.error(log, "erro não tratado", ex);
     return body(HttpStatus.INTERNAL_SERVER_ERROR, new HttpHeaders(), "erro interno");
   }
 

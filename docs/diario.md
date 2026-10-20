@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-19 — F4: transferência entre contas (PR #9)
+
+O que entrou: migration V7 com `transferencia` e o `lancamento` alargado para o tipo `transferencia` com categoria nula; o banco garante dono, tipo e contas diferentes por FK composta e um gatilho só para o mesmo lançamento não ser saída de uma e entrada de outra. `POST`, `GET` e `DELETE /transferencias`, pernas com `transferenciaId` e `direcao` na lista e protegidas em `/lancamentos`, saldo com entradas e saídas, tela com formulário de transferência e totais sem ela. O log do 500 deixou de gravar o conteúdo da linha recusada (dívida que apareceu três vezes).
+Decisões: ADR-025. Fora de ADR: a transferência vive no pacote `entries` para reaproveitar a trava; `criadaEm` vem da perna de saída; a checagem de perna fica depois da trava do lançamento e antes da trava da conta.
+Dívida registrada: idempotência na escrita de dinheiro, mensagem do `POST /lancamentos` com tipo transferência, log do 500 sanitizando demais (paga no começo da F5), `search_path` do gatilho.
+Achados do QA: 0 bloquearam, 0 dívidas, 3 sugestões (duas viraram dívida). As correções da F3 foram reconferidas contra a API real.
+Achados do revisor: 0 bloquearam, 1 dívida (o log), 3 sugestões. Security: 0 críticos, 0 altos, 1 médio (idempotência, já registrada), 2 baixos (o log e o `search_path`).
+Pipeline: verde na primeira tentativa, os 7 checks obrigatórios; nenhum alerta do CodeQL.
+Em aberto: interrupção por limite de uso no meio do backend; retomado sem perda, árvore estava limpa. Conferência em navegador das telas em 360px.
+
 ## 2026-10-19 — F3: lançamento realizado (PR #8)
 
 O que entrou: migration V6 com `categoria` e `lancamento` (duas datas, valor positivo, FK composta com `usuario_id` para conta e para categoria com o tipo), sementes de categoria no cadastro e para quem já existia, `GET /categorias`, CRUD de lançamento com listagem por período, saldo da conta somando os realizados, tela do mês no web.
