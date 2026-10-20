@@ -314,6 +314,32 @@ class InvoiceTest {
     assertThat(list.get(1).get("totalCentavos").asLong()).isEqualTo(100);
   }
 
+  // Fechamento 30 e vencimento 31 em fevereiro de 2026: os dois cortam no dia 28. O pagamento do
+  // dia 28 é do vencimento daquela fatura, não da anterior (ADR-032).
+  @Test
+  void aPaymentOnTheDueDayThatEqualsTheClosingDayCountsOnItsOwnInvoice() throws Exception {
+    InvoicesApi.Actor other = api.newActor(30, 31);
+    api.purchase(other, "despesa", 10_000, "2026-01-10");
+    api.purchase(other, "despesa", 8_000, "2026-02-10");
+    api.pay(other, 4_000, "2026-02-28");
+    api.pay(other, 1_000, "2026-03-05");
+    today("2026-03-06");
+
+    MockHttpServletResponse response =
+        api.invoices(other.session(), other.cardId(), "?de=2026-01-01&ate=2026-03-31");
+    JsonNode list = InvoicesApi.body(response).get("faturas");
+
+    assertThat(list).hasSize(3);
+    assertThat(list.get(0).get("vencimento").asString()).isEqualTo("2026-01-31");
+    assertThat(list.get(0).get("pagoCentavos").asLong()).isZero();
+    assertThat(list.get(1).get("vencimento").asString()).isEqualTo("2026-02-28");
+    assertThat(list.get(1).get("fechamento").asString()).isEqualTo("2026-02-28");
+    assertThat(list.get(1).get("pagoCentavos").asLong()).isEqualTo(5_000);
+    assertThat(list.get(1).get("restanteCentavos").asLong()).isEqualTo(3_000);
+    assertThat(list.get(2).get("vencimento").asString()).isEqualTo("2026-03-31");
+    assertThat(list.get(2).get("pagoCentavos").asLong()).isZero();
+  }
+
   @Test
   void anotherUsersEntriesNeverEnterTheTotals() throws Exception {
     InvoicesApi.Actor other = api.newActor(15, 25);

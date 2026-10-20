@@ -390,6 +390,22 @@ function parcelaOrdemCoerente(parcelaOrdem: unknown, templateId: unknown): boole
   return templateId !== null && Number.isInteger(parcelaOrdem) && Number(parcelaOrdem) >= 1 && Number(parcelaOrdem) <= 10
 }
 
+// Os três campos da compra parcelada vêm todos nulos ou todos preenchidos (ADR-032).
+// Só despesa vira parcela, e o número vai de 1 ao total, que fica entre 2 e 48.
+function parcelaDeCompraCoerente(tipo: unknown, compraId: unknown, num: unknown, total: unknown): boolean {
+  if (compraId === null && num === null && total === null) return true
+  return (
+    tipo === 'despesa' &&
+    typeof compraId === 'string' &&
+    Number.isInteger(num) &&
+    Number.isInteger(total) &&
+    Number(total) >= 2 &&
+    Number(total) <= 48 &&
+    Number(num) >= 1 &&
+    Number(num) <= Number(total)
+  )
+}
+
 function isLancamento(valor: unknown): valor is Lancamento {
   return (
     typeof valor === 'object' &&
@@ -415,6 +431,10 @@ function isLancamento(valor: unknown): valor is Lancamento {
     (valor.templateId === null || typeof valor.templateId === 'string') &&
     'parcelaOrdem' in valor &&
     parcelaOrdemCoerente(valor.parcelaOrdem, valor.templateId) &&
+    'compraParceladaId' in valor &&
+    'parcelaNum' in valor &&
+    'parcelaTotal' in valor &&
+    parcelaDeCompraCoerente(valor.tipo, valor.compraParceladaId, valor.parcelaNum, valor.parcelaTotal) &&
     // Só a regra gera previsto e só ela dá template; a perna é sempre um fato avulso.
     (valor.tipo !== 'transferencia' || (valor.status === 'realizado' && valor.templateId === null)) &&
     'contaId' in valor &&
@@ -503,6 +523,127 @@ export async function deleteLancamento(id: string): Promise<void> {
   })
   if (resposta.status !== 204) {
     return recusarRespostaDeLancamento(resposta, 'DELETE /lancamentos/{id}')
+  }
+}
+
+export type CompraParcelada = components['schemas']['CompraParcelada']
+export type CompraParceladaItem = components['schemas']['CompraParceladaItem']
+export type CompraParceladaRequest = components['schemas']['CompraParceladaRequest']
+export type CompraParceladaAtualizarRequest = components['schemas']['CompraParceladaAtualizarRequest']
+
+export class CompraParceladaNaoEncontradaError extends ApiError {}
+
+export class CompraParceladaInvalidaError extends ApiError {
+  // null quando o corpo do 400 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('compra parcelada recusada por entrada inválida')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+function isCompraParceladaItem(valor: unknown): valor is CompraParceladaItem {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'lancamentoId' in valor &&
+    typeof valor.lancamentoId === 'string' &&
+    'parcelaNum' in valor &&
+    Number.isInteger(valor.parcelaNum) &&
+    // Fora do inteiro seguro o JSON já perdeu o centavo no parse.
+    'valorCentavos' in valor &&
+    Number.isSafeInteger(valor.valorCentavos) &&
+    'dataCaixa' in valor &&
+    eDataIso(valor.dataCaixa)
+  )
+}
+
+function isCompraParcelada(valor: unknown): valor is CompraParcelada {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'titulo' in valor &&
+    typeof valor.titulo === 'string' &&
+    'descricao' in valor &&
+    (valor.descricao === null || typeof valor.descricao === 'string') &&
+    'valorTotalCentavos' in valor &&
+    Number.isSafeInteger(valor.valorTotalCentavos) &&
+    'parcelas' in valor &&
+    Number.isInteger(valor.parcelas) &&
+    Number(valor.parcelas) >= 2 &&
+    Number(valor.parcelas) <= 48 &&
+    'categoriaId' in valor &&
+    typeof valor.categoriaId === 'string' &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'dataCompra' in valor &&
+    eDataIso(valor.dataCompra) &&
+    'criadaEm' in valor &&
+    typeof valor.criadaEm === 'string' &&
+    'itens' in valor &&
+    Array.isArray(valor.itens) &&
+    valor.itens.length > 0 &&
+    valor.itens.every(isCompraParceladaItem)
+  )
+}
+
+async function lerCompraParcelada(resposta: Response, origem: string): Promise<CompraParcelada> {
+  const corpo: unknown = await resposta.json()
+  if (!isCompraParcelada(corpo)) throw new ApiError(`${origem} com formato inesperado`)
+  return corpo
+}
+
+async function recusarRespostaDeCompra(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 404) throw new CompraParceladaNaoEncontradaError('compra parcelada não encontrada')
+  if (resposta.status === 400) throw new CompraParceladaInvalidaError(await lerMensagemDeErro(resposta))
+  throw new ApiError(`${origem} respondeu ${resposta.status}`)
+}
+
+export async function postCompraParcelada(dados: CompraParceladaRequest): Promise<CompraParcelada> {
+  const resposta = await fetch(`${baseUrl}/compras-parceladas`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeCompra(resposta, 'POST /compras-parceladas')
+  return lerCompraParcelada(resposta, 'POST /compras-parceladas')
+}
+
+export async function fetchCompraParcelada(id: string): Promise<CompraParcelada> {
+  const resposta = await fetch(`${baseUrl}/compras-parceladas/${encodeURIComponent(id)}`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarRespostaDeCompra(resposta, 'GET /compras-parceladas/{id}')
+  return lerCompraParcelada(resposta, 'GET /compras-parceladas/{id}')
+}
+
+export async function patchCompraParcelada(
+  id: string,
+  dados: CompraParceladaAtualizarRequest,
+): Promise<CompraParcelada> {
+  const resposta = await fetch(`${baseUrl}/compras-parceladas/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeCompra(resposta, 'PATCH /compras-parceladas/{id}')
+  return lerCompraParcelada(resposta, 'PATCH /compras-parceladas/{id}')
+}
+
+export async function deleteCompraParcelada(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/compras-parceladas/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) {
+    return recusarRespostaDeCompra(resposta, 'DELETE /compras-parceladas/{id}')
   }
 }
 

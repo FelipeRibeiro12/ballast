@@ -22,7 +22,7 @@ class EntryQueries {
       """
       SELECT l.id, l.tipo, l.titulo, l.descricao, l.valor, l.categoria_id, l.conta_id,
              l.data_competencia, l.data_caixa, l.status, l.criado_em, l.template_id,
-             l.parcela_ordem,
+             l.parcela_ordem, l.parcela_de_id, l.parcela_num, l.parcela_total,
              COALESCE(ts.id, te.id) AS transferencia_id,
              CASE WHEN ts.id IS NOT NULL THEN 'saida'
                   WHEN te.id IS NOT NULL THEN 'entrada' END AS direcao
@@ -95,14 +95,23 @@ class EntryQueries {
         .optional();
   }
 
-  record LockedEntry(UUID accountId, String status, UUID templateId) {}
+  // purchaseId é o parcela_de_id: nulo fora de compra parcelada, e igual ao próprio id na primeira
+  // parcela. As duas datas servem à parcela, que não muda de conta nem de data pelo PUT.
+  record LockedEntry(
+      UUID accountId,
+      String status,
+      UUID templateId,
+      UUID purchaseId,
+      LocalDate competenceDate,
+      LocalDate cashDate) {}
 
   // Trava o lançamento do dono e devolve onde ele está agora. Vazio para lançamento alheio ou
   // inexistente. Segura o PUT, o PATCH e o DELETE do mesmo lançamento um atrás do outro, para a
   // conta lida aqui não mudar antes de ela ser travada.
   Optional<LockedEntry> lockEntry(UUID userId, UUID entryId) {
     return jdbc.sql(
-            "SELECT conta_id, status, template_id FROM lancamento"
+            "SELECT conta_id, status, template_id, parcela_de_id, data_competencia, data_caixa"
+                + " FROM lancamento"
                 + " WHERE usuario_id = :userId AND id = :id FOR UPDATE")
         .param("userId", userId)
         .param("id", entryId)
@@ -111,7 +120,10 @@ class EntryQueries {
                 new LockedEntry(
                     rs.getObject("conta_id", UUID.class),
                     rs.getString("status"),
-                    rs.getObject("template_id", UUID.class)))
+                    rs.getObject("template_id", UUID.class),
+                    rs.getObject("parcela_de_id", UUID.class),
+                    rs.getObject("data_competencia", LocalDate.class),
+                    rs.getObject("data_caixa", LocalDate.class)))
         .optional();
   }
 
@@ -242,6 +254,9 @@ class EntryQueries {
         rs.getObject("transferencia_id", UUID.class),
         EntryDirection.fromValue(rs.getString("direcao")),
         rs.getObject("template_id", UUID.class),
-        rs.getObject("parcela_ordem", Integer.class));
+        rs.getObject("parcela_ordem", Integer.class),
+        rs.getObject("parcela_de_id", UUID.class),
+        rs.getObject("parcela_num", Integer.class),
+        rs.getObject("parcela_total", Integer.class));
   }
 }

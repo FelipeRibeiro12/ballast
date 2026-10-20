@@ -11,6 +11,12 @@ import {
   LancamentoNaoEncontradoError,
   TransferenciaInvalidaError,
   TransferenciaNaoEncontradaError,
+  CompraParceladaInvalidaError,
+  CompraParceladaNaoEncontradaError,
+  deleteCompraParcelada,
+  fetchCompraParcelada,
+  patchCompraParcelada,
+  postCompraParcelada,
   deleteLancamento,
   deleteTransferencia,
   fetchTransferencia,
@@ -286,6 +292,9 @@ describe('lançamentos e categorias', () => {
     transferenciaId: null,
     templateId: null,
     parcelaOrdem: null,
+    compraParceladaId: null,
+    parcelaNum: null,
+    parcelaTotal: null,
     direcao: null,
     contaId: 'c1',
     dataCompetencia: '2026-10-05',
@@ -330,6 +339,13 @@ describe('lançamentos e categorias', () => {
     expect(fetch).toHaveBeenLastCalledWith('/lancamentos?de=2026-10-01&ate=2026-10-31&contaId=c+1', {
       credentials: 'same-origin',
     })
+  })
+
+  it('fetchLancamentos aceita parcelas de 1 a N e de 2 a 48 parcelas', async () => {
+    const primeira = { ...lancamento, compraParceladaId: 'l1', parcelaNum: 1, parcelaTotal: 2 }
+    const ultima = { ...lancamento, id: 'l9', compraParceladaId: 'l1', parcelaNum: 48, parcelaTotal: 48 }
+    responder([primeira, ultima], 200)
+    expect(await fetchLancamentos('2026-10-01', '2026-10-31')).toHaveLength(2)
   })
 
   it('fetchLancamentos aceita perna de transferência com categoria nula', async () => {
@@ -438,6 +454,15 @@ describe('lançamentos e categorias', () => {
     ['parcelaOrdem acima de 10', () => fetchLancamentos('a', 'b'), [{ ...lancamento, templateId: 'r1', parcelaOrdem: 11 }]],
     ['parcelaOrdem decimal', () => fetchLancamentos('a', 'b'), [{ ...lancamento, templateId: 'r1', parcelaOrdem: 1.5 }]],
     ['parcelaOrdem sem template', () => fetchLancamentos('a', 'b'), [{ ...lancamento, parcelaOrdem: 1 }]],
+    ['lançamento sem os campos da compra parcelada', () => fetchLancamentos('a', 'b'), [{ ...lancamento, parcelaNum: undefined }]],
+    ['parcela sem parcelaTotal', () => fetchLancamentos('a', 'b'), [{ ...lancamento, compraParceladaId: 'l0', parcelaNum: 1 }]],
+    ['parcelaNum sem compra', () => fetchLancamentos('a', 'b'), [{ ...lancamento, parcelaNum: 1, parcelaTotal: 3 }]],
+    ['parcelaNum zero', () => fetchLancamentos('a', 'b'), [{ ...lancamento, compraParceladaId: 'l0', parcelaNum: 0, parcelaTotal: 3 }]],
+    ['parcelaNum maior que o total', () => fetchLancamentos('a', 'b'), [{ ...lancamento, compraParceladaId: 'l0', parcelaNum: 4, parcelaTotal: 3 }]],
+    ['parcelaTotal 1', () => fetchLancamentos('a', 'b'), [{ ...lancamento, compraParceladaId: 'l0', parcelaNum: 1, parcelaTotal: 1 }]],
+    ['parcelaTotal 49', () => fetchLancamentos('a', 'b'), [{ ...lancamento, compraParceladaId: 'l0', parcelaNum: 1, parcelaTotal: 49 }]],
+    ['parcelaNum decimal', () => fetchLancamentos('a', 'b'), [{ ...lancamento, compraParceladaId: 'l0', parcelaNum: 1.5, parcelaTotal: 3 }]],
+    ['parcela que é receita', () => fetchLancamentos('a', 'b'), [{ ...lancamento, tipo: 'receita', compraParceladaId: 'l0', parcelaNum: 1, parcelaTotal: 3 }]],
     ['perna com template', () => fetchLancamentos('a', 'b'), [{ ...perna, templateId: 'r1' }]],
     ['perna prevista', () => fetchLancamentos('a', 'b'), [{ ...perna, status: 'previsto' }]],
   ])('recusa corpo fora do contrato: %s', async (_nome, chamar, corpo) => {
@@ -577,6 +602,9 @@ describe('recorrências e ocorrências', () => {
     transferenciaId: null,
     templateId: 'r1',
     parcelaOrdem: null,
+    compraParceladaId: null,
+    parcelaNum: null,
+    parcelaTotal: null,
     direcao: null,
     contaId: 'c1',
     dataCompetencia: '2026-11-05',
@@ -948,5 +976,129 @@ describe('fetchFaturas', () => {
     const erro = await fetchFaturas(contaId, 'a', 'b').catch((e: unknown) => e)
     expect(erro).toBeInstanceOf(ApiError)
     expect(erro).not.toBeInstanceOf(ContaInvalidaError)
+  })
+})
+
+describe('compras parceladas', () => {
+  const compra = {
+    id: 'l1',
+    titulo: 'Notebook',
+    descricao: null,
+    valorTotalCentavos: 100000,
+    parcelas: 3,
+    categoriaId: 'cd1',
+    contaId: 'c9',
+    dataCompra: '2026-10-01',
+    criadaEm: '2026-10-01T12:00:00Z',
+    itens: [
+      { lancamentoId: 'l1', parcelaNum: 1, valorCentavos: 33333, dataCaixa: '2026-10-10' },
+      { lancamentoId: 'l2', parcelaNum: 2, valorCentavos: 33333, dataCaixa: '2026-11-10' },
+      { lancamentoId: 'l3', parcelaNum: 3, valorCentavos: 33334, dataCaixa: '2026-12-10' },
+    ],
+  }
+  const dados = {
+    titulo: 'Notebook',
+    valorTotalCentavos: 100000,
+    parcelas: 3,
+    categoriaId: 'cd1',
+    contaId: 'c9',
+    data: '2026-10-01',
+  }
+
+  function responder(corpo: unknown, status: number): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          status === 204
+            ? new Response(null, { status })
+            : new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } }),
+        ),
+      ),
+    )
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('postCompraParcelada manda o corpo em JSON e devolve a compra', async () => {
+    responder(compra, 201)
+    expect(await postCompraParcelada(dados)).toEqual(compra)
+    expect(fetch).toHaveBeenCalledWith('/compras-parceladas', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+  })
+
+  it('fetchCompraParcelada codifica o id', async () => {
+    responder(compra, 200)
+    await fetchCompraParcelada('a/b')
+    expect(fetch).toHaveBeenCalledWith('/compras-parceladas/a%2Fb', { credentials: 'same-origin' })
+  })
+
+  it('patchCompraParcelada manda só os campos informados', async () => {
+    responder(compra, 200)
+    await patchCompraParcelada('l1', { titulo: 'Outro' })
+    expect(fetch).toHaveBeenCalledWith('/compras-parceladas/l1', {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ titulo: 'Outro' }),
+    })
+  })
+
+  it('deleteCompraParcelada aceita 204 e codifica o id', async () => {
+    responder(null, 204)
+    await deleteCompraParcelada('a/b')
+    expect(fetch).toHaveBeenCalledWith('/compras-parceladas/a%2Fb', {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    })
+  })
+
+  it('mapeia 401, 404, 400, 503 e o resto em erros tipados', async () => {
+    const chamadas = [
+      () => postCompraParcelada(dados),
+      () => fetchCompraParcelada('1'),
+      () => patchCompraParcelada('1', { titulo: 'x' }),
+      () => deleteCompraParcelada('1'),
+    ]
+    for (const chamar of chamadas) {
+      responder({ erro: 'x' }, 401)
+      await expect(chamar()).rejects.toBeInstanceOf(SessaoExpiradaError)
+      responder({ erro: 'x' }, 404)
+      await expect(chamar()).rejects.toBeInstanceOf(CompraParceladaNaoEncontradaError)
+      responder({ erro: 'x' }, 503)
+      await expect(chamar()).rejects.toBeInstanceOf(ServicoIndisponivelError)
+      responder({ erro: 'x' }, 500)
+      const erro = await chamar().catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(ApiError)
+      expect(erro).not.toBeInstanceOf(CompraParceladaNaoEncontradaError)
+    }
+  })
+
+  it('400 carrega a mensagem do servidor, ou null se o corpo não segue o contrato', async () => {
+    responder({ erro: 'cada parcela precisa ter ao menos 1 centavo' }, 400)
+    const erro = await postCompraParcelada(dados).catch((e: unknown) => e)
+    expect(erro).toBeInstanceOf(CompraParceladaInvalidaError)
+    expect((erro as CompraParceladaInvalidaError).mensagemServidor).toBe('cada parcela precisa ter ao menos 1 centavo')
+    responder({ outro: 1 }, 400)
+    const semMensagem = await postCompraParcelada(dados).catch((e: unknown) => e)
+    expect((semMensagem as CompraParceladaInvalidaError).mensagemServidor).toBeNull()
+  })
+
+  it.each([
+    ['sem itens', { ...compra, itens: [] }],
+    ['parcelas acima de 48', { ...compra, parcelas: 49 }],
+    ['total decimal', { ...compra, valorTotalCentavos: 10.5 }],
+    ['item com valor decimal', { ...compra, itens: [{ ...compra.itens[0], valorCentavos: 1.5 }] }],
+    ['item sem vencimento', { ...compra, itens: [{ ...compra.itens[0], dataCaixa: undefined }] }],
+    ['sem dataCompra', { ...compra, dataCompra: undefined }],
+  ])('recusa corpo fora do contrato: %s', async (_nome, corpo) => {
+    responder(corpo, 200)
+    await expect(fetchCompraParcelada('l1')).rejects.toThrow(/formato inesperado/)
   })
 })

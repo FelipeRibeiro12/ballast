@@ -63,6 +63,23 @@ class EntriesFrozenDatabaseTest {
     EntriesApi.Actor actor = api.newActor();
     Cookie session = actor.session();
     String body = EntriesApi.JSON.writeValueAsString(EntriesApi.expenseBody(actor));
+    // Cartão de verdade para a rota passar da conferência de corpo e chegar ao banco.
+    String card = api.newCard(session, "Cartão", actor.accountId(), 15, 25);
+    String purchaseBody =
+        EntriesApi.JSON.writeValueAsString(
+            java.util.Map.of(
+                "titulo",
+                "Notebook",
+                "valorTotalCentavos",
+                100_000,
+                "parcelas",
+                3,
+                "categoriaId",
+                actor.expenseCategoryId(),
+                "contaId",
+                card,
+                "data",
+                "2026-03-10"));
     DockerClient docker = DockerClientFactory.instance().client();
     docker.pauseContainerCmd(postgres.getContainerId()).exec();
     try {
@@ -90,6 +107,17 @@ class EntriesFrozenDatabaseTest {
               .andReturn()
               .getResponse();
       assertUnavailableQuickly(removed, Duration.ofNanos(System.nanoTime() - start));
+
+      start = System.nanoTime();
+      MockHttpServletResponse purchase =
+          mvc.perform(
+                  post("/compras-parceladas")
+                      .cookie(session)
+                      .contentType(MediaType.APPLICATION_JSON)
+                      .content(purchaseBody))
+              .andReturn()
+              .getResponse();
+      assertUnavailableQuickly(purchase, Duration.ofNanos(System.nanoTime() - start));
 
       start = System.nanoTime();
       MockHttpServletResponse categories =

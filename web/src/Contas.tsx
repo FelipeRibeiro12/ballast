@@ -454,6 +454,7 @@ export default function Contas({
                     <Faturas
                       cartao={conta}
                       contasAtivas={estado.contas}
+                      versaoDeSaldo={versaoDeSaldo}
                       aoMudarSaldo={aoMudarSaldo}
                       aoSessaoExpirar={aoSessaoExpirar}
                     />

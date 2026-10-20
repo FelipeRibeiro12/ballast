@@ -29,6 +29,9 @@ class EntryService {
 
   // As FKs das pernas recusam apagar ou mover lançamento com a ligação viva. A checagem de
   // isTransferLeg já barra antes; isto cobre o que passar dela.
+  // FK da V11: recusa apagar a primeira parcela com as outras apontando para ela.
+  private static final String PURCHASE_FK = "lancamento_parcela_mesma_compra";
+
   private static final String LEG_FK_OUT = "transferencia_saida_perna_valida";
   private static final String LEG_FK_IN = "transferencia_entrada_perna_valida";
 
@@ -42,7 +45,9 @@ class EntryService {
       CATEGORY_NOT_FOUND,
       BALANCE_OUT_OF_RANGE,
       TRANSFER_LEG,
-      NOT_PLANNED
+      NOT_PLANNED,
+      EDIT_WHOLE_PURCHASE,
+      INSTALLMENT_NOT_EXPENSE
     }
   }
 
@@ -51,7 +56,8 @@ class EntryService {
     NOT_FOUND,
     BALANCE_OUT_OF_RANGE,
     TRANSFER_LEG,
-    CANCEL_OCCURRENCE
+    CANCEL_OCCURRENCE,
+    FIRST_INSTALLMENT
   }
 
   private final EntryRepository entries;
@@ -114,6 +120,9 @@ class EntryService {
     } catch (DataIntegrityViolationException e) {
       if (isLegViolation(e)) {
         return DeleteResult.TRANSFER_LEG;
+      }
+      if (isConstraint(e, PURCHASE_FK)) {
+        return DeleteResult.FIRST_INSTALLMENT;
       }
       throw e;
     }
@@ -183,10 +192,11 @@ class EntryService {
       TransactionStatus status, UUID userId, UUID id, EntryInput input) {
     // O lançamento é travado primeiro para a conta de origem não mudar entre a leitura e o
     // travamento dela. Nenhum outro caminho trava lançamento depois de travar conta.
-    Optional<UUID> currentAccount = queries.lockEntry(userId, id).map(e -> e.accountId());
-    if (currentAccount.isEmpty()) {
+    Optional<EntryQueries.LockedEntry> locked = queries.lockEntry(userId, id);
+    if (locked.isEmpty()) {
       return SaveResult.Rejected.ENTRY_NOT_FOUND;
     }
+    Optional<UUID> currentAccount = locked.map(EntryQueries.LockedEntry::accountId);
     // Antes de travar qualquer conta: a perna já está travada, então o DELETE da transferência
     // espera aqui e o par nunca fica pela metade.
     if (queries.isTransferLeg(userId, id)) {
@@ -194,6 +204,13 @@ class EntryService {
     }
     if (input.accountId() == null) {
       return SaveResult.Rejected.ACCOUNT_NOT_FOUND;
+    }
+    boolean installment = locked.get().purchaseId() != null;
+    if (installment) {
+      Optional<SaveResult.Rejected> refused = checkInstallmentEdit(locked.get(), input);
+      if (refused.isPresent()) {
+        return refused.get();
+      }
     }
     boolean sameAccount = currentAccount.get().equals(input.accountId());
     Optional<Boolean> targetArchived = Optional.empty();
@@ -219,7 +236,9 @@ class EntryService {
             input.accountId(),
             input.amount(),
             input.date(),
-            cashDate(userId, input.accountId(), input.date()));
+            installment
+                ? locked.get().cashDate()
+                : cashDate(userId, input.accountId(), input.date()));
     if (changed == 0) {
       return SaveResult.Rejected.ENTRY_NOT_FOUND;
     }
@@ -238,6 +257,10 @@ class EntryService {
     }
     if (queries.isTransferLeg(userId, id)) {
       return DeleteResult.TRANSFER_LEG;
+    }
+    // As outras parcelas apontam para a primeira: ela só sai com a compra inteira.
+    if (id.equals(entry.get().purchaseId())) {
+      return DeleteResult.FIRST_INSTALLMENT;
     }
     // Apagar uma prevista liberaria a chave (template, data) e a regra geraria a mesma ocorrência
     // de novo. Cancelar guarda a linha e a chave. Realizada e cancelada podem sair.
@@ -320,6 +343,30 @@ class EntryService {
       }
     }
     return Optional.empty();
+  }
+
+  // A parcela não troca de conta nem de data (a data enviada é a da compra, a competência gravada)
+  // e continua despesa. A caixa dela é do cálculo da compra e não se recalcula aqui.
+  private static Optional<SaveResult.Rejected> checkInstallmentEdit(
+      EntryQueries.LockedEntry current, EntryInput input) {
+    if (!current.accountId().equals(input.accountId())
+        || input.date().compareTo(current.competenceDate()) != 0) {
+      return Optional.of(SaveResult.Rejected.EDIT_WHOLE_PURCHASE);
+    }
+    if (input.type() != EntryType.EXPENSE) {
+      return Optional.of(SaveResult.Rejected.INSTALLMENT_NOT_EXPENSE);
+    }
+    return Optional.empty();
+  }
+
+  private static boolean isConstraint(Throwable error, String name) {
+    for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+      if (cause instanceof ConstraintViolationException violation
+          && name.equals(violation.getConstraintName())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static boolean isLegViolation(Throwable error) {

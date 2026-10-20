@@ -210,11 +210,14 @@ function FormularioDePagamento({
 export default function Faturas({
   cartao,
   contasAtivas,
+  versaoDeSaldo,
   aoMudarSaldo,
   aoSessaoExpirar,
 }: {
   cartao: Conta
   contasAtivas: Conta[]
+  // Sobe quando um lançamento mudou o saldo; as faturas abertas buscam de novo.
+  versaoDeSaldo: number
   // Avisa o app que o saldo mudou, para as contas e os lançamentos buscarem de novo.
   aoMudarSaldo: () => void
   aoSessaoExpirar: () => void
@@ -245,7 +248,7 @@ export default function Faturas({
     return () => {
       ativo = false
     }
-  }, [cartao.id, tentativa, aoSessaoExpirar])
+  }, [cartao.id, tentativa, versaoDeSaldo, aoSessaoExpirar])
 
   function recarregar(): void {
     setEstado({ tipo: 'carregando' })
@@ -300,7 +303,7 @@ export default function Faturas({
           contasAtivas={contasAtivas}
           aoPagar={() => {
             setPagando(null)
-            recarregar()
+            // A subida de versaoDeSaldo refaz a busca das faturas.
             aoMudarSaldo()
           }}
           aoCancelar={() => setPagando(null)}
