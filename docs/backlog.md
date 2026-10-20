@@ -164,6 +164,8 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Sem idempotência na escrita de dinheiro: dois `POST /transferencias` (ou `/lancamentos`) idênticos gravam duas vezes (QA da F4, S2). O web barra o submit duplo, mas rede instável com retentativa não. Chave de idempotência por requisição. Dono: backend, antes do PWA offline ou da importação.
 - **DÍVIDA** — `POST /lancamentos` com `tipo: transferencia` é recusado com "categoriaId é obrigatório" ou "requisição inválida", não com uma mensagem que aponte para `/transferencias` (QA da F4, S1). Dono: backend, na próxima fatia que mexer em `EntryController`.
 - **DÍVIDA** — Deadlock (SQLState 40P01) responde 500, não 503 com "tente de novo" (F5). A ordem das travas do ADR-026 não forma ciclo hoje, então só apareceria com caminho novo fora da ordem. Tratar 40P01 junto com o 55P03 do `lock_timeout`. Dono: backend, na próxima fatia que mexer em `ApiExceptionHandler`.
+- **DÍVIDA** — Cancelar uma ocorrência de template e depois apagá-la faz a data voltar como prevista se for de hoje em diante (QA da F5, S2). É o contrato do ADR-026, mas surpreende. Decidir se apagar cancelada some de vez (manter a linha oculta) quando houver pedido. Dono: tech-lead, com o dono do produto.
+- **DÍVIDA** — O job de recorrência só loga pulo e falha; não loga quantas previstas inseriu por template, e uma falha de banco aborta a rodada sem resumo (QA da F5, S4). Dono: backend, junto com a observabilidade da F20.5.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
