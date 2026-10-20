@@ -39,6 +39,7 @@ function lancamento(sobra: Partial<Record<string, unknown>> = {}): Record<string
     valorCentavos: 12345,
     categoriaId: 'cd1',
     transferenciaId: null,
+    templateId: null,
     direcao: null,
     contaId: 'c1',
     dataCompetencia: '2026-10-05',
@@ -46,6 +47,33 @@ function lancamento(sobra: Partial<Record<string, unknown>> = {}): Record<string
     criadoEm: '2026-10-05T12:00:00Z',
     ...sobra,
   }
+}
+
+function prevista(sobra: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return lancamento({
+    id: 'o1',
+    status: 'previsto',
+    titulo: 'Aluguel',
+    valorCentavos: 150000,
+    templateId: 'r1',
+    dataCompetencia: '2026-10-25',
+    dataCaixa: '2026-10-25',
+    ...sobra,
+  })
+}
+
+const recorrenciaAtiva = {
+  id: 'r1',
+  tipo: 'despesa',
+  titulo: 'Aluguel',
+  descricao: null,
+  valorCentavos: 150000,
+  categoriaId: 'cd1',
+  contaId: 'c1',
+  ativo: true,
+  criadoEm: '2026-10-01T12:00:00Z',
+  regra: { frequencia: 'mensal', intervalo: 1, diaDoMes: 25, diaDaSemana: null, inicio: '2026-10-25', fim: null, ocorrenciasMax: null },
+  proximaOcorrencia: '2026-10-25',
 }
 
 function perna(sobra: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
@@ -108,6 +136,7 @@ const base = {
   'GET /auth/eu': responde(usuario),
   'GET /contas': responde([conta()]),
   'GET /categorias': responde(categorias),
+  'GET /recorrencias': responde([]),
 }
 
 // O Intl separa símbolo e número com espaço sem quebra; o texto do teste usa espaço comum.
@@ -610,6 +639,194 @@ describe('Lancamentos', () => {
       fireEvent.submit(form)
       expect(chamadasA('POST /transferencias')).toHaveLength(1)
       expect(within(form).getByRole('button', { name: /salvando/i })).toBeDisabled()
+    })
+  })
+  describe('ocorrências de recorrência', () => {
+    it('prevista tem a marca Previsto, fica fora dos totais e entra na linha de previsto', async () => {
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([
+          lancamento(),
+          prevista(),
+          prevista({ id: 'o2', tipo: 'receita', titulo: 'Bônus', categoriaId: 'cr1', valorCentavos: 20000 }),
+        ]),
+      })
+      render(<App />)
+      const area = within(await secao())
+      const item = (await area.findByText('Aluguel')).closest('li')
+      expect(item).toHaveTextContent('Previsto')
+      expect(item).toHaveTextContent(texto('− R$ 1.500,00'))
+      expect(area.getByText('Receitas').nextSibling).toHaveTextContent(texto('R$ 0,00'))
+      expect(area.getByText('Despesas').nextSibling).toHaveTextContent(texto('R$ 123,45'))
+      expect(area.getByText('Resultado').nextSibling).toHaveTextContent(texto('-R$ 123,45'))
+      expect(area.getByText(/previsto no mês/i)).toHaveTextContent(texto('+R$ 200,00 / −R$ 1.500,00'))
+    })
+
+    it('cancelada aparece riscada com a marca Cancelado e fora dos totais', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([prevista({ status: 'cancelado' })]) })
+      render(<App />)
+      const area = within(await secao())
+      const item = (await area.findByText('Aluguel')).closest('li')
+      expect(item).toHaveTextContent('Cancelado')
+      expect(item).toHaveClass('cancelado')
+      expect(area.getByText('Despesas').nextSibling).toHaveTextContent(texto('R$ 0,00'))
+      expect(area.getByText(/previsto no mês/i)).toHaveTextContent(texto('+R$ 0,00 / −R$ 0,00'))
+    })
+
+    it('prevista não tem Apagar', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([prevista()]) })
+      render(<App />)
+      await screen.findByRole('button', { name: 'Confirmar Aluguel' })
+      expect(screen.queryByRole('button', { name: /apagar/i })).toBeNull()
+    })
+
+    it('confirmar envia PATCH realizado e recarrega lista e saldo', async () => {
+      let corpoEnviado: unknown
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([prevista()]),
+        'PATCH /lancamentos/o1': (corpo) => {
+          corpoEnviado = corpo
+          return Promise.resolve(jsonResponse(prevista({ status: 'realizado' }), 200))
+        },
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Aluguel' }))
+      await waitFor(() => expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(1))
+      expect(JSON.parse(String(corpoEnviado))).toEqual({ status: 'realizado' })
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+      await waitFor(() => expect(chamadasA('GET /contas')).toHaveLength(2))
+    })
+
+    it('cancelar pede confirmação, envia PATCH cancelado e recarrega', async () => {
+      let corpoEnviado: unknown
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([prevista()]),
+        'PATCH /lancamentos/o1': (corpo) => {
+          corpoEnviado = corpo
+          return Promise.resolve(jsonResponse(prevista({ status: 'cancelado' }), 200))
+        },
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Cancelar Aluguel' }))
+      expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(0)
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar cancelar Aluguel' }))
+      await waitFor(() => expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(1))
+      expect(JSON.parse(String(corpoEnviado))).toEqual({ status: 'cancelado' })
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+      await waitFor(() => expect(chamadasA('GET /contas')).toHaveLength(2))
+    })
+
+    it('desistir do cancelamento não envia nada', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([prevista()]) })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Cancelar Aluguel' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Manter' }))
+      expect(screen.getByRole('button', { name: 'Cancelar Aluguel' })).toBeVisible()
+      expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(0)
+    })
+
+    it('400 ao confirmar mostra a mensagem do servidor e mantém a prevista', async () => {
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([prevista()]),
+        'PATCH /lancamentos/o1': responde({ erro: 'conta arquivada' }, 400),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Aluguel' }))
+      expect(await screen.findByText('conta arquivada')).toBeVisible()
+      expect(screen.getByRole('button', { name: 'Confirmar Aluguel' })).toBeVisible()
+    })
+
+    it('503 ao confirmar mostra serviço indisponível', async () => {
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([prevista()]),
+        'PATCH /lancamentos/o1': responde({ erro: 'x' }, 503),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Aluguel' }))
+      expect(await screen.findByText('Serviço indisponível. Tente de novo em instantes.')).toBeVisible()
+    })
+
+    it('404 ao confirmar avisa que não existe mais e recarrega', async () => {
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([prevista()]),
+        'PATCH /lancamentos/o1': responde({ erro: 'x' }, 404),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Aluguel' }))
+      expect(await screen.findByText('Esse lançamento não existe mais.')).toBeVisible()
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+    })
+
+    it('401 ao confirmar volta para o login', async () => {
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([prevista()]),
+        'PATCH /lancamentos/o1': responde({ erro: 'x' }, 401),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Aluguel' }))
+      expect(await screen.findByRole('status')).toHaveTextContent(/sessão acabou/i)
+    })
+
+    it('editar prevista envia PUT no id certo', async () => {
+      let corpoEnviado: unknown
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([prevista()]),
+        'PUT /lancamentos/o1': (corpo) => {
+          corpoEnviado = corpo
+          return Promise.resolve(jsonResponse(prevista({ titulo: 'Aluguel novo' }), 200))
+        },
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Editar Aluguel' }))
+      const form = await formulario('Editar lançamento')
+      expect(within(form).getByLabelText('Data')).toHaveValue('2026-10-25')
+      fireEvent.change(within(form).getByLabelText('Título'), { target: { value: 'Aluguel novo' } })
+      fireEvent.submit(form)
+      await waitFor(() => expect(chamadasA('PUT /lancamentos/o1')).toHaveLength(1))
+      expect(JSON.parse(String(corpoEnviado))).toMatchObject({
+        titulo: 'Aluguel novo',
+        valorCentavos: 150000,
+        data: '2026-10-25',
+      })
+    })
+
+    it('apagar realizada de série ativa de hoje em diante avisa que volta como prevista', async () => {
+      mockFetch({
+        ...base,
+        'GET /recorrencias': responde([recorrenciaAtiva]),
+        [MES_ATUAL]: responde([prevista({ status: 'realizado' })]),
+        'DELETE /lancamentos/o1': () => Promise.resolve(new Response(null, { status: 204 })),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Apagar Aluguel' }))
+      expect(screen.getByText(/volta como prevista/i)).toBeVisible()
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar Aluguel' }))
+      await waitFor(() => expect(chamadasA('DELETE /lancamentos/o1')).toHaveLength(1))
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+    })
+
+    it('apagar realizada de antes de hoje ou de série desativada não avisa', async () => {
+      mockFetch({
+        ...base,
+        'GET /recorrencias': responde([recorrenciaAtiva]),
+        [MES_ATUAL]: responde([
+          prevista({ status: 'realizado', dataCaixa: '2026-10-10', dataCompetencia: '2026-10-10' }),
+          prevista({ id: 'o3', titulo: 'Seguro', status: 'cancelado', templateId: 'r9' }),
+        ]),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Apagar Aluguel' }))
+      expect(screen.queryByText(/volta como prevista/i)).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Apagar Seguro' }))
+      expect(screen.queryByText(/volta como prevista/i)).toBeNull()
     })
   })
 })

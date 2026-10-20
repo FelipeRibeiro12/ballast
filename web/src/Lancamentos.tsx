@@ -11,6 +11,7 @@ import {
   deleteTransferencia,
   fetchCategorias,
   fetchLancamentos,
+  patchStatusLancamento,
   postLancamento,
   postTransferencia,
   putLancamento,
@@ -70,6 +71,15 @@ function mensagemDeTransferencia(erro: unknown): string {
   }
   if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
   return 'Não foi possível salvar a transferência. Tente de novo.'
+}
+
+function mensagemDeStatus(erro: unknown): string {
+  if (erro instanceof LancamentoNaoEncontradoError) return MENSAGEM_NAO_EXISTE
+  if (erro instanceof LancamentoInvalidoError && erro.mensagemServidor !== null) {
+    return erro.mensagemServidor
+  }
+  if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
+  return 'Não foi possível alterar a ocorrência. Tente de novo.'
 }
 
 function mensagemDeExclusao(erro: unknown): string {
@@ -474,12 +484,21 @@ export default function Lancamentos({
   aoSessaoExpirar,
   contas,
   aoMudarSaldo,
+  recorrenciasAtivas,
+  versaoDaLista,
+  aoMudarOcorrencia,
 }: {
   aoSessaoExpirar: () => void
   // Contas ativas, vindas da tela de Contas; null até a primeira carga.
   contas: Conta[] | null
   // Avisa a lista de contas que o saldo mudou.
   aoMudarSaldo: () => void
+  // Ids das recorrências ativas, para avisar que apagar uma ocorrência futura a faz voltar.
+  recorrenciasAtivas: ReadonlySet<string>
+  // Sobe quando outra tela mexeu nas ocorrências (criar ou desativar recorrência).
+  versaoDaLista: number
+  // Avisa a tela de recorrências que a próxima ocorrência pode ter mudado.
+  aoMudarOcorrencia: () => void
 }) {
   const [mes, setMes] = useState<Mes>(() => mesDeHoje())
   const [filtroDeConta, setFiltroDeConta] = useState('')
@@ -488,7 +507,8 @@ export default function Lancamentos({
   const [tentativa, setTentativa] = useState(0)
   const [tentativaDoApoio, setTentativaDoApoio] = useState(0)
   const [editando, setEditando] = useState<Lancamento | null>(null)
-  const [confirmando, setConfirmando] = useState<string | null>(null)
+  // Dois cliques para apagar e para cancelar; a ação guardada evita confirmar a errada.
+  const [confirmando, setConfirmando] = useState<{ id: string; acao: 'apagar' | 'cancelar' } | null>(null)
   const [apagando, setApagando] = useState<string | null>(null)
   const [falhaDeAcao, setFalhaDeAcao] = useState<string | null>(null)
   // Muda a key do formulário de criação para limpar os campos depois de salvar.
@@ -516,7 +536,7 @@ export default function Lancamentos({
     return () => {
       ativo = false
     }
-  }, [mes, filtroDeConta, tentativa, aoSessaoExpirar])
+  }, [mes, filtroDeConta, tentativa, versaoDaLista, aoSessaoExpirar])
 
   useEffect(() => {
     let ativo = true
@@ -546,6 +566,7 @@ export default function Lancamentos({
   function depoisDeMudar(): void {
     recarregar()
     aoMudarSaldo()
+    aoMudarOcorrencia()
   }
 
   function navegar(delta: number): void {
@@ -584,6 +605,31 @@ export default function Lancamentos({
     }
   }
 
+  async function mudarStatus(lancamento: Lancamento, status: 'realizado' | 'cancelado'): Promise<void> {
+    if (acaoEmVoo.current) return
+    acaoEmVoo.current = true
+    setApagando(lancamento.id)
+    setFalhaDeAcao(null)
+    try {
+      await patchStatusLancamento(lancamento.id, status)
+      setConfirmando(null)
+      if (editando?.id === lancamento.id) setEditando(null)
+      depoisDeMudar()
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return
+      }
+      setFalhaDeAcao(mensagemDeStatus(erro))
+      setConfirmando(null)
+      // A lista na tela está velha: busca de novo o que o servidor tem.
+      if (erro instanceof LancamentoNaoEncontradoError) depoisDeMudar()
+    } finally {
+      acaoEmVoo.current = false
+      setApagando(null)
+    }
+  }
+
   const nomesDeConta = new Map<string, string>()
   const nomesDeCategoria = new Map<string, string>()
   if (contas !== null) contas.forEach((conta) => nomesDeConta.set(conta.id, conta.nome))
@@ -594,8 +640,18 @@ export default function Lancamentos({
   // BigInt porque a soma de muitos lançamentos pode passar do inteiro seguro.
   let receitas = 0n
   let despesas = 0n
+  let previstoReceitas = 0n
+  let previstoDespesas = 0n
+  const hoje = hojeLocal()
   if (estado.tipo === 'ok') {
     for (const lancamento of estado.lancamentos) {
+      // Previsto e cancelado não são fato consumado: os totais seguem o saldo, só realizado.
+      if (lancamento.status === 'previsto') {
+        if (lancamento.tipo === 'receita') previstoReceitas += BigInt(lancamento.valorCentavos)
+        else if (lancamento.tipo === 'despesa') previstoDespesas += BigInt(lancamento.valorCentavos)
+        continue
+      }
+      if (lancamento.status !== 'realizado') continue
       if (lancamento.tipo === 'receita') receitas += BigInt(lancamento.valorCentavos)
       else if (lancamento.tipo === 'despesa') despesas += BigInt(lancamento.valorCentavos)
       // Transferência fica fora: mover dinheiro entre contas não é ganho nem gasto.
@@ -673,6 +729,11 @@ export default function Lancamentos({
               <dd>{formatarCentavos(receitas - despesas)}</dd>
             </div>
           </dl>
+          <p className="previsto-no-mes">
+            Previsto no mês: <span className="receita">+{formatarCentavos(previstoReceitas)}</span>
+            {' / '}
+            <span className="despesa">−{formatarCentavos(previstoDespesas)}</span>
+          </p>
           {estado.lancamentos.length === 0 && <p>Nenhum lançamento neste mês.</p>}
           {estado.lancamentos.length > 0 && (
             <ul className="lancamentos">
@@ -680,8 +741,19 @@ export default function Lancamentos({
                 const ePerna = lancamento.tipo === 'transferencia'
                 const sinal =
                   lancamento.tipo === 'receita' || lancamento.direcao === 'entrada' ? '+' : '−'
+                const ePrevista = lancamento.status === 'previsto'
+                const eCancelada = lancamento.status === 'cancelado'
+                // Só vale o aviso se a série ainda gera e a data cai dentro do que ela repõe.
+                const voltaComoPrevista =
+                  lancamento.templateId !== null &&
+                  recorrenciasAtivas.has(lancamento.templateId) &&
+                  lancamento.dataCaixa >= hoje
+                const confirmandoEste = confirmando?.id === lancamento.id ? confirmando.acao : null
                 return (
-                  <li key={lancamento.id}>
+                  <li
+                    key={lancamento.id}
+                    className={ePrevista ? 'previsto' : eCancelada ? 'cancelado' : undefined}
+                  >
                     <div className="lancamento-dados">
                       <span>{formatarDiaMes(lancamento.dataCaixa)}</span>
                       <strong>{lancamento.titulo}</strong>
@@ -693,12 +765,25 @@ export default function Lancamentos({
                         {' · '}
                         {nomesDeConta.get(lancamento.contaId) ?? 'Conta arquivada'}
                       </span>
+                      {(ePrevista || eCancelada) && (
+                        <span className="marca">{ePrevista ? 'Previsto' : 'Cancelado'}</span>
+                      )}
                       <span className={lancamento.tipo}>
                         {sinal} {formatarCentavos(lancamento.valorCentavos)}
                       </span>
                     </div>
                     <div className="lancamento-acoes">
-                      {!ePerna && (
+                      {ePrevista && (
+                        <button
+                          type="button"
+                          disabled={apagando !== null}
+                          aria-label={`Confirmar ${lancamento.titulo}`}
+                          onClick={() => void mudarStatus(lancamento, 'realizado')}
+                        >
+                          Confirmar
+                        </button>
+                      )}
+                      {!ePerna && !eCancelada && (
                         <button
                           type="button"
                           disabled={apagando !== null}
@@ -712,31 +797,59 @@ export default function Lancamentos({
                           Editar
                         </button>
                       )}
-                      {confirmando === lancamento.id ? (
-                        <>
-                          {ePerna && <span>Apaga as duas pernas da transferência.</span>}
+                      {ePrevista &&
+                        (confirmandoEste === 'cancelar' ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={apagando !== null}
+                              aria-label={`Confirmar cancelar ${lancamento.titulo}`}
+                              onClick={() => void mudarStatus(lancamento, 'cancelado')}
+                            >
+                              Confirmar cancelar
+                            </button>
+                            <button type="button" disabled={apagando !== null} onClick={() => setConfirmando(null)}>
+                              Manter
+                            </button>
+                          </>
+                        ) : (
                           <button
                             type="button"
                             disabled={apagando !== null}
-                            aria-label={`Confirmar apagar ${lancamento.titulo}`}
-                            onClick={() => void apagar(lancamento)}
+                            aria-label={`Cancelar ${lancamento.titulo}`}
+                            onClick={() => setConfirmando({ id: lancamento.id, acao: 'cancelar' })}
                           >
-                            Confirmar apagar
-                          </button>
-                          <button type="button" disabled={apagando !== null} onClick={() => setConfirmando(null)}>
                             Cancelar
                           </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={apagando !== null}
-                          aria-label={`Apagar ${lancamento.titulo}`}
-                          onClick={() => setConfirmando(lancamento.id)}
-                        >
-                          Apagar
-                        </button>
-                      )}
+                        ))}
+                      {/* Apagar prevista é recusado pela API: o caminho é cancelar. */}
+                      {!ePrevista &&
+                        (confirmandoEste === 'apagar' ? (
+                          <>
+                            {ePerna && <span>Apaga as duas pernas da transferência.</span>}
+                            {voltaComoPrevista && <span>Essa ocorrência volta como prevista.</span>}
+                            <button
+                              type="button"
+                              disabled={apagando !== null}
+                              aria-label={`Confirmar apagar ${lancamento.titulo}`}
+                              onClick={() => void apagar(lancamento)}
+                            >
+                              Confirmar apagar
+                            </button>
+                            <button type="button" disabled={apagando !== null} onClick={() => setConfirmando(null)}>
+                              Cancelar
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={apagando !== null}
+                            aria-label={`Apagar ${lancamento.titulo}`}
+                            onClick={() => setConfirmando({ id: lancamento.id, acao: 'apagar' })}
+                          >
+                            Apagar
+                          </button>
+                        ))}
                     </div>
                   </li>
                 )

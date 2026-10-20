@@ -315,7 +315,7 @@ function isLancamento(valor: unknown): valor is Lancamento {
     'tipo' in valor &&
     (valor.tipo === 'receita' || valor.tipo === 'despesa' || valor.tipo === 'transferencia') &&
     'status' in valor &&
-    valor.status === 'realizado' &&
+    (valor.status === 'previsto' || valor.status === 'realizado' || valor.status === 'cancelado') &&
     'titulo' in valor &&
     typeof valor.titulo === 'string' &&
     'descricao' in valor &&
@@ -327,6 +327,10 @@ function isLancamento(valor: unknown): valor is Lancamento {
     'transferenciaId' in valor &&
     'direcao' in valor &&
     ligacaoCoerenteComOTipo(valor.tipo, valor.categoriaId, valor.transferenciaId, valor.direcao) &&
+    'templateId' in valor &&
+    (valor.templateId === null || typeof valor.templateId === 'string') &&
+    // Só a regra gera previsto e só ela dá template; a perna é sempre um fato avulso.
+    (valor.tipo !== 'transferencia' || (valor.status === 'realizado' && valor.templateId === null)) &&
     'contaId' in valor &&
     typeof valor.contaId === 'string' &&
     'dataCompetencia' in valor &&
@@ -504,4 +508,159 @@ export async function deleteTransferencia(id: string): Promise<void> {
   if (resposta.status !== 204) {
     return recusarRespostaDeTransferencia(resposta, 'DELETE /transferencias/{id}')
   }
+}
+
+export async function patchStatusLancamento(
+  id: string,
+  status: 'realizado' | 'cancelado',
+): Promise<Lancamento> {
+  const resposta = await fetch(`${baseUrl}/lancamentos/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  })
+  if (!resposta.ok) return recusarRespostaDeLancamento(resposta, 'PATCH /lancamentos/{id}')
+  return lerLancamento(resposta, 'PATCH /lancamentos/{id}')
+}
+
+export type Recorrencia = components['schemas']['Recorrencia']
+export type RegraRecorrencia = components['schemas']['RegraRecorrencia']
+export type RecorrenciaRequest = components['schemas']['RecorrenciaRequest']
+export type RecorrenciaCriada = components['schemas']['RecorrenciaCriada']
+
+export class RecorrenciaNaoEncontradaError extends ApiError {}
+
+export class RecorrenciaInvalidaError extends ApiError {
+  // null quando o corpo do 400 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('recorrência recusada por entrada inválida')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+function inteiroOuNulo(valor: unknown): boolean {
+  return valor === null || Number.isSafeInteger(valor)
+}
+
+function isRegraRecorrencia(valor: unknown): valor is RegraRecorrencia {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'frequencia' in valor &&
+    (valor.frequencia === 'diaria' ||
+      valor.frequencia === 'semanal' ||
+      valor.frequencia === 'mensal' ||
+      valor.frequencia === 'anual') &&
+    'intervalo' in valor &&
+    Number.isSafeInteger(valor.intervalo) &&
+    'diaDoMes' in valor &&
+    inteiroOuNulo(valor.diaDoMes) &&
+    'diaDaSemana' in valor &&
+    inteiroOuNulo(valor.diaDaSemana) &&
+    'inicio' in valor &&
+    typeof valor.inicio === 'string' &&
+    'fim' in valor &&
+    (valor.fim === null || typeof valor.fim === 'string') &&
+    'ocorrenciasMax' in valor &&
+    inteiroOuNulo(valor.ocorrenciasMax)
+  )
+}
+
+function isRecorrencia(valor: unknown): valor is Recorrencia {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'tipo' in valor &&
+    (valor.tipo === 'receita' || valor.tipo === 'despesa') &&
+    'titulo' in valor &&
+    typeof valor.titulo === 'string' &&
+    'descricao' in valor &&
+    (valor.descricao === null || typeof valor.descricao === 'string') &&
+    // Fora do inteiro seguro o JSON já perdeu o centavo no parse.
+    'valorCentavos' in valor &&
+    Number.isSafeInteger(valor.valorCentavos) &&
+    'categoriaId' in valor &&
+    typeof valor.categoriaId === 'string' &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'ativo' in valor &&
+    typeof valor.ativo === 'boolean' &&
+    'criadoEm' in valor &&
+    typeof valor.criadoEm === 'string' &&
+    'regra' in valor &&
+    isRegraRecorrencia(valor.regra) &&
+    'proximaOcorrencia' in valor &&
+    (valor.proximaOcorrencia === null || typeof valor.proximaOcorrencia === 'string')
+  )
+}
+
+function isRecorrenciaCriada(valor: unknown): valor is RecorrenciaCriada {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'ocorrenciasMaterializadas' in valor &&
+    Number.isSafeInteger(valor.ocorrenciasMaterializadas) &&
+    'recorrencia' in valor &&
+    isRecorrencia(valor.recorrencia)
+  )
+}
+
+async function lerRecorrencia(resposta: Response, origem: string): Promise<Recorrencia> {
+  const corpo: unknown = await resposta.json()
+  if (!isRecorrencia(corpo)) {
+    throw new ApiError(`${origem} com formato inesperado`)
+  }
+  return corpo
+}
+
+async function recusarRespostaDeRecorrencia(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 404) throw new RecorrenciaNaoEncontradaError('recorrência não encontrada')
+  if (resposta.status === 400) {
+    throw new RecorrenciaInvalidaError(await lerMensagemDeErro(resposta))
+  }
+  throw new ApiError(`${origem} respondeu ${resposta.status}`)
+}
+
+export async function fetchRecorrencias(): Promise<Recorrencia[]> {
+  const resposta = await fetch(`${baseUrl}/recorrencias`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeRecorrencia(resposta, '/recorrencias')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isRecorrencia)) {
+    throw new ApiError('/recorrencias com formato inesperado')
+  }
+  return corpo
+}
+
+export async function postRecorrencia(dados: RecorrenciaRequest): Promise<RecorrenciaCriada> {
+  const resposta = await fetch(`${baseUrl}/recorrencias`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeRecorrencia(resposta, 'POST /recorrencias')
+  const corpo: unknown = await resposta.json()
+  if (!isRecorrenciaCriada(corpo)) {
+    throw new ApiError('POST /recorrencias com formato inesperado')
+  }
+  return corpo
+}
+
+// O contrato só aceita ativo false: a recorrência não é reativada.
+export async function desativarRecorrencia(id: string): Promise<Recorrencia> {
+  const resposta = await fetch(`${baseUrl}/recorrencias/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ativo: false }),
+  })
+  if (!resposta.ok) return recusarRespostaDeRecorrencia(resposta, 'PATCH /recorrencias/{id}')
+  return lerRecorrencia(resposta, 'PATCH /recorrencias/{id}')
 }

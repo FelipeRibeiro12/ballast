@@ -14,6 +14,7 @@ import {
 import type { Conta, Usuario } from './api'
 import Contas from './Contas'
 import Lancamentos from './Lancamentos'
+import Recorrencias from './Recorrencias'
 
 type EstadoSessao =
   | { tipo: 'carregando' }
@@ -325,6 +326,9 @@ function App() {
   const [versaoDeSaldo, setVersaoDeSaldo] = useState(0)
   // Contas ativas vindas da tela de Contas, para os selects de Lançamentos não buscarem de novo.
   const [contasAtivas, setContasAtivas] = useState<Conta[] | null>(null)
+  const [versaoDaLista, setVersaoDaLista] = useState(0)
+  const [versaoDeRecorrencias, setVersaoDeRecorrencias] = useState(0)
+  const [recorrenciasAtivas, setRecorrenciasAtivas] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     let ativo = true
@@ -412,6 +416,19 @@ function App() {
             aoSessaoExpirar={aoSessaoExpirar}
             contas={contasAtivas}
             aoMudarSaldo={() => setVersaoDeSaldo((n) => n + 1)}
+            recorrenciasAtivas={recorrenciasAtivas}
+            versaoDaLista={versaoDaLista}
+            aoMudarOcorrencia={() => setVersaoDeRecorrencias((n) => n + 1)}
+          />
+          <Recorrencias
+            aoSessaoExpirar={aoSessaoExpirar}
+            contas={contasAtivas}
+            versao={versaoDeRecorrencias}
+            aoCarregarAtivas={setRecorrenciasAtivas}
+            aoMudarOcorrencias={() => {
+              setVersaoDaLista((n) => n + 1)
+              setVersaoDeSaldo((n) => n + 1)
+            }}
           />
         </>
       )}

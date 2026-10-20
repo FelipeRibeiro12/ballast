@@ -1,4 +1,5 @@
 import {
+  formatarDataCompleta,
   formatarDiaMes,
   hojeLocal,
   intervaloDoMes,
@@ -46,5 +47,12 @@ describe('datas', () => {
 
   it('escreve o mês por extenso', () => {
     expect(rotuloDoMes({ ano: 2026, mes: 9 })).toBe('setembro de 2026')
+  })
+})
+
+describe('formatarDataCompleta', () => {
+  it('troca AAAA-MM-DD por dd/mm/aaaa sem passar por Date', () => {
+    expect(formatarDataCompleta('2026-09-05')).toBe('05/09/2026')
+    expect(formatarDataCompleta('2027-01-01')).toBe('01/01/2027')
   })
 })

@@ -46,6 +46,11 @@ export function formatarDiaMes(data: string): string {
   return `${data.slice(8, 10)}/${data.slice(5, 7)}`
 }
 
+// "2026-09-05" vira "05/09/2026", também sem passar por Date.
+export function formatarDataCompleta(data: string): string {
+  return `${formatarDiaMes(data)}/${data.slice(0, 4)}`
+}
+
 const formatadorDoMes = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
 
 export function rotuloDoMes({ ano, mes }: Mes): string {
