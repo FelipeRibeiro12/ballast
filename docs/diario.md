@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-20 — F10: cartão de crédito (PR #16)
+
+O que entrou: migration V10 com `cartao` 1:1 e o tipo `cartao_credito`, com o banco garantindo por coluna gerada e FK composta que só conta de cartão tem cartão e que a conta de pagamento é corrente ou poupança; regra da fatura num componente puro (até o fechamento, inclusive; vencimento menor ou igual ao fechamento vira o mês) aplicada em lançamento, PUT, recorrência, divisão e confirmar com ajuste; `GET /contas/{id}/faturas` derivado dos lançamentos; tela de cartão com limite, disponível, faturas e pagar fatura preenchido; data da compra e dica do vencimento nos formulários.
+Decisões: ADR-031, completado na fatia: a janela do pagamento passou a ser do fechamento desta ao fechamento da seguinte (com a janela por vencimento, pagar com atraso deixava a fatura aberta para sempre); cartão não pode ser origem de transferência (QA, D1); disponível limitado ao limite; fechamento, vencimento e limite não se editam.
+Dívida registrada: lista de lançamentos por competência.
+Achados do QA: 0 bloquearam, 1 dívida corrigida na fatia (saque pelo cartão sumia da fatura), 3 sugestões (pagar de qualquer conta, aceito e documentado; logins paralelos, desenho do F1; compra futura já desconta o saldo, ADR-024). Regra da fatura conferida em 984 de 984 compras contra cálculo independente.
+Achados do revisor: PENDENTE
+Pipeline: PENDENTE
+Em aberto: o frontend achou e corrigiu dois pontos em que o formulário partia da data de caixa e reenviaria o vencimento como data da compra; os dois têm teste que falha com a regressão. Conferência em navegador das telas em 360px.
+
 ## 2026-10-20 — F9: PWA instalável (PR #15)
 
 O que entrou: manifest, ícones gerados de um SVG próprio, service worker com precache só do shell e a denylist do fallback montada da mesma lista de prefixos do proxy; aviso de "Nova versão disponível" com confirmação; metas de app no iOS.
