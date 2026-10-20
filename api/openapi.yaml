@@ -1301,6 +1301,39 @@ components:
       required:
       - nome
       - tipo
+    DivisaoRecorrencia:
+      type: object
+      properties:
+        modo:
+          type: string
+          enum:
+          - percentual
+          - valor
+        parcelas:
+          type: array
+          items:
+            $ref: "#/components/schemas/ParcelaDivisao"
+      required:
+      - modo
+      - parcelas
+    DivisaoRequest:
+      type: object
+      properties:
+        modo:
+          type: string
+          enum:
+          - percentual
+          - valor
+        parcelas:
+          type: array
+          description: De 2 a 10 parcelas. A ordem do array é a ordem das parcelas
+          items:
+            $ref: "#/components/schemas/ParcelaDivisaoRequest"
+          maxItems: 10
+          minItems: 2
+      required:
+      - modo
+      - parcelas
     Erro:
       type: object
       properties:
@@ -1363,6 +1396,15 @@ components:
         id:
           type: string
           format: uuid
+        parcelaOrdem:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: Ordem da parcela na divisão de salário (1 é a primeira); nulo
+            fora de divisão
+          maximum: 10
+          minimum: 1
         status:
           type: string
           enum:
@@ -1407,6 +1449,7 @@ components:
       - descricao
       - direcao
       - id
+      - parcelaOrdem
       - status
       - templateId
       - tipo
@@ -1479,6 +1522,69 @@ components:
       required:
       - email
       - senha
+    ParcelaDivisao:
+      type: object
+      properties:
+        diaDoMes:
+          type: integer
+          format: int32
+          maximum: 31
+          minimum: 1
+        ordem:
+          type: integer
+          format: int32
+          maximum: 10
+          minimum: 1
+        percentualCentesimos:
+          type: integer
+          format: int32
+          description: "Só no modo percentual. 40% é 4000, 33,33% é 3333"
+          maximum: 9999
+          minimum: 1
+        valorCentavos:
+          type: integer
+          format: int64
+          description: Só no modo valor. Centavos de real
+          maximum: 9007199254740991
+          minimum: 1
+        valorParcelaCentavos:
+          type: integer
+          format: int64
+          description: "Centavos que a parcela gera em cada mês, com a regra do centavo"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - diaDoMes
+      - ordem
+      - valorParcelaCentavos
+    ParcelaDivisaoRequest:
+      type: object
+      properties:
+        diaDoMes:
+          type: integer
+          format: int32
+          description: Dia maior que o último do mês cai no último dia
+          maximum: 31
+          minimum: 1
+        percentualCentesimos:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: "Só no modo percentual. Centésimos de ponto percentual: 40%\
+            \ é 4000, 33,33% é 3333"
+          maximum: 9999
+          minimum: 1
+        valorCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: Só no modo valor. Centavos de real
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - diaDoMes
     Recorrencia:
       type: object
       properties:
@@ -1498,6 +1604,12 @@ components:
           - string
           - "null"
           maxLength: 500
+        divisao:
+          anyOf:
+          - $ref: "#/components/schemas/DivisaoRecorrencia"
+          - type: "null"
+          description: Divisão em parcelas; nula quando o template gera uma ocorrência
+            por mês
         id:
           type: string
           format: uuid
@@ -1531,6 +1643,7 @@ components:
       - contaId
       - criadoEm
       - descricao
+      - divisao
       - id
       - proximaOcorrencia
       - regra
@@ -1572,6 +1685,12 @@ components:
           - string
           - "null"
           maxLength: 500
+        divisao:
+          anyOf:
+          - $ref: "#/components/schemas/DivisaoRequest"
+          - type: "null"
+          description: "Divide cada mês em parcelas, uma ocorrência por parcela. Só\
+            \ em frequência mensal, e a regra não manda diaDoMes"
         regra:
           $ref: "#/components/schemas/RegraRecorrenciaRequest"
         tipo:

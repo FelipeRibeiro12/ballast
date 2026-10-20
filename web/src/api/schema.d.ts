@@ -351,6 +351,17 @@ export interface components {
             /** @enum {string} */
             tipo: "corrente" | "poupanca" | "dinheiro";
         };
+        DivisaoRecorrencia: {
+            /** @enum {string} */
+            modo: "percentual" | "valor";
+            parcelas: components["schemas"]["ParcelaDivisao"][];
+        };
+        DivisaoRequest: {
+            /** @enum {string} */
+            modo: "percentual" | "valor";
+            /** @description De 2 a 10 parcelas. A ordem do array é a ordem das parcelas */
+            parcelas: components["schemas"]["ParcelaDivisaoRequest"][];
+        };
         Erro: {
             erro: string;
         };
@@ -388,6 +399,11 @@ export interface components {
             direcao: "saida" | "entrada" | null;
             /** Format: uuid */
             id: string;
+            /**
+             * Format: int32
+             * @description Ordem da parcela na divisão de salário (1 é a primeira); nulo fora de divisão
+             */
+            parcelaOrdem: number | null;
             /** @enum {string} */
             status: "previsto" | "realizado" | "cancelado";
             /**
@@ -441,6 +457,44 @@ export interface components {
             email: string;
             senha: string;
         };
+        ParcelaDivisao: {
+            /** Format: int32 */
+            diaDoMes: number;
+            /** Format: int32 */
+            ordem: number;
+            /**
+             * Format: int32
+             * @description Só no modo percentual. 40% é 4000, 33,33% é 3333
+             */
+            percentualCentesimos?: number;
+            /**
+             * Format: int64
+             * @description Só no modo valor. Centavos de real
+             */
+            valorCentavos?: number;
+            /**
+             * Format: int64
+             * @description Centavos que a parcela gera em cada mês, com a regra do centavo
+             */
+            valorParcelaCentavos: number;
+        };
+        ParcelaDivisaoRequest: {
+            /**
+             * Format: int32
+             * @description Dia maior que o último do mês cai no último dia
+             */
+            diaDoMes: number;
+            /**
+             * Format: int32
+             * @description Só no modo percentual. Centésimos de ponto percentual: 40% é 4000, 33,33% é 3333
+             */
+            percentualCentesimos?: number | null;
+            /**
+             * Format: int64
+             * @description Só no modo valor. Centavos de real
+             */
+            valorCentavos?: number | null;
+        };
         Recorrencia: {
             ativo: boolean;
             /** Format: uuid */
@@ -450,6 +504,8 @@ export interface components {
             /** Format: date-time */
             criadoEm: string;
             descricao: string | null;
+            /** @description Divisão em parcelas; nula quando o template gera uma ocorrência por mês */
+            divisao: components["schemas"]["DivisaoRecorrencia"] | null;
             /** Format: uuid */
             id: string;
             /**
@@ -485,6 +541,8 @@ export interface components {
             /** Format: uuid */
             contaId: string;
             descricao?: string | null;
+            /** @description Divide cada mês em parcelas, uma ocorrência por parcela. Só em frequência mensal, e a regra não manda diaDoMes */
+            divisao?: components["schemas"]["DivisaoRequest"] | null;
             regra: components["schemas"]["RegraRecorrenciaRequest"];
             /** @enum {string} */
             tipo: "receita" | "despesa";

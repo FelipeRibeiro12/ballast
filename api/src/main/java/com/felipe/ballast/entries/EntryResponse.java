@@ -54,7 +54,15 @@ public record EntryResponse(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description = "Id da recorrência que gerou a ocorrência; nulo nos avulsos")
-        UUID templateId) {
+        UUID templateId,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Ordem da parcela na divisão de salário (1 é a primeira); nulo fora de divisão",
+            minimum = "1",
+            maximum = "10")
+        Integer parcelaOrdem) {
 
   // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
   // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
@@ -73,7 +81,8 @@ public record EntryResponse(
         summary.createdAt(),
         summary.transferId(),
         summary.direction(),
-        summary.templateId());
+        summary.templateId(),
+        summary.parcelOrder());
   }
 
   private static long toCents(BigDecimal amount) {

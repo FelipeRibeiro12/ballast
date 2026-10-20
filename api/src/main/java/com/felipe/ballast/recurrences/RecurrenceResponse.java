@@ -34,7 +34,13 @@ public record RecurrenceResponse(
             nullable = true,
             description =
                 "Menor dataCaixa entre as previstas de hoje em diante; nula se não houver ou se inativa")
-        LocalDate proximaOcorrencia) {
+        LocalDate proximaOcorrencia,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            implementation = DivisionResponse.class,
+            description = "Divisão em parcelas; nula quando o template gera uma ocorrência por mês")
+        DivisionResponse divisao) {
 
   // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
   // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
@@ -50,7 +56,10 @@ public record RecurrenceResponse(
         summary.active(),
         summary.createdAt(),
         RuleResponse.from(summary.rule()),
-        summary.nextOccurrence());
+        summary.nextOccurrence(),
+        summary.division() == null
+            ? null
+            : DivisionResponse.from(summary.amount(), summary.division()));
   }
 
   private static long toCents(BigDecimal amount) {

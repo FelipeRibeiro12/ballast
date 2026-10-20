@@ -22,6 +22,7 @@ class EntryQueries {
       """
       SELECT l.id, l.tipo, l.titulo, l.descricao, l.valor, l.categoria_id, l.conta_id,
              l.data_competencia, l.data_caixa, l.status, l.criado_em, l.template_id,
+             l.parcela_ordem,
              COALESCE(ts.id, te.id) AS transferencia_id,
              CASE WHEN ts.id IS NOT NULL THEN 'saida'
                   WHEN te.id IS NOT NULL THEN 'entrada' END AS direcao
@@ -195,6 +196,7 @@ class EntryQueries {
         rs.getObject("criado_em", OffsetDateTime.class).toInstant(),
         rs.getObject("transferencia_id", UUID.class),
         EntryDirection.fromValue(rs.getString("direcao")),
-        rs.getObject("template_id", UUID.class));
+        rs.getObject("template_id", UUID.class),
+        rs.getObject("parcela_ordem", Integer.class));
   }
 }

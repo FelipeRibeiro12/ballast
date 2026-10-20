@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,22 +23,23 @@ import org.springframework.stereotype.Repository;
 @Repository
 class RecurrenceQueries {
 
-  // Linhas por INSERT: cada data usa 2 parâmetros, e uma série diária de 12 meses cabe em uma ida.
-  private static final int INSERT_CHUNK = 400;
+  // Linhas por INSERT: cada data usa até 4 parâmetros, e uma série diária de 12 meses cabe em uma
+  // ida.
+  private static final int INSERT_CHUNK = 250;
 
   private static final String INSERT_HEAD =
       """
       INSERT INTO lancamento (id, usuario_id, tipo, titulo, descricao, valor, categoria_id,
                               conta_id, data_competencia, data_caixa, status, template_id,
-                              ocorrencia_data, desgarrado)
-      SELECT o.id, t.usuario_id, t.tipo, t.titulo, t.descricao, t.valor_total, t.categoria_id,
-             t.conta_id, o.dia, o.dia, 'previsto', t.id, o.dia, false
+                              ocorrencia_data, desgarrado, parcela_ordem)
+      SELECT o.id, t.usuario_id, t.tipo, t.titulo, t.descricao, COALESCE(o.valor, t.valor_total),
+             t.categoria_id, t.conta_id, o.dia, o.dia, 'previsto', t.id, o.dia, false, o.ordem
       FROM template_lancamento t
       CROSS JOIN (VALUES """;
 
   private static final String INSERT_TAIL =
       """
-      ) AS o(id, dia)
+      ) AS o(id, dia, ordem, valor)
       WHERE t.id = :templateId AND t.usuario_id = :userId
       ON CONFLICT (template_id, ocorrencia_data, parcela_ordem)
       WHERE template_id IS NOT NULL DO NOTHING
@@ -56,7 +58,12 @@ class RecurrenceQueries {
       JOIN regra_recorrencia r ON r.id = t.regra_id AND r.usuario_id = t.usuario_id
       """;
 
-  record LockedTemplate(boolean active, UUID accountId, RecurrenceRule rule) {}
+  record LockedTemplate(
+      boolean active, UUID accountId, BigDecimal amount, RecurrenceRule rule, Division division) {}
+
+  // Ocorrência a gravar. Sem divisão, parcelOrder e amount são nulos e o INSERT usa o valor do
+  // template.
+  record NewOccurrence(LocalDate date, Integer parcelOrder, BigDecimal amount) {}
 
   record TemplateRef(UUID userId, UUID templateId) {}
 
@@ -72,16 +79,78 @@ class RecurrenceQueries {
         .param("userId", userId)
         .param("id", id)
         .query(RecurrenceQueries::map)
-        .optional();
+        .optional()
+        .map(summary -> summary.withDivision(findDivision(userId, id).orElse(null)));
   }
 
   // Ativas e inativas. lower() para a ordem não separar maiúscula de minúscula; o id desempata.
   List<RecurrenceSummary> list(UUID userId, LocalDate today) {
-    return jdbc.sql(COLUMNS + "WHERE t.usuario_id = :userId ORDER BY lower(t.titulo), t.id")
-        .param("today", today)
+    List<RecurrenceSummary> summaries =
+        jdbc.sql(COLUMNS + "WHERE t.usuario_id = :userId ORDER BY lower(t.titulo), t.id")
+            .param("today", today)
+            .param("userId", userId)
+            .query(RecurrenceQueries::map)
+            .list();
+    // Uma ida só para as divisões do usuário, em vez de uma por template.
+    Map<UUID, Division> divisions = divisionsOf(userId, null);
+    return summaries.stream().map(s -> s.withDivision(divisions.get(s.id()))).toList();
+  }
+
+  Optional<Division> findDivision(UUID userId, UUID templateId) {
+    return Optional.ofNullable(divisionsOf(userId, templateId).get(templateId));
+  }
+
+  // templateId nulo traz as divisões de todos os templates do usuário. Modo é o que a linha
+  // guarda: percentual preenchido é percentual, senão valor fixo (o CHECK garante um dos dois).
+  private Map<UUID, Division> divisionsOf(UUID userId, UUID templateId) {
+    Map<UUID, List<DivisionPart>> parts = new HashMap<>();
+    Map<UUID, DivisionMode> modes = new HashMap<>();
+    jdbc.sql(
+            """
+            SELECT template_id, ordem, dia_do_mes, percentual, valor_fixo
+            FROM template_divisao
+            WHERE usuario_id = :userId AND (CAST(:templateId AS uuid) IS NULL
+                                            OR template_id = CAST(:templateId AS uuid))
+            ORDER BY template_id, ordem
+            """)
         .param("userId", userId)
-        .query(RecurrenceQueries::map)
-        .list();
+        .param("templateId", templateId, java.sql.Types.OTHER)
+        .query(
+            rs -> {
+              UUID id = rs.getObject("template_id", UUID.class);
+              BigDecimal percent = rs.getBigDecimal("percentual");
+              modes.put(id, percent == null ? DivisionMode.AMOUNT : DivisionMode.PERCENT);
+              parts
+                  .computeIfAbsent(id, key -> new ArrayList<>())
+                  .add(
+                      new DivisionPart(
+                          rs.getInt("ordem"),
+                          rs.getInt("dia_do_mes"),
+                          percent,
+                          rs.getBigDecimal("valor_fixo")));
+            });
+    Map<UUID, Division> result = new HashMap<>();
+    parts.forEach((id, list) -> result.put(id, new Division(modes.get(id), list)));
+    return result;
+  }
+
+  void insertDivision(UUID userId, UUID templateId, Division division) {
+    for (DivisionPart part : division.parts()) {
+      jdbc.sql(
+              """
+              INSERT INTO template_divisao (id, usuario_id, template_id, dia_do_mes, percentual,
+                                            valor_fixo, ordem)
+              VALUES (:id, :userId, :templateId, :day, :percent, :fixedAmount, :order)
+              """)
+          .param("id", newId())
+          .param("userId", userId)
+          .param("templateId", templateId)
+          .param("day", part.dayOfMonth())
+          .param("percent", part.percent(), java.sql.Types.NUMERIC)
+          .param("fixedAmount", part.fixedAmount(), java.sql.Types.NUMERIC)
+          .param("order", part.order())
+          .update();
+    }
   }
 
   // Trava a linha da conta até o fim da transação. Vazio quando a conta não existe ou é de outro
@@ -168,7 +237,7 @@ class RecurrenceQueries {
   Optional<LockedTemplate> lockTemplate(UUID userId, UUID templateId) {
     return jdbc.sql(
             """
-            SELECT t.ativo, t.conta_id,
+            SELECT t.ativo, t.conta_id, t.valor_total,
                    r.frequencia, r.intervalo, r.dia_do_mes, r.dia_da_semana, r.inicio, r.fim,
                    r.ocorrencias_max
             FROM template_lancamento t
@@ -181,31 +250,55 @@ class RecurrenceQueries {
         .query(
             (rs, row) ->
                 new LockedTemplate(
-                    rs.getBoolean("ativo"), rs.getObject("conta_id", UUID.class), mapRule(rs)))
-        .optional();
+                    rs.getBoolean("ativo"),
+                    rs.getObject("conta_id", UUID.class),
+                    rs.getBigDecimal("valor_total"),
+                    mapRule(rs),
+                    null))
+        .optional()
+        .map(
+            locked ->
+                new LockedTemplate(
+                    locked.active(),
+                    locked.accountId(),
+                    locked.amount(),
+                    locked.rule(),
+                    findDivision(userId, templateId).orElse(null)));
   }
 
-  // Grava as ocorrências copiando os campos do próprio template, na mesma instrução: o valor, o
-  // título e as FKs nunca divergem do template. ON CONFLICT pula a data que já existe (gerada
-  // antes, editada ou cancelada), que é o que torna a rodada repetível. Devolve quantas entraram.
-  int insertOccurrences(UUID userId, UUID templateId, List<LocalDate> dates) {
+  // Grava as ocorrências copiando os campos do próprio template, na mesma instrução: o título e as
+  // FKs nunca divergem do template. O valor vem do template, ou da parcela quando há divisão.
+  // ON CONFLICT pula a ocorrência que já existe (gerada antes, editada ou cancelada), que é o que
+  // torna a rodada repetível. A chave inclui a ordem da parcela (ADR-027). Devolve quantas
+  // entraram.
+  int insertOccurrences(UUID userId, UUID templateId, List<NewOccurrence> occurrences) {
     int inserted = 0;
-    for (int from = 0; from < dates.size(); from += INSERT_CHUNK) {
-      List<LocalDate> chunk = dates.subList(from, Math.min(from + INSERT_CHUNK, dates.size()));
+    for (int from = 0; from < occurrences.size(); from += INSERT_CHUNK) {
+      List<NewOccurrence> chunk =
+          occurrences.subList(from, Math.min(from + INSERT_CHUNK, occurrences.size()));
       // Só os nomes dos parâmetros são montados aqui (id0, d0, ...); os valores vão como
-      // parâmetros, nunca no texto do SQL.
+      // parâmetros, nunca no texto do SQL. Ordem e valor nulos entram como NULL com tipo.
       StringBuilder values = new StringBuilder();
       Map<String, Object> params = new HashMap<>();
       for (int i = 0; i < chunk.size(); i++) {
+        NewOccurrence occurrence = chunk.get(i);
         values
             .append(i == 0 ? "" : ", ")
             .append("(CAST(:id")
             .append(i)
             .append(" AS uuid), CAST(:d")
             .append(i)
-            .append(" AS date))");
+            .append(" AS date), ");
         params.put("id" + i, newId());
-        params.put("d" + i, chunk.get(i));
+        params.put("d" + i, occurrence.date());
+        if (occurrence.parcelOrder() == null) {
+          values.append("CAST(NULL AS smallint), CAST(NULL AS numeric))");
+        } else {
+          values.append("CAST(:o").append(i).append(" AS smallint), CAST(:v").append(i);
+          values.append(" AS numeric))");
+          params.put("o" + i, occurrence.parcelOrder());
+          params.put("v" + i, occurrence.amount());
+        }
       }
       inserted +=
           jdbc.sql(INSERT_HEAD + values + INSERT_TAIL)
@@ -283,7 +376,8 @@ class RecurrenceQueries {
         rs.getBoolean("ativo"),
         rs.getObject("criado_em", OffsetDateTime.class).toInstant(),
         mapRule(rs),
-        rs.getObject("proxima", LocalDate.class));
+        rs.getObject("proxima", LocalDate.class),
+        null);
   }
 
   private static EntryType entryType(String value) {

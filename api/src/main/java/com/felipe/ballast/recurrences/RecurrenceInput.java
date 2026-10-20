@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 // Entrada já validada na borda. Id nulo quer dizer que o texto enviado não era um UUID; o serviço
-// trata como conta ou categoria que não existe.
+// trata como conta ou categoria que não existe. division é nula sem divisão de salário.
 record RecurrenceInput(
     EntryType type,
     String title,
@@ -13,4 +13,5 @@ record RecurrenceInput(
     BigDecimal amount,
     UUID categoryId,
     UUID accountId,
-    RecurrenceRule rule) {}
+    RecurrenceRule rule,
+    Division division) {}

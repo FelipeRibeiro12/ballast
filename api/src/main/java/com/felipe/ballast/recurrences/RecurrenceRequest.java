@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
+import java.util.Optional;
 
 @Schema(name = "RecorrenciaRequest")
 public record RecurrenceRequest(
@@ -52,7 +53,17 @@ public record RecurrenceRequest(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         @NotNull(message = "regra é obrigatória")
         @Valid
-        RuleRequest rule) {
+        RuleRequest rule,
+    @JsonProperty("divisao")
+        @Schema(
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+            nullable = true,
+            implementation = DivisionRequest.class,
+            description =
+                "Divide cada mês em parcelas, uma ocorrência por parcela. Só em frequência mensal,"
+                    + " e a regra não manda diaDoMes")
+        @Valid
+        DivisionRequest division) {
 
   // Number.MAX_SAFE_INTEGER: acima disso o JavaScript perde o centavo (ADR-023).
   static final long MAX_CENTS = 9_007_199_254_740_991L;
@@ -70,6 +81,26 @@ public record RecurrenceRequest(
   public RecurrenceRequest {
     title = title == null ? null : title.strip();
     description = description == null || description.isBlank() ? null : description.strip();
+  }
+
+  static final String MONTHLY_ONLY_MESSAGE = "divisao só vale em mensal";
+  static final String NO_DAY_WITH_DIVISION_MESSAGE = "diaDoMes não vale junto com divisao";
+
+  // Combinações entre regra, divisão e valor. Depois da validação por campo.
+  Optional<String> crossFieldProblem() {
+    if (division != null) {
+      if (rule.frequency() != RecurrenceFrequency.MONTHLY) {
+        return Optional.of(MONTHLY_ONLY_MESSAGE);
+      }
+      if (rule.dayOfMonth() != null) {
+        return Optional.of(NO_DAY_WITH_DIVISION_MESSAGE);
+      }
+      Optional<String> problem = division.crossFieldProblem(amountCents);
+      if (problem.isPresent()) {
+        return problem;
+      }
+    }
+    return rule.crossFieldProblem(division != null);
   }
 
   BigDecimal amount() {

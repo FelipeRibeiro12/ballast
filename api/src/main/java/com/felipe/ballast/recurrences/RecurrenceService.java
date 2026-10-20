@@ -1,6 +1,7 @@
 package com.felipe.ballast.recurrences;
 
 import com.felipe.ballast.web.WriteTransaction;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -105,8 +106,12 @@ class RecurrenceService {
     }
     UUID ruleId = queries.insertRule(userId, input.rule());
     UUID templateId = queries.insertTemplate(userId, input, ruleId);
+    if (input.division() != null) {
+      queries.insertDivision(userId, templateId, input.division());
+    }
     LocalDate today = today();
-    int materialized = materializeAhead(userId, templateId, input.rule(), today);
+    int materialized =
+        materializeAhead(userId, templateId, input.rule(), input.amount(), input.division(), today);
     return queries
         .find(userId, templateId, today)
         .<CreateResult>map(found -> new CreateResult.Created(found, materialized))
@@ -162,18 +167,48 @@ class RecurrenceService {
               if (archived.isEmpty() || archived.get()) {
                 return 0;
               }
-              return materializeAhead(userId, templateId, template.get().rule(), today());
+              return materializeAhead(
+                  userId,
+                  templateId,
+                  template.get().rule(),
+                  template.get().amount(),
+                  template.get().division(),
+                  today());
             });
     return inserted == null ? 0 : inserted;
   }
 
   // De max(início, hoje) até hoje mais 12 meses, as duas pontas incluídas. Data que a regra gera
-  // antes de hoje nunca é materializada. Roda dentro de uma transação com o template travado.
-  private int materializeAhead(UUID userId, UUID templateId, RecurrenceRule rule, LocalDate today) {
+  // antes de hoje nunca é materializada. Com divisão, o filtro vale para a data de cada parcela, e
+  // o mês corrente pode sair com só parte delas. Roda dentro de uma transação com o template
+  // travado.
+  private int materializeAhead(
+      UUID userId,
+      UUID templateId,
+      RecurrenceRule rule,
+      BigDecimal amount,
+      Division division,
+      LocalDate today) {
     LocalDate from = rule.start().isAfter(today) ? rule.start() : today;
     LocalDate to = today.plusMonths(HORIZON_MONTHS);
-    List<LocalDate> dates = RecurrenceSchedule.occurrences(rule, from, to);
-    return queries.insertOccurrences(userId, templateId, dates);
+    List<RecurrenceQueries.NewOccurrence> occurrences;
+    if (division == null) {
+      occurrences =
+          RecurrenceSchedule.occurrences(rule, from, to).stream()
+              .map(date -> new RecurrenceQueries.NewOccurrence(date, null, null))
+              .toList();
+    } else {
+      List<BigDecimal> amounts = SalarySplit.amounts(amount, division);
+      List<Integer> days = division.parts().stream().map(DivisionPart::dayOfMonth).toList();
+      occurrences =
+          RecurrenceSchedule.parcels(rule, days, from, to).stream()
+              .map(
+                  parcel ->
+                      new RecurrenceQueries.NewOccurrence(
+                          parcel.date(), parcel.order(), amounts.get(parcel.order() - 1)))
+              .toList();
+    }
+    return queries.insertOccurrences(userId, templateId, occurrences);
   }
 
   private LocalDate today() {

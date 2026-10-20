@@ -113,4 +113,31 @@ final class RecurrenceTestSupport {
         .query(Long.class)
         .single();
   }
+
+  // "data#ordem#valor" de cada ocorrência do template, na ordem de data e ordem da parcela.
+  List<String> parcelRows(String templateId) {
+    return jdbc.sql(
+            "SELECT ocorrencia_data, parcela_ordem, valor FROM lancamento"
+                + " WHERE template_id = :id ORDER BY ocorrencia_data, parcela_ordem")
+        .param("id", UUID.fromString(templateId))
+        .query(
+            (rs, row) ->
+                rs.getObject("ocorrencia_data", LocalDate.class)
+                    + "#"
+                    + rs.getObject("parcela_ordem", Integer.class)
+                    + "#"
+                    + rs.getBigDecimal("valor").toPlainString())
+        .list();
+  }
+
+  String entryId(String templateId, LocalDate date, int order) {
+    return jdbc.sql(
+            "SELECT id FROM lancamento WHERE template_id = :id AND ocorrencia_data = :date"
+                + " AND parcela_ordem = :order")
+        .param("id", UUID.fromString(templateId))
+        .param("date", date)
+        .param("order", order)
+        .query(String.class)
+        .single();
+  }
 }
