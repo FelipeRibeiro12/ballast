@@ -169,6 +169,14 @@ final class RecurrencesApi {
         .getResponse();
   }
 
+  MockHttpServletResponse overdue(Cookie session) throws Exception {
+    var request = get("/lancamentos/vencidos");
+    if (session != null) {
+      request.cookie(session);
+    }
+    return mvc.perform(request).andReturn().getResponse();
+  }
+
   MockHttpServletResponse patchEntry(Cookie session, String id, Object body) throws Exception {
     var request =
         patch("/lancamentos/" + id).contentType(MediaType.APPLICATION_JSON).content(json(body));
@@ -180,6 +188,11 @@ final class RecurrencesApi {
 
   MockHttpServletResponse confirm(Cookie session, String id) throws Exception {
     return patchEntry(session, id, "{\"status\":\"realizado\"}");
+  }
+
+  MockHttpServletResponse confirmAdjusted(Cookie session, String id, Map<String, Object> changes)
+      throws Exception {
+    return patchEntry(session, id, with(changes, "status", "realizado"));
   }
 
   MockHttpServletResponse cancel(Cookie session, String id) throws Exception {

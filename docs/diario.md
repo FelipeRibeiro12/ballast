@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-20 — F7: previsto × realizado (PR #12)
+
+O que entrou: confirmar uma prevista ajustando valor e data no mesmo `PATCH`, com o teto pelo valor novo e a chave da série intacta; `GET /lancamentos/vencidos` com as previstas antes de hoje; bloco "Vencidas" no topo da tela e o confirmar com valor e data preenchidos.
+Decisões: ADR-028. Prevista vencida nunca confirma nem cancela sozinha. Ajuste numa parcela de divisão não rebalanceia as outras.
+Dívida registrada: nenhuma.
+Achados do QA: 0 bloquearam, 0 dívidas, 1 sugestão (soma da divisão depois de ajuste), registrada no contrato.
+Achados do revisor: 0 bloquearam, 1 dívida (as duas datas no confirmar com data, anotada na F10), 3 sugestões sem ação. Security: 0 críticos, 0 altos, 0 médios, 2 baixos sem ação.
+Pipeline: verde na primeira tentativa, os 7 checks obrigatórios; nenhum alerta do CodeQL.
+Em aberto: o QA foi interrompido duas vezes porque o computador dormiu; retomado com o mesmo container, contagem refeita do zero. A API do `make dev` do dono seguiu na 8080 o tempo todo.
+
 ## 2026-10-20 — F6: divisão de salário (PR #11)
 
 O que entrou: migration V9 com `template_divisao` e `parcela_ordem`, com a chave de idempotência alargada pela ordem da parcela num índice parcial; `divisao` no `POST /recorrencias` mensal, por percentual em centésimos ou por valor fixo, de 2 a 10 dias; regra do centavo num componente puro (trunca todas, a última leva o resto); uma ocorrência por parcela por mês; formulário com soma e valores ao vivo no web pela mesma regra.

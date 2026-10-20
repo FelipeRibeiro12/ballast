@@ -11,13 +11,14 @@ import {
   deleteTransferencia,
   fetchCategorias,
   fetchLancamentos,
+  fetchVencidos,
   patchStatusLancamento,
   postLancamento,
   postTransferencia,
   putLancamento,
 } from './api'
-import type { Categoria, Conta, Lancamento } from './api'
-import { formatarDiaMes, hojeLocal, intervaloDoMes, mesDeHoje, rotuloDoMes, somarMeses } from './datas'
+import type { AjusteDeConfirmacao, Categoria, Conta, Lancamento } from './api'
+import { formatarDataCompleta, formatarDiaMes, hojeLocal, intervaloDoMes, mesDeHoje, rotuloDoMes, somarMeses } from './datas'
 import type { Mes } from './datas'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
 
@@ -33,19 +34,25 @@ const ROTULO_DO_TIPO: Record<TipoEditavel, string> = {
   despesa: 'Despesa',
 }
 
-const MENSAGEM_INDISPONIVEL = 'Serviço indisponível. Tente de novo em instantes.'
-const MENSAGEM_NAO_EXISTE = 'Esse lançamento não existe mais.'
-const MENSAGEM_VALOR_INVALIDO =
-  'Valor inválido. Use o formato 1.234,56, maior que zero e até 90.071.992.547.409,91.'
-
 // O servidor aceita datas de 1900 a 2199 (ADR-024); a navegação para nesses limites.
 const ANO_MINIMO = 1900
 const ANO_MAXIMO = 2199
+
+const MENSAGEM_INDISPONIVEL = 'Serviço indisponível. Tente de novo em instantes.'
+const MENSAGEM_NAO_EXISTE = 'Esse lançamento não existe mais.'
+const MENSAGEM_DATA_INVALIDA = `Data inválida. Use uma data de ${ANO_MINIMO} a ${ANO_MAXIMO}.`
+const MENSAGEM_VALOR_INVALIDO =
+  'Valor inválido. Use o formato 1.234,56, maior que zero e até 90.071.992.547.409,91.'
 
 type EstadoLista =
   | { tipo: 'carregando' }
   | { tipo: 'erro'; mensagem: string }
   | { tipo: 'ok'; lancamentos: Lancamento[] }
+
+type EstadoVencidas =
+  | { tipo: 'carregando' }
+  | { tipo: 'erro'; mensagem: string }
+  | { tipo: 'ok'; lancamentos: Lancamento[]; maisAlgum: boolean }
 
 type EstadoCategorias =
   | { tipo: 'carregando' }
@@ -315,6 +322,108 @@ function FormularioDeLancamento({
   )
 }
 
+// O input date já limita a faixa, mas digitar à mão ainda deixa passar texto fora dela.
+function eDataNaFaixa(data: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return false
+  const ano = Number(data.slice(0, 4))
+  return ano >= ANO_MINIMO && ano <= ANO_MAXIMO
+}
+
+function FormularioDeConfirmacao({
+  prevista,
+  aoConfirmar,
+  aoVoltar,
+}: {
+  prevista: Lancamento
+  // Devolve a mensagem de erro, ou null quando deu certo e o formulário vai fechar.
+  aoConfirmar: (ajuste: AjusteDeConfirmacao) => Promise<string | null>
+  aoVoltar: () => void
+}) {
+  const valorPrevisto = formatarCentavos(prevista.valorCentavos).replace(/[^\d.,]/g, '')
+  const [valor, setValor] = useState(valorPrevisto)
+  const [data, setData] = useState(prevista.dataCaixa)
+  const [enviando, setEnviando] = useState(false)
+  const [mensagem, setMensagem] = useState<string | null>(null)
+  // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
+  const emVoo = useRef(false)
+
+  async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
+    evento.preventDefault()
+    if (emVoo.current) return
+    const valorCentavos = lerValorPositivo(valor)
+    if (valorCentavos === null) {
+      setMensagem(MENSAGEM_VALOR_INVALIDO)
+      return
+    }
+    if (!eDataNaFaixa(data)) {
+      setMensagem(MENSAGEM_DATA_INVALIDA)
+      return
+    }
+    emVoo.current = true
+    setEnviando(true)
+    setMensagem(null)
+    // Só o que mudou vai no corpo: sem mudança o pedido é igual ao de confirmar direto.
+    const ajuste: AjusteDeConfirmacao = {
+      ...(valorCentavos === prevista.valorCentavos ? {} : { valorCentavos }),
+      ...(data === prevista.dataCaixa ? {} : { data }),
+    }
+    try {
+      setMensagem(await aoConfirmar(ajuste))
+    } finally {
+      emVoo.current = false
+      setEnviando(false)
+    }
+  }
+
+  const id = `confirmar-${prevista.id}`
+  const descricaoDoErro = mensagem === null ? undefined : `${id}-erro`
+
+  return (
+    <form
+      className="confirmacao"
+      onSubmit={(evento) => void enviar(evento)}
+      aria-label={`Confirmar ${prevista.titulo}`}
+    >
+      <div className="campo">
+        <label htmlFor={`${id}-valor`}>Valor em reais</label>
+        <input
+          id={`${id}-valor`}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          required
+          value={valor}
+          aria-describedby={descricaoDoErro}
+          onChange={(evento) => setValor(evento.target.value)}
+        />
+      </div>
+      <div className="campo">
+        <label htmlFor={`${id}-data`}>Data</label>
+        <input
+          id={`${id}-data`}
+          type="date"
+          required
+          min="1900-01-01"
+          max="2199-12-31"
+          value={data}
+          onChange={(evento) => setData(evento.target.value)}
+        />
+      </div>
+      {mensagem !== null && (
+        <p id={`${id}-erro`} role="alert" className="erro">
+          {mensagem}
+        </p>
+      )}
+      <button type="submit" disabled={enviando}>
+        {enviando ? 'Confirmando...' : 'Confirmar'}
+      </button>
+      <button type="button" disabled={enviando} onClick={aoVoltar}>
+        Voltar
+      </button>
+    </form>
+  )
+}
+
 function FormularioDeTransferencia({
   contas,
   aoSalvar,
@@ -509,9 +618,16 @@ export default function Lancamentos({
   const [apoio, setApoio] = useState<EstadoCategorias>({ tipo: 'carregando' })
   const [tentativa, setTentativa] = useState(0)
   const [tentativaDoApoio, setTentativaDoApoio] = useState(0)
+  const [vencidas, setVencidas] = useState<EstadoVencidas>({ tipo: 'carregando' })
+  const [tentativaDeVencidas, setTentativaDeVencidas] = useState(0)
   const [editando, setEditando] = useState<Lancamento | null>(null)
   // Dois cliques para apagar e para cancelar; a ação guardada evita confirmar a errada.
-  const [confirmando, setConfirmando] = useState<{ id: string; acao: 'apagar' | 'cancelar' } | null>(null)
+  // "ajustar" abre o mini formulário de confirmar. O lugar separa a mesma prevista na lista do mês e em Vencidas.
+  const [confirmando, setConfirmando] = useState<{
+    id: string
+    acao: 'apagar' | 'cancelar' | 'ajustar'
+    lugar: 'mes' | 'vencidas'
+  } | null>(null)
   const [apagando, setApagando] = useState<string | null>(null)
   const [falhaDeAcao, setFalhaDeAcao] = useState<string | null>(null)
   // Muda a key do formulário de criação para limpar os campos depois de salvar.
@@ -543,6 +659,27 @@ export default function Lancamentos({
 
   useEffect(() => {
     let ativo = true
+    // Não volta para "carregando" a cada recarga: o bloco não pisca enquanto a nova lista chega.
+    fetchVencidos().then(
+      (resposta) => {
+        if (ativo) setVencidas({ tipo: 'ok', ...resposta })
+      },
+      (erro: unknown) => {
+        if (!ativo) return
+        if (erro instanceof SessaoExpiradaError) {
+          aoSessaoExpirar()
+          return
+        }
+        setVencidas({ tipo: 'erro', mensagem: mensagemDeLeitura(erro, 'as vencidas') })
+      },
+    )
+    return () => {
+      ativo = false
+    }
+  }, [tentativaDeVencidas, versaoDaLista, aoSessaoExpirar])
+
+  useEffect(() => {
+    let ativo = true
     fetchCategorias().then(
       (categorias) => {
         if (ativo) setApoio({ tipo: 'ok', categorias })
@@ -568,6 +705,7 @@ export default function Lancamentos({
 
   function depoisDeMudar(): void {
     recarregar()
+    setTentativaDeVencidas((n) => n + 1)
     aoMudarSaldo()
     aoMudarOcorrencia()
   }
@@ -608,13 +746,44 @@ export default function Lancamentos({
     }
   }
 
-  async function mudarStatus(lancamento: Lancamento, status: 'realizado' | 'cancelado'): Promise<void> {
+  async function confirmar(lancamento: Lancamento, ajuste: AjusteDeConfirmacao): Promise<string | null> {
+    if (acaoEmVoo.current) return null
+    acaoEmVoo.current = true
+    setApagando(lancamento.id)
+    setFalhaDeAcao(null)
+    try {
+      await patchStatusLancamento(lancamento.id, 'realizado', ajuste)
+      setConfirmando(null)
+      if (editando?.id === lancamento.id) setEditando(null)
+      depoisDeMudar()
+      return null
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return null
+      }
+      if (erro instanceof LancamentoNaoEncontradoError) {
+        // Sem o item não há o que ajustar: fecha o formulário e busca o que o servidor tem.
+        setConfirmando(null)
+        setFalhaDeAcao(MENSAGEM_NAO_EXISTE)
+        depoisDeMudar()
+        return null
+      }
+      // O formulário continua aberto para o usuário corrigir valor ou data.
+      return mensagemDeStatus(erro)
+    } finally {
+      acaoEmVoo.current = false
+      setApagando(null)
+    }
+  }
+
+  async function cancelarOcorrencia(lancamento: Lancamento): Promise<void> {
     if (acaoEmVoo.current) return
     acaoEmVoo.current = true
     setApagando(lancamento.id)
     setFalhaDeAcao(null)
     try {
-      await patchStatusLancamento(lancamento.id, status)
+      await patchStatusLancamento(lancamento.id, 'cancelado')
       setConfirmando(null)
       if (editando?.id === lancamento.id) setEditando(null)
       depoisDeMudar()
@@ -716,6 +885,103 @@ export default function Lancamentos({
           {falhaDeAcao}
         </p>
       )}
+      {vencidas.tipo === 'erro' && (
+        <div className="vencidas-aviso">
+          <p role="alert" className="erro">
+            {vencidas.mensagem}
+          </p>
+          <button
+            type="button"
+            aria-label="Tentar carregar as vencidas de novo"
+            onClick={() => setTentativaDeVencidas((n) => n + 1)}
+          >
+            Tentar de novo
+          </button>
+        </div>
+      )}
+      {vencidas.tipo === 'ok' && vencidas.lancamentos.length > 0 && contas !== null && (
+        <section className="vencidas" aria-labelledby="titulo-vencidas">
+          <h3 id="titulo-vencidas">Vencidas ({vencidas.lancamentos.length})</h3>
+          {vencidas.maisAlgum && <p>mostrando as 200 mais antigas</p>}
+          <ul className="lancamentos">
+            {vencidas.lancamentos.map((vencida) => {
+              const sinal = vencida.tipo === 'receita' ? '+' : '−'
+              const confirmandoEsta =
+                confirmando?.id === vencida.id && confirmando.lugar === 'vencidas' ? confirmando.acao : null
+              return (
+                <li key={vencida.id} className="previsto">
+                  <div className="lancamento-dados">
+                    <span>{formatarDataCompleta(vencida.dataCaixa)}</span>
+                    <strong>{vencida.titulo}</strong>
+                    <span>{nomesDeConta.get(vencida.contaId) ?? 'Conta arquivada'}</span>
+                    <span className={vencida.tipo}>
+                      {sinal} {formatarCentavos(vencida.valorCentavos)}
+                    </span>
+                  </div>
+                  <div className="lancamento-acoes">
+                    {confirmandoEsta !== 'ajustar' && (
+                      <button
+                        type="button"
+                        disabled={apagando !== null}
+                        aria-label={`Confirmar ${vencida.titulo}`}
+                        onClick={() => {
+                          setFalhaDeAcao(null)
+                          setConfirmando({ id: vencida.id, acao: 'ajustar', lugar: 'vencidas' })
+                        }}
+                      >
+                        Confirmar
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={apagando !== null}
+                      aria-label={`Editar ${vencida.titulo}`}
+                      onClick={() => {
+                        setFalhaDeAcao(null)
+                        setConfirmando(null)
+                        setEditando(vencida)
+                      }}
+                    >
+                      Editar
+                    </button>
+                    {confirmandoEsta === 'cancelar' ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={apagando !== null}
+                          aria-label={`Confirmar cancelar ${vencida.titulo}`}
+                          onClick={() => void cancelarOcorrencia(vencida)}
+                        >
+                          Confirmar cancelar
+                        </button>
+                        <button type="button" disabled={apagando !== null} onClick={() => setConfirmando(null)}>
+                          Manter
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={apagando !== null}
+                        aria-label={`Cancelar ${vencida.titulo}`}
+                        onClick={() => setConfirmando({ id: vencida.id, acao: 'cancelar', lugar: 'vencidas' })}
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                  {confirmandoEsta === 'ajustar' && (
+                    <FormularioDeConfirmacao
+                      prevista={vencida}
+                      aoConfirmar={(ajuste) => confirmar(vencida, ajuste)}
+                      aoVoltar={() => setConfirmando(null)}
+                    />
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
       {estado.tipo === 'ok' && contas !== null && (
         <>
           <dl className="totais">
@@ -751,7 +1017,8 @@ export default function Lancamentos({
                   lancamento.templateId !== null &&
                   recorrenciasAtivas.has(lancamento.templateId) &&
                   lancamento.dataCaixa >= hoje
-                const confirmandoEste = confirmando?.id === lancamento.id ? confirmando.acao : null
+                const confirmandoEste =
+                  confirmando?.id === lancamento.id && confirmando.lugar === 'mes' ? confirmando.acao : null
                 return (
                   <li
                     key={lancamento.id}
@@ -783,12 +1050,15 @@ export default function Lancamentos({
                       </span>
                     </div>
                     <div className="lancamento-acoes">
-                      {ePrevista && (
+                      {ePrevista && confirmandoEste !== 'ajustar' && (
                         <button
                           type="button"
                           disabled={apagando !== null}
                           aria-label={`Confirmar ${lancamento.titulo}`}
-                          onClick={() => void mudarStatus(lancamento, 'realizado')}
+                          onClick={() => {
+                            setFalhaDeAcao(null)
+                            setConfirmando({ id: lancamento.id, acao: 'ajustar', lugar: 'mes' })
+                          }}
                         >
                           Confirmar
                         </button>
@@ -814,7 +1084,7 @@ export default function Lancamentos({
                               type="button"
                               disabled={apagando !== null}
                               aria-label={`Confirmar cancelar ${lancamento.titulo}`}
-                              onClick={() => void mudarStatus(lancamento, 'cancelado')}
+                              onClick={() => void cancelarOcorrencia(lancamento)}
                             >
                               Confirmar cancelar
                             </button>
@@ -827,7 +1097,7 @@ export default function Lancamentos({
                             type="button"
                             disabled={apagando !== null}
                             aria-label={`Cancelar ${lancamento.titulo}`}
-                            onClick={() => setConfirmando({ id: lancamento.id, acao: 'cancelar' })}
+                            onClick={() => setConfirmando({ id: lancamento.id, acao: 'cancelar', lugar: 'mes' })}
                           >
                             Cancelar
                           </button>
@@ -855,12 +1125,19 @@ export default function Lancamentos({
                             type="button"
                             disabled={apagando !== null}
                             aria-label={`Apagar ${lancamento.titulo}`}
-                            onClick={() => setConfirmando({ id: lancamento.id, acao: 'apagar' })}
+                            onClick={() => setConfirmando({ id: lancamento.id, acao: 'apagar', lugar: 'mes' })}
                           >
                             Apagar
                           </button>
                         ))}
                     </div>
+                    {confirmandoEste === 'ajustar' && (
+                      <FormularioDeConfirmacao
+                        prevista={lancamento}
+                        aoConfirmar={(ajuste) => confirmar(lancamento, ajuste)}
+                        aoVoltar={() => setConfirmando(null)}
+                      />
+                    )}
                   </li>
                 )
               })}

@@ -11,7 +11,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
@@ -57,6 +59,8 @@ class EntryController {
       new ErrorResponse("só ocorrência prevista pode mudar de status");
   private static final ErrorResponse INVALID_STATUS =
       new ErrorResponse("status deve ser realizado ou cancelado");
+  private static final ErrorResponse CANCEL_WITH_ADJUST =
+      new ErrorResponse("cancelar não aceita valorCentavos nem data");
   private static final ErrorResponse CANCEL_OCCURRENCE = new ErrorResponse("cancele a ocorrência");
 
   private static final ErrorResponse INVALID_FROM =
@@ -73,10 +77,15 @@ class EntryController {
   // Conta os dois extremos: 2028-01-01 a 2028-12-31 são 366 dias.
   private static final long MAX_DAYS = 366;
 
-  private final EntryService entries;
+  // "Hoje" é o dia do usuário, não o do servidor em UTC (mesmo fuso da recorrência).
+  private static final ZoneId ZONE = ZoneId.of("America/Sao_Paulo");
 
-  EntryController(EntryService entries) {
+  private final EntryService entries;
+  private final Clock clock;
+
+  EntryController(EntryService entries, Clock clock) {
     this.entries = entries;
+    this.clock = clock;
   }
 
   @Operation(
@@ -203,6 +212,34 @@ class EntryController {
   }
 
   @Operation(
+      operationId = "getLancamentosVencidos",
+      summary = "Lista as previstas vencidas do usuário",
+      description =
+          "Lançamentos previstos com dataCaixa antes de hoje (America/Sao_Paulo), da mais antiga"
+              + " para a mais nova (depois id), no máximo 200. maisAlgum é true quando havia mais"
+              + " que isso. Nada muda sozinho: o usuário confirma ou cancela cada uma (ADR-028).",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Previstas vencidas",
+      content = @Content(schema = @Schema(implementation = OverdueResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível; pode tentar de novo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @GetMapping(path = "/lancamentos/vencidos", produces = MediaType.APPLICATION_JSON_VALUE)
+  OverdueResponse overdue(@AuthenticationPrincipal AuthenticatedUser user) {
+    LocalDate today = clock.instant().atZone(ZONE).toLocalDate();
+    EntryService.Overdue overdue = entries.listOverdue(user.id(), today);
+    return new OverdueResponse(
+        overdue.entries().stream().map(EntryResponse::from).toList(), overdue.more());
+  }
+
+  @Operation(
       operationId = "getLancamentosById",
       summary = "Devolve um lançamento do usuário",
       security = @SecurityRequirement(name = "cookieAuth"))
@@ -305,8 +342,11 @@ class EntryController {
       operationId = "patchLancamentosById",
       summary = "Confirma ou cancela uma ocorrência prevista",
       description =
-          "Corpo {\"status\": \"realizado\"} ou {\"status\": \"cancelado\"}, o único campo. Só"
-              + " uma ocorrência prevista muda de status. Confirmar passa a contar no saldo, com"
+          "Corpo {\"status\": \"realizado\"} ou {\"status\": \"cancelado\"}. Só uma ocorrência"
+              + " prevista muda de status. Ao confirmar, valorCentavos e data são opcionais e"
+              + " gravam o valor e a data reais (a data vale para dataCompetencia e dataCaixa);"
+              + " ocorrencia_data da série não muda. Com cancelado, os dois dão 400. Confirmar"
+              + " passa a contar no saldo, com"
               + " a trava e o teto do saldo do lançamento, e recusa conta arquivada; cancelar não"
               + " mexe em saldo e vale mesmo com a conta arquivada. As duas são definitivas e"
               + " deixam a ocorrência desgarrada: o job não a recria nem a altera.",
@@ -319,7 +359,7 @@ class EntryController {
       responseCode = "400",
       description =
           "\"status é obrigatório\", \"status deve ser realizado ou cancelado\", campo não"
-              + " declarado; \"só ocorrência prevista pode mudar de status\" (o lançamento não"
+              + " declarado, valorCentavos ou data inválidos, valorCentavos ou data com cancelado; \"só ocorrência prevista pode mudar de status\" (o lançamento não"
               + " está previsto); \"conta arquivada\" e \"saldo da conta fora do limite\" (só ao"
               + " confirmar); \"use a rota de transferência\" (perna de transferência)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -356,11 +396,16 @@ class EntryController {
     if (target.isEmpty()) {
       return ResponseEntity.badRequest().body(INVALID_STATUS);
     }
+    if (target.get() == TargetStatus.CANCELLED && request.hasAdjustment()) {
+      return ResponseEntity.badRequest().body(CANCEL_WITH_ADJUST);
+    }
     Optional<UUID> entryId = CanonicalUuid.parse(id);
     if (entryId.isEmpty()) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
     }
-    EntryService.SaveResult result = entries.changeStatus(user.id(), entryId.get(), target.get());
+    EntryService.SaveResult result =
+        entries.changeStatus(
+            user.id(), entryId.get(), target.get(), request.amount(), request.parsedDate());
     if (result instanceof EntryService.SaveResult.Saved saved) {
       log.info(
           "lançamento mudou de status usuario_id={} lancamento_id={} status={}",

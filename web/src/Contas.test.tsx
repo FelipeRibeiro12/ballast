@@ -37,6 +37,9 @@ function mockFetch(rotas: Rotas): void {
       if (chave === 'GET /categorias') return Promise.resolve(jsonResponse([], 200))
       if (chave === 'GET /recorrencias') return Promise.resolve(jsonResponse([], 200))
       if (chave.startsWith('GET /lancamentos?')) return Promise.resolve(jsonResponse([], 200))
+      if (chave === 'GET /lancamentos/vencidos') {
+        return Promise.resolve(jsonResponse({ lancamentos: [], maisAlgum: false }, 200))
+      }
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),
   )

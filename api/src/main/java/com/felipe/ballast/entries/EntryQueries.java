@@ -104,14 +104,39 @@ class EntryQueries {
 
   // Só sai de previsto. desgarrado acompanha para a ocorrência de template: confirmar ou cancelar
   // é o usuário assumindo a linha, e a marca fica certa mesmo que alguém passe a apagar por status.
-  int changeStatus(UUID userId, UUID entryId, TargetStatus target) {
+  // Valor e data nulos mantêm o que está gravado; ocorrencia_data nunca entra aqui, a chave da
+  // regra continua a original. O CAST dá tipo ao parâmetro nulo.
+  int changeStatus(
+      UUID userId, UUID entryId, TargetStatus target, BigDecimal amount, LocalDate date) {
     return jdbc.sql(
-            "UPDATE lancamento SET status = :status, desgarrado = (template_id IS NOT NULL)"
-                + " WHERE usuario_id = :userId AND id = :id AND status = 'previsto'")
+            """
+            UPDATE lancamento
+            SET status = :status, desgarrado = (template_id IS NOT NULL),
+                valor = COALESCE(CAST(:amount AS numeric), valor),
+                data_competencia = COALESCE(CAST(:date AS date), data_competencia),
+                data_caixa = COALESCE(CAST(:date AS date), data_caixa)
+            WHERE usuario_id = :userId AND id = :id AND status = 'previsto'
+            """)
         .param("status", target.value())
+        .param("amount", amount)
+        .param("date", date)
         .param("userId", userId)
         .param("id", entryId)
         .update();
+  }
+
+  // Previstas com data_caixa antes de hoje, da mais antiga para a mais nova. Pede uma a mais que o
+  // limite para o serviço saber se houve corte sem um segundo COUNT.
+  List<EntrySummary> listOverdue(UUID userId, LocalDate today, int limit) {
+    return jdbc.sql(
+            COLUMNS
+                + "WHERE l.usuario_id = :userId AND l.status = 'previsto' AND l.data_caixa < :today"
+                + " ORDER BY l.data_caixa, l.id LIMIT :limit")
+        .param("userId", userId)
+        .param("today", today)
+        .param("limit", limit)
+        .query(EntryQueries::map)
+        .list();
   }
 
   // Editar uma ocorrência de template a tira do controle da regra. Sem template, não faz nada.

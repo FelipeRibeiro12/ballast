@@ -7,13 +7,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
-### F7 — Previsto × realizado
-Marcar um previsto como realizado (ajustando valor e data se vier diferente).
-Editar uma ocorrência marca `desgarrado` e a materialização passa a respeitar.
-A F5 já entregou confirmar, cancelar e o `desgarrado` no PUT. Falta confirmar
-ajustando valor e data, e decidir o que fazer com prevista vencida (data antes de
-hoje e ainda `previsto`): hoje ela fica assim para sempre (revisão do PR #10).
-
 ### F8 — Saldo projetado
 Fluxo de caixa dos próximos 90 dias por `data_caixa`. É o primeiro momento em
 que o app responde algo que planilha não responde fácil.
@@ -33,6 +26,9 @@ Conta tipo cartão, fechamento e vencimento, cálculo de `data_caixa`, fatura
 agrupada, pagamento como transferência.
 Teste obrigatório: fechamento dia 31 em fevereiro, vencimento menor que
 fechamento, compra no dia do fechamento.
+Atenção: o confirmar com ajuste da F7 grava a `data` nas duas datas. Com
+cartão, a prevista tem competência e caixa diferentes; confirmar com data tem
+de mexer só na caixa, ou o gráfico por categoria erra (revisão do PR #12).
 
 ### F11 — Compra parcelada
 N lançamentos ligados por `parcela_de_id`, mesma competência, caixa avançando.

@@ -139,6 +139,7 @@ const base = {
   'GET /contas': responde([conta()]),
   'GET /categorias': responde(categorias),
   'GET /recorrencias': responde([]),
+  'GET /lancamentos/vencidos': responde({ lancamentos: [], maisAlgum: false }),
 }
 
 // O Intl separa símbolo e número com espaço sem quebra; o texto do teste usa espaço comum.
@@ -154,6 +155,16 @@ async function formulario(nome = 'Novo lançamento'): Promise<HTMLElement> {
 function preencher(form: HTMLElement, titulo: string, valor: string): void {
   fireEvent.change(within(form).getByLabelText('Título'), { target: { value: titulo } })
   fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: valor } })
+}
+
+// Confirmar abre o mini formulário no item; este passo manda o formulário aberto.
+async function abrirConfirmacao(titulo: string): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('button', { name: `Confirmar ${titulo}` }))
+  return screen.findByRole('form', { name: `Confirmar ${titulo}` })
+}
+
+function enviarConfirmacao(form: HTMLElement): void {
+  fireEvent.click(within(form).getByRole('button', { name: 'Confirmar' }))
 }
 
 describe('Lancamentos', () => {
@@ -693,7 +704,7 @@ describe('Lancamentos', () => {
         },
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Aluguel' }))
+      enviarConfirmacao(await abrirConfirmacao('Aluguel'))
       await waitFor(() => expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(1))
       expect(JSON.parse(String(corpoEnviado))).toEqual({ status: 'realizado' })
       await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
@@ -736,9 +747,12 @@ describe('Lancamentos', () => {
         'PATCH /lancamentos/o1': responde({ erro: 'conta arquivada' }, 400),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Aluguel' }))
+      const form = await abrirConfirmacao('Aluguel')
+      enviarConfirmacao(form)
       expect(await screen.findByText('conta arquivada')).toBeVisible()
-      expect(screen.getByRole('button', { name: 'Confirmar Aluguel' })).toBeVisible()
+      // O formulário segue aberto para corrigir valor ou data.
+      expect(within(form).getByRole('button', { name: 'Confirmar' })).toBeEnabled()
+      expect(within(form).getByLabelText(/valor em reais/i)).toHaveValue('1.500,00')
     })
 
     it('503 ao confirmar mostra serviço indisponível', async () => {
@@ -748,7 +762,7 @@ describe('Lancamentos', () => {
         'PATCH /lancamentos/o1': responde({ erro: 'x' }, 503),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Aluguel' }))
+      enviarConfirmacao(await abrirConfirmacao('Aluguel'))
       expect(await screen.findByText('Serviço indisponível. Tente de novo em instantes.')).toBeVisible()
     })
 
@@ -759,7 +773,7 @@ describe('Lancamentos', () => {
         'PATCH /lancamentos/o1': responde({ erro: 'x' }, 404),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Aluguel' }))
+      enviarConfirmacao(await abrirConfirmacao('Aluguel'))
       expect(await screen.findByText('Esse lançamento não existe mais.')).toBeVisible()
       await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
     })
@@ -771,7 +785,7 @@ describe('Lancamentos', () => {
         'PATCH /lancamentos/o1': responde({ erro: 'x' }, 401),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Aluguel' }))
+      enviarConfirmacao(await abrirConfirmacao('Aluguel'))
       expect(await screen.findByRole('status')).toHaveTextContent(/sessão acabou/i)
     })
 
@@ -829,6 +843,213 @@ describe('Lancamentos', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
       fireEvent.click(screen.getByRole('button', { name: 'Apagar Seguro' }))
       expect(screen.queryByText(/volta como prevista/i)).toBeNull()
+    })
+  })
+
+  describe('confirmar com ajuste e vencidas', () => {
+    const vencida = (sobra: Partial<Record<string, unknown>> = {}) =>
+      prevista({ id: 'v1', titulo: 'Internet', valorCentavos: 9990, dataCompetencia: '2026-09-05', dataCaixa: '2026-09-05', ...sobra })
+    const vencidasCom = (lancamentos: unknown[], maisAlgum = false) =>
+      responde({ lancamentos, maisAlgum })
+    const VENCIDAS = 'GET /lancamentos/vencidos'
+    const blocoVencidas = async (): Promise<HTMLElement> =>
+      screen.findByRole('region', { name: /vencidas/i })
+
+    function patchQueCaptura(id: string, guarda: { corpo?: unknown }) {
+      return {
+        [`PATCH /lancamentos/${id}`]: (corpo: unknown) => {
+          guarda.corpo = corpo
+          return Promise.resolve(jsonResponse(prevista({ id, status: 'realizado' }), 200))
+        },
+      }
+    }
+
+    it('confirmar abre valor e data preenchidos com o previsto', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([prevista()]) })
+      render(<App />)
+      const form = await abrirConfirmacao('Aluguel')
+      expect(within(form).getByLabelText(/valor em reais/i)).toHaveValue('1.500,00')
+      expect(within(form).getByLabelText('Data')).toHaveValue('2026-10-25')
+      expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(0)
+    })
+
+    it('Voltar fecha o formulário sem enviar', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([prevista()]) })
+      render(<App />)
+      const form = await abrirConfirmacao('Aluguel')
+      fireEvent.click(within(form).getByRole('button', { name: 'Voltar' }))
+      expect(screen.getByRole('button', { name: 'Confirmar Aluguel' })).toBeVisible()
+      expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(0)
+    })
+
+    it('mudando o valor manda valorCentavos inteiro e só ele', async () => {
+      const guarda: { corpo?: unknown } = {}
+      mockFetch({ ...base, [MES_ATUAL]: responde([prevista()]), ...patchQueCaptura('o1', guarda) })
+      render(<App />)
+      const form = await abrirConfirmacao('Aluguel')
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '1.499,90' } })
+      enviarConfirmacao(form)
+      await waitFor(() => expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(1))
+      expect(JSON.parse(String(guarda.corpo))).toEqual({ status: 'realizado', valorCentavos: 149990 })
+    })
+
+    it('mudando a data manda a data local AAAA-MM-DD e só ela', async () => {
+      const guarda: { corpo?: unknown } = {}
+      mockFetch({ ...base, [MES_ATUAL]: responde([prevista()]), ...patchQueCaptura('o1', guarda) })
+      render(<App />)
+      const form = await abrirConfirmacao('Aluguel')
+      fireEvent.change(within(form).getByLabelText('Data'), { target: { value: '2026-10-12' } })
+      enviarConfirmacao(form)
+      await waitFor(() => expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(1))
+      expect(JSON.parse(String(guarda.corpo))).toEqual({ status: 'realizado', data: '2026-10-12' })
+    })
+
+    it('valor inválido não envia e mostra a mensagem', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([prevista()]) })
+      render(<App />)
+      const form = await abrirConfirmacao('Aluguel')
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: 'abc' } })
+      enviarConfirmacao(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent(/valor inválido/i)
+      expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(0)
+    })
+
+    it('data fora da faixa não envia', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([prevista()]) })
+      render(<App />)
+      const form = await abrirConfirmacao('Aluguel')
+      fireEvent.change(within(form).getByLabelText('Data'), { target: { value: '1800-01-01' } })
+      // O clique esbarraria na validação nativa do min; o submit direto exercita a checagem do código.
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent(/data inválida/i)
+      expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(0)
+    })
+
+    it('400 do servidor aparece dentro do formulário de ajuste', async () => {
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([prevista()]),
+        'PATCH /lancamentos/o1': responde({ erro: 'saldo da conta fora do limite' }, 400),
+      })
+      render(<App />)
+      const form = await abrirConfirmacao('Aluguel')
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '10,00' } })
+      enviarConfirmacao(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent('saldo da conta fora do limite')
+    })
+
+    it('submit duplo manda uma só requisição', async () => {
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([prevista()]),
+        'PATCH /lancamentos/o1': () => new Promise<Response>(() => {}),
+      })
+      render(<App />)
+      const form = await abrirConfirmacao('Aluguel')
+      fireEvent.submit(form)
+      fireEvent.submit(form)
+      await waitFor(() => expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(1))
+    })
+
+    it('sem vencidas o bloco não aparece', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([]) })
+      render(<App />)
+      await screen.findByText(/nenhum lançamento neste mês/i)
+      expect(screen.queryByRole('region', { name: /vencidas/i })).toBeNull()
+    })
+
+    it('mostra o bloco com contador, data completa, conta e valor com sinal', async () => {
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([]),
+        [VENCIDAS]: vencidasCom([vencida(), vencida({ id: 'v2', titulo: 'Bônus', tipo: 'receita', valorCentavos: 20000 })]),
+      })
+      render(<App />)
+      const bloco = within(await blocoVencidas())
+      expect(bloco.getByRole('heading', { name: 'Vencidas (2)' })).toBeVisible()
+      const itens = bloco.getAllByRole('listitem')
+      expect(itens[0]).toHaveTextContent('05/09/2026')
+      expect(itens[0]).toHaveTextContent('Internet')
+      expect(itens[0]).toHaveTextContent('Nubank')
+      expect(itens[0]).toHaveTextContent(texto('− R$ 99,90'))
+      expect(itens[1]).toHaveTextContent(texto('+ R$ 200,00'))
+      expect(bloco.queryByText(/mostrando as 200 mais antigas/i)).toBeNull()
+    })
+
+    it('maisAlgum mostra o aviso de corte', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([]), [VENCIDAS]: vencidasCom([vencida()], true) })
+      render(<App />)
+      expect(within(await blocoVencidas()).getByText('mostrando as 200 mais antigas')).toBeVisible()
+    })
+
+    it('confirmar vencida sem mudar nada manda só status e recarrega vencidas, mês e saldo', async () => {
+      const guarda: { corpo?: unknown } = {}
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([]),
+        [VENCIDAS]: vencidasCom([vencida()]),
+        ...patchQueCaptura('v1', guarda),
+      })
+      render(<App />)
+      const bloco = within(await blocoVencidas())
+      fireEvent.click(bloco.getByRole('button', { name: 'Confirmar Internet' }))
+      const form = await screen.findByRole('form', { name: 'Confirmar Internet' })
+      expect(within(form).getByLabelText('Data')).toHaveValue('2026-09-05')
+      enviarConfirmacao(form)
+      await waitFor(() => expect(chamadasA('PATCH /lancamentos/v1')).toHaveLength(1))
+      expect(JSON.parse(String(guarda.corpo))).toEqual({ status: 'realizado' })
+      await waitFor(() => expect(chamadasA(VENCIDAS)).toHaveLength(2))
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+      await waitFor(() => expect(chamadasA('GET /contas')).toHaveLength(2))
+    })
+
+    it('cancelar vencida pede confirmação antes de enviar', async () => {
+      const guarda: { corpo?: unknown } = {}
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([]),
+        [VENCIDAS]: vencidasCom([vencida()]),
+        ...patchQueCaptura('v1', guarda),
+      })
+      render(<App />)
+      const bloco = within(await blocoVencidas())
+      fireEvent.click(bloco.getByRole('button', { name: 'Cancelar Internet' }))
+      expect(chamadasA('PATCH /lancamentos/v1')).toHaveLength(0)
+      fireEvent.click(bloco.getByRole('button', { name: 'Confirmar cancelar Internet' }))
+      await waitFor(() => expect(chamadasA('PATCH /lancamentos/v1')).toHaveLength(1))
+      expect(JSON.parse(String(guarda.corpo))).toEqual({ status: 'cancelado' })
+      await waitFor(() => expect(chamadasA(VENCIDAS)).toHaveLength(2))
+    })
+
+    it('Editar vencida abre o formulário de edição', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([]), [VENCIDAS]: vencidasCom([vencida()]) })
+      render(<App />)
+      fireEvent.click(within(await blocoVencidas()).getByRole('button', { name: 'Editar Internet' }))
+      const form = await formulario('Editar lançamento')
+      expect(within(form).getByLabelText('Título')).toHaveValue('Internet')
+    })
+
+    it('falha na busca de vencidas mostra aviso, não derruba o mês e tenta de novo', async () => {
+      let chamadas = 0
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([lancamento()]),
+        [VENCIDAS]: () => {
+          chamadas += 1
+          return Promise.resolve(
+            chamadas === 1
+              ? jsonResponse({ erro: 'x' }, 500)
+              : jsonResponse({ lancamentos: [vencida()], maisAlgum: false }, 200),
+          )
+        },
+      })
+      render(<App />)
+      const area = within(await secao())
+      expect(await area.findByText('Feira')).toBeVisible()
+      expect(await area.findByText('Não foi possível carregar as vencidas.')).toBeVisible()
+      fireEvent.click(area.getByRole('button', { name: /tentar carregar as vencidas de novo/i }))
+      expect(await blocoVencidas()).toBeVisible()
+      expect(screen.queryByText('Não foi possível carregar as vencidas.')).toBeNull()
     })
   })
 

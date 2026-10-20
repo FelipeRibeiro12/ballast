@@ -518,18 +518,53 @@ export async function deleteTransferencia(id: string): Promise<void> {
   }
 }
 
+// Valor e data só valem para realizado; a assinatura impede mandar com cancelado.
+export type AjusteDeConfirmacao = Pick<
+  components['schemas']['LancamentoStatusRequest'],
+  'valorCentavos' | 'data'
+>
+
+export async function patchStatusLancamento(id: string, status: 'cancelado'): Promise<Lancamento>
+export async function patchStatusLancamento(
+  id: string,
+  status: 'realizado',
+  ajuste?: AjusteDeConfirmacao,
+): Promise<Lancamento>
 export async function patchStatusLancamento(
   id: string,
   status: 'realizado' | 'cancelado',
+  ajuste?: AjusteDeConfirmacao,
 ): Promise<Lancamento> {
   const resposta = await fetch(`${baseUrl}/lancamentos/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, ...ajuste }),
   })
   if (!resposta.ok) return recusarRespostaDeLancamento(resposta, 'PATCH /lancamentos/{id}')
   return lerLancamento(resposta, 'PATCH /lancamentos/{id}')
+}
+
+export type LancamentosVencidos = components['schemas']['LancamentosVencidos']
+
+function isLancamentosVencidos(valor: unknown): valor is LancamentosVencidos {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'lancamentos' in valor &&
+    Array.isArray(valor.lancamentos) &&
+    valor.lancamentos.every(isLancamento) &&
+    'maisAlgum' in valor &&
+    typeof valor.maisAlgum === 'boolean'
+  )
+}
+
+export async function fetchVencidos(): Promise<LancamentosVencidos> {
+  const resposta = await fetch(`${baseUrl}/lancamentos/vencidos`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeLancamento(resposta, '/lancamentos/vencidos')
+  const corpo: unknown = await resposta.json()
+  if (!isLancamentosVencidos(corpo)) throw new ApiError('/lancamentos/vencidos com formato inesperado')
+  return corpo
 }
 
 export type Recorrencia = components['schemas']['Recorrencia']

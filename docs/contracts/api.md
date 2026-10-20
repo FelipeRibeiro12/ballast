@@ -180,9 +180,22 @@ apagar uma ocorrência (seção no fim).
 
 - `PATCH /lancamentos/{id}` com `{"status": "realizado"}` confirma e com
   `{"status": "cancelado"}` cancela uma ocorrência. Só esses dois valores, e o
-  campo é obrigatório e o único: sem ele, 400 `status é obrigatório`; outro valor
+  campo é obrigatório: sem ele, 400 `status é obrigatório`; outro valor
   (inclusive `previsto`), 400 `status deve ser realizado ou cancelado`; campo não
   declarado, 400. Responde 200 com o lançamento (mesmo corpo de `GET`).
+- Confirmar aceita ajuste (ADR-028): `{"status": "realizado", "valorCentavos"?,
+  "data"?}`, os dois opcionais. `valorCentavos` é inteiro de 1 a
+  9007199254740991 e `data` é `AAAA-MM-DD` estrito com ano de 1900 a 2199, as
+  mesmas regras e mensagens do `POST /lancamentos`; inválido dá 400 e nada muda.
+  A `data` vale para `dataCompetencia` e `dataCaixa`. Valor e data entram na mesma
+  transação da confirmação e o teto do saldo é conferido com o valor novo. A
+  ocorrência sai do mês antigo da lista e aparece no novo. A chave da regra
+  (`ocorrencia_data`, que a API não expõe) não muda, então o job não recria a
+  ocorrência na data original. Com `cancelado`, `valorCentavos` ou `data`
+  presentes dão 400 `cancelar não aceita valorCentavos nem data` e nada muda.
+  Numa parcela de divisão (ADR-027), o ajuste vale só para ela: as outras
+  parcelas do mês não se rebalanceiam, e a soma do mês passa a ser o que de fato
+  entrou, não mais o valor cheio do template.
 - Só parte de `previsto`. De `realizado` ou `cancelado`, 400 `só ocorrência
   prevista pode mudar de status` (confirmar duas vezes dá 400 na segunda e o saldo
   conta uma vez). As duas mudanças são definitivas: não existe voltar a
@@ -209,6 +222,18 @@ apagar uma ocorrência (seção no fim).
   apaga.
 - A resposta do lançamento não traz `desgarrado`. Quem precisa saber se a
   linha saiu do controle da regra usa `status` (confirmada e cancelada já saíram).
+
+### Vencidas (ADR-028)
+
+- `GET /lancamentos/vencidos` devolve as previstas do usuário com `dataCaixa`
+  antes de hoje (dia de `America/Sao_Paulo`), da mais antiga para a mais nova
+  (depois `id`), no máximo 200:
+  `{"lancamentos": [...], "maisAlgum": boolean}`. Cada item tem o mesmo formato
+  de `GET /lancamentos`. `maisAlgum` é `true` quando havia mais de 200; confirmar
+  ou cancelar as primeiras traz o resto na chamada seguinte.
+- Nada vence sozinho: a prevista fica `previsto` até o usuário confirmar (com ou
+  sem ajuste) ou cancelar. Realizada, cancelada e prevista de hoje em diante não
+  entram. Sem sessão, 401.
 
 ### Espera de trava
 
