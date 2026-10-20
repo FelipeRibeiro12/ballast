@@ -76,7 +76,9 @@ class EntryCreationTest {
             "dataCompetencia",
             "dataCaixa",
             "status",
-            "criadoEm");
+            "criadoEm",
+            "transferenciaId",
+            "direcao");
     assertThat(UUID.fromString(body.get("id").asString())).isNotNull();
     assertThat(body.get("tipo").asString()).isEqualTo("despesa");
     assertThat(body.get("titulo").asString()).isEqualTo("Mercado do mês");

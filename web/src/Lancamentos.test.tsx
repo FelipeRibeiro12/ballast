@@ -38,12 +38,42 @@ function lancamento(sobra: Partial<Record<string, unknown>> = {}): Record<string
     descricao: null,
     valorCentavos: 12345,
     categoriaId: 'cd1',
+    transferenciaId: null,
+    direcao: null,
     contaId: 'c1',
     dataCompetencia: '2026-10-05',
     dataCaixa: '2026-10-05',
     criadoEm: '2026-10-05T12:00:00Z',
     ...sobra,
   }
+}
+
+function perna(sobra: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return lancamento({
+    id: 'p1',
+    tipo: 'transferencia',
+    titulo: 'Reserva',
+    valorCentavos: 50000,
+    categoriaId: null,
+    transferenciaId: 't1',
+    direcao: 'saida',
+    ...sobra,
+  })
+}
+
+const contaB = conta({ id: 'c2', nome: 'Carteira', saldoCentavos: 0 })
+
+const transferenciaCriada = {
+  id: 't1',
+  contaOrigemId: 'c1',
+  contaDestinoId: 'c2',
+  valorCentavos: 50000,
+  data: '2026-10-19',
+  titulo: 'Transferência',
+  descricao: null,
+  saidaId: 'p1',
+  entradaId: 'p2',
+  criadaEm: '2026-10-19T12:00:00Z',
 }
 
 function jsonResponse(corpo: unknown, status: number): Response {
@@ -406,5 +436,180 @@ describe('Lancamentos', () => {
     await waitFor(async () =>
       expect(within(within(await formulario()).getByLabelText('Conta')).getByText('Reserva')).toBeVisible(),
     )
+  })
+  describe('transferência', () => {
+    const duasContas = { ...base, 'GET /contas': responde([conta(), contaB]) }
+
+    async function abrirTransferencia(): Promise<HTMLElement> {
+      fireEvent.click(await screen.findByRole('button', { name: 'Transferência' }))
+      return formulario('Nova transferência')
+    }
+
+    it('mostra a perna com sinal pela direção e fora dos totais', async () => {
+      mockFetch({
+        ...duasContas,
+        [MES_ATUAL]: responde([
+          lancamento(),
+          perna(),
+          perna({ id: 'p2', contaId: 'c2', direcao: 'entrada', titulo: 'Reserva entrada' }),
+        ]),
+      })
+      render(<App />)
+      const area = within(await secao())
+      const itens = await area.findAllByRole('listitem')
+      expect(itens).toHaveLength(3)
+      expect(itens[1]).toHaveTextContent('Transferência · Nubank')
+      expect(itens[1]).toHaveTextContent(texto('− R$ 500,00'))
+      expect(itens[2]).toHaveTextContent('Transferência · Carteira')
+      expect(itens[2]).toHaveTextContent(texto('+ R$ 500,00'))
+      expect(area.getByText('Receitas').nextSibling).toHaveTextContent(texto('R$ 0,00'))
+      expect(area.getByText('Despesas').nextSibling).toHaveTextContent(texto('R$ 123,45'))
+      expect(area.getByText('Resultado').nextSibling).toHaveTextContent(texto('-R$ 123,45'))
+    })
+
+    it('perna não tem Editar', async () => {
+      mockFetch({ ...duasContas, [MES_ATUAL]: responde([perna()]) })
+      render(<App />)
+      expect(await screen.findByRole('button', { name: 'Apagar Reserva' })).toBeVisible()
+      expect(screen.queryByRole('button', { name: 'Editar Reserva' })).toBeNull()
+    })
+
+    it('apagar a perna avisa das duas pernas, chama DELETE /transferencias e recarrega', async () => {
+      mockFetch({
+        ...duasContas,
+        [MES_ATUAL]: responde([perna()]),
+        'DELETE /transferencias/t1': () => Promise.resolve(new Response(null, { status: 204 })),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Apagar Reserva' }))
+      expect(screen.getByText(/as duas pernas/i)).toBeVisible()
+      expect(chamadasA('DELETE /transferencias/t1')).toHaveLength(0)
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar Reserva' }))
+      await waitFor(() => expect(chamadasA('DELETE /transferencias/t1')).toHaveLength(1))
+      expect(chamadasA('DELETE /lancamentos/p1')).toHaveLength(0)
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+      await waitFor(() => expect(chamadasA('GET /contas')).toHaveLength(2))
+    })
+
+    it('cria enviando o corpo certo e recarrega lista e saldo', async () => {
+      let corpoEnviado: unknown
+      mockFetch({
+        ...duasContas,
+        [MES_ATUAL]: responde([]),
+        'POST /transferencias': (corpo) => {
+          corpoEnviado = corpo
+          return Promise.resolve(jsonResponse(transferenciaCriada, 201))
+        },
+      })
+      render(<App />)
+      const form = await abrirTransferencia()
+      fireEvent.change(within(form).getByLabelText('Conta de destino'), { target: { value: 'c2' } })
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '500,00' } })
+      fireEvent.submit(form)
+      await waitFor(() => expect(chamadasA('POST /transferencias')).toHaveLength(1))
+      expect(JSON.parse(String(corpoEnviado))).toEqual({
+        contaOrigemId: 'c1',
+        contaDestinoId: 'c2',
+        valorCentavos: 50000,
+        data: '2026-10-19',
+      })
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+      await waitFor(() => expect(chamadasA('GET /contas')).toHaveLength(2))
+    })
+
+    it('envia título e descrição quando preenchidos', async () => {
+      let corpoEnviado: unknown
+      mockFetch({
+        ...duasContas,
+        [MES_ATUAL]: responde([]),
+        'POST /transferencias': (corpo) => {
+          corpoEnviado = corpo
+          return Promise.resolve(jsonResponse(transferenciaCriada, 201))
+        },
+      })
+      render(<App />)
+      const form = await abrirTransferencia()
+      fireEvent.change(within(form).getByLabelText(/título/i), { target: { value: '  Reserva  ' } })
+      fireEvent.change(within(form).getByLabelText(/descrição/i), { target: { value: 'mês' } })
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '1,00' } })
+      fireEvent.submit(form)
+      await waitFor(() => expect(chamadasA('POST /transferencias')).toHaveLength(1))
+      expect(JSON.parse(String(corpoEnviado))).toMatchObject({ titulo: 'Reserva', descricao: 'mês' })
+    })
+
+    it('mesma conta em origem e destino não envia', async () => {
+      mockFetch({ ...duasContas, [MES_ATUAL]: responde([]), 'POST /transferencias': responde(transferenciaCriada, 201) })
+      render(<App />)
+      const form = await abrirTransferencia()
+      fireEvent.change(within(form).getByLabelText('Conta de destino'), { target: { value: 'c1' } })
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '5,00' } })
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent(/contas diferentes/i)
+      expect(chamadasA('POST /transferencias')).toHaveLength(0)
+    })
+
+    it('valor inválido não envia', async () => {
+      mockFetch({ ...duasContas, [MES_ATUAL]: responde([]) })
+      render(<App />)
+      const form = await abrirTransferencia()
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '0' } })
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent(/valor inválido/i)
+      expect(chamadasA('POST /transferencias')).toHaveLength(0)
+    })
+
+    it('com menos de duas contas mostra o aviso', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([]) })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Transferência' }))
+      expect(await screen.findByText('Crie duas contas para transferir.')).toBeVisible()
+      expect(screen.queryByRole('form', { name: 'Nova transferência' })).toBeNull()
+    })
+
+    it('400 mostra a mensagem do servidor e mantém o que foi digitado', async () => {
+      mockFetch({
+        ...duasContas,
+        [MES_ATUAL]: responde([]),
+        'POST /transferencias': responde({ erro: 'saldo da conta fora do limite' }, 400),
+      })
+      render(<App />)
+      const form = await abrirTransferencia()
+      fireEvent.change(within(form).getByLabelText('Conta de destino'), { target: { value: 'c2' } })
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '5,00' } })
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent('saldo da conta fora do limite')
+      expect(within(form).getByLabelText(/valor em reais/i)).toHaveValue('5,00')
+      expect(within(form).getByRole('button', { name: /adicionar transferência/i })).toBeEnabled()
+    })
+
+    it('401 ao criar volta para o login', async () => {
+      mockFetch({
+        ...duasContas,
+        [MES_ATUAL]: responde([]),
+        'POST /transferencias': responde({ erro: 'x' }, 401),
+      })
+      render(<App />)
+      const form = await abrirTransferencia()
+      fireEvent.change(within(form).getByLabelText('Conta de destino'), { target: { value: 'c2' } })
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '5,00' } })
+      fireEvent.submit(form)
+      expect(await screen.findByRole('form', { name: /entrar/i })).toBeVisible()
+    })
+
+    it('submit duplo manda uma só requisição', async () => {
+      mockFetch({
+        ...duasContas,
+        [MES_ATUAL]: responde([]),
+        'POST /transferencias': () => new Promise<Response>(() => {}),
+      })
+      render(<App />)
+      const form = await abrirTransferencia()
+      fireEvent.change(within(form).getByLabelText('Conta de destino'), { target: { value: 'c2' } })
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '5,00' } })
+      fireEvent.submit(form)
+      fireEvent.submit(form)
+      expect(chamadasA('POST /transferencias')).toHaveLength(1)
+      expect(within(form).getByRole('button', { name: /salvando/i })).toBeDisabled()
+    })
   })
 })

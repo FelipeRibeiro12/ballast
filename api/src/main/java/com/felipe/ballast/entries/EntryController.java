@@ -45,6 +45,10 @@ class EntryController {
   private static final ErrorResponse ACCOUNT_ARCHIVED = new ErrorResponse("conta arquivada");
   private static final ErrorResponse CATEGORY_NOT_FOUND =
       new ErrorResponse("categoria não encontrada");
+  private static final ErrorResponse TRANSFER_LEG =
+      new ErrorResponse("use a rota de transferência");
+  // Mesmo texto que o tipo desconhecido tinha antes de o enum conhecer transferencia.
+  private static final ErrorResponse INVALID_TYPE = new ErrorResponse("requisição inválida");
   private static final ErrorResponse BALANCE_OUT_OF_RANGE =
       new ErrorResponse("saldo da conta fora do limite");
 
@@ -110,6 +114,9 @@ class EntryController {
       produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> create(
       @AuthenticationPrincipal AuthenticatedUser user, @Valid @RequestBody EntryRequest request) {
+    if (request.type() == EntryType.TRANSFER) {
+      return ResponseEntity.badRequest().body(INVALID_TYPE);
+    }
     EntryService.SaveResult result = entries.create(user.id(), toInput(request));
     if (result instanceof EntryService.SaveResult.Saved saved) {
       log.info("lançamento criado usuario_id={} lancamento_id={}", user.id(), saved.entry().id());
@@ -234,9 +241,11 @@ class EntryController {
   @ApiResponse(
       responseCode = "400",
       description =
-          "Entrada inválida, inclusive campo não declarado; \"conta não encontrada\","
-              + " \"conta arquivada\" (só ao trocar de conta), \"categoria não encontrada\" ou"
-              + " \"saldo da conta fora do limite\" (em qualquer das contas afetadas)",
+          "Entrada inválida, inclusive campo não declarado e tipo transferencia;"
+              + " \"conta não encontrada\", \"conta arquivada\" (só ao trocar de conta),"
+              + " \"categoria não encontrada\", \"saldo da conta fora do limite\" (em qualquer"
+              + " das contas afetadas) ou \"use a rota de transferência\" (o lançamento é perna"
+              + " de transferência)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -267,6 +276,9 @@ class EntryController {
       @AuthenticationPrincipal AuthenticatedUser user,
       @PathVariable("id") String id,
       @Valid @RequestBody EntryRequest request) {
+    if (request.type() == EntryType.TRANSFER) {
+      return ResponseEntity.badRequest().body(INVALID_TYPE);
+    }
     Optional<UUID> entryId = CanonicalUuid.parse(id);
     if (entryId.isEmpty()) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
@@ -290,7 +302,8 @@ class EntryController {
       responseCode = "400",
       description =
           "\"saldo da conta fora do limite\": apagar o lançamento tiraria o saldo da faixa de"
-              + " ±9007199254740991 centavos, e nada é apagado",
+              + " ±9007199254740991 centavos, e nada é apagado; \"use a rota de"
+              + " transferência\": o lançamento é perna de transferência",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -315,6 +328,7 @@ class EntryController {
     return switch (entries.delete(user.id(), entryId.get())) {
       case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
+      case TRANSFER_LEG -> ResponseEntity.badRequest().body(TRANSFER_LEG);
       case DELETED -> {
         log.info("lançamento apagado usuario_id={} lancamento_id={}", user.id(), entryId.get());
         yield ResponseEntity.noContent().build();
@@ -340,6 +354,7 @@ class EntryController {
       case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
       case CATEGORY_NOT_FOUND -> ResponseEntity.badRequest().body(CATEGORY_NOT_FOUND);
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
+      case TRANSFER_LEG -> ResponseEntity.badRequest().body(TRANSFER_LEG);
     };
   }
 }

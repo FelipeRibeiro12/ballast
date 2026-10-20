@@ -13,7 +13,9 @@ import java.time.LocalDate;
 @Schema(name = "LancamentoRequest")
 public record EntryRequest(
     @JsonProperty("tipo")
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
+        @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            allowableValues = {"receita", "despesa"})
         @NotNull(message = TYPE_MESSAGE)
         EntryType type,
     @JsonProperty("titulo")

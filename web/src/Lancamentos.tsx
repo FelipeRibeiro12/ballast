@@ -5,10 +5,14 @@ import {
   LancamentoNaoEncontradoError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
+  TransferenciaInvalidaError,
+  TransferenciaNaoEncontradaError,
   deleteLancamento,
+  deleteTransferencia,
   fetchCategorias,
   fetchLancamentos,
   postLancamento,
+  postTransferencia,
   putLancamento,
 } from './api'
 import type { Categoria, Conta, Lancamento } from './api'
@@ -18,15 +22,20 @@ import { formatarCentavos, lerValorPositivo } from './dinheiro'
 
 type TipoDeLancamento = Lancamento['tipo']
 
-const TIPOS: TipoDeLancamento[] = ['receita', 'despesa']
+// O formulário de lançamento só cria receita e despesa; transferência tem formulário próprio.
+type TipoEditavel = Exclude<TipoDeLancamento, 'transferencia'>
 
-const ROTULO_DO_TIPO: Record<TipoDeLancamento, string> = {
+const TIPOS: TipoEditavel[] = ['receita', 'despesa']
+
+const ROTULO_DO_TIPO: Record<TipoEditavel, string> = {
   receita: 'Receita',
   despesa: 'Despesa',
 }
 
 const MENSAGEM_INDISPONIVEL = 'Serviço indisponível. Tente de novo em instantes.'
 const MENSAGEM_NAO_EXISTE = 'Esse lançamento não existe mais.'
+const MENSAGEM_VALOR_INVALIDO =
+  'Valor inválido. Use o formato 1.234,56, maior que zero e até 90.071.992.547.409,91.'
 
 // O servidor aceita datas de 1900 a 2199 (ADR-024); a navegação para nesses limites.
 const ANO_MINIMO = 1900
@@ -55,8 +64,21 @@ function mensagemDeGravacao(erro: unknown): string {
   return 'Não foi possível salvar o lançamento. Tente de novo.'
 }
 
+function mensagemDeTransferencia(erro: unknown): string {
+  if (erro instanceof TransferenciaInvalidaError && erro.mensagemServidor !== null) {
+    return erro.mensagemServidor
+  }
+  if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
+  return 'Não foi possível salvar a transferência. Tente de novo.'
+}
+
 function mensagemDeExclusao(erro: unknown): string {
-  if (erro instanceof LancamentoNaoEncontradoError) return MENSAGEM_NAO_EXISTE
+  if (erro instanceof LancamentoNaoEncontradoError || erro instanceof TransferenciaNaoEncontradaError) {
+    return MENSAGEM_NAO_EXISTE
+  }
+  if (erro instanceof TransferenciaInvalidaError && erro.mensagemServidor !== null) {
+    return erro.mensagemServidor
+  }
   if (erro instanceof LancamentoInvalidoError && erro.mensagemServidor !== null) {
     return erro.mensagemServidor
   }
@@ -81,7 +103,9 @@ function FormularioDeLancamento({
   aoCancelar: (() => void) | null
   aoSessaoExpirar: () => void
 }) {
-  const [tipo, setTipo] = useState<TipoDeLancamento>(inicial?.tipo ?? 'despesa')
+  const [tipo, setTipo] = useState<TipoEditavel>(
+    TIPOS.find((opcao) => opcao === inicial?.tipo) ?? 'despesa',
+  )
   const [titulo, setTitulo] = useState(inicial?.titulo ?? '')
   const [valor, setValor] = useState(
     inicial === null ? '' : formatarCentavos(inicial.valorCentavos).replace(/[^\d.,]/g, ''),
@@ -118,7 +142,7 @@ function FormularioDeLancamento({
     if (emVoo.current) return
     const valorCentavos = lerValorPositivo(valor)
     if (valorCentavos === null) {
-      setMensagem('Valor inválido. Use o formato 1.234,56, maior que zero e até 90.071.992.547.409,91.')
+      setMensagem(MENSAGEM_VALOR_INVALIDO)
       return
     }
     emVoo.current = true
@@ -281,6 +305,171 @@ function FormularioDeLancamento({
   )
 }
 
+function FormularioDeTransferencia({
+  contas,
+  aoSalvar,
+  aoSessaoExpirar,
+}: {
+  contas: Conta[]
+  aoSalvar: () => void
+  aoSessaoExpirar: () => void
+}) {
+  const [origemEscolhida, setOrigemEscolhida] = useState(contas[0]?.id ?? '')
+  const [destinoEscolhido, setDestinoEscolhido] = useState(contas[1]?.id ?? '')
+  const [titulo, setTitulo] = useState('')
+  const [valor, setValor] = useState('')
+  const [data, setData] = useState(hojeLocal())
+  const [descricao, setDescricao] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [mensagem, setMensagem] = useState<string | null>(null)
+  // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
+  const emVoo = useRef(false)
+
+  // A conta escolhida pode ter sido arquivada e sumido da lista; cai na primeira disponível.
+  const contaOrigemId = contas.some((c) => c.id === origemEscolhida) ? origemEscolhida : (contas[0]?.id ?? '')
+  const contaDestinoId = contas.some((c) => c.id === destinoEscolhido)
+    ? destinoEscolhido
+    : (contas.find((c) => c.id !== contaOrigemId)?.id ?? '')
+
+  if (contas.length < 2) {
+    return <p>Crie duas contas para transferir.</p>
+  }
+
+  async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
+    evento.preventDefault()
+    if (emVoo.current) return
+    if (contaOrigemId === contaDestinoId) {
+      setMensagem('Escolha contas diferentes para origem e destino.')
+      return
+    }
+    const valorCentavos = lerValorPositivo(valor)
+    if (valorCentavos === null) {
+      setMensagem(MENSAGEM_VALOR_INVALIDO)
+      return
+    }
+    emVoo.current = true
+    setEnviando(true)
+    setMensagem(null)
+    try {
+      await postTransferencia({
+        contaOrigemId,
+        contaDestinoId,
+        valorCentavos,
+        data,
+        // Título ausente faz o servidor usar "Transferência".
+        ...(titulo.trim() === '' ? {} : { titulo: titulo.trim() }),
+        ...(descricao.trim() === '' ? {} : { descricao: descricao.trim() }),
+      })
+      setTitulo('')
+      setValor('')
+      setDescricao('')
+      aoSalvar()
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return
+      }
+      setMensagem(mensagemDeTransferencia(erro))
+    } finally {
+      emVoo.current = false
+      setEnviando(false)
+    }
+  }
+
+  const descricaoDoErro = mensagem === null ? undefined : 'erro-transferencia'
+
+  return (
+    <form onSubmit={(evento) => void enviar(evento)} aria-label="Nova transferência">
+      <h3>Nova transferência</h3>
+      <div className="campo">
+        <label htmlFor="transferencia-origem">Conta de origem</label>
+        <select
+          id="transferencia-origem"
+          value={contaOrigemId}
+          required
+          onChange={(evento) => setOrigemEscolhida(evento.target.value)}
+        >
+          {contas.map((conta) => (
+            <option key={conta.id} value={conta.id}>
+              {conta.nome}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="campo">
+        <label htmlFor="transferencia-destino">Conta de destino</label>
+        <select
+          id="transferencia-destino"
+          value={contaDestinoId}
+          required
+          onChange={(evento) => setDestinoEscolhido(evento.target.value)}
+        >
+          {contas.map((conta) => (
+            <option key={conta.id} value={conta.id}>
+              {conta.nome}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="campo">
+        <label htmlFor="transferencia-valor">Valor em reais</label>
+        <input
+          id="transferencia-valor"
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="0,00"
+          required
+          value={valor}
+          aria-describedby={descricaoDoErro}
+          onChange={(evento) => setValor(evento.target.value)}
+        />
+      </div>
+      <div className="campo">
+        <label htmlFor="transferencia-data">Data</label>
+        <input
+          id="transferencia-data"
+          type="date"
+          required
+          min="1900-01-01"
+          max="2199-12-31"
+          value={data}
+          onChange={(evento) => setData(evento.target.value)}
+        />
+      </div>
+      <div className="campo">
+        <label htmlFor="transferencia-titulo">Título (opcional)</label>
+        <input
+          id="transferencia-titulo"
+          type="text"
+          maxLength={100}
+          placeholder="Transferência"
+          value={titulo}
+          onChange={(evento) => setTitulo(evento.target.value)}
+        />
+      </div>
+      <div className="campo">
+        <label htmlFor="transferencia-descricao">Descrição (opcional)</label>
+        <input
+          id="transferencia-descricao"
+          type="text"
+          maxLength={500}
+          value={descricao}
+          onChange={(evento) => setDescricao(evento.target.value)}
+        />
+      </div>
+      {mensagem !== null && (
+        <p id="erro-transferencia" role="alert" className="erro">
+          {mensagem}
+        </p>
+      )}
+      <button type="submit" disabled={enviando}>
+        {enviando ? 'Salvando...' : 'Adicionar transferência'}
+      </button>
+    </form>
+  )
+}
+
 export default function Lancamentos({
   aoSessaoExpirar,
   contas,
@@ -304,6 +493,7 @@ export default function Lancamentos({
   const [falhaDeAcao, setFalhaDeAcao] = useState<string | null>(null)
   // Muda a key do formulário de criação para limpar os campos depois de salvar.
   const [versaoDoFormulario, setVersaoDoFormulario] = useState(0)
+  const [modoDoFormulario, setModoDoFormulario] = useState<'lancamento' | 'transferencia'>('lancamento')
   const acaoEmVoo = useRef(false)
 
   useEffect(() => {
@@ -371,7 +561,9 @@ export default function Lancamentos({
     setApagando(lancamento.id)
     setFalhaDeAcao(null)
     try {
-      await deleteLancamento(lancamento.id)
+      // Apagar uma perna apaga o par inteiro; /lancamentos recusaria com 400.
+      if (lancamento.transferenciaId === null) await deleteLancamento(lancamento.id)
+      else await deleteTransferencia(lancamento.transferenciaId)
       setConfirmando(null)
       if (editando?.id === lancamento.id) setEditando(null)
       depoisDeMudar()
@@ -383,7 +575,9 @@ export default function Lancamentos({
       setFalhaDeAcao(mensagemDeExclusao(erro))
       setConfirmando(null)
       // A lista na tela está velha: busca de novo o que o servidor tem.
-      if (erro instanceof LancamentoNaoEncontradoError) depoisDeMudar()
+      if (erro instanceof LancamentoNaoEncontradoError || erro instanceof TransferenciaNaoEncontradaError) {
+        depoisDeMudar()
+      }
     } finally {
       acaoEmVoo.current = false
       setApagando(null)
@@ -403,7 +597,8 @@ export default function Lancamentos({
   if (estado.tipo === 'ok') {
     for (const lancamento of estado.lancamentos) {
       if (lancamento.tipo === 'receita') receitas += BigInt(lancamento.valorCentavos)
-      else despesas += BigInt(lancamento.valorCentavos)
+      else if (lancamento.tipo === 'despesa') despesas += BigInt(lancamento.valorCentavos)
+      // Transferência fica fora: mover dinheiro entre contas não é ganho nem gasto.
     }
   }
 
@@ -443,7 +638,10 @@ export default function Lancamentos({
           </select>
         </div>
       )}
-      {estado.tipo === 'carregando' && <p>Carregando lançamentos...</p>}
+      {/* Sem as contas a lista mostraria "Conta arquivada" para todo mundo por um instante. */}
+      {(estado.tipo === 'carregando' || (estado.tipo === 'ok' && contas === null)) && (
+        <p>Carregando lançamentos...</p>
+      )}
       {estado.tipo === 'erro' && (
         <>
           <p role="alert" className="erro">
@@ -459,7 +657,7 @@ export default function Lancamentos({
           {falhaDeAcao}
         </p>
       )}
-      {estado.tipo === 'ok' && (
+      {estado.tipo === 'ok' && contas !== null && (
         <>
           <dl className="totais">
             <div>
@@ -479,14 +677,19 @@ export default function Lancamentos({
           {estado.lancamentos.length > 0 && (
             <ul className="lancamentos">
               {estado.lancamentos.map((lancamento) => {
-                const sinal = lancamento.tipo === 'receita' ? '+' : '−'
+                const ePerna = lancamento.tipo === 'transferencia'
+                const sinal =
+                  lancamento.tipo === 'receita' || lancamento.direcao === 'entrada' ? '+' : '−'
                 return (
                   <li key={lancamento.id}>
                     <div className="lancamento-dados">
                       <span>{formatarDiaMes(lancamento.dataCaixa)}</span>
                       <strong>{lancamento.titulo}</strong>
                       <span>
-                        {nomesDeCategoria.get(lancamento.categoriaId) ?? 'Sem categoria'}
+                        {ePerna
+                          ? 'Transferência'
+                          : ((lancamento.categoriaId !== null && nomesDeCategoria.get(lancamento.categoriaId)) ||
+                            'Sem categoria')}
                         {' · '}
                         {nomesDeConta.get(lancamento.contaId) ?? 'Conta arquivada'}
                       </span>
@@ -495,20 +698,23 @@ export default function Lancamentos({
                       </span>
                     </div>
                     <div className="lancamento-acoes">
-                      <button
-                        type="button"
-                        disabled={apagando !== null}
-                        aria-label={`Editar ${lancamento.titulo}`}
-                        onClick={() => {
-                          setFalhaDeAcao(null)
-                          setConfirmando(null)
-                          setEditando(lancamento)
-                        }}
-                      >
-                        Editar
-                      </button>
+                      {!ePerna && (
+                        <button
+                          type="button"
+                          disabled={apagando !== null}
+                          aria-label={`Editar ${lancamento.titulo}`}
+                          onClick={() => {
+                            setFalhaDeAcao(null)
+                            setConfirmando(null)
+                            setEditando(lancamento)
+                          }}
+                        >
+                          Editar
+                        </button>
+                      )}
                       {confirmando === lancamento.id ? (
                         <>
+                          {ePerna && <span>Apaga as duas pernas da transferência.</span>}
                           <button
                             type="button"
                             disabled={apagando !== null}
@@ -558,7 +764,36 @@ export default function Lancamentos({
           </button>
         </>
       )}
-      {apoio.tipo === 'ok' && contas !== null && (
+      {contas !== null && editando === null && (
+        <div role="group" aria-label="Tipo de registro">
+          <button
+            type="button"
+            aria-pressed={modoDoFormulario === 'lancamento'}
+            onClick={() => setModoDoFormulario('lancamento')}
+          >
+            Lançamento
+          </button>
+          <button
+            type="button"
+            aria-pressed={modoDoFormulario === 'transferencia'}
+            onClick={() => setModoDoFormulario('transferencia')}
+          >
+            Transferência
+          </button>
+        </div>
+      )}
+      {contas !== null && editando === null && modoDoFormulario === 'transferencia' && (
+        <FormularioDeTransferencia
+          key={`transferencia-${versaoDoFormulario}`}
+          contas={contas}
+          aoSalvar={() => {
+            setVersaoDoFormulario((n) => n + 1)
+            depoisDeMudar()
+          }}
+          aoSessaoExpirar={aoSessaoExpirar}
+        />
+      )}
+      {(editando !== null || modoDoFormulario === 'lancamento') && apoio.tipo === 'ok' && contas !== null && (
         <FormularioDeLancamento
           key={editando?.id ?? `novo-${versaoDoFormulario}`}
           contas={contas}

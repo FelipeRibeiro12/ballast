@@ -1,6 +1,5 @@
 package com.felipe.ballast.entries;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,8 +21,10 @@ class EntryService {
   private static final String ACCOUNT_FK = "lancamento_conta_mesmo_usuario";
   private static final String CATEGORY_FK = "lancamento_categoria_mesmo_usuario_e_tipo";
 
-  // 9007199254740991 centavos em reais. O valor é comparado com compareTo: a escala não conta.
-  private static final BigDecimal BALANCE_LIMIT = new BigDecimal("90071992547409.91");
+  // As FKs das pernas recusam apagar ou mover lançamento com a ligação viva. A checagem de
+  // isTransferLeg já barra antes; isto cobre o que passar dela.
+  private static final String LEG_FK_OUT = "transferencia_saida_perna_valida";
+  private static final String LEG_FK_IN = "transferencia_entrada_perna_valida";
 
   sealed interface SaveResult {
     record Saved(EntrySummary entry) implements SaveResult {}
@@ -33,14 +34,16 @@ class EntryService {
       ACCOUNT_NOT_FOUND,
       ACCOUNT_ARCHIVED,
       CATEGORY_NOT_FOUND,
-      BALANCE_OUT_OF_RANGE
+      BALANCE_OUT_OF_RANGE,
+      TRANSFER_LEG
     }
   }
 
   enum DeleteResult {
     DELETED,
     NOT_FOUND,
-    BALANCE_OUT_OF_RANGE
+    BALANCE_OUT_OF_RANGE,
+    TRANSFER_LEG
   }
 
   private final EntryRepository entries;
@@ -78,7 +81,14 @@ class EntryService {
   // NOT_FOUND para lançamento de outro usuário ou inexistente, sem distinguir. Apagar uma
   // despesa grande também pode tirar o saldo da faixa, por isso confere como as outras escritas.
   DeleteResult delete(UUID userId, UUID id) {
-    return transaction.execute(status -> deleteLocked(status, userId, id));
+    try {
+      return transaction.execute(status -> deleteLocked(status, userId, id));
+    } catch (DataIntegrityViolationException e) {
+      if (isLegViolation(e)) {
+        return DeleteResult.TRANSFER_LEG;
+      }
+      throw e;
+    }
   }
 
   private SaveResult createLocked(TransactionStatus status, UUID userId, EntryInput input) {
@@ -105,6 +115,11 @@ class EntryService {
     Optional<UUID> currentAccount = queries.lockEntryAccount(userId, id);
     if (currentAccount.isEmpty()) {
       return SaveResult.Rejected.ENTRY_NOT_FOUND;
+    }
+    // Antes de travar qualquer conta: a perna já está travada, então o DELETE da transferência
+    // espera aqui e o par nunca fica pela metade.
+    if (queries.isTransferLeg(userId, id)) {
+      return SaveResult.Rejected.TRANSFER_LEG;
     }
     if (input.accountId() == null) {
       return SaveResult.Rejected.ACCOUNT_NOT_FOUND;
@@ -148,6 +163,9 @@ class EntryService {
     if (account.isEmpty()) {
       return DeleteResult.NOT_FOUND;
     }
+    if (queries.isTransferLeg(userId, id)) {
+      return DeleteResult.TRANSFER_LEG;
+    }
     queries.lockAccount(userId, account.get());
     if (entries.deleteOwned(userId, id) == 0) {
       return DeleteResult.NOT_FOUND;
@@ -190,13 +208,11 @@ class EntryService {
     return Optional.empty();
   }
 
-  // Lê o saldo depois da escrita, ainda dentro da transação e com a conta travada: ninguém mais
-  // muda o saldo entre esta leitura e o commit.
   private boolean balanceFits(UUID userId, UUID accountId) {
-    return queries.balance(userId, accountId).abs().compareTo(BALANCE_LIMIT) <= 0;
+    return queries.balanceFits(userId, accountId);
   }
 
-  private static List<UUID> lockOrder(UUID first, UUID second) {
+  static List<UUID> lockOrder(UUID first, UUID second) {
     if (first.equals(second)) {
       return List.of(first);
     }
@@ -215,8 +231,25 @@ class EntryService {
         if (CATEGORY_FK.equals(violation.getConstraintName())) {
           return Optional.of(SaveResult.Rejected.CATEGORY_NOT_FOUND);
         }
+        if (isLegConstraint(violation.getConstraintName())) {
+          return Optional.of(SaveResult.Rejected.TRANSFER_LEG);
+        }
       }
     }
     return Optional.empty();
+  }
+
+  private static boolean isLegViolation(Throwable error) {
+    for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+      if (cause instanceof ConstraintViolationException violation
+          && isLegConstraint(violation.getConstraintName())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean isLegConstraint(String name) {
+    return LEG_FK_OUT.equals(name) || LEG_FK_IN.equals(name);
   }
 }

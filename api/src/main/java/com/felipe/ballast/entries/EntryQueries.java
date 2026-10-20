@@ -17,14 +17,23 @@ import org.springframework.stereotype.Repository;
 @Repository
 class EntryQueries {
 
+  // As duas junções usam os UNIQUE de saida_id e entrada_id. A direção vem da ligação (ADR-025).
   private static final String COLUMNS =
       """
-      SELECT id, tipo, titulo, descricao, valor, categoria_id, conta_id, data_competencia,
-             data_caixa, status, criado_em
-      FROM lancamento
+      SELECT l.id, l.tipo, l.titulo, l.descricao, l.valor, l.categoria_id, l.conta_id,
+             l.data_competencia, l.data_caixa, l.status, l.criado_em,
+             COALESCE(ts.id, te.id) AS transferencia_id,
+             CASE WHEN ts.id IS NOT NULL THEN 'saida'
+                  WHEN te.id IS NOT NULL THEN 'entrada' END AS direcao
+      FROM lancamento l
+      LEFT JOIN transferencia ts ON ts.saida_id = l.id AND ts.usuario_id = l.usuario_id
+      LEFT JOIN transferencia te ON te.entrada_id = l.id AND te.usuario_id = l.usuario_id
       """;
 
-  private static final String ORDER = " ORDER BY data_caixa DESC, criado_em DESC, id DESC";
+  private static final String ORDER = " ORDER BY l.data_caixa DESC, l.criado_em DESC, l.id DESC";
+
+  // 9007199254740991 centavos em reais. Comparado com compareTo: a escala não conta.
+  private static final BigDecimal BALANCE_LIMIT = new BigDecimal("90071992547409.91");
 
   private final JdbcClient jdbc;
 
@@ -33,7 +42,7 @@ class EntryQueries {
   }
 
   Optional<EntrySummary> find(UUID userId, UUID id) {
-    return jdbc.sql(COLUMNS + "WHERE usuario_id = :userId AND id = :id")
+    return jdbc.sql(COLUMNS + "WHERE l.usuario_id = :userId AND l.id = :id")
         .param("userId", userId)
         .param("id", id)
         .query(EntryQueries::map)
@@ -42,7 +51,7 @@ class EntryQueries {
 
   // Período por data_caixa, pontas incluídas. accountId nulo não filtra por conta.
   List<EntrySummary> list(UUID userId, LocalDate from, LocalDate to, UUID accountId) {
-    String where = "WHERE usuario_id = :userId AND data_caixa BETWEEN :from AND :to";
+    String where = "WHERE l.usuario_id = :userId AND l.data_caixa BETWEEN :from AND :to";
     if (accountId == null) {
       return jdbc.sql(COLUMNS + where + ORDER)
           .param("userId", userId)
@@ -51,7 +60,7 @@ class EntryQueries {
           .query(EntryQueries::map)
           .list();
     }
-    return jdbc.sql(COLUMNS + where + " AND conta_id = :accountId" + ORDER)
+    return jdbc.sql(COLUMNS + where + " AND l.conta_id = :accountId" + ORDER)
         .param("userId", userId)
         .param("from", from)
         .param("to", to)
@@ -84,14 +93,34 @@ class EntryQueries {
         .optional();
   }
 
-  // Saldo atual da conta na transação em curso (ADR-024), em reais. Mesma conta que o
-  // AccountQueries, só que para uma conta e sem o resto das colunas.
+  // Perna de transferência não se edita nem se apaga por /lancamentos. Roda depois de travar o
+  // lançamento: o DELETE da transferência também trava as pernas, então só um dos dois vence.
+  boolean isTransferLeg(UUID userId, UUID entryId) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM transferencia WHERE usuario_id = :userId"
+                + " AND (saida_id = :id OR entrada_id = :id))")
+        .param("userId", userId)
+        .param("id", entryId)
+        .query(Boolean.class)
+        .single();
+  }
+
+  // Saldo atual da conta na transação em curso (ADR-024), em reais: inicial mais receitas menos
+  // despesas, mais entradas menos saídas de transferência, só realizados. Mesma conta do
+  // AccountQueries, para uma conta só. Sem ligação de entrada, a perna é saída.
   BigDecimal balance(UUID userId, UUID accountId) {
     return jdbc.sql(
             """
             SELECT c.saldo_inicial + COALESCE(
-                     (SELECT SUM(CASE WHEN l.tipo = 'receita' THEN l.valor ELSE -l.valor END)
+                     (SELECT SUM(CASE l.tipo
+                                   WHEN 'receita' THEN l.valor
+                                   WHEN 'despesa' THEN -l.valor
+                                   WHEN 'transferencia' THEN
+                                     CASE WHEN te.id IS NOT NULL THEN l.valor ELSE -l.valor END
+                                 END)
                       FROM lancamento l
+                      LEFT JOIN transferencia te
+                        ON te.entrada_id = l.id AND te.usuario_id = l.usuario_id
                       WHERE l.usuario_id = :userId AND l.conta_id = :id
                         AND l.status = 'realizado'), 0)
             FROM conta c
@@ -101,6 +130,12 @@ class EntryQueries {
         .param("id", accountId)
         .query(BigDecimal.class)
         .single();
+  }
+
+  // Lê o saldo depois da escrita, ainda dentro da transação e com a conta travada: ninguém mais
+  // muda o saldo entre esta leitura e o commit.
+  boolean balanceFits(UUID userId, UUID accountId) {
+    return balance(userId, accountId).abs().compareTo(BALANCE_LIMIT) <= 0;
   }
 
   // Confere dono e tipo juntos: categoria de receita não serve para despesa.
@@ -127,6 +162,8 @@ class EntryQueries {
         rs.getObject("data_competencia", LocalDate.class),
         rs.getObject("data_caixa", LocalDate.class),
         rs.getString("status"),
-        rs.getObject("criado_em", OffsetDateTime.class).toInstant());
+        rs.getObject("criado_em", OffsetDateTime.class).toInstant(),
+        rs.getObject("transferencia_id", UUID.class),
+        EntryDirection.fromValue(rs.getString("direcao")));
   }
 }
