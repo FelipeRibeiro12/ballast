@@ -325,4 +325,85 @@ class RecurrenceScheduleTest {
   void intervalBelowOneIsRefused() {
     assertThatThrownBy(() -> daily(0, "2026-10-01")).isInstanceOf(IllegalArgumentException.class);
   }
+
+  // Divisão: o período é o mês e cada parcela tem o seu dia
+
+  private static List<String> parcels(
+      RecurrenceRule rule, List<Integer> days, String from, String to) {
+    return RecurrenceSchedule.parcels(rule, days, d(from), d(to)).stream()
+        .map(p -> p.date() + "#" + p.order())
+        .toList();
+  }
+
+  @Test
+  void parcelsGiveOneDatePerDayInEachMonth() {
+    assertThat(parcels(monthly(15, 1, "2026-01-01"), List.of(15, 30), "2026-01-01", "2026-02-28"))
+        .containsExactly("2026-01-15#1", "2026-01-30#2", "2026-02-15#1", "2026-02-28#2");
+  }
+
+  @Test
+  void parcelsOfDays30And31BothFallOnTheLastDayOfFebruary() {
+    assertThat(parcels(monthly(30, 1, "2026-02-01"), List.of(30, 31), "2026-02-01", "2026-02-28"))
+        .containsExactly("2026-02-28#1", "2026-02-28#2");
+    assertThat(parcels(monthly(30, 1, "2028-02-01"), List.of(30, 31), "2028-02-01", "2028-02-29"))
+        .containsExactly("2028-02-29#1", "2028-02-29#2");
+  }
+
+  @Test
+  void parcelsFollowTheOrderOfTheArrayEvenWhenTheDaysAreNotAscending() {
+    assertThat(parcels(monthly(20, 1, "2026-01-01"), List.of(20, 5), "2026-01-01", "2026-01-31"))
+        .containsExactly("2026-01-20#1", "2026-01-05#2");
+  }
+
+  @Test
+  void maxOccurrencesCountsMonthsNotParcels() {
+    RecurrenceRule rule =
+        new RecurrenceRule(RecurrenceFrequency.MONTHLY, 1, 15, null, d("2026-01-01"), null, 3);
+
+    assertThat(parcels(rule, List.of(15, 30), "2026-01-01", "2030-01-01"))
+        .containsExactly(
+            "2026-01-15#1",
+            "2026-01-30#2",
+            "2026-02-15#1",
+            "2026-02-28#2",
+            "2026-03-15#1",
+            "2026-03-30#2");
+  }
+
+  @Test
+  void endFiltersByParcelDate() {
+    RecurrenceRule rule =
+        new RecurrenceRule(
+            RecurrenceFrequency.MONTHLY, 1, 15, null, d("2026-01-01"), d("2026-02-20"), null);
+
+    assertThat(parcels(rule, List.of(15, 30), "2026-01-01", "2030-01-01"))
+        .containsExactly("2026-01-15#1", "2026-01-30#2", "2026-02-15#1");
+  }
+
+  @Test
+  void parcelBeforeFromIsDroppedAndTheOneAfterStays() {
+    assertThat(parcels(monthly(15, 1, "2026-01-01"), List.of(15, 30), "2026-10-20", "2026-10-31"))
+        .containsExactly("2026-10-30#2");
+  }
+
+  @Test
+  void parcelBeforeTheStartDoesNotCountAsAnOccurrence() {
+    RecurrenceRule rule =
+        new RecurrenceRule(RecurrenceFrequency.MONTHLY, 1, 5, null, d("2026-01-20"), null, 1);
+
+    assertThat(parcels(rule, List.of(5, 25), "2026-01-01", "2026-12-31"))
+        .containsExactly("2026-01-25#2");
+  }
+
+  @Test
+  void parcelsRespectTheIntervalBetweenMonths() {
+    assertThat(parcels(monthly(5, 2, "2026-01-01"), List.of(5, 20), "2026-01-01", "2026-06-30"))
+        .containsExactly(
+            "2026-01-05#1",
+            "2026-01-20#2",
+            "2026-03-05#1",
+            "2026-03-20#2",
+            "2026-05-05#1",
+            "2026-05-20#2");
+  }
 }

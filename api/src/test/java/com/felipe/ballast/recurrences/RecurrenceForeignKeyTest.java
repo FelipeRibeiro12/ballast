@@ -66,7 +66,8 @@ class RecurrenceForeignKeyTest {
         new BigDecimal("1500.00"),
         UUID.fromString(categoryId),
         UUID.fromString(accountId),
-        rule);
+        rule,
+        null);
   }
 
   @Test

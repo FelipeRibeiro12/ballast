@@ -41,6 +41,7 @@ function recorrencia(sobra: Partial<Record<string, unknown>> = {}): Record<strin
       fim: null,
       ocorrenciasMax: null,
     },
+    divisao: null,
     proximaOcorrencia: '2026-11-05',
     ...sobra,
   }
@@ -475,5 +476,289 @@ describe('Recorrencias', () => {
     mockFetch({ ...base, 'GET /contas': responde([]) })
     render(<App />)
     expect(await within(await secao()).findByText('Crie uma conta antes de criar uma recorrência.')).toBeVisible()
+  })
+
+  describe('divisão de salário', () => {
+    const marcar = (form: HTMLElement): void => {
+      fireEvent.click(within(form).getByRole('checkbox', { name: 'Dividir em vários dias' }))
+    }
+    const parcela = (form: HTMLElement, numero: number, dia: string, valor: string): void => {
+      mudar(form, `Dia do mês da parcela ${numero}`, dia)
+      fireEvent.change(
+        within(form).getByLabelText(new RegExp(`^(Percentual|Valor) da parcela ${numero}$`)),
+        { target: { value: valor } },
+      )
+    }
+    const semEspacoDuro = (texto: string | null): string => (texto ?? '').replace(/\u00a0/g, ' ')
+
+    async function formularioComDivisao(rotas: Rotas = base): Promise<HTMLElement> {
+      mockFetch(rotas)
+      render(<App />)
+      const form = await formulario()
+      preencher(form, 'Salário', '5.000,00')
+      marcar(form)
+      return form
+    }
+
+    function capturarPost(): { corpos: unknown[]; rotas: Rotas } {
+      const corpos: unknown[] = []
+      const rotas: Rotas = {
+        ...base,
+        'POST /recorrencias': (corpo) => {
+          corpos.push(JSON.parse(String(corpo)))
+          return Promise.resolve(jsonResponse(criada, 201))
+        },
+      }
+      return { corpos, rotas }
+    }
+
+    it('o bloco só aparece em frequência mensal', async () => {
+      mockFetch(base)
+      render(<App />)
+      const form = await formulario()
+      expect(within(form).getByRole('checkbox', { name: 'Dividir em vários dias' })).not.toBeChecked()
+      mudar(form, 'Frequência', 'semanal')
+      expect(within(form).queryByRole('checkbox', { name: 'Dividir em vários dias' })).toBeNull()
+      mudar(form, 'Frequência', 'anual')
+      expect(within(form).queryByRole('checkbox', { name: 'Dividir em vários dias' })).toBeNull()
+      mudar(form, 'Frequência', 'mensal')
+      expect(within(form).getByRole('checkbox', { name: 'Dividir em vários dias' })).toBeVisible()
+    })
+
+    it('ligado esconde o dia do mês da regra e mostra duas parcelas', async () => {
+      const form = await formularioComDivisao()
+      expect(within(form).queryByLabelText('Dia do mês')).toBeNull()
+      expect(within(form).getByLabelText('Dia do mês da parcela 1')).toBeVisible()
+      expect(within(form).getByLabelText('Dia do mês da parcela 2')).toBeVisible()
+      expect(within(form).queryByLabelText('Dia do mês da parcela 3')).toBeNull()
+      expect(within(form).getByLabelText('Percentual da parcela 1')).toBeVisible()
+      fireEvent.click(within(form).getByRole('checkbox', { name: 'Dividir em vários dias' }))
+      expect(within(form).getByLabelText('Dia do mês')).toBeVisible()
+      expect(within(form).queryByLabelText('Dia do mês da parcela 1')).toBeNull()
+    })
+
+    it('adiciona até 10 parcelas e remove até sobrarem 2', async () => {
+      const form = await formularioComDivisao()
+      expect(within(form).queryByRole('button', { name: /remover parcela/i })).toBeNull()
+      for (let i = 3; i <= 10; i++) {
+        fireEvent.click(within(form).getByRole('button', { name: 'Adicionar parcela' }))
+      }
+      expect(within(form).getByLabelText('Dia do mês da parcela 10')).toBeVisible()
+      expect(within(form).queryByRole('button', { name: 'Adicionar parcela' })).toBeNull()
+      fireEvent.click(within(form).getByRole('button', { name: 'Remover parcela 10' }))
+      expect(within(form).queryByLabelText('Dia do mês da parcela 10')).toBeNull()
+      expect(within(form).getByRole('button', { name: 'Adicionar parcela' })).toBeVisible()
+      for (let i = 9; i >= 3; i--) {
+        fireEvent.click(within(form).getByRole('button', { name: `Remover parcela ${i}` }))
+      }
+      expect(within(form).getAllByLabelText(/^Dia do mês da parcela/)).toHaveLength(2)
+      expect(within(form).queryByRole('button', { name: /remover parcela/i })).toBeNull()
+    })
+
+    it('remover uma parcela do meio mantém o que foi digitado nas outras', async () => {
+      const form = await formularioComDivisao()
+      fireEvent.click(within(form).getByRole('button', { name: 'Adicionar parcela' }))
+      parcela(form, 1, '5', '30')
+      parcela(form, 2, '15', '30')
+      parcela(form, 3, '25', '40')
+      fireEvent.click(within(form).getByRole('button', { name: 'Remover parcela 2' }))
+      expect(within(form).getByLabelText('Dia do mês da parcela 1')).toHaveValue(5)
+      expect(within(form).getByLabelText('Dia do mês da parcela 2')).toHaveValue(25)
+      expect(within(form).getByLabelText('Percentual da parcela 2')).toHaveValue('40')
+    })
+
+    it('mostra a soma dos percentuais ao vivo', async () => {
+      const form = await formularioComDivisao()
+      parcela(form, 1, '5', '40')
+      expect(form).toHaveTextContent('Soma: 40% (precisa dar 100%)')
+      parcela(form, 2, '20', '59,99')
+      expect(form).toHaveTextContent('Soma: 99,99% (precisa dar 100%)')
+      parcela(form, 2, '20', '60')
+      expect(form).toHaveTextContent('Soma: 100% (precisa dar 100%)')
+    })
+
+    it('mostra a soma dos valores contra o valor total', async () => {
+      const form = await formularioComDivisao()
+      mudar(form, 'Dividir por', 'valor')
+      parcela(form, 1, '5', '2.000,00')
+      expect(semEspacoDuro(form.textContent)).toContain('Soma: R$ 2.000,00 (valor total: R$ 5.000,00)')
+      parcela(form, 2, '20', '3.000,00')
+      expect(semEspacoDuro(form.textContent)).toContain('Soma: R$ 5.000,00 (valor total: R$ 5.000,00)')
+    })
+
+    it('mostra o valor de cada parcela com a regra do centavo', async () => {
+      const form = await formularioComDivisao()
+      mudar(form, 'Valor em reais', '1.000,00')
+      fireEvent.click(within(form).getByRole('button', { name: 'Adicionar parcela' }))
+      parcela(form, 1, '5', '33,33')
+      parcela(form, 2, '15', '33,33')
+      parcela(form, 3, '25', '33,34')
+      const geradas = within(form)
+        .getAllByText(/^Gera R\$/)
+        .map((no) => semEspacoDuro(no.textContent))
+      expect(geradas).toEqual(['Gera R$ 333,30', 'Gera R$ 333,30', 'Gera R$ 333,40'])
+    })
+
+    it('não mostra valor gerado enquanto a soma não fecha em 100%', async () => {
+      const form = await formularioComDivisao()
+      parcela(form, 1, '5', '33,33')
+      parcela(form, 2, '15', '33,33')
+      expect(within(form).queryByText(/^Gera R\$/)).toBeNull()
+    })
+
+    it.each([
+      ['dia repetido', [['10', '50'], ['10', '50']], /dias das parcelas devem ser diferentes/i],
+      ['soma de percentual diferente de 100', [['5', '50'], ['10', '49,99']], /somar 100%/i],
+      ['percentual com três casas', [['5', '50'], ['10', '50,005']], /percentual da parcela 2/i],
+      ['dia fora da faixa', [['0', '50'], ['10', '50']], /dia do mês da parcela 1/i],
+    ])('não envia com %s', async (_nome, linhas, mensagem) => {
+      const { corpos, rotas } = capturarPost()
+      const form = await formularioComDivisao(rotas)
+      linhas.forEach(([dia, valor], i) => parcela(form, i + 1, dia, valor))
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent(mensagem)
+      expect(corpos).toHaveLength(0)
+    })
+
+    it('não envia soma de valores diferente do total', async () => {
+      const { corpos, rotas } = capturarPost()
+      const form = await formularioComDivisao(rotas)
+      mudar(form, 'Dividir por', 'valor')
+      parcela(form, 1, '5', '2.000,00')
+      parcela(form, 2, '20', '2.999,99')
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent(/somar o valor total/i)
+      expect(corpos).toHaveLength(0)
+    })
+
+    it('não envia parcela que daria zero centavos', async () => {
+      const { corpos, rotas } = capturarPost()
+      const form = await formularioComDivisao(rotas)
+      mudar(form, 'Valor em reais', '0,50')
+      parcela(form, 1, '5', '0,01')
+      parcela(form, 2, '20', '99,99')
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent(/ao menos R\$/)
+      expect(corpos).toHaveLength(0)
+    })
+
+    it('envia percentual como inteiro, na ordem do array e sem diaDoMes na regra', async () => {
+      const { corpos, rotas } = capturarPost()
+      const form = await formularioComDivisao(rotas)
+      fireEvent.click(within(form).getByRole('button', { name: 'Adicionar parcela' }))
+      parcela(form, 1, '30', '33,33')
+      parcela(form, 2, '15', '33,33')
+      parcela(form, 3, '5', '33,34')
+      fireEvent.submit(form)
+      await waitFor(() => expect(corpos).toHaveLength(1))
+      expect(corpos[0]).toEqual({
+        tipo: 'despesa',
+        titulo: 'Salário',
+        valorCentavos: 500000,
+        categoriaId: 'cd1',
+        contaId: 'c1',
+        regra: { frequencia: 'mensal', intervalo: 1, inicio: '2026-10-19' },
+        divisao: {
+          modo: 'percentual',
+          parcelas: [
+            { diaDoMes: 30, percentualCentesimos: 3333 },
+            { diaDoMes: 15, percentualCentesimos: 3333 },
+            { diaDoMes: 5, percentualCentesimos: 3334 },
+          ],
+        },
+      })
+    })
+
+    it('envia valor fixo como centavos inteiros', async () => {
+      const { corpos, rotas } = capturarPost()
+      const form = await formularioComDivisao(rotas)
+      mudar(form, 'Dividir por', 'valor')
+      parcela(form, 1, '5', '2.000,50')
+      parcela(form, 2, '20', '2.999,50')
+      fireEvent.submit(form)
+      await waitFor(() => expect(corpos).toHaveLength(1))
+      expect(corpos[0]).toMatchObject({
+        valorCentavos: 500000,
+        regra: { frequencia: 'mensal', intervalo: 1, inicio: '2026-10-19' },
+        divisao: {
+          modo: 'valor',
+          parcelas: [
+            { diaDoMes: 5, valorCentavos: 200050 },
+            { diaDoMes: 20, valorCentavos: 299950 },
+          ],
+        },
+      })
+    })
+
+    it('desligar a divisão volta a mandar o dia do mês e nenhuma divisao', async () => {
+      const { corpos, rotas } = capturarPost()
+      const form = await formularioComDivisao(rotas)
+      parcela(form, 1, '5', '50')
+      marcar(form)
+      mudar(form, 'Dia do mês', '10')
+      fireEvent.submit(form)
+      await waitFor(() => expect(corpos).toHaveLength(1))
+      expect(corpos[0]).toMatchObject({ regra: { frequencia: 'mensal', diaDoMes: 10 } })
+      expect(corpos[0]).not.toHaveProperty('divisao')
+    })
+
+    it('trocar a frequência para semanal não manda a divisao', async () => {
+      const { corpos, rotas } = capturarPost()
+      const form = await formularioComDivisao(rotas)
+      mudar(form, 'Frequência', 'semanal')
+      fireEvent.submit(form)
+      await waitFor(() => expect(corpos).toHaveLength(1))
+      expect(corpos[0]).not.toHaveProperty('divisao')
+    })
+
+    it('400 do servidor aparece e mantém as parcelas digitadas', async () => {
+      const form = await formularioComDivisao({
+        ...base,
+        'POST /recorrencias': responde({ erro: 'os dias das parcelas devem ser distintos' }, 400),
+      })
+      parcela(form, 1, '5', '40')
+      parcela(form, 2, '20', '60')
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent('os dias das parcelas devem ser distintos')
+      expect(within(form).getByLabelText('Dia do mês da parcela 2')).toHaveValue(20)
+    })
+
+    it('a lista mostra os dias na regra e o valor de cada parcela', async () => {
+      const divisao = {
+        modo: 'percentual',
+        parcelas: [
+          { ordem: 1, diaDoMes: 15, percentualCentesimos: 4000, valorParcelaCentavos: 200000 },
+          { ordem: 2, diaDoMes: 30, percentualCentesimos: 6000, valorParcelaCentavos: 300000 },
+        ],
+      }
+      mockFetch({
+        ...base,
+        'GET /recorrencias': responde([
+          recorrencia({
+            id: 'r5',
+            tipo: 'receita',
+            titulo: 'Salário',
+            categoriaId: 'cr1',
+            valorCentavos: 500000,
+            divisao,
+            regra: {
+              frequencia: 'mensal',
+              intervalo: 1,
+              diaDoMes: 15,
+              diaDaSemana: null,
+              inicio: '2026-11-15',
+              fim: null,
+              ocorrenciasMax: null,
+            },
+          }),
+        ]),
+      })
+      render(<App />)
+      const item = (await within(await secao()).findAllByRole('listitem'))[0]
+      const texto = semEspacoDuro(item.textContent)
+      expect(texto).toContain('Todo mês nos dias 15 e 30')
+      expect(texto).toContain('dia 15: R$ 2.000,00 (40%)')
+      expect(texto).toContain('dia 30: R$ 3.000,00 (60%)')
+    })
   })
 })

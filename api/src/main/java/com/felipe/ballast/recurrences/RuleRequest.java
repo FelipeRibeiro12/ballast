@@ -90,8 +90,9 @@ public record RuleRequest(
 
   // As combinações abaixo são as do CHECK regra_campos_conforme_frequencia e regra_fim_*; a
   // mensagem diz o que corrigir sem repetir o valor enviado. Roda depois da validação por campo.
-  Optional<String> crossFieldProblem() {
-    if (frequency == RecurrenceFrequency.MONTHLY && dayOfMonth == null) {
+  Optional<String> crossFieldProblem(boolean hasDivision) {
+    // Com divisão o dia vem das parcelas e o servidor preenche o da regra (ADR-027).
+    if (frequency == RecurrenceFrequency.MONTHLY && dayOfMonth == null && !hasDivision) {
       return Optional.of("mensal exige diaDoMes");
     }
     if (frequency == RecurrenceFrequency.WEEKLY && dayOfWeek == null) {
@@ -113,11 +114,17 @@ public record RuleRequest(
   }
 
   // Só depois de a validação por campo passar: as datas já são ISO válidas.
-  RecurrenceRule toRule() {
+  // Com divisão, o dia da regra é o da parcela de ordem 1: o CHECK mensal exige um dia e quem
+  // gera as datas são as parcelas (ADR-027).
+  RecurrenceRule toRule(Division division) {
+    // Integer e não int: o ternário com int desembrulharia o dayOfMonth nulo das outras
+    // frequências.
+    Integer ruleDay =
+        division == null ? dayOfMonth : Integer.valueOf(division.parts().getFirst().dayOfMonth());
     return new RecurrenceRule(
         frequency,
         interval == null ? 1 : interval,
-        dayOfMonth,
+        ruleDay,
         dayOfWeek,
         parsedStart(),
         end == null ? null : parsedEnd(),

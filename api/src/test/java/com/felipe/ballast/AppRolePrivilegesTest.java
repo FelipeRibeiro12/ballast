@@ -82,6 +82,7 @@ class AppRolePrivilegesTest {
     assertDenied("TRUNCATE transferencia");
     assertDenied("TRUNCATE regra_recorrencia");
     assertDenied("TRUNCATE template_lancamento");
+    assertDenied("TRUNCATE template_divisao");
   }
 
   @Test
@@ -236,6 +237,67 @@ class AppRolePrivilegesTest {
     assertThat(ativo).isFalse();
     assertThat(deletedTemplate).isEqualTo(1);
     assertThat(deletedRegra).isEqualTo(1);
+  }
+
+  @Test
+  void allowsDmlOnTemplateDivisao() {
+    UUID usuarioId = UUID.randomUUID();
+    UUID contaId = UUID.randomUUID();
+    UUID categoriaId = UUID.randomUUID();
+    UUID regraId = UUID.randomUUID();
+    UUID templateId = UUID.randomUUID();
+    UUID divisaoId = UUID.randomUUID();
+    jdbc.sql("INSERT INTO usuario (id, email, senha_hash) VALUES (:id, :email, 'hash')")
+        .param("id", usuarioId)
+        .param("email", "div-dml-" + usuarioId + "@example.com")
+        .update();
+    jdbc.sql(
+            "INSERT INTO conta (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'Caixa', 'dinheiro')")
+        .param("id", contaId)
+        .param("usuarioId", usuarioId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO categoria (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'Pets', 'despesa')")
+        .param("id", categoriaId)
+        .param("usuarioId", usuarioId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO regra_recorrencia (id, usuario_id, frequencia, dia_do_mes, inicio)"
+                + " VALUES (:id, :usuarioId, 'mensal', 5, DATE '2026-10-19')")
+        .param("id", regraId)
+        .param("usuarioId", usuarioId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO template_lancamento (id, usuario_id, tipo, titulo, categoria_id,"
+                + " conta_id, valor_total, regra_id) VALUES (:id, :usuarioId, 'despesa', 'Ração',"
+                + " :categoriaId, :contaId, 10.00, :regraId)")
+        .param("id", templateId)
+        .param("usuarioId", usuarioId)
+        .param("categoriaId", categoriaId)
+        .param("contaId", contaId)
+        .param("regraId", regraId)
+        .update();
+
+    jdbc.sql(
+            "INSERT INTO template_divisao (id, usuario_id, template_id, dia_do_mes, percentual,"
+                + " ordem) VALUES (:id, :usuarioId, :templateId, 5, 40.00, 1)")
+        .param("id", divisaoId)
+        .param("usuarioId", usuarioId)
+        .param("templateId", templateId)
+        .update();
+    jdbc.sql("UPDATE template_divisao SET percentual = 50.00 WHERE id = :id")
+        .param("id", divisaoId)
+        .update();
+    String percentual =
+        jdbc.sql("SELECT percentual::text FROM template_divisao WHERE id = :id")
+            .param("id", divisaoId)
+            .query(String.class)
+            .single();
+    int deleted =
+        jdbc.sql("DELETE FROM template_divisao WHERE id = :id").param("id", divisaoId).update();
+
+    assertThat(percentual).isEqualTo("50.00");
+    assertThat(deleted).isEqualTo(1);
   }
 
   private void insertPerna(UUID usuarioId, UUID id, UUID contaId) {

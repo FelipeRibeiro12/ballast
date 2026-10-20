@@ -249,6 +249,7 @@ describe('lançamentos e categorias', () => {
     categoriaId: 'cd1',
     transferenciaId: null,
     templateId: null,
+    parcelaOrdem: null,
     direcao: null,
     contaId: 'c1',
     dataCompetencia: '2026-10-05',
@@ -298,6 +299,15 @@ describe('lançamentos e categorias', () => {
   it('fetchLancamentos aceita perna de transferência com categoria nula', async () => {
     responder([perna, { ...perna, id: 'p2', direcao: 'entrada' }], 200)
     expect(await fetchLancamentos('2026-10-01', '2026-10-31')).toHaveLength(2)
+  })
+
+  it('fetchLancamentos aceita parcelaOrdem de 1 a 10 na ocorrência de um template', async () => {
+    const parcela = { ...lancamento, id: 'o1', status: 'previsto', templateId: 'r1', parcelaOrdem: 10 }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(JSON.stringify([parcela]), { status: 200 }))),
+    )
+    expect(await fetchLancamentos('a', 'b')).toEqual([parcela])
   })
 
   it('fetchLancamentos aceita ocorrência prevista e cancelada com templateId', async () => {
@@ -387,6 +397,11 @@ describe('lançamentos e categorias', () => {
     ['put com status inesperado', () => putLancamento('1', dados), { ...lancamento, status: 'arquivado' }],
     ['lançamento sem templateId', () => fetchLancamentos('a', 'b'), [{ ...lancamento, templateId: undefined }]],
     ['templateId que não é texto', () => fetchLancamentos('a', 'b'), [{ ...lancamento, templateId: 7 }]],
+    ['lançamento sem parcelaOrdem', () => fetchLancamentos('a', 'b'), [{ ...lancamento, parcelaOrdem: undefined }]],
+    ['parcelaOrdem zero', () => fetchLancamentos('a', 'b'), [{ ...lancamento, templateId: 'r1', parcelaOrdem: 0 }]],
+    ['parcelaOrdem acima de 10', () => fetchLancamentos('a', 'b'), [{ ...lancamento, templateId: 'r1', parcelaOrdem: 11 }]],
+    ['parcelaOrdem decimal', () => fetchLancamentos('a', 'b'), [{ ...lancamento, templateId: 'r1', parcelaOrdem: 1.5 }]],
+    ['parcelaOrdem sem template', () => fetchLancamentos('a', 'b'), [{ ...lancamento, parcelaOrdem: 1 }]],
     ['perna com template', () => fetchLancamentos('a', 'b'), [{ ...perna, templateId: 'r1' }]],
     ['perna prevista', () => fetchLancamentos('a', 'b'), [{ ...perna, status: 'previsto' }]],
   ])('recusa corpo fora do contrato: %s', async (_nome, chamar, corpo) => {
@@ -512,6 +527,7 @@ describe('recorrências e ocorrências', () => {
     ativo: true,
     criadoEm: '2026-10-19T12:00:00Z',
     regra,
+    divisao: null,
     proximaOcorrencia: '2026-11-05',
   }
   const lancamento = {
@@ -524,6 +540,7 @@ describe('recorrências e ocorrências', () => {
     categoriaId: 'cd1',
     transferenciaId: null,
     templateId: 'r1',
+    parcelaOrdem: null,
     direcao: null,
     contaId: 'c1',
     dataCompetencia: '2026-11-05',
@@ -552,6 +569,51 @@ describe('recorrências e ocorrências', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it('fetchRecorrencias lê a divisão por percentual e por valor', async () => {
+    const porPercentual = {
+      ...recorrencia,
+      id: 'r2',
+      valorCentavos: 100000,
+      divisao: {
+        modo: 'percentual',
+        parcelas: [
+          { ordem: 1, diaDoMes: 15, percentualCentesimos: 3333, valorParcelaCentavos: 33330 },
+          { ordem: 2, diaDoMes: 30, percentualCentesimos: 6667, valorParcelaCentavos: 66670 },
+        ],
+      },
+    }
+    const porValor = {
+      ...porPercentual,
+      id: 'r3',
+      divisao: {
+        modo: 'valor',
+        parcelas: [
+          { ordem: 1, diaDoMes: 15, valorCentavos: 40000, valorParcelaCentavos: 40000 },
+          { ordem: 2, diaDoMes: 30, valorCentavos: 60000, valorParcelaCentavos: 60000 },
+        ],
+      },
+    }
+    responder([porPercentual, porValor], 200)
+    expect(await fetchRecorrencias()).toEqual([porPercentual, porValor])
+  })
+
+  it('postRecorrencia envia a divisao no corpo', async () => {
+    const comDivisao = {
+      ...dados,
+      regra: { frequencia: 'mensal' as const, inicio: '2026-11-05' },
+      divisao: {
+        modo: 'percentual' as const,
+        parcelas: [
+          { diaDoMes: 15, percentualCentesimos: 4000 },
+          { diaDoMes: 30, percentualCentesimos: 6000 },
+        ],
+      },
+    }
+    responder({ recorrencia, ocorrenciasMaterializadas: 24 }, 201)
+    await postRecorrencia(comDivisao)
+    expect(vi.mocked(fetch).mock.calls[0][1]?.body).toBe(JSON.stringify(comDivisao))
   })
 
   it('fetchRecorrencias lê a lista', async () => {
@@ -628,6 +690,14 @@ describe('recorrências e ocorrências', () => {
     ['valor decimal', () => fetchRecorrencias(), [{ ...recorrencia, valorCentavos: 1.5 }]],
     ['tipo transferencia', () => fetchRecorrencias(), [{ ...recorrencia, tipo: 'transferencia' }]],
     ['ativo que não é booleano', () => fetchRecorrencias(), [{ ...recorrencia, ativo: 'sim' }]],
+    ['sem o campo divisao', () => fetchRecorrencias(), [{ ...recorrencia, divisao: undefined }]],
+    ['divisao com modo desconhecido', () => fetchRecorrencias(), [{ ...recorrencia, divisao: { modo: 'x', parcelas: [] } }]],
+    ['divisao sem parcelas', () => fetchRecorrencias(), [{ ...recorrencia, divisao: { modo: 'valor' } }]],
+    ['parcela sem valorParcelaCentavos', () => fetchRecorrencias(), [{ ...recorrencia, divisao: { modo: 'valor', parcelas: [{ ordem: 1, diaDoMes: 5, valorCentavos: 100 }] } }]],
+    ['parcela percentual sem o campo do modo', () => fetchRecorrencias(), [{ ...recorrencia, divisao: { modo: 'percentual', parcelas: [{ ordem: 1, diaDoMes: 5, valorParcelaCentavos: 100 }] } }]],
+    ['parcela com o campo do outro modo', () => fetchRecorrencias(), [{ ...recorrencia, divisao: { modo: 'valor', parcelas: [{ ordem: 1, diaDoMes: 5, valorCentavos: 100, percentualCentesimos: 10, valorParcelaCentavos: 100 }] } }]],
+    ['parcela com percentual decimal', () => fetchRecorrencias(), [{ ...recorrencia, divisao: { modo: 'percentual', parcelas: [{ ordem: 1, diaDoMes: 5, percentualCentesimos: 33.33, valorParcelaCentavos: 100 }] } }]],
+    ['parcela com valor decimal', () => fetchRecorrencias(), [{ ...recorrencia, divisao: { modo: 'valor', parcelas: [{ ordem: 1, diaDoMes: 5, valorCentavos: 1.5, valorParcelaCentavos: 100 }] } }]],
     ['proximaOcorrencia ausente', () => fetchRecorrencias(), [{ ...recorrencia, proximaOcorrencia: undefined }]],
     ['post sem o aninhamento', () => postRecorrencia(dados), recorrencia],
     ['post sem contagem', () => postRecorrencia(dados), { recorrencia }],

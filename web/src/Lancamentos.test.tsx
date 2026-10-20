@@ -40,6 +40,7 @@ function lancamento(sobra: Partial<Record<string, unknown>> = {}): Record<string
     categoriaId: 'cd1',
     transferenciaId: null,
     templateId: null,
+    parcelaOrdem: null,
     direcao: null,
     contaId: 'c1',
     dataCompetencia: '2026-10-05',
@@ -73,6 +74,7 @@ const recorrenciaAtiva = {
   ativo: true,
   criadoEm: '2026-10-01T12:00:00Z',
   regra: { frequencia: 'mensal', intervalo: 1, diaDoMes: 25, diaDaSemana: null, inicio: '2026-10-25', fim: null, ocorrenciasMax: null },
+  divisao: null,
   proximaOcorrencia: '2026-10-25',
 }
 
@@ -827,6 +829,40 @@ describe('Lancamentos', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
       fireEvent.click(screen.getByRole('button', { name: 'Apagar Seguro' }))
       expect(screen.queryByText(/volta como prevista/i)).toBeNull()
+    })
+  })
+
+  describe('parcelas de uma divisão', () => {
+    const divisaoDeDuas = {
+      modo: 'valor',
+      parcelas: [
+        { ordem: 1, diaDoMes: 15, valorCentavos: 100000, valorParcelaCentavos: 100000 },
+        { ordem: 2, diaDoMes: 25, valorCentavos: 50000, valorParcelaCentavos: 50000 },
+      ],
+    }
+
+    it('mostra "parcela 1 de 2" quando a recorrência traz a divisão', async () => {
+      mockFetch({
+        ...base,
+        'GET /recorrencias': responde([{ ...recorrenciaAtiva, divisao: divisaoDeDuas }]),
+        [MES_ATUAL]: responde([prevista({ parcelaOrdem: 1 }), prevista({ id: 'o2', parcelaOrdem: 2 })]),
+      })
+      render(<App />)
+      expect(await screen.findByText('parcela 1 de 2')).toBeVisible()
+      expect(screen.getByText('parcela 2 de 2')).toBeVisible()
+    })
+
+    it('mostra só "parcela 1" quando a recorrência não está disponível', async () => {
+      mockFetch({ ...base, [MES_ATUAL]: responde([prevista({ parcelaOrdem: 1 })]) })
+      render(<App />)
+      expect(await screen.findByText('parcela 1')).toBeVisible()
+    })
+
+    it('ocorrência sem divisão não mostra parcela', async () => {
+      mockFetch({ ...base, 'GET /recorrencias': responde([recorrenciaAtiva]), [MES_ATUAL]: responde([prevista()]) })
+      render(<App />)
+      await screen.findByRole('button', { name: 'Confirmar Aluguel' })
+      expect(screen.queryByText(/^parcela/)).toBeNull()
     })
   })
 })

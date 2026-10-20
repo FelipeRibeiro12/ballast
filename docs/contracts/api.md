@@ -130,6 +130,52 @@ apagar uma ocorrência (seção no fim).
   `realizado`**: previsto não muda `saldoCentavos`.
   Nenhuma rota cria uma prevista: só a regra gera.
 
+### Divisão de salário (ADR-027)
+
+- `POST /recorrencias` aceita `divisao` opcional: `{"modo": "percentual" |
+  "valor", "parcelas": [{"diaDoMes", "percentualCentesimos" | "valorCentavos"}]}`,
+  de 2 a 10 parcelas. A ordem do array é a ordem das parcelas (a primeira é a
+  ordem 1). `diaDoMes` de 1 a 31, `percentualCentesimos` de 1 a 9999 (40% é
+  `4000`, 33,33% é `3333`: inteiro, nunca decimal) e `valorCentavos` de 1 a
+  9007199254740991. Todas as parcelas usam o campo do modo declarado, e o campo
+  do outro modo não pode vir.
+- Com `divisao`, a regra é mensal e **não manda `diaDoMes`** (as parcelas dão os
+  dias). O servidor grava o dia da parcela de ordem 1 na regra, e a resposta
+  devolve esse valor em `regra.diaDoMes`. Sem `divisao`, `mensal` continua
+  exigindo `diaDoMes`.
+- Recusas, 400 sem gravar nada: `divisao só vale em mensal`, `diaDoMes não vale
+  junto com divisao`, `divisao.modo deve ser percentual ou valor`,
+  `divisao.parcelas deve ter entre 2 e 10 parcelas`, `cada parcela deve trazer
+  só o campo do modo da divisao`, `os dias das parcelas devem ser distintos`,
+  `os percentuais das parcelas devem somar 10000`, `os valores das parcelas
+  devem somar o valorCentavos` e `toda parcela deve valer ao menos 1 centavo`
+  (percentual pequeno sobre valor pequeno que trunca para 0,00). Faixas por
+  campo têm mensagem própria. Campo não declarado, na divisão ou na parcela,
+  dá 400.
+- Regra do centavo: cada parcela por percentual é `valor × percentual / 100`
+  truncada em centavos, e a última (maior `ordem`) recebe o resto, então a soma
+  das parcelas é sempre `valorCentavos`. R$ 1.000,00 em 3333, 3333 e 3334 dá
+  333,30 + 333,30 + 333,40. Em modo valor, cada parcela é o valor informado.
+- `recorrencia.divisao` (em `POST`, `GET /recorrencias` e `GET
+  /recorrencias/{id}`) é `null` sem divisão, e senão `{modo, parcelas: [{ordem,
+  diaDoMes, percentualCentesimos | valorCentavos, valorParcelaCentavos}]}`. Só o
+  campo do modo vem em cada parcela; `valorParcelaCentavos` é o que a parcela
+  gera por mês, já com a regra do centavo. A guarda de tipo do cliente precisa
+  aceitar `divisao` anulável e a ausência de `percentualCentesimos` ou
+  `valorCentavos`.
+- Materialização: cada mês que a regra gera vira uma ocorrência `previsto` por
+  parcela, com `dataCaixa` e `dataCompetencia` no dia da parcela (dia maior que
+  o último do mês cai no último dia: parcelas dos dias 30 e 31 em fevereiro caem
+  as duas em 28/2, ou 29/2 em ano bissexto, e seguem duas ocorrências).
+  `ocorrenciasMax` conta meses, não parcelas. `fim` e o início do horizonte
+  (hoje) valem por data de parcela: o mês corrente pode sair com só as parcelas
+  de hoje em diante. `ocorrenciasMaterializadas` conta parcelas. O título é o do
+  template, igual nas parcelas.
+- `GET /lancamentos` e `GET /lancamentos/{id}` ganham `parcelaOrdem` (1 a 10 na
+  ocorrência de uma divisão, `null` nos avulsos e nas ocorrências sem divisão).
+  Confirmar, cancelar, editar e apagar valem por parcela, sem mudança de
+  formato; apagar libera só a data e a ordem daquela parcela.
+
 ### Ocorrência
 
 - `PATCH /lancamentos/{id}` com `{"status": "realizado"}` confirma e com
@@ -169,7 +215,8 @@ apagar uma ocorrência (seção no fim).
 Toda escrita de lançamento, transferência e recorrência (`POST`, `PUT`,
 `PATCH`, `DELETE` de `/lancamentos`; `POST` e `DELETE` de `/transferencias`;
 `POST` e `PATCH` de `/recorrencias`; `PATCH` de `/contas/{id}`, que arquiva e
-desarquiva) espera no máximo 2 s por trava de conta,
+desarquiva) espera cerca de 2 s por trava de conta (o prazo do `lock_timeout`,
+mais o tempo da resposta),
 lançamento ou template. Estourar dá 503 `serviço indisponível` sem gravar nada,
 o mesmo corpo de banco fora, e o cliente pode tentar de novo. O job pula o
 template travado e o pega na rodada seguinte. O job não trava a conta: numa

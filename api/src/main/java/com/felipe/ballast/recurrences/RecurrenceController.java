@@ -101,10 +101,11 @@ class RecurrenceController {
     if (request.type() == EntryType.TRANSFER) {
       return ResponseEntity.badRequest().body(INVALID_TYPE);
     }
-    Optional<String> problem = request.rule().crossFieldProblem();
+    Optional<String> problem = request.crossFieldProblem();
     if (problem.isPresent()) {
       return ResponseEntity.badRequest().body(new ErrorResponse(problem.get()));
     }
+    Division division = request.division() == null ? null : request.division().toDivision();
     RecurrenceInput input =
         new RecurrenceInput(
             request.type(),
@@ -113,7 +114,8 @@ class RecurrenceController {
             request.amount(),
             CanonicalUuid.parse(request.categoryId()).orElse(null),
             CanonicalUuid.parse(request.accountId()).orElse(null),
-            request.rule().toRule());
+            request.rule().toRule(division),
+            division);
     RecurrenceService.CreateResult result = recurrences.create(user.id(), input);
     if (result instanceof RecurrenceService.CreateResult.Created created) {
       log.info(

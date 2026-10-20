@@ -37,6 +37,46 @@ final class RecurrenceSchedule {
     return result;
   }
 
+  // Parcela de uma série com divisão: a data e a ordem (1 é a primeira do array).
+  record Parcel(LocalDate date, int order) {}
+
+  // Série mensal com divisão (ADR-027). O período é o mês, e "days" traz o dia de cada parcela na
+  // ordem. O dia da regra não entra: quem gera as datas são as parcelas. Um mês só conta no
+  // ocorrencias_max se alguma parcela cai no início ou depois; "fim" corta por data de parcela.
+  static List<Parcel> parcels(
+      RecurrenceRule rule, List<Integer> days, LocalDate from, LocalDate to) {
+    List<Parcel> result = new ArrayList<>();
+    long counted = 0;
+    YearMonth first = YearMonth.from(rule.start());
+    for (long period = 0; ; period++) {
+      YearMonth month = first.plusMonths(period * rule.interval());
+      LocalDate monthStart = month.atDay(1);
+      if (monthStart.isAfter(to) || (rule.end() != null && monthStart.isAfter(rule.end()))) {
+        break;
+      }
+      List<Parcel> inSeries = new ArrayList<>();
+      for (int i = 0; i < days.size(); i++) {
+        LocalDate date = clamp(month, days.get(i));
+        if (!date.isBefore(rule.start()) && (rule.end() == null || !date.isAfter(rule.end()))) {
+          inSeries.add(new Parcel(date, i + 1));
+        }
+      }
+      if (inSeries.isEmpty()) {
+        continue;
+      }
+      if (rule.maxOccurrences() != null && counted >= rule.maxOccurrences()) {
+        break;
+      }
+      counted++;
+      for (Parcel parcel : inSeries) {
+        if (!parcel.date().isBefore(from) && !parcel.date().isAfter(to)) {
+          result.add(parcel);
+        }
+      }
+    }
+    return result;
+  }
+
   private static LocalDate dateOf(RecurrenceRule rule, long period) {
     long step = period * rule.interval();
     return switch (rule.frequency()) {

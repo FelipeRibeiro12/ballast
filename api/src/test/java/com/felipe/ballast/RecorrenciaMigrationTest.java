@@ -228,14 +228,18 @@ class RecorrenciaMigrationTest {
     ocorrencia(f, template, "2026-11-05", "previsto").update();
 
     assertConstraint(
-        "lancamento_template_ocorrencia_unica", ocorrencia(f, template, "2026-11-05", "previsto"));
+        "lancamento_template_ocorrencia_parcela_unica",
+        ocorrencia(f, template, "2026-11-05", "previsto"));
     // a desgarrada também ocupa a chave, mesmo com outra data de competência
     assertConstraint(
-        "lancamento_template_ocorrencia_unica",
+        "lancamento_template_ocorrencia_parcela_unica",
         ocorrencia(f, template, "2026-11-05", "realizado").param("desgarrado", true));
 
     int inserted =
-        jdbc.sql(insertSql(" ON CONFLICT (template_id, ocorrencia_data) DO NOTHING"))
+        jdbc.sql(
+                insertSql(
+                    " ON CONFLICT (template_id, ocorrencia_data, parcela_ordem)"
+                        + " WHERE template_id IS NOT NULL DO NOTHING"))
             .params(ocorrenciaParams(f, template, "2026-11-05", "previsto"))
             .update();
     assertThat(inserted).isZero();

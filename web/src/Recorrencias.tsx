@@ -12,8 +12,11 @@ import {
 } from './api'
 import type { Categoria, Conta, Recorrencia, RegraRecorrencia } from './api'
 import { formatarDataCompleta, hojeLocal } from './datas'
+import { somarLinhas, validarDivisao, valoresGerados } from './divisao'
+import type { LinhaDeParcela, ModoDivisao } from './divisao'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
-import { descreverRegra } from './regra'
+import { formatarPercentual } from './percentual'
+import { descreverParcelas, descreverRegra } from './regra'
 
 type Tipo = Recorrencia['tipo']
 type Frequencia = RegraRecorrencia['frequencia']
@@ -31,6 +34,10 @@ const ROTULO_DA_FREQUENCIA: Record<Frequencia, string> = {
 }
 
 const DIAS_DA_SEMANA = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado']
+
+// Mesmos limites da API (ADR-027).
+const MINIMO_DE_PARCELAS = 2
+const MAXIMO_DE_PARCELAS = 10
 
 const MENSAGEM_INDISPONIVEL = 'Serviço indisponível. Tente de novo em instantes.'
 const MENSAGEM_NAO_EXISTE = 'Essa recorrência não existe mais.'
@@ -87,6 +94,13 @@ function dataNaFaixa(data: string): boolean {
   return ano >= ANO_MINIMO && ano <= ANO_MAXIMO
 }
 
+// A chave é a identidade da linha: remover uma do meio não pode trocar o que foi digitado nas outras.
+type LinhaComChave = LinhaDeParcela & { chave: number }
+
+function linhaVazia(chave: number): LinhaComChave {
+  return { chave, dia: '', valor: '' }
+}
+
 function FormularioDeRecorrencia({
   contas,
   categorias,
@@ -112,6 +126,10 @@ function FormularioDeRecorrencia({
   const [termino, setTermino] = useState<Termino>('nenhum')
   const [dataFinal, setDataFinal] = useState('')
   const [vezes, setVezes] = useState('')
+  const [dividir, setDividir] = useState(false)
+  const [modoDivisao, setModoDivisao] = useState<ModoDivisao>('percentual')
+  const [linhas, setLinhas] = useState<LinhaComChave[]>([linhaVazia(1), linhaVazia(2)])
+  const proximaChave = useRef(3)
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
@@ -123,6 +141,19 @@ function FormularioDeRecorrencia({
     ? categoriaEscolhida
     : (categoriasDoTipo[0]?.id ?? '')
   const contaId = contas.some((c) => c.id === contaEscolhida) ? contaEscolhida : (contas[0]?.id ?? '')
+  // A divisão só existe em mensal; trocar a frequência esconde o bloco sem perder o que foi digitado.
+  const dividindo = dividir && frequencia === 'mensal'
+  const valorTotal = lerValorPositivo(valor)
+
+  function mudarLinha(chave: number, campo: 'dia' | 'valor', texto: string): void {
+    setLinhas((atuais) => atuais.map((linha) => (linha.chave === chave ? { ...linha, [campo]: texto } : linha)))
+  }
+
+  function mudarModo(novo: ModoDivisao): void {
+    setModoDivisao(novo)
+    // "40" em percentual não significa nada em reais, então o campo recomeça vazio.
+    setLinhas((atuais) => atuais.map((linha) => ({ ...linha, valor: '' })))
+  }
 
   async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
     evento.preventDefault()
@@ -138,7 +169,7 @@ function FormularioDeRecorrencia({
       return
     }
     const diaDoMesLido = lerInteiro(diaDoMes, 1, 31)
-    if (frequencia === 'mensal' && diaDoMesLido === null) {
+    if (frequencia === 'mensal' && !dividindo && diaDoMesLido === null) {
       setMensagem('Dia do mês inválido. Use um número inteiro de 1 a 31.')
       return
     }
@@ -155,6 +186,11 @@ function FormularioDeRecorrencia({
       setMensagem(`Número de vezes inválido. Use um inteiro de 1 a ${MAXIMO_DE_VEZES}.`)
       return
     }
+    const divisaoLida = dividindo ? validarDivisao(modoDivisao, linhas, valorCentavos) : null
+    if (divisaoLida?.tipo === 'erro') {
+      setMensagem(divisaoLida.mensagem)
+      return
+    }
     emVoo.current = true
     setEnviando(true)
     setMensagem(null)
@@ -163,7 +199,8 @@ function FormularioDeRecorrencia({
       frequencia,
       intervalo: intervaloLido,
       inicio,
-      ...(frequencia === 'mensal' && diaDoMesLido !== null ? { diaDoMes: diaDoMesLido } : {}),
+      // Com divisão a API recusa diaDoMes na regra: os dias vêm das parcelas.
+      ...(frequencia === 'mensal' && !dividindo && diaDoMesLido !== null ? { diaDoMes: diaDoMesLido } : {}),
       ...(frequencia === 'semanal' ? { diaDaSemana: Number(diaDaSemana) } : {}),
       ...(termino === 'data' ? { fim: dataFinal } : {}),
       ...(termino === 'vezes' && vezesLido !== null ? { ocorrenciasMax: vezesLido } : {}),
@@ -177,6 +214,7 @@ function FormularioDeRecorrencia({
         categoriaId,
         contaId,
         regra,
+        ...(divisaoLida?.tipo === 'ok' ? { divisao: divisaoLida.divisao } : {}),
       })
       aoSalvar()
     } catch (erro) {
@@ -191,6 +229,12 @@ function FormularioDeRecorrencia({
     }
   }
 
+  const geradas = dividindo && modoDivisao === 'percentual' ? valoresGerados(valorTotal, linhas) : null
+  const somaDasLinhas = somarLinhas(modoDivisao, linhas)
+  const resumoDaSoma =
+    modoDivisao === 'percentual'
+      ? `Soma: ${formatarPercentual(Number(somaDasLinhas))} (precisa dar 100%)`
+      : `Soma: ${formatarCentavos(somaDasLinhas)} (valor total: ${valorTotal === null ? 'não informado' : formatarCentavos(valorTotal)})`
   const descricaoDoErro = mensagem === null ? undefined : 'erro-recorrencia'
 
   return (
@@ -312,7 +356,7 @@ function FormularioDeRecorrencia({
         />
         <small id="ajuda-intervalo">Repete a cada tantos períodos, de 1 a 99.</small>
       </div>
-      {frequencia === 'mensal' && (
+      {frequencia === 'mensal' && !dividindo && (
         <div className="campo">
           <label htmlFor="recorrencia-dia-do-mes">Dia do mês</label>
           <input
@@ -329,6 +373,89 @@ function FormularioDeRecorrencia({
           />
           <small id="ajuda-dia-do-mes">Meses curtos usam o último dia.</small>
         </div>
+      )}
+      {frequencia === 'mensal' && (
+        <div className="campo">
+          <label htmlFor="recorrencia-dividir">
+            <input
+              id="recorrencia-dividir"
+              type="checkbox"
+              checked={dividir}
+              onChange={(evento) => setDividir(evento.target.checked)}
+            />{' '}
+            Dividir em vários dias
+          </label>
+        </div>
+      )}
+      {dividindo && (
+        <fieldset>
+          <legend>Parcelas</legend>
+          <div className="campo">
+            <label htmlFor="recorrencia-modo-divisao">Dividir por</label>
+            <select
+              id="recorrencia-modo-divisao"
+              value={modoDivisao}
+              onChange={(evento) => {
+                if (evento.target.value === 'percentual' || evento.target.value === 'valor') {
+                  mudarModo(evento.target.value)
+                }
+              }}
+            >
+              <option value="percentual">Percentual</option>
+              <option value="valor">Valor</option>
+            </select>
+          </div>
+          {linhas.map((linha, indice) => {
+            const numero = indice + 1
+            return (
+              <div className="campo" key={linha.chave}>
+                <label htmlFor={`parcela-dia-${linha.chave}`}>{`Dia do mês da parcela ${numero}`}</label>
+                <input
+                  id={`parcela-dia-${linha.chave}`}
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={31}
+                  step={1}
+                  required
+                  value={linha.dia}
+                  onChange={(evento) => mudarLinha(linha.chave, 'dia', evento.target.value)}
+                />
+                <label htmlFor={`parcela-valor-${linha.chave}`}>
+                  {`${modoDivisao === 'percentual' ? 'Percentual' : 'Valor'} da parcela ${numero}`}
+                </label>
+                <input
+                  id={`parcela-valor-${linha.chave}`}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="0,00"
+                  required
+                  value={linha.valor}
+                  onChange={(evento) => mudarLinha(linha.chave, 'valor', evento.target.value)}
+                />
+                {geradas !== null && <small>{`Gera ${formatarCentavos(geradas[indice])}`}</small>}
+                {linhas.length > MINIMO_DE_PARCELAS && (
+                  <button type="button" onClick={() => setLinhas((atuais) => atuais.filter((l) => l.chave !== linha.chave))}>
+                    {`Remover parcela ${numero}`}
+                  </button>
+                )}
+              </div>
+            )
+          })}
+          {linhas.length < MAXIMO_DE_PARCELAS && (
+            <button
+              type="button"
+              onClick={() => {
+                setLinhas((atuais) => [...atuais, linhaVazia(proximaChave.current)])
+                proximaChave.current += 1
+              }}
+            >
+              Adicionar parcela
+            </button>
+          )}
+          <p aria-live="polite">{resumoDaSoma}</p>
+        </fieldset>
       )}
       {frequencia === 'semanal' && (
         <div className="campo">
@@ -420,6 +547,7 @@ export default function Recorrencias({
   contas,
   versao,
   aoCarregarAtivas,
+  aoCarregarParcelas,
   aoMudarOcorrencias,
 }: {
   aoSessaoExpirar: () => void
@@ -429,6 +557,8 @@ export default function Recorrencias({
   versao: number
   // Entrega os ids das recorrências ativas para a lista do mês avisar que apagar faz voltar.
   aoCarregarAtivas: (ids: ReadonlySet<string>) => void
+  // Entrega o total de parcelas de cada recorrência com divisão, ativa ou não: as já realizadas continuam na lista do mês.
+  aoCarregarParcelas: (totais: ReadonlyMap<string, number>) => void
   // Criar e desativar mudam as previstas do mês e, ao confirmar, o saldo.
   aoMudarOcorrencias: () => void
 }) {
@@ -451,6 +581,11 @@ export default function Recorrencias({
         if (!ativo) return
         setEstado({ tipo: 'ok', recorrencias })
         aoCarregarAtivas(new Set(recorrencias.filter((r) => r.ativo).map((r) => r.id)))
+        aoCarregarParcelas(
+          new Map(
+            recorrencias.flatMap((r): [string, number][] => (r.divisao === null ? [] : [[r.id, r.divisao.parcelas.length]])),
+          ),
+        )
       },
       (erro: unknown) => {
         if (!ativo) return
@@ -464,7 +599,7 @@ export default function Recorrencias({
     return () => {
       ativo = false
     }
-  }, [tentativa, versao, aoSessaoExpirar, aoCarregarAtivas])
+  }, [tentativa, versao, aoSessaoExpirar, aoCarregarAtivas, aoCarregarParcelas])
 
   useEffect(() => {
     let ativo = true
@@ -558,7 +693,14 @@ export default function Recorrencias({
                   {recorrencia.tipo === 'receita' ? '+' : '−'} {formatarCentavos(recorrencia.valorCentavos)}
                 </span>
                 <span>{nomesDeConta.get(recorrencia.contaId) ?? 'Conta arquivada'}</span>
-                <span>{descreverRegra(recorrencia.regra)}</span>
+                <span>{descreverRegra(recorrencia.regra, recorrencia.divisao)}</span>
+                {recorrencia.divisao !== null && (
+                  <ul className="parcelas" aria-label={`Parcelas de ${recorrencia.titulo}`}>
+                    {descreverParcelas(recorrencia.divisao).map((texto) => (
+                      <li key={texto}>{texto}</li>
+                    ))}
+                  </ul>
+                )}
                 {recorrencia.ativo ? (
                   <span>
                     {recorrencia.proximaOcorrencia === null

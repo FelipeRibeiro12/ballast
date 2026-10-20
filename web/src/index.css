@@ -173,7 +173,7 @@ select {
   padding: 0;
 }
 
-.recorrencias li {
+.recorrencias > li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -183,8 +183,15 @@ select {
   border-bottom: 1px solid #ddd;
 }
 
-.recorrencias li.desativada {
+.recorrencias > li.desativada {
   color: #666;
+}
+
+.parcelas {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 0.75rem;
+  font-size: 0.9rem;
 }
 
 .recorrencia-dados {

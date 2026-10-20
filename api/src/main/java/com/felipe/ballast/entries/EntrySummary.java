@@ -7,7 +7,7 @@ import java.util.UUID;
 
 // Linha da consulta. O valor fica em BigDecimal com escala 2; a conversão para centavos
 // acontece só na saída (EntryResponse). transferId e direction são nulos fora de transferência;
-// templateId é nulo no avulso.
+// templateId e parcelOrder são nulos no avulso e na ocorrência sem divisão.
 record EntrySummary(
     UUID id,
     EntryType type,
@@ -22,4 +22,5 @@ record EntrySummary(
     Instant createdAt,
     UUID transferId,
     EntryDirection direction,
-    UUID templateId) {}
+    UUID templateId,
+    Integer parcelOrder) {}

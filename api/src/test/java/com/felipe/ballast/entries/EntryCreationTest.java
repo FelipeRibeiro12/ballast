@@ -79,8 +79,10 @@ class EntryCreationTest {
             "criadoEm",
             "transferenciaId",
             "direcao",
-            "templateId");
+            "templateId",
+            "parcelaOrdem");
     assertThat(body.get("templateId").isNull()).isTrue();
+    assertThat(body.get("parcelaOrdem").isNull()).isTrue();
     assertThat(UUID.fromString(body.get("id").asString())).isNotNull();
     assertThat(body.get("tipo").asString()).isEqualTo("despesa");
     assertThat(body.get("titulo").asString()).isEqualTo("Mercado do mês");

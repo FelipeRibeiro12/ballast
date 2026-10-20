@@ -2,7 +2,7 @@
 
 App de controle financeiro pessoal: fiat e cripto no mesmo lugar, com recorrência, cartão de crédito parcelado, metas e projeção de saldo.
 
-Hoje existem cadastro, login, logout, contas (criar, listar, arquivar) lançamentos realizados de receita e despesa, com categorias semeadas, transferência entre contas e recorrência (diária, semanal, mensal e anual, materializada 12 meses à frente), com saldo calculado. Divisão de salário, saldo projetado e os demais módulos ainda não existem.
+Hoje existem cadastro, login, logout, contas (criar, listar, arquivar), lançamentos realizados de receita e despesa, com categorias semeadas, transferência entre contas e recorrência (diária, semanal, mensal e anual, materializada 12 meses à frente) com divisão de salário em vários dias do mês, com saldo calculado. Saldo projetado e os demais módulos ainda não existem.
 
 Visão do produto em `docs/visao.md`. Decisões em `docs/adr-*.md`.
 
@@ -102,6 +102,7 @@ Rotas atuais:
 - `POST /transferencias`: corpo `{"contaOrigemId", "contaDestinoId", "valorCentavos", "data", "titulo", "descricao"}`. Cria as duas pernas e a ligação. Contas iguais, arquivadas ou de outro usuário dão 400.
 - `GET` e `DELETE /transferencias/{id}`. Apagar remove as duas pernas. Em `/lancamentos`, a perna traz `transferenciaId` e `direcao` e não se edita nem apaga por lá.
 - `POST /recorrencias`: template com a regra (`frequencia`, `intervalo`, `diaDoMes` ou `diaDaSemana`, `inicio`, `fim` ou `ocorrenciasMax`). Gera as ocorrências previstas de hoje até 12 meses à frente, e um job diário estende o horizonte.
+  Na mensal, `divisao` opcional reparte o valor em 2 a 10 dias, por `percentualCentesimos` (33,33% é `3333`) ou `valorCentavos`; no percentual a última parcela leva o resto do centavo.
 - `GET /recorrencias`, `GET /recorrencias/{id}` e `PATCH /recorrencias/{id}` com `{"ativo": false}`, que apaga as previstas de hoje em diante.
 - `PATCH /lancamentos/{id}` com `{"status": "realizado"}` confirma uma prevista e `{"status": "cancelado"}` cancela. Prevista não entra no saldo e não se apaga: cancela-se.
 
