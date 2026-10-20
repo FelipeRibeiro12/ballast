@@ -2,6 +2,12 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-20 — Correção: proxy do Vite (PR #14)
+
+O que entrou: o proxy de desenvolvimento passa a repassar os oito prefixos da API, com um teste que compara a lista com o `openapi.yaml` nos dois sentidos.
+Por que passou: desde a F2 as telas de dados não funcionavam no `make dev`, porque o proxy só levava `/healthz` e `/auth`. Toda a suíte do web mocka `fetch`, o QA de cada fatia rodou contra a API direto, e ninguém abriu o web de verdade depois da F1. Achado ao ler a config na F9. É a mesma lacuna da dívida de conferência em navegador.
+Pipeline: PENDENTE
+
 ## 2026-10-20 — F8: saldo projetado (PR #13) — fim do MVP
 
 O que entrou: `GET /saldo-projetado` com um ponto por dia de hoje até 1 a 366 dias, realizado e previsto pela data de caixa, vencidas no primeiro dia e somadas à parte, menor saldo; seção no web com gráfico de linha em SVG feito à mão, aviso de negativo em texto e a lista dos dias com movimento.
