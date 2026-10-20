@@ -15,6 +15,7 @@ import type { Conta, Usuario } from './api'
 import Contas from './Contas'
 import Lancamentos from './Lancamentos'
 import Recorrencias from './Recorrencias'
+import SaldoProjetado from './SaldoProjetado'
 
 type EstadoSessao =
   | { tipo: 'carregando' }
@@ -412,6 +413,12 @@ function App() {
             aoSessaoExpirar={aoSessaoExpirar}
             versaoDeSaldo={versaoDeSaldo}
             aoCarregarAtivas={setContasAtivas}
+          />
+          {/* Logo abaixo das contas: é a resposta principal do app, antes de qualquer formulário. */}
+          <SaldoProjetado
+            aoSessaoExpirar={aoSessaoExpirar}
+            contas={contasAtivas}
+            versaoDeSaldo={versaoDeSaldo}
           />
           <Lancamentos
             aoSessaoExpirar={aoSessaoExpirar}

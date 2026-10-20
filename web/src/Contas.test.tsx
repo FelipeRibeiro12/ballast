@@ -25,6 +25,17 @@ function jsonResponse(corpo: unknown, status: number): Response {
 
 const responde = (corpo: unknown, status = 200) => () => Promise.resolve(jsonResponse(corpo, status))
 
+// A tela logada também busca o saldo projetado; estes testes não querem saber dele.
+const saldoProjetadoPadrao = {
+  inicio: '2026-10-20',
+  fim: '2026-10-20',
+  contaId: null,
+  saldoAtualCentavos: 0,
+  vencidasCentavos: 0,
+  menorSaldo: { data: '2026-10-20', saldoCentavos: 0 },
+  dias: [{ data: '2026-10-20', entradasCentavos: 0, saidasCentavos: 0, saldoCentavos: 0 }],
+}
+
 function mockFetch(rotas: Rotas): void {
   vi.stubGlobal(
     'fetch',
@@ -39,6 +50,9 @@ function mockFetch(rotas: Rotas): void {
       if (chave.startsWith('GET /lancamentos?')) return Promise.resolve(jsonResponse([], 200))
       if (chave === 'GET /lancamentos/vencidos') {
         return Promise.resolve(jsonResponse({ lancamentos: [], maisAlgum: false }, 200))
+      }
+      if (chave.startsWith('GET /saldo-projetado?')) {
+        return Promise.resolve(jsonResponse(saldoProjetadoPadrao, 200))
       }
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),

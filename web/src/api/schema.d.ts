@@ -278,6 +278,26 @@ export interface paths {
         patch: operations["patchRecorrenciasById"];
         trace?: never;
     };
+    "/saldo-projetado": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Série diária do saldo projetado por dataCaixa
+         * @description Um ponto por dia, de hoje (America/Sao_Paulo) até hoje + dias - 1. O saldo do dia é o saldo inicial das contas mais tudo que é realizado ou previsto com dataCaixa até o dia; cancelado nunca entra, e a prevista vencida entra pela própria data. Sem contaId soma as contas ativas (transferência entre duas delas se anula; de ativa para arquivada sai do total). Com contaId vale só a conta, também arquivada, e a transferência conta pelo sinal da perna dela. entradas e saídas de um dia são só os lançamentos com dataCaixa naquele dia; a perna de transferência só conta quando a outra perna está fora do filtro.
+         */
+        get: operations["getSaldoProjetado"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/transferencias": {
         parameters: {
             query?: never;
@@ -370,6 +390,25 @@ export interface components {
             saldoInicialCentavos: number;
             /** @enum {string} */
             tipo: "corrente" | "poupanca" | "dinheiro";
+        };
+        DiaProjetado: {
+            /** Format: date */
+            data: string;
+            /**
+             * Format: int64
+             * @description Entradas com dataCaixa neste dia
+             */
+            entradasCentavos: number;
+            /**
+             * Format: int64
+             * @description Saídas com dataCaixa neste dia, em número positivo
+             */
+            saidasCentavos: number;
+            /**
+             * Format: int64
+             * @description Saldo ao fim do dia: saldo inicial mais tudo até dataCaixa deste dia
+             */
+            saldoCentavos: number;
         };
         DivisaoRecorrencia: {
             /** @enum {string} */
@@ -492,6 +531,13 @@ export interface components {
         LoginRequest: {
             email: string;
             senha: string;
+        };
+        /** @description Menor saldo da série e o primeiro dia em que ocorre */
+        MenorSaldo: {
+            /** Format: date */
+            data: string;
+            /** Format: int64 */
+            saldoCentavos: number;
         };
         ParcelaDivisao: {
             /** Format: int32 */
@@ -644,6 +690,35 @@ export interface components {
              * @description Conta as ocorrências desde o início; não vale junto com fim
              */
             ocorrenciasMax?: number | null;
+        };
+        SaldoProjetado: {
+            /**
+             * Format: uuid
+             * @description A conta pedida, ou null quando a série soma as contas ativas
+             */
+            contaId: string | null;
+            dias: components["schemas"]["DiaProjetado"][];
+            /**
+             * Format: date
+             * @description Último dia da série
+             */
+            fim: string;
+            /**
+             * Format: date
+             * @description Hoje em America/Sao_Paulo
+             */
+            inicio: string;
+            menorSaldo: components["schemas"]["MenorSaldo"];
+            /**
+             * Format: int64
+             * @description Saldo de GET /contas somado nas contas do filtro, todo realizado
+             */
+            saldoAtualCentavos: number;
+            /**
+             * Format: int64
+             * @description Soma com sinal das previstas com dataCaixa antes de hoje
+             */
+            vencidasCentavos: number;
         };
         Transferencia: {
             /** Format: uuid */
@@ -1924,6 +1999,66 @@ export interface operations {
                 };
             };
             /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getSaldoProjetado: {
+        parameters: {
+            query?: {
+                /** @description Quantos dias a série tem, contando hoje */
+                dias?: number;
+                contaId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Série diária */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaldoProjetado"];
+                };
+            };
+            /** @description dias que não é inteiro de 1 a 366 (ou repetido), contaId que não é UUID (ou repetido) ou "projeção fora do limite" (algum valor sairia de ±9007199254740991 centavos) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description contaId de outro usuário ou inexistente, com o mesmo corpo "conta não encontrada" */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;

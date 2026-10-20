@@ -13,6 +13,17 @@ function jsonResponse(corpo: unknown, status: number, headers: Record<string, st
   })
 }
 
+// A tela logada também busca o saldo projetado; estes testes não querem saber dele.
+const saldoProjetadoPadrao = {
+  inicio: '2026-10-20',
+  fim: '2026-10-20',
+  contaId: null,
+  saldoAtualCentavos: 0,
+  vencidasCentavos: 0,
+  menorSaldo: { data: '2026-10-20', saldoCentavos: 0 },
+  dias: [{ data: '2026-10-20', entradasCentavos: 0, saidasCentavos: 0, saldoCentavos: 0 }],
+}
+
 // Roteia por "MÉTODO caminho". Recebe funções para a promessa rejeitada só nascer
 // quando o fetch for chamado. /healthz e GET /contas respondem 200 salvo se a rota for informada.
 function mockFetch(rotas: Rotas): void {
@@ -31,6 +42,9 @@ function mockFetch(rotas: Rotas): void {
       if (chave.startsWith('GET /lancamentos?')) return Promise.resolve(jsonResponse([], 200))
       if (chave === 'GET /lancamentos/vencidos') {
         return Promise.resolve(jsonResponse({ lancamentos: [], maisAlgum: false }, 200))
+      }
+      if (chave.startsWith('GET /saldo-projetado?')) {
+        return Promise.resolve(jsonResponse(saldoProjetadoPadrao, 200))
       }
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),
@@ -112,6 +126,17 @@ describe('App: sessão', () => {
     expect(await screen.findByText(/ana@exemplo\.com/)).toBeVisible()
     expect(screen.getByRole('button', { name: /sair/i })).toBeVisible()
     expect(screen.queryByLabelText(/senha/i)).toBeNull()
+  })
+
+  it('mostra o saldo projetado logo abaixo de Contas e antes de Lançamentos', async () => {
+    mockFetch({ 'GET /auth/eu': () => Promise.resolve(jsonResponse(usuario, 200)) })
+    render(<App />)
+    const projetado = await screen.findByRole('heading', { name: 'Saldo projetado' })
+    const titulos = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    expect(titulos.indexOf('Saldo projetado')).toBe(titulos.indexOf('Contas') + 1)
+    expect(titulos.indexOf('Lançamentos')).toBeGreaterThan(titulos.indexOf('Saldo projetado'))
+    expect(projetado).toBeVisible()
+    expect(chamadasA('GET /saldo-projetado?dias=90').length).toBeGreaterThan(0)
   })
 
   it('mostra o e-mail quando o nome é nulo', async () => {

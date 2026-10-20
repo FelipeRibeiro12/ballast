@@ -247,3 +247,43 @@ o mesmo corpo de banco fora, e o cliente pode tentar de novo. O job pula o
 template travado e o pega na rodada seguinte. O job não trava a conta: numa
 corrida com arquivar, pode sobrar uma prevista numa conta arquivada. Ela não
 entra no saldo, confirmar dá 400 `conta arquivada` e cancelar funciona.
+
+## Saldo projetado (ADR-029)
+
+- `GET /saldo-projetado?dias=90&contaId=` devolve a série diária do saldo por
+  `dataCaixa`: `{"inicio", "fim", "contaId", "saldoAtualCentavos",
+  "vencidasCentavos", "menorSaldo": {"data", "saldoCentavos"}, "dias":
+  [{"data", "entradasCentavos", "saidasCentavos", "saldoCentavos"}]}`. Tudo em
+  inteiro de centavos; `contaId` é `null` quando a série soma as contas ativas.
+- `inicio` é hoje (`America/Sao_Paulo`), `fim` é hoje + `dias` - 1, e `dias` tem
+  um ponto por dia, sem buraco. `dias` é inteiro de 1 a 366 (padrão 90), só
+  dígitos, sem sinal nem zero à esquerda. Fora disso, ou repetido, dá 400
+  `dias deve ser um inteiro de 1 a 366`. `contaId` malformado ou repetido dá 400
+  `contaId deve ser um UUID`.
+- `saldoCentavos` do dia `d` é o saldo inicial das contas do filtro mais tudo
+  `realizado` ou `previsto` com `dataCaixa` até `d` (receita e perna de entrada
+  somam, despesa e perna de saída subtraem). `cancelado` nunca entra. A prevista
+  vencida entra pela própria data, então já está no primeiro ponto, e
+  `vencidasCentavos` é a soma com sinal delas, nas mesmas contas do filtro: sem
+  `contaId`, vencida de conta arquivada não entra. Realizado com data futura
+  entra no dia dele.
+- `entradasCentavos` e `saidasCentavos` de um dia são só os lançamentos com
+  `dataCaixa` naquele dia (o primeiro ponto mostra só o movimento de hoje); saída
+  vem positiva. A perna de transferência só conta quando a outra perna está numa
+  conta fora do filtro: sem `contaId`, transferência entre duas ativas não
+  aparece como entrada nem saída (o saldo já se anula), de ativa para arquivada
+  aparece como saída e de arquivada para ativa como entrada; com `contaId`,
+  toda perna daquela conta conta.
+- `saldoAtualCentavos` é o saldo de `GET /contas` (todo realizado, de qualquer
+  data) somado nas contas do filtro. Pode diferir do primeiro ponto: previstas e
+  realizado futuro mexem num e não no outro.
+- `menorSaldo` é o menor `saldoCentavos` da série e o primeiro dia em que ocorre
+  (série toda igual dá hoje).
+- Sem `contaId`: todas as contas ativas do usuário. Transferência entre duas
+  ativas se anula no saldo; de ativa para arquivada, ou o inverso, só a perna da
+  conta ativa conta e o valor sai (ou entra) no total. Com `contaId`: só aquela
+  conta, arquivada também, e a transferência conta pelo sinal da perna dela.
+- `contaId` de outro usuário ou inexistente dá 404 `conta não encontrada`, mesmo
+  corpo. Sem sessão, 401. Banco fora, 503.
+- Qualquer valor da resposta fora de ±9007199254740991 centavos (só acontece
+  somando várias contas perto do teto) dá 400 `projeção fora do limite`.

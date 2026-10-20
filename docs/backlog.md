@@ -7,10 +7,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
-### F8 — Saldo projetado
-Fluxo de caixa dos próximos 90 dias por `data_caixa`. É o primeiro momento em
-que o app responde algo que planilha não responde fácil.
-
 **Fim do MVP.** A partir daqui, cada fatia é opcional e pode ser reordenada.
 
 ## Depois
@@ -156,6 +152,8 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — O job de recorrência só loga pulo e falha; não loga quantas previstas inseriu por template, e uma falha de banco aborta a rodada sem resumo (QA da F5, S4). Dono: backend, junto com a observabilidade da F20.5.
 - **DÍVIDA** — O job de recorrência não trava a conta (ADR-026): numa corrida com arquivar, pode sobrar prevista em conta arquivada. Não entra no saldo e não confirma, mas aparece na lista. Rever se arquivar passar a apagar as previstas da conta. Dono: backend, na fatia que mexer em arquivar conta.
 - **DÍVIDA** — `RecurrenceQueries.lockTemplate` monta o template com a divisão nula e completa com uma segunda consulta; um caminho novo que use o objeto antes disso materializaria a série sem divisão (revisão do PR #11). Juntar numa leitura só. Dono: backend, na próxima fatia que mexer em recorrência.
+- **DÍVIDA** — Parâmetro de query não declarado é ignorado em silêncio em todas as listagens: `?contaid=` (caixa errada) devolve o resultado sem filtro, com 200 (QA da F8, S1). Recusar parâmetro desconhecido com 400, como já se faz com campo de corpo. Dono: backend, numa fatia de endurecimento ou na F20.5.
+- **DÍVIDA** — O saldo projetado e o saldo de `/contas` leem todo o histórico de lançamentos do usuário a cada chamada, porque o realizado vale em qualquer data (revisão e auditoria do PR #13). Hoje ~21 ms com 20 mil lançamentos. Medir com anos de histórico e, se doer, saldo base materializado com ADR (CLAUDE.md, "Saldo não é coluna") ou índice por `(usuario_id, conta_id, data_caixa)`. Dono: dba, quando o volume real passar de 100 mil lançamentos por usuário.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

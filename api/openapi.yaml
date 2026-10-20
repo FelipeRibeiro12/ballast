@@ -1060,6 +1060,74 @@ paths:
       summary: Desativa uma recorrência
       tags:
       - recorrencias
+  /saldo-projetado:
+    get:
+      description: "Um ponto por dia, de hoje (America/Sao_Paulo) até hoje + dias\
+        \ - 1. O saldo do dia é o saldo inicial das contas mais tudo que é realizado\
+        \ ou previsto com dataCaixa até o dia; cancelado nunca entra, e a prevista\
+        \ vencida entra pela própria data. Sem contaId soma as contas ativas (transferê\
+        ncia entre duas delas se anula; de ativa para arquivada sai do total). Com\
+        \ contaId vale só a conta, também arquivada, e a transferência conta pelo\
+        \ sinal da perna dela. entradas e saídas de um dia são só os lançamentos com\
+        \ dataCaixa naquele dia; a perna de transferência só conta quando a outra\
+        \ perna está fora do filtro."
+      operationId: getSaldoProjetado
+      parameters:
+      - description: "Quantos dias a série tem, contando hoje"
+        in: query
+        name: dias
+        required: false
+        schema:
+          type: integer
+          default: 90
+          description: "Quantos dias a série tem, contando hoje"
+          maximum: 366
+          minimum: 1
+      - in: query
+        name: contaId
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaldoProjetado"
+          description: Série diária
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "dias que não é inteiro de 1 a 366 (ou repetido), contaId que\
+            \ não é UUID (ou repetido) ou \"projeção fora do limite\" (algum valor\
+            \ sairia de ±9007199254740991 centavos)"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "contaId de outro usuário ou inexistente, com o mesmo corpo\
+            \ \"conta não encontrada\""
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível; pode tentar de novo
+      security:
+      - cookieAuth: []
+      summary: Série diária do saldo projetado por dataCaixa
+      tags:
+      - saldo-projetado
   /transferencias:
     post:
       description: "Cria as duas pernas (tipo transferencia, sem categoria, mesmo\
@@ -1335,6 +1403,36 @@ components:
       required:
       - nome
       - tipo
+    DiaProjetado:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+        entradasCentavos:
+          type: integer
+          format: int64
+          description: Entradas com dataCaixa neste dia
+          maximum: 9007199254740991
+          minimum: 0
+        saidasCentavos:
+          type: integer
+          format: int64
+          description: "Saídas com dataCaixa neste dia, em número positivo"
+          maximum: 9007199254740991
+          minimum: 0
+        saldoCentavos:
+          type: integer
+          format: int64
+          description: "Saldo ao fim do dia: saldo inicial mais tudo até dataCaixa\
+            \ deste dia"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - data
+      - entradasCentavos
+      - saidasCentavos
+      - saldoCentavos
     DivisaoRecorrencia:
       type: object
       properties:
@@ -1582,6 +1680,21 @@ components:
       required:
       - email
       - senha
+    MenorSaldo:
+      type: object
+      description: Menor saldo da série e o primeiro dia em que ocorre
+      properties:
+        data:
+          type: string
+          format: date
+        saldoCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - data
+      - saldoCentavos
     ParcelaDivisao:
       type: object
       properties:
@@ -1878,6 +1991,49 @@ components:
       required:
       - frequencia
       - inicio
+    SaldoProjetado:
+      type: object
+      properties:
+        contaId:
+          type:
+          - string
+          - "null"
+          format: uuid
+          description: "A conta pedida, ou null quando a série soma as contas ativas"
+        dias:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiaProjetado"
+        fim:
+          type: string
+          format: date
+          description: Último dia da série
+        inicio:
+          type: string
+          format: date
+          description: Hoje em America/Sao_Paulo
+        menorSaldo:
+          $ref: "#/components/schemas/MenorSaldo"
+        saldoAtualCentavos:
+          type: integer
+          format: int64
+          description: "Saldo de GET /contas somado nas contas do filtro, todo realizado"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        vencidasCentavos:
+          type: integer
+          format: int64
+          description: Soma com sinal das previstas com dataCaixa antes de hoje
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - contaId
+      - dias
+      - fim
+      - inicio
+      - menorSaldo
+      - saldoAtualCentavos
+      - vencidasCentavos
     Transferencia:
       type: object
       properties:
