@@ -62,3 +62,11 @@ Armadilhas:
 - QA contra a API real com Postgres descartável próprio (porta alta) pegou o B1 que a suíte verde não pegava: banco congelado logo depois de uma requisição. Manter o QA real em toda fatia com rota de banco.
 - Rodar `qa` em paralelo com o `frontend` funciona: não se tocam. Pedir ao `backend` a causa com evidência antes da correção.
 - Fatia entregue sai do backlog no PR seguinte se esquecer; conferir o `## MVP` ao fechar.
+
+## F2 a F10 (2026-10-19 e 20, PRs #7 a #16)
+
+- Padrão que funcionou por fatia: ADR primeiro, dba (migration) e backend em paralelo quando não se tocam, frontend e qa em paralelo, reviewer e security em paralelo com o CI. Merge só depois do CI do último commit (ruleset strict).
+- QA contra a API real com Postgres descartável e oráculo independente pegou bug em quase toda fatia que a suíte verde não pegava (trava, teto, ciclo de trava do job, janela de pagamento). Manter.
+- Ninguém abria o web de verdade: o proxy do Vite ficou sem as rotas de dados da F2 à F8 (PR #14). Agora há teste que compara o proxy com o openapi.yaml; a conferência em navegador continua sendo dívida do dono.
+- Contrato que muda o tipo consumido pelo web quebra o build do web: commitar API e o ajuste mínimo do web juntos.
+- A API do make dev do dono roda na 8080; agentes usam portas altas e nunca a derrubam. O computador dormir mata agente no meio: conferir container e processo antes de retomar.

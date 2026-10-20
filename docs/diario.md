@@ -8,8 +8,8 @@ O que entrou: migration V10 com `cartao` 1:1 e o tipo `cartao_credito`, com o ba
 Decisões: ADR-031, completado na fatia: a janela do pagamento passou a ser do fechamento desta ao fechamento da seguinte (com a janela por vencimento, pagar com atraso deixava a fatura aberta para sempre); cartão não pode ser origem de transferência (QA, D1); disponível limitado ao limite; fechamento, vencimento e limite não se editam.
 Dívida registrada: lista de lançamentos por competência.
 Achados do QA: 0 bloquearam, 1 dívida corrigida na fatia (saque pelo cartão sumia da fatura), 3 sugestões (pagar de qualquer conta, aceito e documentado; logins paralelos, desenho do F1; compra futura já desconta o saldo, ADR-024). Regra da fatura conferida em 984 de 984 compras contra cálculo independente.
-Achados do revisor: PENDENTE
-Pipeline: PENDENTE
+Achados do revisor: 0 bloquearam, 1 dívida (vencimento igual ao fechamento em fevereiro, registrada para a F11), 2 sugestões sem ação. Security: 0 críticos, 0 altos, 0 médios, 2 baixos (cartão como origem garantido só na aplicação, registrado; tamanho do nome, coberto pelo DTO de conta).
+Pipeline: verde na primeira tentativa, os 7 checks obrigatórios; nenhum alerta do CodeQL.
 Em aberto: o frontend achou e corrigiu dois pontos em que o formulário partia da data de caixa e reenviaria o vencimento como data da compra; os dois têm teste que falha com a regressão. Conferência em navegador das telas em 360px.
 
 ## 2026-10-20 — F9: PWA instalável (PR #15)
