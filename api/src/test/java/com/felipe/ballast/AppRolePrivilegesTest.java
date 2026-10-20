@@ -83,6 +83,7 @@ class AppRolePrivilegesTest {
     assertDenied("TRUNCATE regra_recorrencia");
     assertDenied("TRUNCATE template_lancamento");
     assertDenied("TRUNCATE template_divisao");
+    assertDenied("TRUNCATE cartao");
   }
 
   @Test
@@ -297,6 +298,46 @@ class AppRolePrivilegesTest {
         jdbc.sql("DELETE FROM template_divisao WHERE id = :id").param("id", divisaoId).update();
 
     assertThat(percentual).isEqualTo("50.00");
+    assertThat(deleted).isEqualTo(1);
+  }
+
+  @Test
+  void allowsDmlOnCartao() {
+    UUID usuarioId = UUID.randomUUID();
+    UUID cartaoId = UUID.randomUUID();
+    UUID pagamentoId = UUID.randomUUID();
+    jdbc.sql("INSERT INTO usuario (id, email, senha_hash) VALUES (:id, :email, 'hash')")
+        .param("id", usuarioId)
+        .param("email", "cartao-dml-" + usuarioId + "@example.com")
+        .update();
+    jdbc.sql(
+            "INSERT INTO conta (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'Banco',"
+                + " 'corrente'), (:cartaoId, :usuarioId, 'Cartão', 'cartao_credito')")
+        .param("id", pagamentoId)
+        .param("cartaoId", cartaoId)
+        .param("usuarioId", usuarioId)
+        .update();
+
+    jdbc.sql(
+            "INSERT INTO cartao (conta_id, usuario_id, limite, dia_fechamento, dia_vencimento,"
+                + " conta_pagamento_id) VALUES (:cartaoId, :usuarioId, 5000.00, 25, 5,"
+                + " :pagamentoId)")
+        .param("cartaoId", cartaoId)
+        .param("usuarioId", usuarioId)
+        .param("pagamentoId", pagamentoId)
+        .update();
+    jdbc.sql("UPDATE cartao SET limite = 7000.00 WHERE conta_id = :id")
+        .param("id", cartaoId)
+        .update();
+    String limite =
+        jdbc.sql("SELECT limite::text FROM cartao WHERE conta_id = :id")
+            .param("id", cartaoId)
+            .query(String.class)
+            .single();
+    int deleted =
+        jdbc.sql("DELETE FROM cartao WHERE conta_id = :id").param("id", cartaoId).update();
+
+    assertThat(limite).isEqualTo("7000.00");
     assertThat(deleted).isEqualTo(1);
   }
 

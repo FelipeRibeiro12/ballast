@@ -116,6 +116,9 @@ também atende a busca por `usuario_id`. `usuario_id` é `ON DELETE CASCADE`,
 Migration `V6` (ADR-024): `conta` ganha `unique (id, usuario_id)`
 (`conta_id_usuario_unico`), o alvo da FK composta de `lancamento`.
 
+Migration `V10` (ADR-031): o `CHECK` de `tipo` aceita também `cartao_credito`
+(detalhes em Cartão de crédito).
+
 Saldo **não** é coluna. É `saldo_inicial` + soma dos lançamentos realizados.
 Guardar saldo materializado é a origem clássica de divergência; se a
 performance exigir, isso vira view materializada depois, com ADR.
@@ -140,21 +143,58 @@ invariante de dinheiro.
 ```
 cartao
   conta_id            uuid pk fk       -- 1:1 com conta tipo cartao_credito
-  limite              numeric(18,2) not null
+  usuario_id          uuid fk not null
+  limite              numeric(18,2) not null check (> 0 e <= 90071992547409.91)
   dia_fechamento      smallint not null check (between 1 and 31)
   dia_vencimento      smallint not null check (between 1 and 31)
-  conta_pagamento_id  uuid fk          -- de onde sai o dinheiro da fatura
+  conta_pagamento_id  uuid fk not null -- de onde sai o dinheiro da fatura
+  tipo_conta          text gerada      -- sempre 'cartao_credito'
+  pagamento_aceito    bool gerada      -- sempre true
 ```
 
-A regra que gera `data_caixa` de uma compra no cartão:
+A regra que gera `data_caixa` de uma compra no cartão (ADR-031), com
+fechamento `F`, vencimento `V` e dia maior que o último do mês caindo no último
+dia:
 
-> Se `data_competencia` ≤ dia de fechamento do mês corrente, a compra entra na
-> fatura que vence neste mês ou no próximo (conforme vencimento > fechamento).
-> Se for depois do fechamento, entra na fatura seguinte.
+1. O fechamento do mês da compra é o dia `F` daquele mês. Se a compra for **até
+   o fechamento, inclusive**, entra na fatura que fecha naquele mês. Senão,
+   entra na que fecha no mês seguinte.
+2. Se `V > F`, a fatura vence no mesmo mês em que fecha. Se `V <= F`, vence no
+   mês seguinte ao do fechamento.
+3. `data_caixa` é o dia do vencimento dessa fatura. `data_competencia` é a data
+   da compra.
 
 Casos de borda que **precisam de teste**: fechamento dia 31 em fevereiro,
 vencimento menor que fechamento (vira o mês), compra no próprio dia do
 fechamento.
+
+Migration `V10` (ADR-031):
+
+- `conta_tipo_valido` passa a aceitar `corrente`, `poupanca`, `dinheiro` e
+  `cartao_credito`. `beneficio` e `cripto` continuam fora.
+- `conta` ganha `aceita_pagamento_cartao`, coluna gerada
+  (`tipo IN ('corrente','poupanca')`), e dois uniques que são alvo das FKs de
+  `cartao`: `conta_id_usuario_tipo_unico (id, usuario_id, tipo)` e
+  `conta_id_usuario_aceita_pagamento_unico (id, usuario_id,
+  aceita_pagamento_cartao)`. A aplicação não escreve na coluna gerada.
+- `conta_id` é a chave primária: duas linhas para a mesma conta colidem em
+  `cartao_pkey`. `usuario_id` é `ON DELETE CASCADE`.
+- **Dono e tipo sem trigger.** `cartao_conta_mesmo_usuario_e_tipo`: FK
+  `(conta_id, usuario_id, tipo_conta)` para `conta (id, usuario_id, tipo)`, com
+  `tipo_conta` gerada constante, então só conta `cartao_credito` do mesmo
+  usuário tem linha em `cartao`. `cartao_pagamento_mesmo_usuario_e_tipo`: FK
+  `(conta_pagamento_id, usuario_id, pagamento_aceito)` para `conta (id,
+  usuario_id, aceita_pagamento_cartao)`, então a conta de pagamento é do mesmo
+  usuário e é corrente ou poupança. Ambas `ON DELETE NO ACTION`, o que também
+  impede apagar ou mudar o tipo de uma conta que tem cartão ou paga um.
+  `INSERT` em `cartao` não cita as duas colunas geradas.
+- `cartao_pagamento_em_outra_conta`: `conta_pagamento_id <> conta_id`.
+- **Fica com a aplicação:** conta de cartão sem linha em `cartao`. Garantir o 1:1
+  do outro lado pediria gatilho adiável; `POST /contas` cria as duas na mesma
+  transação. Conta de pagamento arquivada também é decisão do serviço.
+- Sem índice novo. A busca do cartão pela conta é a chave primária. Para a lista
+  de faturas, `(usuario_id, conta_id, data_caixa)` em `lancamento` foi medido e
+  não entrou (seção Lançamento, "Índice da F10").
 
 ### Cripto
 
@@ -504,6 +544,14 @@ As demais colunas e tabelas deste bloco chegam com as suas fatias.
   `conta_id` ou `categoria_id` ficou de fora: ganhou 0,3 ms no saldo e a
   checagem das FKs na exclusão do usuário caiu de 5 ms para 2 ms. Quem trouxer
   CRUD de categoria ou relatório cria o dele com o `EXPLAIN`.
+- Índice da F10 (cartão), medido e **não criado**: 400 mil linhas em 21
+  usuários, um com 20 mil lançamentos em 830 dias e 2 mil no cartão. A fatura lê
+  `lancamento` por `usuario_id`, `conta_id` e intervalo de `data_caixa`. Com só
+  `lancamento_usuario_data_caixa`: 12 meses (864 linhas do cartão, 8760 lidas)
+  2,3 ms; um mês (72 do cartão, 720 lidas) 0,14 ms. Com
+  `(usuario_id, conta_id, data_caixa)` experimental: 0,56 ms e 0,05 ms. Ganho de
+  menos de 2 ms por consulta, pago em toda escrita de lançamento. Quem medir
+  lentidão real na lista de faturas cria o índice com o `EXPLAIN` dela.
 - Query do saldo (a partir da F4): `saldo_inicial` + receitas − despesas +
   entradas − saídas, só `realizado`. A direção da perna vem de um `LEFT JOIN`
   em `transferencia` por `entrada_id`; sem ligação de entrada, a perna é saída.
@@ -787,7 +835,7 @@ create index on lancamento (usuario_id, hash_externo) where hash_externo is not 
 create index on importacao_linha (importacao_id, decisao);
 ```
 
-Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query.
+Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum.
 O primeiro serve saldo e fluxo de caixa; o segundo, gráfico por categoria e
 orçamento. Antes de adicionar qualquer outro, rode `EXPLAIN ANALYZE` e mostre o
 antes e o depois.
