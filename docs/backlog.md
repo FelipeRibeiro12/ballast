@@ -11,12 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F9 — PWA instalável
-Manifest, ícones e service worker via vite-plugin-pwa com `devOptions.enabled:
-false`. Service worker em desenvolvimento atrapalha por cachear assets; vale
-quando há algo para instalar no celular. Pronto: instalável no Android e iOS,
-`make dev` sem cache de asset.
-
 ### F10 — Cartão de crédito
 Conta tipo cartão, fechamento e vencimento, cálculo de `data_caixa`, fatura
 agrupada, pagamento como transferência.
@@ -154,6 +148,7 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — `RecurrenceQueries.lockTemplate` monta o template com a divisão nula e completa com uma segunda consulta; um caminho novo que use o objeto antes disso materializaria a série sem divisão (revisão do PR #11). Juntar numa leitura só. Dono: backend, na próxima fatia que mexer em recorrência.
 - **DÍVIDA** — Parâmetro de query não declarado é ignorado em silêncio em todas as listagens: `?contaid=` (caixa errada) devolve o resultado sem filtro, com 200 (QA da F8, S1). Recusar parâmetro desconhecido com 400, como já se faz com campo de corpo. Dono: backend, numa fatia de endurecimento ou na F20.5.
 - **DÍVIDA** — O saldo projetado e o saldo de `/contas` leem todo o histórico de lançamentos do usuário a cada chamada, porque o realizado vale em qualquer data (revisão e auditoria do PR #13). Hoje ~21 ms com 20 mil lançamentos. Medir com anos de histórico e, se doer, saldo base materializado com ADR (CLAUDE.md, "Saldo não é coluna") ou índice por `(usuario_id, conta_id, data_caixa)`. Dono: dba, quando o volume real passar de 100 mil lançamentos por usuário.
+- **DÍVIDA** — Na hospedagem do PWA, servir `/sw.js` com `Cache-Control: no-cache` (e HTTPS, sem o qual o service worker não registra); senão uma versão velha do worker demora a ser trocada (auditoria do PR #15). Dono: devops, na escolha da hospedagem.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
