@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-20 — F8: saldo projetado (PR #13) — fim do MVP
+
+O que entrou: `GET /saldo-projetado` com um ponto por dia de hoje até 1 a 366 dias, realizado e previsto pela data de caixa, vencidas no primeiro dia e somadas à parte, menor saldo; seção no web com gráfico de linha em SVG feito à mão, aviso de negativo em texto e a lista dos dias com movimento.
+Decisões: ADR-029, completado na fatia: transferência entre contas do filtro não conta como entrada nem saída. Fora de ADR: "fica negativo em" usa o primeiro dia negativo, não o do mínimo.
+Dívida registrada: parâmetro de query desconhecido ignorado (padrão do projeto).
+Achados do QA: 0 bloquearam, 0 dívidas, 2 sugestões (uma virou dívida, outra virou texto no contrato). Série conferida centavo a centavo contra cálculo independente em 15 cortes.
+Achados do revisor: PENDENTE
+Pipeline: PENDENTE
+Em aberto: conferência em navegador das telas em 360px, que segue de antes.
+
 ## 2026-10-20 — F7: previsto × realizado (PR #12)
 
 O que entrou: confirmar uma prevista ajustando valor e data no mesmo `PATCH`, com o teto pelo valor novo e a chave da série intacta; `GET /lancamentos/vencidos` com as previstas antes de hoje; bloco "Vencidas" no topo da tela e o confirmar com valor e data preenchidos.

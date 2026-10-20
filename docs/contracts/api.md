@@ -264,8 +264,9 @@ entra no saldo, confirmar dá 400 `conta arquivada` e cancelar funciona.
   `realizado` ou `previsto` com `dataCaixa` até `d` (receita e perna de entrada
   somam, despesa e perna de saída subtraem). `cancelado` nunca entra. A prevista
   vencida entra pela própria data, então já está no primeiro ponto, e
-  `vencidasCentavos` é a soma com sinal delas. Realizado com data futura entra no
-  dia dele.
+  `vencidasCentavos` é a soma com sinal delas, nas mesmas contas do filtro: sem
+  `contaId`, vencida de conta arquivada não entra. Realizado com data futura
+  entra no dia dele.
 - `entradasCentavos` e `saidasCentavos` de um dia são só os lançamentos com
   `dataCaixa` naquele dia (o primeiro ponto mostra só o movimento de hoje); saída
   vem positiva. A perna de transferência só conta quando a outra perna está numa
