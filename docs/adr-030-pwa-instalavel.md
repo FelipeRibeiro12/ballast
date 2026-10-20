@@ -18,7 +18,10 @@ número velho como se fosse atual.
 
 - **Dependência.** `vite-plugin-pwa` 1.3.0, em `devDependencies` e com versão
   fixa. Licença MIT, mantido pelo projeto vite-pwa, sem custo. Ele traz
-  `workbox-build` e `workbox-window` 7.4.1, também MIT. A 2.0.0 saiu em
+  `workbox-build` e `workbox-window` 7.4.1, também MIT. O `workbox-window` é
+  peer do plugin e vai no bundle do cliente pelo registro do service worker,
+  então entra explícito em `dependencies` com versão fixa; sem isso o pnpm não
+  o expõe ao build. A 2.0.0 saiu em
   2026-10-03 com mudança de versão maior; fica para quando tiver mais
   estrada, e a troca é só de versão.
 - **Ícones.** Gerados uma vez a partir do SVG do app com

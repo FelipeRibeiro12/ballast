@@ -12,6 +12,7 @@ import {
   postLogout,
 } from './api'
 import type { Conta, Usuario } from './api'
+import AvisoDeAtualizacao from './AvisoDeAtualizacao'
 import Contas from './Contas'
 import Lancamentos from './Lancamentos'
 import Recorrencias from './Recorrencias'
@@ -363,6 +364,7 @@ function App() {
   return (
     <main>
       <h1>Ballast</h1>
+      <AvisoDeAtualizacao />
       {sessao.tipo === 'carregando' && <p>Carregando...</p>}
       {sessao.tipo === 'erro' && (
         <>
