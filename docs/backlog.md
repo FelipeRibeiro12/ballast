@@ -7,11 +7,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
-### F6 — Divisão de salário
-`template_divisao` por percentual e por valor fixo, com mais de dois dias.
-Teste obrigatório: a regra do centavo — três partes de 33,33% de R$ 1.000
-precisam somar exatamente R$ 1.000.
-
 ### F7 — Previsto × realizado
 Marcar um previsto como realizado (ajustando valor e data se vier diferente).
 Editar uma ocorrência marca `desgarrado` e a materialização passa a respeitar.

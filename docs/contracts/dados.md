@@ -419,8 +419,8 @@ truncamento (`setScale(2, RoundingMode.DOWN)`) e o resto vai para a **última** 
 parcelas é sempre igual ao `valor_total` — isso é invariante e precisa de teste
 (ex.: R$ 1.000,00 em três partes de 33,33% não pode somar R$ 999,99).
 
-Validação: soma dos percentuais = 100, ou soma dos valores fixos =
-`valor_total`.
+Validação: soma dos percentuais = 100,00 (10000 em `percentualCentesimos` no
+JSON), ou soma dos valores fixos = `valor_total`.
 
 Migration `V9` (ADR-027), recorte da F6:
 

@@ -215,7 +215,8 @@ apagar uma ocorrência (seção no fim).
 Toda escrita de lançamento, transferência e recorrência (`POST`, `PUT`,
 `PATCH`, `DELETE` de `/lancamentos`; `POST` e `DELETE` de `/transferencias`;
 `POST` e `PATCH` de `/recorrencias`; `PATCH` de `/contas/{id}`, que arquiva e
-desarquiva) espera no máximo 2 s por trava de conta,
+desarquiva) espera cerca de 2 s por trava de conta (o prazo do `lock_timeout`,
+mais o tempo da resposta),
 lançamento ou template. Estourar dá 503 `serviço indisponível` sem gravar nada,
 o mesmo corpo de banco fora, e o cliente pode tentar de novo. O job pula o
 template travado e o pega na rodada seguinte. O job não trava a conta: numa
