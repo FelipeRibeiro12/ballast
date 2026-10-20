@@ -8,8 +8,8 @@ O que entrou: `GET /saldo-projetado` com um ponto por dia de hoje até 1 a 366 d
 Decisões: ADR-029, completado na fatia: transferência entre contas do filtro não conta como entrada nem saída. Fora de ADR: "fica negativo em" usa o primeiro dia negativo, não o do mínimo.
 Dívida registrada: parâmetro de query desconhecido ignorado (padrão do projeto).
 Achados do QA: 0 bloquearam, 0 dívidas, 2 sugestões (uma virou dívida, outra virou texto no contrato). Série conferida centavo a centavo contra cálculo independente em 15 cortes.
-Achados do revisor: PENDENTE
-Pipeline: PENDENTE
+Achados do revisor: 0 bloquearam, 1 dívida (custo linear com o histórico, registrada), 2 sugestões sem ação. Security: 0 críticos, 0 altos, 0 médios, 2 baixos (o mesmo custo, coberto pelo rate limit da F20.5; diferença de tempo para conta alheia, desprezível com UUID).
+Pipeline: verde na primeira tentativa, os 7 checks obrigatórios; nenhum alerta do CodeQL.
 Em aberto: conferência em navegador das telas em 360px, que segue de antes.
 
 ## 2026-10-20 — F7: previsto × realizado (PR #12)
