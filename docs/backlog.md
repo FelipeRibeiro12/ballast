@@ -7,10 +7,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## MVP
 
-### F4 — Transferência entre contas
-Par de lançamentos ligados, excluído de todo relatório de receita e despesa.
-É curta, mas se vier depois dos gráficos você refaz os gráficos.
-
 ### F5 — Recorrência
 A fatia mais difícil do projeto. Regra, template, materialização 12 meses à
 frente, idempotente.
@@ -166,6 +162,8 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — O teto de 2 s da consulta de sessão (`SessionQueries`) só tem teste de banco congelado. Falta um que confira que o `networkTimeout` da conexão volta ao valor do pool depois de uma consulta normal (revisão do PR #7). Dono: backend, na fatia que mexer no pool.
 - **DÍVIDA** — Categoria filha pode ter tipo diferente do pai: a V6 garante um nível só, mas não o mesmo tipo (F3). Um `CHECK` junto com a FK do pai fecha isso. Dono: dba, na fatia que trouxer o CRUD de categoria.
 - **DÍVIDA** — A trava da conta na escrita de lançamento (ADR-024) espera sem prazo próprio: uma transação presa segura as outras até o `socketTimeout` de 30 s. Definir `lock_timeout` curto na transação de escrita e responder 503. Dono: backend, na F5, que vai escrever lançamento em lote.
+- **DÍVIDA** — Sem idempotência na escrita de dinheiro: dois `POST /transferencias` (ou `/lancamentos`) idênticos gravam duas vezes (QA da F4, S2). O web barra o submit duplo, mas rede instável com retentativa não. Chave de idempotência por requisição. Dono: backend, antes do PWA offline ou da importação.
+- **DÍVIDA** — `POST /lancamentos` com `tipo: transferencia` é recusado com "categoriaId é obrigatório" ou "requisição inválida", não com uma mensagem que aponte para `/transferencias` (QA da F4, S1). Dono: backend, na próxima fatia que mexer em `EntryController`.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
