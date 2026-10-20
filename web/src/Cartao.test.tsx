@@ -468,6 +468,69 @@ describe('Cartão de crédito', () => {
       })
     })
 
+    describe('confirmar uma prevista', () => {
+      function prevista(sobra: Partial<Record<string, unknown>>): Record<string, unknown> {
+        return {
+          id: 'o1',
+          tipo: 'despesa',
+          status: 'previsto',
+          titulo: 'Assinatura',
+          descricao: null,
+          valorCentavos: 5000,
+          categoriaId: 'cd1',
+          transferenciaId: null,
+          templateId: 'r1',
+          parcelaOrdem: null,
+          direcao: null,
+          contaId: 'c9',
+          dataCompetencia: '2026-10-03',
+          dataCaixa: '2026-11-10',
+          criadoEm: '2026-10-01T12:00:00Z',
+          ...sobra,
+        }
+      }
+
+      async function abrir(lancamento: Record<string, unknown>): Promise<HTMLElement> {
+        mockFetch({
+          ...sessaoViva,
+          'GET /contas': responde([conta(), cartaoVisa()]),
+          'GET /lancamentos?de=2026-10-01&ate=2026-10-31': responde([lancamento]),
+          'PATCH /lancamentos/o1': responde({ ...lancamento, status: 'realizado' }),
+        })
+        render(<App />)
+        fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Assinatura' }))
+        return screen.findByRole('form', { name: 'Confirmar Assinatura' })
+      }
+
+      const corpoDoPatch = (): unknown => JSON.parse(String(chamadasA('PATCH /lancamentos/o1')[0][1]?.body))
+
+      it('em cartão abre com a data da compra, mostra a fatura e sem mudar manda só o status', async () => {
+        const form = await abrir(prevista({}))
+        expect(within(form).getByLabelText('Data da compra')).toHaveValue('2026-10-03')
+        expect(within(form).getByText('Entra na fatura que vence em 10/11')).toBeVisible()
+        fireEvent.click(within(form).getByRole('button', { name: 'Confirmar' }))
+        await waitFor(() => expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(1))
+        expect(corpoDoPatch()).toEqual({ status: 'realizado' })
+      })
+
+      it('em cartão, mudar a data manda a nova data da compra', async () => {
+        const form = await abrir(prevista({}))
+        fireEvent.change(within(form).getByLabelText('Data da compra'), { target: { value: '2026-10-05' } })
+        fireEvent.click(within(form).getByRole('button', { name: 'Confirmar' }))
+        await waitFor(() => expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(1))
+        expect(corpoDoPatch()).toEqual({ status: 'realizado', data: '2026-10-05' })
+      })
+
+      it('fora de cartão segue com a data de sempre', async () => {
+        const form = await abrir(prevista({ contaId: 'c1', dataCompetencia: '2026-10-25', dataCaixa: '2026-10-25' }))
+        expect(within(form).getByLabelText('Data')).toHaveValue('2026-10-25')
+        expect(within(form).queryByText(/entra na fatura/i)).not.toBeInTheDocument()
+        fireEvent.click(within(form).getByRole('button', { name: 'Confirmar' }))
+        await waitFor(() => expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(1))
+        expect(corpoDoPatch()).toEqual({ status: 'realizado' })
+      })
+    })
+
     it('recorrência em cartão avisa que as ocorrências entram na fatura de cada mês', async () => {
       mockFetch({ ...sessaoViva, 'GET /contas': responde([conta(), cartaoVisa()]) })
       render(<App />)

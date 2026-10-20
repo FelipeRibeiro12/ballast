@@ -339,17 +339,20 @@ function eDataNaFaixa(data: string): boolean {
 
 function FormularioDeConfirmacao({
   prevista,
+  cartao,
   aoConfirmar,
   aoVoltar,
 }: {
   prevista: Lancamento
+  // Cartão da conta da prevista, ou null. Nele a data é a da compra e a caixa vem do servidor.
+  cartao: Conta['cartao']
   // Devolve a mensagem de erro, ou null quando deu certo e o formulário vai fechar.
   aoConfirmar: (ajuste: AjusteDeConfirmacao) => Promise<string | null>
   aoVoltar: () => void
 }) {
   const valorPrevisto = formatarCentavos(prevista.valorCentavos).replace(/[^\d.,]/g, '')
   const [valor, setValor] = useState(valorPrevisto)
-  const [data, setData] = useState(prevista.dataCaixa)
+  const [data, setData] = useState(prevista.dataCompetencia)
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
@@ -373,7 +376,7 @@ function FormularioDeConfirmacao({
     // Só o que mudou vai no corpo: sem mudança o pedido é igual ao de confirmar direto.
     const ajuste: AjusteDeConfirmacao = {
       ...(valorCentavos === prevista.valorCentavos ? {} : { valorCentavos }),
-      ...(data === prevista.dataCaixa ? {} : { data }),
+      ...(data === prevista.dataCompetencia ? {} : { data }),
     }
     try {
       setMensagem(await aoConfirmar(ajuste))
@@ -406,7 +409,7 @@ function FormularioDeConfirmacao({
         />
       </div>
       <div className="campo">
-        <label htmlFor={`${id}-data`}>Data</label>
+        <label htmlFor={`${id}-data`}>{cartao === null ? 'Data' : 'Data da compra'}</label>
         <input
           id={`${id}-data`}
           type="date"
@@ -416,6 +419,12 @@ function FormularioDeConfirmacao({
           value={data}
           onChange={(evento) => setData(evento.target.value)}
         />
+        {cartao !== null && /^\d{4}-\d{2}-\d{2}$/.test(data) && (
+          <small>
+            Entra na fatura que vence em{' '}
+            {formatarDiaMes(vencimentoDaFatura(data, cartao.diaFechamento, cartao.diaVencimento))}
+          </small>
+        )}
       </div>
       {mensagem !== null && (
         <p id={`${id}-erro`} role="alert" className="erro">
@@ -813,6 +822,7 @@ export default function Lancamentos({
   const nomesDeConta = new Map<string, string>()
   const nomesDeCategoria = new Map<string, string>()
   if (contas !== null) contas.forEach((conta) => nomesDeConta.set(conta.id, conta.nome))
+  const cartaoDaConta = (id: string): Conta['cartao'] => contas?.find((c) => c.id === id)?.cartao ?? null
   if (apoio.tipo === 'ok') {
     apoio.categorias.forEach((categoria) => nomesDeCategoria.set(categoria.id, categoria.nome))
   }
@@ -980,6 +990,7 @@ export default function Lancamentos({
                   {confirmandoEsta === 'ajustar' && (
                     <FormularioDeConfirmacao
                       prevista={vencida}
+                      cartao={cartaoDaConta(vencida.contaId)}
                       aoConfirmar={(ajuste) => confirmar(vencida, ajuste)}
                       aoVoltar={() => setConfirmando(null)}
                     />
@@ -1146,6 +1157,7 @@ export default function Lancamentos({
                     {confirmandoEste === 'ajustar' && (
                       <FormularioDeConfirmacao
                         prevista={lancamento}
+                        cartao={cartaoDaConta(lancamento.contaId)}
                         aoConfirmar={(ajuste) => confirmar(lancamento, ajuste)}
                         aoVoltar={() => setConfirmando(null)}
                       />
