@@ -218,3 +218,72 @@ small {
   flex-basis: 100%;
   min-width: 0;
 }
+
+.periodos {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.periodos button {
+  flex: 1;
+}
+
+.periodos button[aria-pressed='true'] {
+  background: #1a4d8f;
+  color: #fff;
+  border: 1px solid #1a4d8f;
+  font-weight: bold;
+}
+
+.negativo {
+  color: #b00020;
+  font-weight: bold;
+}
+
+.grafico {
+  display: block;
+  height: auto;
+  margin: 0.5rem 0 1rem;
+}
+
+.grafico-linha {
+  stroke: #1a4d8f;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.grafico-zero {
+  stroke: #888;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.grafico-menor {
+  fill: #1a4d8f;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.grafico-menor.negativo {
+  fill: #b00020;
+}
+
+.grafico-rotulo {
+  font-size: 10px;
+  fill: #555;
+}
+
+.dias-movimento {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.dias-movimento li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #ddd;
+}

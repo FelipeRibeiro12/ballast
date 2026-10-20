@@ -27,6 +27,8 @@ import {
   desativarRecorrencia,
   fetchRecorrencias,
   fetchVencidos,
+  fetchSaldoProjetado,
+  ProjecaoInvalidaError,
   patchStatusLancamento,
   postRecorrencia,
 } from './api'
@@ -741,5 +743,92 @@ describe('recorrências e ocorrências', () => {
   ])('recusa corpo fora do contrato: %s', async (_nome, chamar, corpo) => {
     responder(corpo, 200)
     await expect(chamar()).rejects.toThrow(/formato inesperado/)
+  })
+})
+
+describe('fetchSaldoProjetado', () => {
+  const saldo = {
+    inicio: '2026-10-20',
+    fim: '2026-10-21',
+    contaId: null,
+    saldoAtualCentavos: 10000,
+    vencidasCentavos: -500,
+    menorSaldo: { data: '2026-10-21', saldoCentavos: 8000 },
+    dias: [
+      { data: '2026-10-20', entradasCentavos: 0, saidasCentavos: 0, saldoCentavos: 9500 },
+      { data: '2026-10-21', entradasCentavos: 0, saidasCentavos: 1500, saldoCentavos: 8000 },
+    ],
+  }
+
+  function responder(corpo: unknown, status: number): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } }),
+        ),
+      ),
+    )
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('pede os dias e lê a série', async () => {
+    responder(saldo, 200)
+    expect(await fetchSaldoProjetado(90)).toEqual(saldo)
+    expect(fetch).toHaveBeenCalledWith('/saldo-projetado?dias=90', { credentials: 'same-origin' })
+  })
+
+  it('manda contaId quando informado', async () => {
+    const contaId = '7f1e2c9a-0b6d-4f43-9a52-1c8d3e5b6a70'
+    responder({ ...saldo, contaId }, 200)
+    await fetchSaldoProjetado(30, contaId)
+    expect(fetch).toHaveBeenCalledWith(`/saldo-projetado?dias=30&contaId=${contaId}`, {
+      credentials: 'same-origin',
+    })
+  })
+
+  it.each([
+    ['sem dias', { ...saldo, dias: undefined }],
+    ['dias vazio', { ...saldo, dias: [] }],
+    ['dias que não é lista', { ...saldo, dias: {} }],
+    ['dia com data fora do formato', { ...saldo, dias: [{ ...saldo.dias[0], data: '20/10/2026' }] }],
+    ['dia com saldo decimal', { ...saldo, dias: [{ ...saldo.dias[0], saldoCentavos: 95.5 }] }],
+    ['dia com entradas em texto', { ...saldo, dias: [{ ...saldo.dias[0], entradasCentavos: '0' }] }],
+    ['dia com saída fora do inteiro seguro', { ...saldo, dias: [{ ...saldo.dias[0], saidasCentavos: 2 ** 60 }] }],
+    ['sem menorSaldo', { ...saldo, menorSaldo: undefined }],
+    ['menorSaldo com data inválida', { ...saldo, menorSaldo: { data: 'x', saldoCentavos: 1 } }],
+    ['menorSaldo decimal', { ...saldo, menorSaldo: { data: '2026-10-21', saldoCentavos: 1.5 } }],
+    ['saldoAtual decimal', { ...saldo, saldoAtualCentavos: 1.5 }],
+    ['vencidas ausente', { ...saldo, vencidasCentavos: undefined }],
+    ['inicio inválido', { ...saldo, inicio: 'hoje' }],
+    ['fim ausente', { ...saldo, fim: undefined }],
+    ['contaId que não é texto nem null', { ...saldo, contaId: 3 }],
+    ['corpo que é lista', []],
+  ])('recusa corpo fora do contrato: %s', async (_nome, corpo) => {
+    responder(corpo, 200)
+    await expect(fetchSaldoProjetado(90)).rejects.toThrow(/formato inesperado/)
+  })
+
+  it('mapeia 400, 401, 404, 503 e o resto em erros tipados', async () => {
+    responder({ erro: 'dias deve ser um inteiro de 1 a 366' }, 400)
+    await expect(fetchSaldoProjetado(0)).rejects.toBeInstanceOf(ProjecaoInvalidaError)
+    await expect(fetchSaldoProjetado(0)).rejects.toMatchObject({
+      mensagemServidor: 'dias deve ser um inteiro de 1 a 366',
+    })
+    responder('sem formato', 400)
+    await expect(fetchSaldoProjetado(0)).rejects.toMatchObject({ mensagemServidor: null })
+    responder({ erro: 'x' }, 401)
+    await expect(fetchSaldoProjetado(90)).rejects.toBeInstanceOf(SessaoExpiradaError)
+    responder({ erro: 'conta não encontrada' }, 404)
+    await expect(fetchSaldoProjetado(90, 'x')).rejects.toBeInstanceOf(ContaNaoEncontradaError)
+    responder({ erro: 'x' }, 503)
+    await expect(fetchSaldoProjetado(90)).rejects.toBeInstanceOf(ServicoIndisponivelError)
+    responder({ erro: 'x' }, 500)
+    const erro = await fetchSaldoProjetado(90).catch((e: unknown) => e)
+    expect(erro).toBeInstanceOf(ApiError)
+    expect(erro).not.toBeInstanceOf(ProjecaoInvalidaError)
   })
 })

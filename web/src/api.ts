@@ -736,3 +736,92 @@ export async function desativarRecorrencia(id: string): Promise<Recorrencia> {
   if (!resposta.ok) return recusarRespostaDeRecorrencia(resposta, 'PATCH /recorrencias/{id}')
   return lerRecorrencia(resposta, 'PATCH /recorrencias/{id}')
 }
+
+export type SaldoProjetado = components['schemas']['SaldoProjetado']
+export type DiaProjetado = components['schemas']['DiaProjetado']
+export type MenorSaldo = components['schemas']['MenorSaldo']
+
+export class ProjecaoInvalidaError extends ApiError {
+  // null quando o corpo do 400 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('projeção recusada por entrada inválida')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+function eDataIso(valor: unknown): boolean {
+  return typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor)
+}
+
+function isDiaProjetado(valor: unknown): valor is DiaProjetado {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'data' in valor &&
+    eDataIso(valor.data) &&
+    // Fora do inteiro seguro o JSON já perdeu o centavo no parse.
+    'entradasCentavos' in valor &&
+    Number.isSafeInteger(valor.entradasCentavos) &&
+    'saidasCentavos' in valor &&
+    Number.isSafeInteger(valor.saidasCentavos) &&
+    'saldoCentavos' in valor &&
+    Number.isSafeInteger(valor.saldoCentavos)
+  )
+}
+
+function isMenorSaldo(valor: unknown): valor is MenorSaldo {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'data' in valor &&
+    eDataIso(valor.data) &&
+    'saldoCentavos' in valor &&
+    Number.isSafeInteger(valor.saldoCentavos)
+  )
+}
+
+function isSaldoProjetado(valor: unknown): valor is SaldoProjetado {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'inicio' in valor &&
+    eDataIso(valor.inicio) &&
+    'fim' in valor &&
+    eDataIso(valor.fim) &&
+    'contaId' in valor &&
+    (valor.contaId === null || typeof valor.contaId === 'string') &&
+    'saldoAtualCentavos' in valor &&
+    Number.isSafeInteger(valor.saldoAtualCentavos) &&
+    'vencidasCentavos' in valor &&
+    Number.isSafeInteger(valor.vencidasCentavos) &&
+    'menorSaldo' in valor &&
+    isMenorSaldo(valor.menorSaldo) &&
+    // A série tem ao menos hoje; lista vazia é corpo fora do contrato.
+    'dias' in valor &&
+    Array.isArray(valor.dias) &&
+    valor.dias.length > 0 &&
+    valor.dias.every(isDiaProjetado)
+  )
+}
+
+async function recusarRespostaDeProjecao(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 404) throw new ContaNaoEncontradaError('conta não encontrada')
+  if (resposta.status === 400) throw new ProjecaoInvalidaError(await lerMensagemDeErro(resposta))
+  throw new ApiError(`${origem} respondeu ${resposta.status}`)
+}
+
+export async function fetchSaldoProjetado(dias: number, contaId?: string): Promise<SaldoProjetado> {
+  const parametros = new URLSearchParams({ dias: String(dias) })
+  if (contaId !== undefined) parametros.set('contaId', contaId)
+  const resposta = await fetch(`${baseUrl}/saldo-projetado?${parametros.toString()}`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarRespostaDeProjecao(resposta, '/saldo-projetado')
+  const corpo: unknown = await resposta.json()
+  if (!isSaldoProjetado(corpo)) throw new ApiError('/saldo-projetado com formato inesperado')
+  return corpo
+}
