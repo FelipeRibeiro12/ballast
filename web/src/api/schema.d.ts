@@ -184,6 +184,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lancamentos/vencidos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as previstas vencidas do usuário
+         * @description Lançamentos previstos com dataCaixa antes de hoje (America/Sao_Paulo), da mais antiga para a mais nova (depois id), no máximo 200. maisAlgum é true quando havia mais que isso. Nada muda sozinho: o usuário confirma ou cancela cada uma (ADR-028).
+         */
+        get: operations["getLancamentosVencidos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lancamentos/{id}": {
         parameters: {
             query?: never;
@@ -208,7 +228,7 @@ export interface paths {
         head?: never;
         /**
          * Confirma ou cancela uma ocorrência prevista
-         * @description Corpo {"status": "realizado"} ou {"status": "cancelado"}, o único campo. Só uma ocorrência prevista muda de status. Confirmar passa a contar no saldo, com a trava e o teto do saldo do lançamento, e recusa conta arquivada; cancelar não mexe em saldo e vale mesmo com a conta arquivada. As duas são definitivas e deixam a ocorrência desgarrada: o job não a recria nem a altera.
+         * @description Corpo {"status": "realizado"} ou {"status": "cancelado"}. Só uma ocorrência prevista muda de status. Ao confirmar, valorCentavos e data são opcionais e gravam o valor e a data reais (a data vale para dataCompetencia e dataCaixa); ocorrencia_data da série não muda. Com cancelado, os dois dão 400. Confirmar passa a contar no saldo, com a trava e o teto do saldo do lançamento, e recusa conta arquivada; cancelar não mexe em saldo e vale mesmo com a conta arquivada. As duas são definitivas e deixam a ocorrência desgarrada: o job não a recria nem a altera.
          */
         patch: operations["patchLancamentosById"];
         trace?: never;
@@ -448,10 +468,26 @@ export interface components {
         };
         LancamentoStatusRequest: {
             /**
+             * Format: date
+             * @description Só com status realizado: data real, gravada em dataCompetencia e dataCaixa
+             * @example 2026-03-10
+             */
+            data?: string;
+            /**
              * @description Só uma ocorrência prevista muda de status
              * @enum {string}
              */
             status: "realizado" | "cancelado";
+            /**
+             * Format: int64
+             * @description Só com status realizado: valor real, no lugar do previsto
+             */
+            valorCentavos?: number;
+        };
+        LancamentosVencidos: {
+            lancamentos: components["schemas"]["Lancamento"][];
+            /** @description True quando havia mais de 200 previstas vencidas e a lista foi cortada */
+            maisAlgum: boolean;
         };
         LoginRequest: {
             email: string;
@@ -1357,6 +1393,44 @@ export interface operations {
             };
         };
     };
+    getLancamentosVencidos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Previstas vencidas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LancamentosVencidos"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível; pode tentar de novo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     getLancamentosById: {
         parameters: {
             query?: never;
@@ -1568,7 +1642,7 @@ export interface operations {
                     "application/json": components["schemas"]["Lancamento"];
                 };
             };
-            /** @description "status é obrigatório", "status deve ser realizado ou cancelado", campo não declarado; "só ocorrência prevista pode mudar de status" (o lançamento não está previsto); "conta arquivada" e "saldo da conta fora do limite" (só ao confirmar); "use a rota de transferência" (perna de transferência) */
+            /** @description "status é obrigatório", "status deve ser realizado ou cancelado", campo não declarado, valorCentavos ou data inválidos, valorCentavos ou data com cancelado; "só ocorrência prevista pode mudar de status" (o lançamento não está previsto); "conta arquivada" e "saldo da conta fora do limite" (só ao confirmar); "use a rota de transferência" (perna de transferência) */
             400: {
                 headers: {
                     [name: string]: unknown;

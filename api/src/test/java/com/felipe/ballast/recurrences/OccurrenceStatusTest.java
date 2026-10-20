@@ -195,7 +195,7 @@ class OccurrenceStatusTest {
         "{\"status\":null}",
         "{}",
         "{\"status\":1}",
-        "{\"status\":\"realizado\",\"valorCentavos\":1}",
+        "{\"status\":\"realizado\",\"contaId\":\"x\"}",
       })
   void anyOtherBodyIsA400AndNothingChanges(String body) throws Exception {
     String id = occurrenceId(templateId, FIRST);

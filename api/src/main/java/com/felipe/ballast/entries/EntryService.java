@@ -1,6 +1,8 @@
 package com.felipe.ballast.entries;
 
 import com.felipe.ballast.web.WriteTransaction;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,6 +21,8 @@ import org.springframework.transaction.TransactionStatus;
 class EntryService {
 
   private static final String PLANNED = "previsto";
+
+  static final int OVERDUE_LIMIT = 200;
 
   private static final String ACCOUNT_FK = "lancamento_conta_mesmo_usuario";
   private static final String CATEGORY_FK = "lancamento_categoria_mesmo_usuario_e_tipo";
@@ -85,8 +89,21 @@ class EntryService {
   // Confirmar ou cancelar uma ocorrência prevista. Ordem de travas: o lançamento, depois a conta
   // (só ao confirmar; cancelar não mexe em saldo). Nenhum caminho trava template aqui, então não
   // há ciclo com o job (template, depois conta) nem com desativar (template, depois a linha).
-  SaveResult changeStatus(UUID userId, UUID id, TargetStatus target) {
-    return transaction.execute(status -> changeStatusLocked(status, userId, id, target));
+  // Valor e data opcionais só chegam com REALIZED (o controller recusa com cancelado) e são
+  // gravados na mesma transação da confirmação, antes de conferir o teto com o valor novo.
+  SaveResult changeStatus(
+      UUID userId, UUID id, TargetStatus target, BigDecimal amount, LocalDate date) {
+    return transaction.execute(
+        status -> changeStatusLocked(status, userId, id, target, amount, date));
+  }
+
+  // Um item a mais que o limite diz se houve corte; ele não sai na resposta.
+  record Overdue(List<EntrySummary> entries, boolean more) {}
+
+  Overdue listOverdue(UUID userId, LocalDate today) {
+    List<EntrySummary> found = queries.listOverdue(userId, today, OVERDUE_LIMIT + 1);
+    boolean more = found.size() > OVERDUE_LIMIT;
+    return new Overdue(more ? found.subList(0, OVERDUE_LIMIT) : found, more);
   }
 
   // NOT_FOUND para lançamento de outro usuário ou inexistente, sem distinguir. Apagar uma
@@ -120,7 +137,12 @@ class EntryService {
   }
 
   private SaveResult changeStatusLocked(
-      TransactionStatus status, UUID userId, UUID id, TargetStatus target) {
+      TransactionStatus status,
+      UUID userId,
+      UUID id,
+      TargetStatus target,
+      BigDecimal amount,
+      LocalDate date) {
     Optional<EntryQueries.LockedEntry> entry = queries.lockEntry(userId, id);
     if (entry.isEmpty()) {
       return SaveResult.Rejected.ENTRY_NOT_FOUND;
@@ -141,7 +163,7 @@ class EntryService {
         return SaveResult.Rejected.ACCOUNT_ARCHIVED;
       }
     }
-    if (queries.changeStatus(userId, id, target) == 0) {
+    if (queries.changeStatus(userId, id, target, amount, date) == 0) {
       return SaveResult.Rejected.ENTRY_NOT_FOUND;
     }
     if (target == TargetStatus.REALIZED && !balanceFits(userId, entry.get().accountId())) {
@@ -231,8 +253,7 @@ class EntryService {
     return queries.find(userId, id);
   }
 
-  List<EntrySummary> list(
-      UUID userId, java.time.LocalDate from, java.time.LocalDate to, UUID accountId) {
+  List<EntrySummary> list(UUID userId, LocalDate from, LocalDate to, UUID accountId) {
     return queries.list(userId, from, to, accountId);
   }
 
