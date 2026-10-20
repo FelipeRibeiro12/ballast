@@ -450,8 +450,12 @@ function FormularioDeTransferencia({
   aoSalvar: () => void
   aoSessaoExpirar: () => void
 }) {
-  const [origemEscolhida, setOrigemEscolhida] = useState(contas[0]?.id ?? '')
-  const [destinoEscolhido, setDestinoEscolhido] = useState(contas[1]?.id ?? '')
+  // O servidor recusa cartão como origem de transferência; ele só entra como destino (pagar fatura).
+  const origens = contas.filter((c) => c.tipo !== 'cartao_credito')
+  const [origemEscolhida, setOrigemEscolhida] = useState(origens[0]?.id ?? '')
+  const [destinoEscolhido, setDestinoEscolhido] = useState(
+    contas.find((c) => c.id !== origens[0]?.id)?.id ?? '',
+  )
   const [titulo, setTitulo] = useState('')
   const [valor, setValor] = useState('')
   const [data, setData] = useState(hojeLocal())
@@ -462,12 +466,12 @@ function FormularioDeTransferencia({
   const emVoo = useRef(false)
 
   // A conta escolhida pode ter sido arquivada e sumido da lista; cai na primeira disponível.
-  const contaOrigemId = contas.some((c) => c.id === origemEscolhida) ? origemEscolhida : (contas[0]?.id ?? '')
+  const contaOrigemId = origens.some((c) => c.id === origemEscolhida) ? origemEscolhida : (origens[0]?.id ?? '')
   const contaDestinoId = contas.some((c) => c.id === destinoEscolhido)
     ? destinoEscolhido
     : (contas.find((c) => c.id !== contaOrigemId)?.id ?? '')
 
-  if (contas.length < 2) {
+  if (origens.length === 0 || contas.length < 2) {
     return <p>Crie duas contas para transferir.</p>
   }
 
@@ -525,7 +529,7 @@ function FormularioDeTransferencia({
           required
           onChange={(evento) => setOrigemEscolhida(evento.target.value)}
         >
-          {contas.map((conta) => (
+          {origens.map((conta) => (
             <option key={conta.id} value={conta.id}>
               {conta.nome}
             </option>

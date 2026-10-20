@@ -531,6 +531,50 @@ describe('Cartão de crédito', () => {
       })
     })
 
+    describe('cartão não é origem de transferência', () => {
+      async function abrirTransferencia(contas: Record<string, unknown>[]): Promise<void> {
+        mockFetch({ ...sessaoViva, 'GET /contas': responde(contas) })
+        render(<App />)
+        fireEvent.click(await screen.findByRole('button', { name: 'Transferência' }))
+      }
+
+      it('o select de origem não lista o cartão e o de destino lista', async () => {
+        await abrirTransferencia([conta(), conta({ id: 'c2', nome: 'Reserva', tipo: 'poupanca' }), cartaoVisa()])
+        const form = await screen.findByRole('form', { name: 'Nova transferência' })
+        const nomes = (rotulo: string): (string | null)[] =>
+          within(within(form).getByLabelText(rotulo)).getAllByRole('option').map((o) => o.textContent)
+        expect(nomes('Conta de origem')).toEqual(['Nubank', 'Reserva'])
+        expect(nomes('Conta de destino')).toEqual(['Nubank', 'Reserva', 'Visa'])
+      })
+
+      it('uma conta comum mais um cartão ainda deixa transferir, com o cartão só no destino', async () => {
+        await abrirTransferencia([conta(), cartaoVisa()])
+        const form = await screen.findByRole('form', { name: 'Nova transferência' })
+        expect(within(form).getByLabelText('Conta de origem')).toHaveValue('c1')
+        expect(within(form).getByLabelText('Conta de destino')).toHaveValue('c9')
+      })
+
+      it('só cartões, ou uma conta sozinha, mostram o aviso de duas contas', async () => {
+        await abrirTransferencia([cartaoVisa(), cartaoVisa({ id: 'c8', nome: 'Master' })])
+        expect(await screen.findByText('Crie duas contas para transferir.')).toBeVisible()
+        expect(screen.queryByRole('form', { name: 'Nova transferência' })).toBeNull()
+      })
+
+      it('o Pagar fatura também não oferece cartão como origem', async () => {
+        mockFetch({
+          ...sessaoViva,
+          'GET /contas': responde([conta(), cartaoVisa(), cartaoVisa({ id: 'c8', nome: 'Master' })]),
+          [FATURAS]: responde({ contaId: 'c9', faturas: [fatura()] }),
+        })
+        render(<App />)
+        await abrirFaturas()
+        fireEvent.click(await screen.findByRole('button', { name: 'Pagar fatura de 10/11/2026' }))
+        const form = await screen.findByRole('form', { name: 'Pagamento da fatura' })
+        const origem = within(form).getByLabelText('Conta de origem')
+        expect(within(origem).getAllByRole('option').map((o) => o.textContent)).toEqual(['Nubank'])
+      })
+    })
+
     it('recorrência em cartão avisa que as ocorrências entram na fatura de cada mês', async () => {
       mockFetch({ ...sessaoViva, 'GET /contas': responde([conta(), cartaoVisa()]) })
       render(<App />)
