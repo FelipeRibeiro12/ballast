@@ -11,12 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F9 — PWA instalável
-Manifest, ícones e service worker via vite-plugin-pwa com `devOptions.enabled:
-false`. Service worker em desenvolvimento atrapalha por cachear assets; vale
-quando há algo para instalar no celular. Pronto: instalável no Android e iOS,
-`make dev` sem cache de asset.
-
 ### F10 — Cartão de crédito
 Conta tipo cartão, fechamento e vencimento, cálculo de `data_caixa`, fatura
 agrupada, pagamento como transferência.

@@ -19,3 +19,5 @@ Fatia entregue sai do `docs/backlog.md` e vira linha aqui.
 - F6 (divisão de salário): uma recorrência mensal pode cair em vários dias do mês, por percentual ou por valor fixo. As parcelas somam sempre o valor cheio: no percentual, a última leva o centavo que sobra.
 - F7 (previsto × realizado): confirmar uma prevista já com o valor e a data que vieram de verdade, e um bloco de vencidas no topo da tela com o que ficou para trás. Nada se confirma nem cancela sozinho.
 - F8 (saldo projetado): gráfico do saldo dos próximos 30, 90 ou 180 dias, com o dia em que fica negativo e o menor saldo do período. Fecha o MVP.
+- Correção: no `make dev`, as telas de contas, lançamentos, recorrências e saldo projetado voltaram a falar com a API (o proxy do Vite só repassava login e `/healthz` desde a F2).
+- F9 (PWA instalável): o app pode ser instalado na tela inicial do celular e no desktop. Nenhum dado financeiro fica guardado no aparelho: sem rede, a tela abre e avisa que não conseguiu falar com o servidor. Versão nova pergunta antes de recarregar.

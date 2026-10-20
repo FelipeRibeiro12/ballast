@@ -2,11 +2,21 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-20 — F9: PWA instalável (PR #15)
+
+O que entrou: manifest, ícones gerados de um SVG próprio, service worker com precache só do shell e a denylist do fallback montada da mesma lista de prefixos do proxy; aviso de "Nova versão disponível" com confirmação; metas de app no iOS.
+Decisões: ADR-030. Dependências novas: `vite-plugin-pwa` 1.3.0 (dev) e `workbox-window` 7.4.1 (runtime), MIT, versão fixa; a 2.0.0 do plugin ficou para depois. Nenhuma resposta da API vai para cache.
+Dívida registrada: nenhuma.
+Achados do QA: não houve QA separado; a prova foi o build (sw.js só com assets e a denylist), o preview com os content-types e o dev sem service worker. Instalação em aparelho real fica com o dono.
+Achados do revisor: PENDENTE
+Pipeline: PENDENTE
+Em aberto: instalar no Android e no iPhone de verdade.
+
 ## 2026-10-20 — Correção: proxy do Vite (PR #14)
 
 O que entrou: o proxy de desenvolvimento passa a repassar os oito prefixos da API, com um teste que compara a lista com o `openapi.yaml` nos dois sentidos.
 Por que passou: desde a F2 as telas de dados não funcionavam no `make dev`, porque o proxy só levava `/healthz` e `/auth`. Toda a suíte do web mocka `fetch`, o QA de cada fatia rodou contra a API direto, e ninguém abriu o web de verdade depois da F1. Achado ao ler a config na F9. É a mesma lacuna da dívida de conferência em navegador.
-Pipeline: PENDENTE
+Pipeline: verde na primeira tentativa.
 
 ## 2026-10-20 — F8: saldo projetado (PR #13) — fim do MVP
 
