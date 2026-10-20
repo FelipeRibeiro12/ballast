@@ -193,6 +193,9 @@ apagar uma ocorrência (seção no fim).
   (`ocorrencia_data`, que a API não expõe) não muda, então o job não recria a
   ocorrência na data original. Com `cancelado`, `valorCentavos` ou `data`
   presentes dão 400 `cancelar não aceita valorCentavos nem data` e nada muda.
+  Numa parcela de divisão (ADR-027), o ajuste vale só para ela: as outras
+  parcelas do mês não se rebalanceiam, e a soma do mês passa a ser o que de fato
+  entrou, não mais o valor cheio do template.
 - Só parte de `previsto`. De `realizado` ou `cancelado`, 400 `só ocorrência
   prevista pode mudar de status` (confirmar duas vezes dá 400 na segunda e o saldo
   conta uma vez). As duas mudanças são definitivas: não existe voltar a

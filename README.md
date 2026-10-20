@@ -105,6 +105,8 @@ Rotas atuais:
   Na mensal, `divisao` opcional reparte o valor em 2 a 10 dias, por `percentualCentesimos` (33,33% é `3333`) ou `valorCentavos`; no percentual a última parcela leva o resto do centavo.
 - `GET /recorrencias`, `GET /recorrencias/{id}` e `PATCH /recorrencias/{id}` com `{"ativo": false}`, que apaga as previstas de hoje em diante.
 - `PATCH /lancamentos/{id}` com `{"status": "realizado"}` confirma uma prevista e `{"status": "cancelado"}` cancela. Prevista não entra no saldo e não se apaga: cancela-se.
+  Confirmar aceita `valorCentavos` e `data` para registrar o que de fato aconteceu.
+- `GET /lancamentos/vencidos`: previstas com data de caixa antes de hoje, da mais antiga para a mais nova, até 200.
 
 Rota que não é pública responde 401 sem sessão. `POST`, `PUT` e `PATCH` exigem `Content-Type: application/json`, e corpo acima de 4 KiB dá 413. Banco fora dá 503 em qualquer rota. Valor em dinheiro vai em inteiro de centavos (ADR-005, ADR-023).
 
