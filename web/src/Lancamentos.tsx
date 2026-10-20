@@ -18,6 +18,7 @@ import {
   putLancamento,
 } from './api'
 import type { AjusteDeConfirmacao, Categoria, Conta, Lancamento } from './api'
+import { vencimentoDaFatura } from './fatura'
 import { formatarDataCompleta, formatarDiaMes, hojeLocal, intervaloDoMes, mesDeHoje, rotuloDoMes, somarMeses } from './datas'
 import type { Mes } from './datas'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
@@ -129,7 +130,7 @@ function FormularioDeLancamento({
   )
   const [categoriaEscolhida, setCategoriaEscolhida] = useState(inicial?.categoriaId ?? '')
   const [contaEscolhida, setContaEscolhida] = useState(inicial?.contaId ?? '')
-  const [data, setData] = useState(inicial?.dataCaixa ?? hojeLocal())
+  const [data, setData] = useState(inicial?.dataCompetencia ?? hojeLocal())
   const [descricao, setDescricao] = useState(inicial?.descricao ?? '')
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
@@ -147,6 +148,7 @@ function FormularioDeLancamento({
       inicial !== null && contaEscolhida === inicial.contaId
       ? contaEscolhida
       : (contas[0]?.id ?? '')
+  const cartaoEscolhido = contas.find((c) => c.id === contaId)?.cartao ?? null
   const contaArquivadaDoLancamento =
     inicial !== null && !contas.some((c) => c.id === inicial.contaId) ? inicial.contaId : null
 
@@ -284,7 +286,7 @@ function FormularioDeLancamento({
         </select>
       </div>
       <div className="campo">
-        <label htmlFor="lancamento-data">Data</label>
+        <label htmlFor="lancamento-data">{cartaoEscolhido === null ? 'Data' : 'Data da compra'}</label>
         <input
           id="lancamento-data"
           type="date"
@@ -294,6 +296,12 @@ function FormularioDeLancamento({
           value={data}
           onChange={(evento) => setData(evento.target.value)}
         />
+        {cartaoEscolhido !== null && /^\d{4}-\d{2}-\d{2}$/.test(data) && (
+          <small>
+            Entra na fatura que vence em{' '}
+            {formatarDiaMes(vencimentoDaFatura(data, cartaoEscolhido.diaFechamento, cartaoEscolhido.diaVencimento))}
+          </small>
+        )}
       </div>
       <div className="campo">
         <label htmlFor="lancamento-descricao">Descrição (opcional)</label>

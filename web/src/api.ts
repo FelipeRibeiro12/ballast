@@ -281,6 +281,56 @@ export async function patchConta(id: string, arquivada: boolean): Promise<Conta>
   return lerConta(resposta, 'PATCH /contas/{id}')
 }
 
+export type Fatura = components['schemas']['Fatura']
+export type Faturas = components['schemas']['Faturas']
+
+const SITUACOES_DE_FATURA: readonly string[] = ['aberta', 'fechada', 'paga']
+
+function isFatura(valor: unknown): valor is Fatura {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'vencimento' in valor &&
+    /^\d{4}-\d{2}-\d{2}$/.test(String(valor.vencimento)) &&
+    'fechamento' in valor &&
+    /^\d{4}-\d{2}-\d{2}$/.test(String(valor.fechamento)) &&
+    // Total e restante podem ser negativos (estorno, pagamento a mais); o que importa é o inteiro seguro.
+    'totalCentavos' in valor &&
+    Number.isSafeInteger(valor.totalCentavos) &&
+    'pagoCentavos' in valor &&
+    Number.isSafeInteger(valor.pagoCentavos) &&
+    'restanteCentavos' in valor &&
+    Number.isSafeInteger(valor.restanteCentavos) &&
+    'situacao' in valor &&
+    typeof valor.situacao === 'string' &&
+    SITUACOES_DE_FATURA.includes(valor.situacao)
+  )
+}
+
+function isFaturas(valor: unknown): valor is Faturas {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'faturas' in valor &&
+    Array.isArray(valor.faturas) &&
+    valor.faturas.every(isFatura)
+  )
+}
+
+// de e ate são datas de vencimento, AAAA-MM-DD.
+export async function fetchFaturas(contaId: string, de: string, ate: string): Promise<Faturas> {
+  const parametros = new URLSearchParams({ de, ate })
+  const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(contaId)}/faturas?${parametros.toString()}`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarResposta(resposta, '/contas/{id}/faturas')
+  const corpo: unknown = await resposta.json()
+  if (!isFaturas(corpo)) throw new ApiError('/contas/{id}/faturas com formato inesperado')
+  return corpo
+}
+
 export type Categoria = components['schemas']['Categoria']
 export type Lancamento = components['schemas']['Lancamento']
 export type LancamentoRequest = components['schemas']['LancamentoRequest']

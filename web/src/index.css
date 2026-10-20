@@ -298,3 +298,12 @@ small {
   border: 1px solid #1a4d8f;
   border-radius: 0.25rem;
 }
+
+.faturas {
+  min-width: 0;
+}
+
+.faturas form {
+  border-top: 1px solid #ddd;
+  padding-top: 0.5rem;
+}

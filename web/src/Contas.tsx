@@ -10,8 +10,9 @@ import {
   patchConta,
   postConta,
 } from './api'
-import type { Conta } from './api'
-import { formatarCentavos, lerCentavos } from './dinheiro'
+import type { Conta, CriarContaRequest } from './api'
+import Faturas from './Faturas'
+import { formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
 
 type EstadoLista =
   | { tipo: 'carregando' }
@@ -27,8 +28,7 @@ const ROTULO_DO_TIPO: Record<TipoDeConta, string> = {
   cartao_credito: 'Cartão de crédito',
 }
 
-// O cartão ganha formulário próprio numa fatia à parte.
-const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro']
+const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito']
 
 // Mesma ordem do servidor: nome sem diferenciar caixa nem acento, id para desempatar.
 function compararContas(a: Conta, b: Conta): number {
@@ -59,20 +59,42 @@ function mensagemDeArquivamento(erro: unknown): string {
   return 'Não foi possível alterar a conta. Tente de novo.'
 }
 
+const MENSAGEM_SEM_CONTA_DE_PAGAMENTO = 'Crie uma conta corrente ou poupança para pagar o cartão.'
+
+// Só inteiro puro de 1 a 31; "1e1" e "2.5" são recusados.
+function lerDiaDoMes(texto: string): number | null {
+  if (!/^\d{1,2}$/.test(texto.trim())) return null
+  const dia = Number(texto)
+  return dia >= 1 && dia <= 31 ? dia : null
+}
+
 function NovaConta({
+  contasDePagamento,
   aoCriar,
   aoSessaoExpirar,
 }: {
+  // Contas ativas, correntes ou poupanças: as únicas que o servidor aceita para pagar um cartão.
+  contasDePagamento: Conta[]
   aoCriar: (conta: Conta) => void
   aoSessaoExpirar: () => void
 }) {
   const [nome, setNome] = useState('')
   const [tipo, setTipo] = useState<TipoDeConta>('corrente')
   const [saldo, setSaldo] = useState('')
+  const [limite, setLimite] = useState('')
+  const [diaFechamento, setDiaFechamento] = useState('')
+  const [diaVencimento, setDiaVencimento] = useState('')
+  const [pagamentoEscolhido, setPagamentoEscolhido] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
   const emVoo = useRef(false)
+
+  const eCartao = tipo === 'cartao_credito'
+  const contaPagamentoId = contasDePagamento.some((c) => c.id === pagamentoEscolhido)
+    ? pagamentoEscolhido
+    : (contasDePagamento[0]?.id ?? '')
+  const semContaDePagamento = eCartao && contasDePagamento.length === 0
 
   async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
     evento.preventDefault()
@@ -83,15 +105,49 @@ function NovaConta({
       setMensagem('Saldo inválido. Use o formato 1.234,56, até 90.071.992.547.409,91.')
       return
     }
+    let cartao: CriarContaRequest['cartao']
+    let saldoParaEnviar = saldoInicialCentavos
+    if (eCartao) {
+      const limiteCentavos = lerValorPositivo(limite)
+      if (limiteCentavos === null) {
+        setMensagem('Limite inválido. Use o formato 1.234,56, maior que zero.')
+        return
+      }
+      const fechamento = lerDiaDoMes(diaFechamento)
+      const vencimento = lerDiaDoMes(diaVencimento)
+      if (fechamento === null || vencimento === null) {
+        setMensagem('Dia de fechamento e de vencimento devem ser de 1 a 31.')
+        return
+      }
+      if (contaPagamentoId === '') {
+        setMensagem(MENSAGEM_SEM_CONTA_DE_PAGAMENTO)
+        return
+      }
+      // O usuário digita a fatura em aberto como positivo; no saldo ela é dívida.
+      if (saldoInicialCentavos < 0) {
+        setMensagem('Digite a fatura em aberto como valor positivo.')
+        return
+      }
+      saldoParaEnviar = saldoInicialCentavos === 0 ? 0 : -saldoInicialCentavos
+      cartao = { limiteCentavos, diaFechamento: fechamento, diaVencimento: vencimento, contaPagamentoId }
+    }
     emVoo.current = true
     setEnviando(true)
     setMensagem(null)
     try {
-      const conta = await postConta({ nome, tipo, saldoInicialCentavos })
+      const conta = await postConta({
+        nome,
+        tipo,
+        saldoInicialCentavos: saldoParaEnviar,
+        ...(cartao === undefined ? {} : { cartao }),
+      })
       aoCriar(conta)
       setNome('')
       setTipo('corrente')
       setSaldo('')
+      setLimite('')
+      setDiaFechamento('')
+      setDiaVencimento('')
     } catch (erro) {
       if (erro instanceof SessaoExpiradaError) {
         aoSessaoExpirar()
@@ -139,7 +195,9 @@ function NovaConta({
         </select>
       </div>
       <div className="campo">
-        <label htmlFor="conta-saldo">Saldo inicial em reais (opcional)</label>
+        <label htmlFor="conta-saldo">
+          {eCartao ? 'Fatura em aberto hoje (opcional)' : 'Saldo inicial em reais (opcional)'}
+        </label>
         <input
           id="conta-saldo"
           type="text"
@@ -151,12 +209,75 @@ function NovaConta({
           onChange={(evento) => setSaldo(evento.target.value)}
         />
       </div>
+      {eCartao && (
+        <>
+          <div className="campo">
+            <label htmlFor="conta-limite">Limite em reais</label>
+            <input
+              id="conta-limite"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="0,00"
+              required
+              value={limite}
+              onChange={(evento) => setLimite(evento.target.value)}
+            />
+          </div>
+          <div className="campo">
+            <label htmlFor="conta-fechamento">Dia de fechamento</label>
+            <input
+              id="conta-fechamento"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={31}
+              required
+              value={diaFechamento}
+              onChange={(evento) => setDiaFechamento(evento.target.value)}
+            />
+          </div>
+          <div className="campo">
+            <label htmlFor="conta-vencimento">Dia de vencimento</label>
+            <input
+              id="conta-vencimento"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={31}
+              required
+              value={diaVencimento}
+              onChange={(evento) => setDiaVencimento(evento.target.value)}
+            />
+            <small>Meses curtos usam o último dia.</small>
+          </div>
+          {semContaDePagamento ? (
+            <p role="status">{MENSAGEM_SEM_CONTA_DE_PAGAMENTO}</p>
+          ) : (
+            <div className="campo">
+              <label htmlFor="conta-pagamento">Conta de pagamento</label>
+              <select
+                id="conta-pagamento"
+                value={contaPagamentoId}
+                required
+                onChange={(evento) => setPagamentoEscolhido(evento.target.value)}
+              >
+                {contasDePagamento.map((conta) => (
+                  <option key={conta.id} value={conta.id}>
+                    {conta.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
+      )}
       {mensagem !== null && (
         <p id="erro-nova-conta" role="alert" className="erro">
           {mensagem}
         </p>
       )}
-      <button type="submit" disabled={enviando}>
+      <button type="submit" disabled={enviando || semContaDePagamento}>
         {enviando ? 'Criando...' : 'Criar conta'}
       </button>
     </form>
@@ -167,13 +288,17 @@ export default function Contas({
   aoSessaoExpirar,
   versaoDeSaldo,
   aoCarregarAtivas,
+  aoMudarSaldo,
 }: {
   aoSessaoExpirar: () => void
   // Sobe quando um lançamento muda; a lista busca de novo para o saldo reagir.
   versaoDeSaldo: number
   // Entrega a lista de contas ativas sempre que ela muda, para a tela de lançamentos usar.
   aoCarregarAtivas: (contas: Conta[]) => void
+  // Avisa o app que o saldo mudou (pagamento de fatura), para as outras telas buscarem de novo.
+  aoMudarSaldo: () => void
 }) {
+  const [faturasDe, setFaturasDe] = useState<string | null>(null)
   const [arquivadas, setArquivadas] = useState(false)
   const [estado, setEstado] = useState<EstadoLista>({ tipo: 'carregando' })
   const [tentativa, setTentativa] = useState(0)
@@ -299,7 +424,23 @@ export default function Contas({
                   <strong>{conta.nome}</strong>
                   <span>{ROTULO_DO_TIPO[conta.tipo]}</span>
                   <span>{formatarCentavos(conta.saldoCentavos)}</span>
+                  {conta.cartao !== null && (
+                    <span>
+                      Disponível: {formatarCentavos(conta.cartao.disponivelCentavos)} de{' '}
+                      {formatarCentavos(conta.cartao.limiteCentavos)}
+                    </span>
+                  )}
                 </div>
+                {conta.cartao !== null && !arquivadas && (
+                  <button
+                    type="button"
+                    aria-expanded={faturasDe === conta.id}
+                    aria-label={`Faturas de ${conta.nome}`}
+                    onClick={() => setFaturasDe((atual) => (atual === conta.id ? null : conta.id))}
+                  >
+                    Faturas
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={ocupada !== null}
@@ -308,6 +449,16 @@ export default function Contas({
                 >
                   {arquivadas ? 'Desarquivar' : 'Arquivar'}
                 </button>
+                {faturasDe === conta.id && !arquivadas && (
+                  <div className="confirmacao">
+                    <Faturas
+                      cartao={conta}
+                      contasAtivas={estado.contas}
+                      aoMudarSaldo={aoMudarSaldo}
+                      aoSessaoExpirar={aoSessaoExpirar}
+                    />
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -315,6 +466,9 @@ export default function Contas({
       )}
       {!arquivadas && (
         <NovaConta
+          contasDePagamento={
+            estado.tipo === 'ok' ? estado.contas.filter((c) => c.tipo === 'corrente' || c.tipo === 'poupanca') : []
+          }
           aoCriar={(conta) =>
             setEstado((atual) =>
               atual.tipo === 'ok' ? { tipo: 'ok', contas: [...atual.contas, conta].sort(compararContas) } : atual,

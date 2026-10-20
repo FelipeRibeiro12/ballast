@@ -192,7 +192,7 @@ describe('Contas', () => {
     expect(nome).toBeRequired()
     expect(screen.getByLabelText(/saldo inicial/i)).toHaveAttribute('inputmode', 'decimal')
     const opcoes = within(screen.getByLabelText('Tipo')).getAllByRole('option')
-    expect(opcoes.map((opcao) => opcao.textContent)).toEqual(['Corrente', 'Poupança', 'Dinheiro'])
+    expect(opcoes.map((opcao) => opcao.textContent)).toEqual(['Corrente', 'Poupança', 'Dinheiro', 'Cartão de crédito'])
   })
 
   it('cria a conta, mostra na lista sem recarregar e limpa o formulário', async () => {
