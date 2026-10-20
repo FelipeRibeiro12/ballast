@@ -4,6 +4,7 @@ import static com.felipe.ballast.entries.TransfersApi.body;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.felipe.ballast.IntegrationTest;
+import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -12,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 
 // A checagem da aplicação diz "não é perna", como numa corrida em que a ligação surge entre a
@@ -23,7 +23,7 @@ class TransferLegForeignKeyTest {
   @Autowired MockMvc mvc;
   @Autowired JdbcClient jdbc;
   @Autowired EntryRepository repository;
-  @Autowired TransactionTemplate transaction;
+  @Autowired WriteTransaction transaction;
   private EntryService service;
   private EntriesApi.Actor actor;
   private UUID outId;

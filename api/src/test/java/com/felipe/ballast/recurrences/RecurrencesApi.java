@@ -1,8 +1,10 @@
 package com.felipe.ballast.recurrences;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 import com.felipe.ballast.identity.TestUsers;
 import jakarta.servlet.http.Cookie;
@@ -165,6 +167,40 @@ final class RecurrencesApi {
     return mvc.perform(get("/lancamentos?de=" + from + "&ate=" + to).cookie(session))
         .andReturn()
         .getResponse();
+  }
+
+  MockHttpServletResponse patchEntry(Cookie session, String id, Object body) throws Exception {
+    var request =
+        patch("/lancamentos/" + id).contentType(MediaType.APPLICATION_JSON).content(json(body));
+    if (session != null) {
+      request.cookie(session);
+    }
+    return mvc.perform(request).andReturn().getResponse();
+  }
+
+  MockHttpServletResponse confirm(Cookie session, String id) throws Exception {
+    return patchEntry(session, id, "{\"status\":\"realizado\"}");
+  }
+
+  MockHttpServletResponse cancel(Cookie session, String id) throws Exception {
+    return patchEntry(session, id, "{\"status\":\"cancelado\"}");
+  }
+
+  MockHttpServletResponse putEntry(Cookie session, String id, Object body) throws Exception {
+    var request =
+        put("/lancamentos/" + id).contentType(MediaType.APPLICATION_JSON).content(json(body));
+    if (session != null) {
+      request.cookie(session);
+    }
+    return mvc.perform(request).andReturn().getResponse();
+  }
+
+  MockHttpServletResponse deleteEntry(Cookie session, String id) throws Exception {
+    var request = delete("/lancamentos/" + id);
+    if (session != null) {
+      request.cookie(session);
+    }
+    return mvc.perform(request).andReturn().getResponse();
   }
 
   long accountBalance(Cookie session, String accountId) throws Exception {

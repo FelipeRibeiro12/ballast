@@ -81,16 +81,46 @@ class EntryQueries {
         .optional();
   }
 
-  // Trava o lançamento do dono e devolve a conta em que ele está agora. Vazio para lançamento
-  // alheio ou inexistente. Segura o PUT e o DELETE do mesmo lançamento um atrás do outro, para a
+  record LockedEntry(UUID accountId, String status, UUID templateId) {}
+
+  // Trava o lançamento do dono e devolve onde ele está agora. Vazio para lançamento alheio ou
+  // inexistente. Segura o PUT, o PATCH e o DELETE do mesmo lançamento um atrás do outro, para a
   // conta lida aqui não mudar antes de ela ser travada.
-  Optional<UUID> lockEntryAccount(UUID userId, UUID entryId) {
+  Optional<LockedEntry> lockEntry(UUID userId, UUID entryId) {
     return jdbc.sql(
-            "SELECT conta_id FROM lancamento WHERE usuario_id = :userId AND id = :id FOR UPDATE")
+            "SELECT conta_id, status, template_id FROM lancamento"
+                + " WHERE usuario_id = :userId AND id = :id FOR UPDATE")
         .param("userId", userId)
         .param("id", entryId)
-        .query(UUID.class)
+        .query(
+            (rs, row) ->
+                new LockedEntry(
+                    rs.getObject("conta_id", UUID.class),
+                    rs.getString("status"),
+                    rs.getObject("template_id", UUID.class)))
         .optional();
+  }
+
+  // Só sai de previsto. desgarrado acompanha para a ocorrência de template: confirmar ou cancelar
+  // é o usuário assumindo a linha, e a marca fica certa mesmo que alguém passe a apagar por status.
+  int changeStatus(UUID userId, UUID entryId, TargetStatus target) {
+    return jdbc.sql(
+            "UPDATE lancamento SET status = :status, desgarrado = (template_id IS NOT NULL)"
+                + " WHERE usuario_id = :userId AND id = :id AND status = 'previsto'")
+        .param("status", target.value())
+        .param("userId", userId)
+        .param("id", entryId)
+        .update();
+  }
+
+  // Editar uma ocorrência de template a tira do controle da regra. Sem template, não faz nada.
+  void markDetached(UUID userId, UUID entryId) {
+    jdbc.sql(
+            "UPDATE lancamento SET desgarrado = true"
+                + " WHERE usuario_id = :userId AND id = :id AND template_id IS NOT NULL")
+        .param("userId", userId)
+        .param("id", entryId)
+        .update();
   }
 
   // Perna de transferência não se edita nem se apaga por /lancamentos. Roda depois de travar o

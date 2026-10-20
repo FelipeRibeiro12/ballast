@@ -78,4 +78,39 @@ final class RecurrenceTestSupport {
         .param("date", date)
         .update();
   }
+
+  record Row(
+      String id,
+      String status,
+      boolean detached,
+      LocalDate occurrenceDate,
+      LocalDate cashDate,
+      String title) {}
+
+  // A ocorrência pela chave da regra (a data que a regra gerou), mesmo depois de editada.
+  java.util.Optional<Row> byKey(String templateId, LocalDate key) {
+    return jdbc.sql(
+            "SELECT id, status, desgarrado, ocorrencia_data, data_caixa, titulo FROM lancamento"
+                + " WHERE template_id = :id AND ocorrencia_data = :key")
+        .param("id", UUID.fromString(templateId))
+        .param("key", key)
+        .query(
+            (rs, row) ->
+                new Row(
+                    rs.getString("id"),
+                    rs.getString("status"),
+                    rs.getBoolean("desgarrado"),
+                    rs.getObject("ocorrencia_data", LocalDate.class),
+                    rs.getObject("data_caixa", LocalDate.class),
+                    rs.getString("titulo")))
+        .optional();
+  }
+
+  long countByStatus(String templateId, String status) {
+    return jdbc.sql("SELECT count(*) FROM lancamento WHERE template_id = :id AND status = :status")
+        .param("id", UUID.fromString(templateId))
+        .param("status", status)
+        .query(Long.class)
+        .single();
+  }
 }

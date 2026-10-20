@@ -69,9 +69,8 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
 
 ## Recorrência (ADR-026)
 
-Primeira entrega da F5: criar, listar, ver e desativar. Confirmar, cancelar e
-editar uma ocorrência (`PATCH` e `PUT /lancamentos/{id}`) e o bloqueio do
-`DELETE` ficam para a segunda entrega.
+Criar, listar, ver e desativar a recorrência, e confirmar, cancelar, editar e
+apagar uma ocorrência (seção no fim).
 
 - `POST /recorrencias` recebe `{"tipo", "titulo", "descricao"?,
   "valorCentavos", "categoriaId", "contaId", "regra": {"frequencia",
@@ -126,7 +125,48 @@ editar uma ocorrência (`PATCH` e `PUT /lancamentos/{id}`) e o bloqueio do
   poder ser `previsto` (a guarda de tipo do cliente precisa aceitar), além de
   `realizado` e `cancelado`. As previstas entram na lista do mês pela
   `dataCaixa`, com `dataCompetencia` igual. **O saldo continua somando só
-  `realizado`**: previsto não muda `saldoCentavos`. Nesta entrega nenhuma rota
-  de `/lancamentos` cria, confirma ou cancela previsto; o `PUT` e o `DELETE`
-  ainda tratam uma ocorrência como um lançamento comum (a segunda entrega fecha
-  isso).
+  `realizado`**: previsto não muda `saldoCentavos`.
+  Nenhuma rota cria uma prevista: só a regra gera.
+
+### Ocorrência
+
+- `PATCH /lancamentos/{id}` com `{"status": "realizado"}` confirma e com
+  `{"status": "cancelado"}` cancela uma ocorrência. Só esses dois valores, e o
+  campo é obrigatório e o único: sem ele, 400 `status é obrigatório`; outro valor
+  (inclusive `previsto`), 400 `status deve ser realizado ou cancelado`; campo não
+  declarado, 400. Responde 200 com o lançamento (mesmo corpo de `GET`).
+- Só parte de `previsto`. De `realizado` ou `cancelado`, 400 `só ocorrência
+  prevista pode mudar de status` (confirmar duas vezes dá 400 na segunda e o saldo
+  conta uma vez). As duas mudanças são definitivas: não existe voltar a
+  `previsto`.
+- Confirmar entra no saldo na `dataCaixa` da ocorrência, recusa conta arquivada
+  (400 `conta arquivada`) e confere o teto do saldo (400 `saldo da conta fora do
+  limite`); nos dois casos a ocorrência segue `previsto`. Cancelar não mexe em
+  saldo e vale mesmo com a conta arquivada.
+- Perna de transferência no `PATCH` dá 400 `use a rota de transferência`. Outro
+  usuário, inexistente e id fora da forma canônica dão 404 com o mesmo corpo do
+  resto de `/lancamentos/{id}`.
+- `PUT /lancamentos/{id}` numa ocorrência (qualquer status) funciona como num
+  lançamento comum e a deixa desgarrada: a regra nunca mais altera a linha.
+  `templateId` fica, e o `status` não muda pelo `PUT`. Numa prevista o teto do
+  saldo não entra (previsto não conta no saldo); mover para conta arquivada dá
+  400 `conta arquivada`. Mudar a data da ocorrência não faz a regra gerar outra
+  na data original.
+- `DELETE /lancamentos/{id}` numa ocorrência `previsto` dá 400 `cancele a
+  ocorrência` e nada muda: cancele. Ocorrência `realizado` ou `cancelado` pode ser
+  apagada (204). Apagar libera a data para a regra: se a data é de hoje em diante
+  e a recorrência segue ativa, o job a gera de novo como `previsto` na próxima
+  rodada; data de antes de hoje não volta.
+  Quem quer só tirar a ocorrência do saldo e da lista de previstas cancela, não
+  apaga.
+- A resposta do lançamento não traz `desgarrado`. Quem precisa saber se a
+  linha saiu do controle da regra usa `status` (confirmada e cancelada já saíram).
+
+### Espera de trava
+
+Toda escrita de lançamento, transferência e recorrência (`POST`, `PUT`,
+`PATCH`, `DELETE` de `/lancamentos`; `POST` e `DELETE` de `/transferencias`;
+`POST` e `PATCH` de `/recorrencias`) espera no máximo 2 s por trava de conta,
+lançamento ou template. Estourar dá 503 `serviço indisponível` sem gravar nada,
+o mesmo corpo de banco fora, e o cliente pode tentar de novo. O job pula o
+template travado e o pega na rodada seguinte.

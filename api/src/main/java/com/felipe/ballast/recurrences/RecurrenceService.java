@@ -1,13 +1,15 @@
 package com.felipe.ballast.recurrences;
 
+import com.felipe.ballast.web.WriteTransaction;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.postgresql.util.PSQLException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionTemplate;
 
 // Assume entrada já validada e normalizada na borda. Todo método recebe o dono vindo da sessão,
 // menos os do job, que recebem o dono lido do próprio template.
@@ -15,7 +17,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 // Ordem de travas: template e depois conta. Desativar trava só o template; arquivar trava só a
 // conta. Quem materializa (criar e job) trava o template, confere que continua ativo e trava a
 // conta para ler "arquivada": depois que desativar ou arquivar respondeu 200, nenhuma ocorrência
-// nova entra (ADR-026).
+// nova entra (ADR-026). Criar trava só a conta, porque o template ainda não existe. Confirmar,
+// cancelar, editar e apagar ocorrência (EntryService) travam o lançamento e depois a conta, nunca
+// o template, então não fecham ciclo com este serviço.
 @Service
 class RecurrenceService {
 
@@ -24,6 +28,9 @@ class RecurrenceService {
 
   // Até onde a materialização enxerga à frente, em meses contados de hoje, ponta incluída.
   static final int HORIZON_MONTHS = 12;
+
+  private static final String ACCOUNT_FK = "template_conta_mesmo_usuario";
+  private static final String CATEGORY_FK = "template_categoria_mesmo_usuario_e_tipo";
 
   sealed interface CreateResult {
     record Created(RecurrenceSummary recurrence, int materialized) implements CreateResult {}
@@ -36,10 +43,10 @@ class RecurrenceService {
   }
 
   private final RecurrenceQueries queries;
-  private final TransactionTemplate transaction;
+  private final WriteTransaction transaction;
   private final Clock clock;
 
-  RecurrenceService(RecurrenceQueries queries, TransactionTemplate transaction, Clock clock) {
+  RecurrenceService(RecurrenceQueries queries, WriteTransaction transaction, Clock clock) {
     this.queries = queries;
     this.transaction = transaction;
     this.clock = clock;
@@ -52,7 +59,28 @@ class RecurrenceService {
     if (input.accountId() == null) {
       return CreateResult.Rejected.ACCOUNT_NOT_FOUND;
     }
-    return transaction.execute(status -> createLocked(userId, input));
+    // A violação da FK composta sai da transação já com rollback e é capturada aqui fora, como no
+    // EntryService. A conferência de dentro só dá a mensagem; quem segura a corrida é a FK.
+    try {
+      return transaction.execute(status -> createLocked(userId, input));
+    } catch (DataIntegrityViolationException e) {
+      return rejectionOf(e).orElseThrow(() -> e);
+    }
+  }
+
+  private static Optional<CreateResult.Rejected> rejectionOf(Throwable error) {
+    for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+      if (cause instanceof PSQLException psql && psql.getServerErrorMessage() != null) {
+        String constraint = psql.getServerErrorMessage().getConstraint();
+        if (ACCOUNT_FK.equals(constraint)) {
+          return Optional.of(CreateResult.Rejected.ACCOUNT_NOT_FOUND);
+        }
+        if (CATEGORY_FK.equals(constraint)) {
+          return Optional.of(CreateResult.Rejected.CATEGORY_NOT_FOUND);
+        }
+      }
+    }
+    return Optional.empty();
   }
 
   private CreateResult createLocked(UUID userId, RecurrenceInput input) {

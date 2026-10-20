@@ -520,7 +520,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
       security:
       - cookieAuth: []
       summary: Lista os lançamentos do usuário num período
@@ -577,7 +578,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
       security:
       - cookieAuth: []
       summary: Cria um lançamento realizado
@@ -586,7 +588,10 @@ paths:
   /lancamentos/{id}:
     delete:
       description: "Apaga a linha, também numa conta arquivada. O saldo deixa de somá\
-        -lo."
+        -lo. Ocorrência prevista de recorrência não se apaga (400 \"cancele a ocorrê\
+        ncia\"): cancele. Realizada ou cancelada pode ser apagada, e se a data é de\
+        \ hoje em diante e a recorrência segue ativa, o job volta a gerar a ocorrê\
+        ncia como prevista."
       operationId: deleteLancamentosById
       parameters:
       - in: path
@@ -608,7 +613,8 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "\"saldo da conta fora do limite\": apagar o lançamento tiraria\
             \ o saldo da faixa de ±9007199254740991 centavos, e nada é apagado; \"\
-            use a rota de transferência\": o lançamento é perna de transferência"
+            use a rota de transferência\": o lançamento é perna de transferência;\
+            \ \"cancele a ocorrência\": ocorrência prevista de recorrência"
         "401":
           content:
             application/json:
@@ -627,7 +633,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
       security:
       - cookieAuth: []
       summary: Apaga um lançamento
@@ -666,17 +673,95 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
       security:
       - cookieAuth: []
       summary: Devolve um lançamento do usuário
+      tags:
+      - lancamentos
+    patch:
+      description: "Corpo {\"status\": \"realizado\"} ou {\"status\": \"cancelado\"\
+        }, o único campo. Só uma ocorrência prevista muda de status. Confirmar passa\
+        \ a contar no saldo, com a trava e o teto do saldo do lançamento, e recusa\
+        \ conta arquivada; cancelar não mexe em saldo e vale mesmo com a conta arquivada.\
+        \ As duas são definitivas e deixam a ocorrência desgarrada: o job não a recria\
+        \ nem a altera."
+      operationId: patchLancamentosById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LancamentoStatusRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lancamento"
+          description: Lançamento com o status novo
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "\"status é obrigatório\", \"status deve ser realizado ou cancelado\"\
+            , campo não declarado; \"só ocorrência prevista pode mudar de status\"\
+            \ (o lançamento não está previsto); \"conta arquivada\" e \"saldo da conta\
+            \ fora do limite\" (só ao confirmar); \"use a rota de transferência\"\
+            \ (perna de transferência)"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Lançamento de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
+      security:
+      - cookieAuth: []
+      summary: Confirma ou cancela uma ocorrência prevista
       tags:
       - lancamentos
     put:
       description: "Mesmo corpo do POST, substitui todos os campos e grava a data\
         \ nas duas colunas. Mover o lançamento para uma conta arquivada é recusado\
         \ (400 \"conta arquivada\"). Editar sem trocar de conta vale mesmo com a conta\
-        \ arquivada, para corrigir lançamento antigo."
+        \ arquivada, para corrigir lançamento antigo. Numa ocorrência de recorrência\
+        \ marca o lançamento como desgarrado (a regra não toca mais nele) e manté\
+        m templateId; o status não muda por aqui, e uma ocorrência prevista não conta\
+        \ no saldo, então o teto só vale para realizada."
       operationId: putLancamentosById
       parameters:
       - in: path
@@ -737,7 +822,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Banco indisponível
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
       security:
       - cookieAuth: []
       summary: Substitui um lançamento
@@ -1368,6 +1454,17 @@ components:
       - tipo
       - titulo
       - valorCentavos
+    LancamentoStatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Só uma ocorrência prevista muda de status
+          enum:
+          - realizado
+          - cancelado
+      required:
+      - status
     LoginRequest:
       type: object
       properties:

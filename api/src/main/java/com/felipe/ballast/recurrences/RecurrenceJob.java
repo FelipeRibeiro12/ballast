@@ -1,5 +1,6 @@
 package com.felipe.ballast.recurrences;
 
+import com.felipe.ballast.web.LockTimeouts;
 import com.felipe.ballast.web.UnexpectedErrorLog;
 import java.util.List;
 import java.util.UUID;
@@ -40,6 +41,7 @@ class RecurrenceJob {
     UUID after = BEFORE_ALL;
     int templates = 0;
     int failures = 0;
+    int skipped = 0;
     int inserted = 0;
     while (true) {
       List<RecurrenceQueries.TemplateRef> batch = recurrences.activeTemplates(after, batchSize);
@@ -51,6 +53,16 @@ class RecurrenceJob {
         try {
           inserted += recurrences.materialize(ref.userId(), ref.templateId());
         } catch (RuntimeException e) {
+          if (LockTimeouts.isLockTimeout(e)) {
+            // Trava ocupada por mais de 2 s: o template fica para a próxima rodada, sem stack.
+            skipped++;
+            log.warn(
+                "recorrência pulada por trava ocupada usuario_id={} template_id={}",
+                ref.userId(),
+                ref.templateId());
+            after = ref.templateId();
+            continue;
+          }
           // Um template com problema não pode parar os outros. O título fica fora do log.
           failures++;
           UnexpectedErrorLog.error(
@@ -63,9 +75,10 @@ class RecurrenceJob {
       }
     }
     log.info(
-        "materialização das recorrências templates={} ocorrencias={} falhas={}",
+        "materialização das recorrências templates={} ocorrencias={} puladas={} falhas={}",
         templates,
         inserted,
+        skipped,
         failures);
   }
 }

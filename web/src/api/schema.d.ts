@@ -195,18 +195,22 @@ export interface paths {
         get: operations["getLancamentosById"];
         /**
          * Substitui um lançamento
-         * @description Mesmo corpo do POST, substitui todos os campos e grava a data nas duas colunas. Mover o lançamento para uma conta arquivada é recusado (400 "conta arquivada"). Editar sem trocar de conta vale mesmo com a conta arquivada, para corrigir lançamento antigo.
+         * @description Mesmo corpo do POST, substitui todos os campos e grava a data nas duas colunas. Mover o lançamento para uma conta arquivada é recusado (400 "conta arquivada"). Editar sem trocar de conta vale mesmo com a conta arquivada, para corrigir lançamento antigo. Numa ocorrência de recorrência marca o lançamento como desgarrado (a regra não toca mais nele) e mantém templateId; o status não muda por aqui, e uma ocorrência prevista não conta no saldo, então o teto só vale para realizada.
          */
         put: operations["putLancamentosById"];
         post?: never;
         /**
          * Apaga um lançamento
-         * @description Apaga a linha, também numa conta arquivada. O saldo deixa de somá-lo.
+         * @description Apaga a linha, também numa conta arquivada. O saldo deixa de somá-lo. Ocorrência prevista de recorrência não se apaga (400 "cancele a ocorrência"): cancele. Realizada ou cancelada pode ser apagada, e se a data é de hoje em diante e a recorrência segue ativa, o job volta a gerar a ocorrência como prevista.
          */
         delete: operations["deleteLancamentosById"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Confirma ou cancela uma ocorrência prevista
+         * @description Corpo {"status": "realizado"} ou {"status": "cancelado"}, o único campo. Só uma ocorrência prevista muda de status. Confirmar passa a contar no saldo, com a trava e o teto do saldo do lançamento, e recusa conta arquivada; cancelar não mexe em saldo e vale mesmo com a conta arquivada. As duas são definitivas e deixam a ocorrência desgarrada: o job não a recria nem a altera.
+         */
+        patch: operations["patchLancamentosById"];
         trace?: never;
     };
     "/recorrencias": {
@@ -425,6 +429,13 @@ export interface components {
              * @description Centavos de real, sempre positivo; o sinal vem do tipo
              */
             valorCentavos: number;
+        };
+        LancamentoStatusRequest: {
+            /**
+             * @description Só uma ocorrência prevista muda de status
+             * @enum {string}
+             */
+            status: "realizado" | "cancelado";
         };
         LoginRequest: {
             email: string;
@@ -1208,7 +1219,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível */
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1277,7 +1288,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível */
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1326,7 +1337,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível */
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1406,7 +1417,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível */
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -1437,7 +1448,7 @@ export interface operations {
                     "application/json": Record<string, never>;
                 };
             };
-            /** @description "saldo da conta fora do limite": apagar o lançamento tiraria o saldo da faixa de ±9007199254740991 centavos, e nada é apagado; "use a rota de transferência": o lançamento é perna de transferência */
+            /** @description "saldo da conta fora do limite": apagar o lançamento tiraria o saldo da faixa de ±9007199254740991 centavos, e nada é apagado; "use a rota de transferência": o lançamento é perna de transferência; "cancele a ocorrência": ocorrência prevista de recorrência */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1464,7 +1475,87 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível */
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    patchLancamentosById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LancamentoStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Lançamento com o status novo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lancamento"];
+                };
+            };
+            /** @description "status é obrigatório", "status deve ser realizado ou cancelado", campo não declarado; "só ocorrência prevista pode mudar de status" (o lançamento não está previsto); "conta arquivada" e "saldo da conta fora do limite" (só ao confirmar); "use a rota de transferência" (perna de transferência) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Lançamento de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
             503: {
                 headers: {
                     [name: string]: unknown;

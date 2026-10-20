@@ -83,6 +83,11 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<Object> handleUnexpected(Exception ex) {
+    // A trava ocupada por mais de 2 s não é falha da requisição: o cliente pode tentar de novo.
+    if (LockTimeouts.isLockTimeout(ex)) {
+      log.warn("espera por trava estourou", ex);
+      return body(HttpStatus.SERVICE_UNAVAILABLE, new HttpHeaders(), "serviço indisponível");
+    }
     UnexpectedErrorLog.error(log, "erro não tratado", ex);
     return body(HttpStatus.INTERNAL_SERVER_ERROR, new HttpHeaders(), "erro interno");
   }

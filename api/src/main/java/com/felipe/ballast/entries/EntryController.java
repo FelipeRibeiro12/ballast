@@ -24,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -51,6 +52,12 @@ class EntryController {
   private static final ErrorResponse INVALID_TYPE = new ErrorResponse("requisição inválida");
   private static final ErrorResponse BALANCE_OUT_OF_RANGE =
       new ErrorResponse("saldo da conta fora do limite");
+
+  private static final ErrorResponse NOT_PLANNED =
+      new ErrorResponse("só ocorrência prevista pode mudar de status");
+  private static final ErrorResponse INVALID_STATUS =
+      new ErrorResponse("status deve ser realizado ou cancelado");
+  private static final ErrorResponse CANCEL_OCCURRENCE = new ErrorResponse("cancele a ocorrência");
 
   private static final ErrorResponse INVALID_FROM =
       new ErrorResponse("de deve ser uma data AAAA-MM-DD com ano entre 1900 e 2199");
@@ -106,7 +113,7 @@ class EntryController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "503",
-      description = "Banco indisponível",
+      description = "Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @PostMapping(
       path = "/lancamentos",
@@ -152,7 +159,7 @@ class EntryController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "503",
-      description = "Banco indisponível",
+      description = "Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @GetMapping(path = "/lancamentos", produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> list(
@@ -214,7 +221,7 @@ class EntryController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "503",
-      description = "Banco indisponível",
+      description = "Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @GetMapping(path = "/lancamentos/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> find(
@@ -232,7 +239,9 @@ class EntryController {
           "Mesmo corpo do POST, substitui todos os campos e grava a data nas duas colunas. Mover"
               + " o lançamento para uma conta arquivada é recusado (400 \"conta arquivada\"). Editar"
               + " sem trocar de conta vale mesmo com a conta arquivada, para corrigir lançamento"
-              + " antigo.",
+              + " antigo. Numa ocorrência de recorrência marca o lançamento como desgarrado (a"
+              + " regra não toca mais nele) e mantém templateId; o status não muda por aqui, e uma"
+              + " ocorrência prevista não conta no saldo, então o teto só vale para realizada.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",
@@ -266,7 +275,7 @@ class EntryController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "503",
-      description = "Banco indisponível",
+      description = "Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @PutMapping(
       path = "/lancamentos/{id}",
@@ -293,9 +302,84 @@ class EntryController {
   }
 
   @Operation(
+      operationId = "patchLancamentosById",
+      summary = "Confirma ou cancela uma ocorrência prevista",
+      description =
+          "Corpo {\"status\": \"realizado\"} ou {\"status\": \"cancelado\"}, o único campo. Só"
+              + " uma ocorrência prevista muda de status. Confirmar passa a contar no saldo, com"
+              + " a trava e o teto do saldo do lançamento, e recusa conta arquivada; cancelar não"
+              + " mexe em saldo e vale mesmo com a conta arquivada. As duas são definitivas e"
+              + " deixam a ocorrência desgarrada: o job não a recria nem a altera.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Lançamento com o status novo",
+      content = @Content(schema = @Schema(implementation = EntryResponse.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          "\"status é obrigatório\", \"status deve ser realizado ou cancelado\", campo não"
+              + " declarado; \"só ocorrência prevista pode mudar de status\" (o lançamento não"
+              + " está previsto); \"conta arquivada\" e \"saldo da conta fora do limite\" (só ao"
+              + " confirmar); \"use a rota de transferência\" (perna de transferência)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description =
+          "Lançamento de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "413",
+      description = "Corpo maior que 4 KiB",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "415",
+      description = "Content-Type diferente de application/json",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @PatchMapping(
+      path = "/lancamentos/{id}",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> changeStatus(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable("id") String id,
+      @Valid @RequestBody StatusRequest request) {
+    Optional<TargetStatus> target = TargetStatus.fromValue(request.status());
+    if (target.isEmpty()) {
+      return ResponseEntity.badRequest().body(INVALID_STATUS);
+    }
+    Optional<UUID> entryId = CanonicalUuid.parse(id);
+    if (entryId.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    EntryService.SaveResult result = entries.changeStatus(user.id(), entryId.get(), target.get());
+    if (result instanceof EntryService.SaveResult.Saved saved) {
+      log.info(
+          "lançamento mudou de status usuario_id={} lancamento_id={} status={}",
+          user.id(),
+          saved.entry().id(),
+          target.get().value());
+      return ResponseEntity.ok(EntryResponse.from(saved.entry()));
+    }
+    return rejection((EntryService.SaveResult.Rejected) result);
+  }
+
+  @Operation(
       operationId = "deleteLancamentosById",
       summary = "Apaga um lançamento",
-      description = "Apaga a linha, também numa conta arquivada. O saldo deixa de somá-lo.",
+      description =
+          "Apaga a linha, também numa conta arquivada. O saldo deixa de somá-lo. Ocorrência"
+              + " prevista de recorrência não se apaga (400 \"cancele a ocorrência\"): cancele."
+              + " Realizada ou cancelada pode ser apagada, e se a data é de hoje em diante e a"
+              + " recorrência segue ativa, o job volta a gerar a ocorrência como prevista.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(responseCode = "204", description = "Lançamento apagado")
   @ApiResponse(
@@ -303,7 +387,8 @@ class EntryController {
       description =
           "\"saldo da conta fora do limite\": apagar o lançamento tiraria o saldo da faixa de"
               + " ±9007199254740991 centavos, e nada é apagado; \"use a rota de"
-              + " transferência\": o lançamento é perna de transferência",
+              + " transferência\": o lançamento é perna de transferência; \"cancele a"
+              + " ocorrência\": ocorrência prevista de recorrência",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -316,7 +401,7 @@ class EntryController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "503",
-      description = "Banco indisponível",
+      description = "Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @DeleteMapping(path = "/lancamentos/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> delete(
@@ -329,6 +414,7 @@ class EntryController {
       case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
       case TRANSFER_LEG -> ResponseEntity.badRequest().body(TRANSFER_LEG);
+      case CANCEL_OCCURRENCE -> ResponseEntity.badRequest().body(CANCEL_OCCURRENCE);
       case DELETED -> {
         log.info("lançamento apagado usuario_id={} lancamento_id={}", user.id(), entryId.get());
         yield ResponseEntity.noContent().build();
@@ -355,6 +441,7 @@ class EntryController {
       case CATEGORY_NOT_FOUND -> ResponseEntity.badRequest().body(CATEGORY_NOT_FOUND);
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
       case TRANSFER_LEG -> ResponseEntity.badRequest().body(TRANSFER_LEG);
+      case NOT_PLANNED -> ResponseEntity.badRequest().body(NOT_PLANNED);
     };
   }
 }

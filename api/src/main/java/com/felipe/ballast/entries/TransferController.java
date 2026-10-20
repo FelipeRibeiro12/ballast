@@ -180,7 +180,8 @@ class TransferController {
       case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
       // Resultado do DELETE de lançamento; a transferência nunca o devolve.
-      case TRANSFER_LEG -> throw new IllegalStateException("resultado impossível");
+      case TRANSFER_LEG, CANCEL_OCCURRENCE ->
+          throw new IllegalStateException("resultado impossível");
       case DELETED -> {
         log.info(
             "transferência apagada usuario_id={} transferencia_id={}", user.id(), transferId.get());

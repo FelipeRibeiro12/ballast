@@ -61,6 +61,21 @@ e o que acontece com cada ocorrência.
 - `DELETE /lancamentos/{id}` numa ocorrência prevista de template dá 400
   `cancele a ocorrência`: apagar liberaria a chave e a regra geraria a mesma
   data de novo. Realizada de template pode ser apagada.
+- `desgarrado` no confirmar e no cancelar é redundante hoje: a materialização
+  nunca atualiza linha (a chave unique com `ON CONFLICT DO NOTHING` já ocupa o
+  slot) e desativar só apaga `previsto`. Fica marcado mesmo assim, para
+  `desgarrado` querer dizer "o usuário assumiu a linha" em qualquer caminho.
+- `DELETE` de ocorrência `realizado` ou `cancelado` apaga a linha e libera a
+  chave. Data de antes de hoje nunca volta (a materialização começa em hoje).
+  Data de hoje em diante com o template ativo volta como `previsto` na próxima
+  rodada do job; com o template inativo, não volta. Quem quer manter a
+  ocorrência fora do saldo e da lista de previstas cancela, não apaga.
+- Ordem de travas, para não haver deadlock: template, depois conta (criar
+  recorrência trava só a conta, o template ainda não existe; job); lançamento,
+  depois conta (`PUT`, `DELETE`, confirmar); cancelar trava só o lançamento;
+  transferência, depois lançamento, depois conta. Desativar trava o template e
+  depois pega a linha de cada prevista no `DELETE`; confirmar não trava template,
+  então não há ciclo com ele.
 
 ### Materialização
 
@@ -78,8 +93,11 @@ e o que acontece com cada ocorrência.
 ### Espera de trava
 
 - Toda transação de escrita de lançamento, transferência e recorrência faz
-  `SET LOCAL lock_timeout = '2s'`. Estourar dá 503 `serviço indisponível`.
-  Fecha a dívida da F3.
+  `SET LOCAL lock_timeout = '2s'`, antes da primeira trava. Estourar dá 503
+  `serviço indisponível`. Fecha a dívida da F3. O job pula o template travado e
+  loga, sem stack. O Postgres devolve SQLState 55P03; o Spring não o traduz
+  pelo `JdbcClient` (chega como `UncategorizedSQLException`), então a
+  aplicação confere o SQLState na cadeia de causas.
 
 ## Justificativa
 
