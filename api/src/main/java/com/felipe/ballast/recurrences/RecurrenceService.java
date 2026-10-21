@@ -1,6 +1,8 @@
 package com.felipe.ballast.recurrences;
 
 import com.felipe.ballast.entries.CardBilling;
+import com.felipe.ballast.entries.EntryType;
+import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -42,13 +44,18 @@ class RecurrenceService {
   private static final String ACCOUNT_FK = "template_conta_mesmo_usuario";
   private static final String CATEGORY_FK = "template_categoria_mesmo_usuario_e_tipo";
 
+  // Gatilho da V12, que o INSERT da ocorrência dispara. Na criação é a rede de segurança da
+  // conferência; no job é o sinal de que a categoria saiu da lista depois que o template nasceu.
+  static final String PERMITTED_TRIGGER = "lancamento_categoria_permitida_no_beneficio";
+
   sealed interface CreateResult {
     record Created(RecurrenceSummary recurrence, int materialized) implements CreateResult {}
 
     enum Rejected implements CreateResult {
       ACCOUNT_NOT_FOUND,
       ACCOUNT_ARCHIVED,
-      CATEGORY_NOT_FOUND
+      CATEGORY_NOT_FOUND,
+      CATEGORY_NOT_PERMITTED
     }
   }
 
@@ -79,6 +86,9 @@ class RecurrenceService {
   }
 
   private static Optional<CreateResult.Rejected> rejectionOf(Throwable error) {
+    if (Constraints.isViolated(error, PERMITTED_TRIGGER)) {
+      return Optional.of(CreateResult.Rejected.CATEGORY_NOT_PERMITTED);
+    }
     for (Throwable cause = error; cause != null; cause = cause.getCause()) {
       if (cause instanceof PSQLException psql && psql.getServerErrorMessage() != null) {
         String constraint = psql.getServerErrorMessage().getConstraint();
@@ -104,6 +114,10 @@ class RecurrenceService {
     if (input.categoryId() == null
         || !queries.categoryExists(userId, input.categoryId(), input.type())) {
       return CreateResult.Rejected.CATEGORY_NOT_FOUND;
+    }
+    if (input.type() == EntryType.EXPENSE
+        && !queries.isCategoryPermitted(userId, input.accountId(), input.categoryId())) {
+      return CreateResult.Rejected.CATEGORY_NOT_PERMITTED;
     }
     UUID ruleId = queries.insertRule(userId, input.rule());
     UUID templateId = queries.insertTemplate(userId, input, ruleId);

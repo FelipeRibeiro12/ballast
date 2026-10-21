@@ -14,6 +14,7 @@ function conta(id: string, nome: string): Conta {
     arquivada: false,
     criadaEm: '2026-10-19T12:00:00Z',
     cartao: null,
+    categoriasPermitidas: null,
   }
 }
 
@@ -122,6 +123,20 @@ describe('SaldoProjetado', () => {
 
     fireEvent.change(select, { target: { value: '' } })
     await waitFor(() => expect(urlsPedidas().filter((u) => u === '/saldo-projetado?dias=90')).toHaveLength(2))
+  })
+
+  it('lista o benefício no filtro e projeta só ele quando escolhido', async () => {
+    mockFetch(responde(serie()))
+    const vr: Conta = { ...conta('b1', 'VR'), tipo: 'beneficio', categoriasPermitidas: [] }
+    renderizar({ contas: [nubank, vr] })
+    await screen.findByText(/menor saldo/i)
+
+    const select = screen.getByLabelText(/conta/i)
+    expect(within(select).getByRole('option', { name: 'VR' })).toBeVisible()
+    // A API já deixa o benefício de fora da projeção sem contaId; o cliente não filtra nada.
+    expect(urlsPedidas()).toEqual(['/saldo-projetado?dias=90'])
+    fireEvent.change(select, { target: { value: 'b1' } })
+    await waitFor(() => expect(urlsPedidas()).toContain('/saldo-projetado?dias=90&contaId=b1'))
   })
 
   it('volta para todas as contas quando a escolhida sai da lista de ativas', async () => {

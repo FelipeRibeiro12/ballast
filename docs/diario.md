@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-21 — F12: benefícios com restrição (PR #19)
+
+O que entrou: migration V12 com o tipo `beneficio`, `conta_categoria_permitida` (FK composta com colunas geradas: só conta de benefício e só categoria de despesa do mesmo usuário) e um gatilho que recusa despesa fora da lista; a regra também na aplicação em lançamento, PUT, recorrência e job; benefício fora de transferência; saldo projetado sem conta escolhida sem benefício; no web, o tipo Vale-benefício com as categorias em checkboxes, o select de categoria filtrado na despesa e o cartão "Benefícios" no Início.
+Decisões: ADR-034, com emenda do ADR-029. A regra vale só para despesa e só na escrita; o gatilho trava a conta com FOR SHARE e a troca da lista trava com FOR UPDATE.
+Dívida registrada: helpers de constraint repetidos, mensagens novas fora das descrições do OpenAPI, recorrência pulada para sempre quando a categoria sai da lista.
+Achados do QA: 0 bloquearam, 0 dívidas, 2 sugestões (texto do invariante 4 corrigido para "no momento da escrita"; lista editável em conta arquivada, inofensivo). 150 checagens, inclusive 180 operações cruzadas de corrida.
+Achados do revisor: 0 bloquearam, 2 dívidas (criar benefício sem as categorias carregadas gravava lista vazia, corrigido na fatia; consulta repetida, registrada), 3 sugestões (texto do ADR-034 sobre confirmar e PUT, corrigido; as duas do QA, registradas). Security: 0 críticos, 0 altos, 0 médios, 2 baixos sem ação.
+Pipeline: PENDENTE
+Em aberto: o backend parou uma vez pelo limite de uso antes de mexer em arquivo; dois laços de espera do PR #18 que nunca terminariam foram encerrados.
+
 ## 2026-10-20 — Redesenho visual e e2e em navegador (PR #18)
 
 O que entrou: Playwright 1.63.0 com `make e2e`, que sobe Postgres, API e web descartáveis e roda o fluxo principal em 360px e 1280px com capturas no claro e no escuro, e o job `e2e` no CI fora do ruleset; o web redesenhado com quatro seções por hash, tokens de cor e espaço, modo escuro com seletor, cartões, selos, painéis acessíveis para criar, menu de ações por lançamento, faturas compactas, Início com saldo, projeção e próximas previstas, ícone próprio do app.

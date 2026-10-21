@@ -14,9 +14,10 @@ import org.springframework.stereotype.Repository;
 @Repository
 class ProjectionQueries {
 
-  // Sem contaId, só as contas ativas. Com contaId vale a conta pedida, arquivada ou não, e a
+  // Sem contaId, só as contas ativas que não são de benefício: R$ 800 de VR não pagam o aluguel
+  // (ADR-034). Com contaId vale a conta pedida, arquivada ou não, benefício inclusive, e a
   // contagem de contas do escopo é como o serviço percebe conta alheia ou inexistente.
-  private static final String ALL_ACTIVE = "NOT arquivada";
+  private static final String ALL_ACTIVE = "NOT arquivada AND tipo <> 'beneficio'";
   private static final String ONE_ACCOUNT = "id = :accountId";
 
   private static final String QUERY_START =

@@ -65,8 +65,10 @@ class AccountCreationTest {
             "saldoCentavos",
             "arquivada",
             "criadaEm",
-            "cartao");
+            "cartao",
+            "categoriasPermitidas");
     assertThat(body.get("cartao").isNull()).isTrue();
+    assertThat(body.get("categoriasPermitidas").isNull()).isTrue();
     assertThat(body.get("nome").asString()).isEqualTo("Nubank");
     assertThat(body.get("tipo").asString()).isEqualTo("corrente");
     assertThat(body.get("moeda").asString()).isEqualTo("BRL");
@@ -225,7 +227,7 @@ class AccountCreationTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"cartao_credito", "beneficio", "cripto", "Corrente", "", "0"})
+  @ValueSource(strings = {"cartao_credito", "Beneficio", "cripto", "Corrente", "", "0"})
   void rejectsATypeOutsideTheList(String type) throws Exception {
     MockHttpServletResponse response = api.create(session, account("Conta", type, null));
 

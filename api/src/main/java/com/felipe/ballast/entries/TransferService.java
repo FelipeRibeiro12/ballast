@@ -27,6 +27,7 @@ class TransferService {
       ACCOUNT_ARCHIVED,
       SAME_ACCOUNT,
       CARD_AS_ORIGIN,
+      BENEFIT_ACCOUNT,
       BALANCE_OUT_OF_RANGE
     }
   }
@@ -88,6 +89,11 @@ class TransferService {
     }
     if (fromArchived.get() || toArchived.get()) {
       return CreateResult.Rejected.ACCOUNT_ARCHIVED;
+    }
+    // Depois de "não encontrada": a resposta para conta alheia não pode revelar o tipo dela.
+    if (entryQueries.isBenefitAccount(userId, input.fromAccountId())
+        || entryQueries.isBenefitAccount(userId, input.toAccountId())) {
+      return CreateResult.Rejected.BENEFIT_ACCOUNT;
     }
     // Saída do cartão não entra em nenhuma fatura, mas baixaria o saldo dele: a fatura ficaria paga
     // com dívida no saldo. Só o pagamento (cartão como destino) é transferência.

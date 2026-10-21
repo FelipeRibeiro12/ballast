@@ -17,6 +17,7 @@ function conta(sobra: Partial<Record<string, unknown>> = {}): Record<string, unk
     arquivada: false,
     criadaEm: '2026-10-19T12:00:00Z',
     cartao: null,
+    categoriasPermitidas: null,
     ...sobra,
   }
 }
@@ -628,6 +629,27 @@ describe('Cartão de crédito', () => {
         const form = await screen.findByRole('form', { name: 'Pagamento da fatura' })
         const origem = within(form).getByLabelText('Conta de origem')
         expect(within(origem).getAllByRole('option').map((o) => o.textContent)).toEqual(['Nubank'])
+      })
+    })
+
+    describe('benefício não participa de transferência nem de pagamento de fatura', () => {
+      const vr = conta({ id: 'b1', nome: 'VR', tipo: 'beneficio', categoriasPermitidas: [] })
+
+      it('o Pagar fatura não lista benefício em origem nem destino', async () => {
+        mockFetch({
+          ...sessaoViva,
+          'GET /contas': responde([conta(), vr, cartaoVisa()]),
+          [FATURAS]: responde({ contaId: 'c9', faturas: [fatura()] }),
+        })
+        window.location.hash = '#/contas'
+        render(<App />)
+        await abrirFaturas()
+        fireEvent.click(await screen.findByRole('button', { name: 'Pagar fatura de 10/11/2026' }))
+        const form = await screen.findByRole('form', { name: 'Pagamento da fatura' })
+        const nomes = (rotulo: string): (string | null)[] =>
+          within(within(form).getByLabelText(rotulo)).getAllByRole('option').map((o) => o.textContent)
+        expect(nomes('Conta de origem')).toEqual(['Nubank'])
+        expect(nomes('Conta de destino')).toEqual(['Nubank', 'Visa'])
       })
     })
 

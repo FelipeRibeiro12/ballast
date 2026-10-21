@@ -48,6 +48,8 @@ class EntryController {
   private static final ErrorResponse ACCOUNT_ARCHIVED = new ErrorResponse("conta arquivada");
   private static final ErrorResponse CATEGORY_NOT_FOUND =
       new ErrorResponse("categoria não encontrada");
+  private static final ErrorResponse CATEGORY_NOT_PERMITTED =
+      new ErrorResponse("categoria não permitida nesta conta");
   private static final ErrorResponse TRANSFER_LEG =
       new ErrorResponse("use a rota de transferência");
   // Mesmo texto que o tipo desconhecido tinha antes de o enum conhecer transferencia.
@@ -496,6 +498,7 @@ class EntryController {
       case ACCOUNT_NOT_FOUND -> ResponseEntity.badRequest().body(ACCOUNT_NOT_FOUND);
       case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
       case CATEGORY_NOT_FOUND -> ResponseEntity.badRequest().body(CATEGORY_NOT_FOUND);
+      case CATEGORY_NOT_PERMITTED -> ResponseEntity.badRequest().body(CATEGORY_NOT_PERMITTED);
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
       case TRANSFER_LEG -> ResponseEntity.badRequest().body(TRANSFER_LEG);
       case NOT_PLANNED -> ResponseEntity.badRequest().body(NOT_PLANNED);

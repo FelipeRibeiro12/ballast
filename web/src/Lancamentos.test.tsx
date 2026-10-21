@@ -17,6 +17,7 @@ function conta(sobra: Partial<Record<string, unknown>> = {}): Record<string, unk
     arquivada: false,
     criadaEm: '2026-10-19T12:00:00Z',
     cartao: null,
+    categoriasPermitidas: null,
     ...sobra,
   }
 }
@@ -1546,6 +1547,114 @@ describe('Lancamentos', () => {
       fireEvent.click(await acao('Apagar compra Notebook'))
       fireEvent.click(await screen.findByRole('button', { name: 'Confirmar apagar compra Notebook' }))
       await waitFor(() => expect(chamadasA(faturas)).toHaveLength(2))
+    })
+  })
+
+  describe('benefício com restrição', () => {
+    const vr = conta({ id: 'b1', nome: 'VR', tipo: 'beneficio', saldoCentavos: 80000, categoriasPermitidas: ['cd1'] })
+    const vrAberto = conta({ id: 'b2', nome: 'VA', tipo: 'beneficio', categoriasPermitidas: [] })
+    const comBeneficio = { ...base, 'GET /contas': responde([conta(), vr, vrAberto]), [MES_ATUAL]: responde([]) }
+
+    const opcoes = (select: HTMLElement): (string | null)[] =>
+      within(select).getAllByRole('option').map((opcao) => opcao.textContent)
+
+    it('despesa em benefício com lista mostra só as categorias permitidas', async () => {
+      mockFetch(comBeneficio)
+      render(<App />)
+      const form = await formulario()
+      fireEvent.change(within(form).getByLabelText('Conta'), { target: { value: 'b1' } })
+      // Sem escolha prévia que valha, o campo pede uma categoria em vez de adivinhar.
+      expect(opcoes(within(form).getByLabelText('Categoria'))).toEqual(['Escolha uma categoria', 'Mercado'])
+      expect(within(form).getByLabelText('Categoria')).toHaveValue('')
+      expect(within(form).getByText(/só aceita algumas categorias de despesa/i)).toBeVisible()
+    })
+
+    it('receita no mesmo benefício mostra todas as categorias de receita', async () => {
+      mockFetch(comBeneficio)
+      render(<App />)
+      const form = await formulario()
+      fireEvent.change(within(form).getByLabelText('Conta'), { target: { value: 'b1' } })
+      fireEvent.change(within(form).getByLabelText('Tipo'), { target: { value: 'receita' } })
+      expect(opcoes(within(form).getByLabelText('Categoria'))).toEqual(['Salário'])
+      expect(within(form).queryByText(/só aceita algumas categorias/i)).toBeNull()
+    })
+
+    it('benefício com lista vazia aceita todas as categorias de despesa', async () => {
+      mockFetch(comBeneficio)
+      render(<App />)
+      const form = await formulario()
+      fireEvent.change(within(form).getByLabelText('Conta'), { target: { value: 'b2' } })
+      expect(opcoes(within(form).getByLabelText('Categoria'))).toEqual(['Mercado', 'Transporte'])
+    })
+
+    it('trocar para benefício limpa a categoria que não vale e pede outra', async () => {
+      mockFetch({ ...comBeneficio, 'POST /lancamentos': responde(lancamento({ contaId: 'b1' }), 201) })
+      render(<App />)
+      const form = await formulario()
+      preencher(form, 'Almoço', '30,00')
+      fireEvent.change(within(form).getByLabelText('Categoria'), { target: { value: 'cd2' } })
+      fireEvent.change(within(form).getByLabelText('Conta'), { target: { value: 'b1' } })
+      const select = within(form).getByLabelText('Categoria')
+      expect(select).toHaveValue('')
+      expect(select).toBeRequired()
+      expect(opcoes(select)).toEqual(['Escolha uma categoria', 'Mercado'])
+      expect(within(form).getByText(/a categoria escolhida não vale nesta conta/i)).toBeVisible()
+      fireEvent.change(select, { target: { value: 'cd1' } })
+      fireEvent.submit(form)
+      await waitFor(() => expect(chamadasA('POST /lancamentos')).toHaveLength(1))
+      expect(JSON.parse(String(chamadasA('POST /lancamentos')[0][1]?.body))).toMatchObject({
+        categoriaId: 'cd1',
+        contaId: 'b1',
+      })
+    })
+
+    it('categoria que vale nas duas contas continua escolhida ao trocar', async () => {
+      mockFetch(comBeneficio)
+      render(<App />)
+      const form = await formulario()
+      fireEvent.change(within(form).getByLabelText('Categoria'), { target: { value: 'cd1' } })
+      fireEvent.change(within(form).getByLabelText('Conta'), { target: { value: 'b1' } })
+      expect(within(form).getByLabelText('Categoria')).toHaveValue('cd1')
+    })
+
+    it('voltar para conta sem restrição devolve todas as categorias', async () => {
+      mockFetch(comBeneficio)
+      render(<App />)
+      const form = await formulario()
+      fireEvent.change(within(form).getByLabelText('Conta'), { target: { value: 'b1' } })
+      fireEvent.change(within(form).getByLabelText('Conta'), { target: { value: 'c1' } })
+      expect(opcoes(within(form).getByLabelText('Categoria'))).toEqual(['Mercado', 'Transporte'])
+    })
+
+    it('400 de categoria não permitida mostra a mensagem do servidor', async () => {
+      mockFetch({
+        ...comBeneficio,
+        'POST /lancamentos': responde({ erro: 'categoria não permitida nesta conta' }, 400),
+      })
+      render(<App />)
+      const form = await formulario()
+      preencher(form, 'Almoço', '30,00')
+      fireEvent.change(within(form).getByLabelText('Conta'), { target: { value: 'b1' } })
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent('categoria não permitida nesta conta')
+    })
+
+    it('benefício não aparece em origem nem destino da transferência', async () => {
+      mockFetch({ ...comBeneficio, 'GET /contas': responde([conta(), contaB, vr, vrAberto]) })
+      render(<App />)
+      await abrirNovo()
+      fireEvent.click(await screen.findByRole('button', { name: 'Transferência' }))
+      const form = await formulario('Nova transferência')
+      expect(opcoes(within(form).getByLabelText('Conta de origem'))).toEqual(['Nubank', 'Carteira'])
+      expect(opcoes(within(form).getByLabelText('Conta de destino'))).toEqual(['Nubank', 'Carteira'])
+    })
+
+    it('só benefício e uma conta pede mais contas para transferir', async () => {
+      mockFetch({ ...comBeneficio, 'GET /contas': responde([conta(), vr]) })
+      render(<App />)
+      await abrirNovo()
+      fireEvent.click(await screen.findByRole('button', { name: 'Transferência' }))
+      expect(await screen.findByText('Crie duas contas para transferir.')).toBeVisible()
     })
   })
 })

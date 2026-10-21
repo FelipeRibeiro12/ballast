@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -52,6 +54,18 @@ class AccountController {
 
   private static final ErrorResponse PAYMENT_ACCOUNT_NOT_ELIGIBLE =
       new ErrorResponse("conta de pagamento deve ser uma conta corrente ou poupança ativa");
+
+  private static final ErrorResponse CATEGORY_NOT_FOUND =
+      new ErrorResponse("categoria não encontrada");
+
+  private static final ErrorResponse PERMITTED_NOT_ALLOWED =
+      new ErrorResponse("categoriasPermitidas só vale para conta de benefício");
+
+  private static final ErrorResponse PERMITTED_REPEATED =
+      new ErrorResponse("categoriasPermitidas não pode repetir categoria");
+
+  private static final ErrorResponse NOT_BENEFIT =
+      new ErrorResponse("só conta de benefício tem categorias permitidas");
 
   private static final ErrorResponse INVALID_ARCHIVED_FILTER =
       new ErrorResponse("arquivadas deve ser true ou false");
@@ -111,13 +125,29 @@ class AccountController {
     if (!isCard && request.card() != null) {
       return ResponseEntity.badRequest().body(CARD_NOT_ALLOWED);
     }
+    boolean isBenefit = request.type() == AccountType.BENEFIT;
+    if (!isBenefit && request.permittedCategories() != null) {
+      return ResponseEntity.badRequest().body(PERMITTED_NOT_ALLOWED);
+    }
+    // Conta de benefício sem o campo grava lista vazia: aceita qualquer categoria.
+    List<UUID> permitted = null;
+    if (isBenefit) {
+      PermittedCategories.Parsed parsed =
+          PermittedCategories.parse(
+              request.permittedCategories() == null ? List.of() : request.permittedCategories());
+      if (!(parsed instanceof PermittedCategories.Parsed.Ids ids)) {
+        return ResponseEntity.badRequest().body(permittedRefusal(parsed));
+      }
+      permitted = ids.ids();
+    }
     AccountService.CreateResult result =
         accounts.create(
             user.id(),
             request.name(),
             request.type(),
             request.initialBalance(),
-            cardInput(request.card()));
+            cardInput(request.card()),
+            permitted);
     return switch (result) {
       case AccountService.CreateResult.Created created -> {
         log.info("conta criada usuario_id={} conta_id={}", user.id(), created.account().id());
@@ -133,9 +163,17 @@ class AccountController {
               ResponseEntity.badRequest().body(PAYMENT_ACCOUNT_NOT_FOUND);
           case PAYMENT_ACCOUNT_NOT_ELIGIBLE ->
               ResponseEntity.badRequest().body(PAYMENT_ACCOUNT_NOT_ELIGIBLE);
+          case CATEGORY_NOT_FOUND -> ResponseEntity.badRequest().body(CATEGORY_NOT_FOUND);
         };
       }
     };
+  }
+
+  // Id malformado tem a mesma resposta de categoria inexistente ou de outro usuário.
+  private static ErrorResponse permittedRefusal(PermittedCategories.Parsed refused) {
+    return refused == PermittedCategories.Parsed.Refused.REPEATED
+        ? PERMITTED_REPEATED
+        : CATEGORY_NOT_FOUND;
   }
 
   // O texto de contaPagamentoId que não é UUID vira nulo, e o serviço responde "não encontrada".
@@ -279,5 +317,80 @@ class AccountController {
         updated.get().id(),
         updated.get().archived());
     return ResponseEntity.ok(AccountResponse.from(updated.get()));
+  }
+
+  @Operation(
+      operationId = "putContasByIdCategoriasPermitidas",
+      summary = "Troca a lista de categorias permitidas de uma conta de benefício",
+      description =
+          "Substitui a lista inteira. Lista vazia libera qualquer categoria de despesa. Não mexe"
+              + " em lançamento já gravado.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Conta com a lista nova",
+      content = @Content(schema = @Schema(implementation = AccountResponse.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          "Entrada inválida, inclusive campo não declarado, mais de 50 itens, item repetido,"
+              + " categoria inexistente, de outro usuário, de receita ou id malformado, e conta"
+              + " que não é de benefício",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description =
+          "Conta de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "413",
+      description = "Corpo maior que 4 KiB",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "415",
+      description = "Content-Type diferente de application/json",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível ou conta travada por mais de 2 s",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @PutMapping(
+      path = "/contas/{id}/categorias-permitidas",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> replacePermitted(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable("id") String id,
+      @Valid @RequestBody PermittedCategoriesRequest request) {
+    Optional<UUID> accountId = CanonicalUuid.parse(id);
+    if (accountId.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    PermittedCategories.Parsed parsed = PermittedCategories.parse(request.categoryIds());
+    if (!(parsed instanceof PermittedCategories.Parsed.Ids ids)) {
+      return ResponseEntity.badRequest().body(permittedRefusal(parsed));
+    }
+    AccountService.ReplaceResult result =
+        accounts.replacePermitted(user.id(), accountId.get(), ids.ids());
+    return switch (result) {
+      case AccountService.ReplaceResult.Replaced replaced -> {
+        log.info(
+            "categorias permitidas trocadas usuario_id={} conta_id={} quantidade={}",
+            user.id(),
+            replaced.account().id(),
+            ids.ids().size());
+        yield ResponseEntity.ok(AccountResponse.from(replaced.account()));
+      }
+      case AccountService.ReplaceResult.Rejected rejected ->
+          switch (rejected) {
+            case ACCOUNT_NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+            case NOT_BENEFIT -> ResponseEntity.badRequest().body(NOT_BENEFIT);
+            case CATEGORY_NOT_FOUND -> ResponseEntity.badRequest().body(CATEGORY_NOT_FOUND);
+          };
+    };
   }
 }

@@ -39,6 +39,8 @@ class TransferController {
       new ErrorResponse("contas devem ser diferentes");
   private static final ErrorResponse CARD_AS_ORIGIN =
       new ErrorResponse("cartão não pode ser origem de transferência");
+  private static final ErrorResponse BENEFIT_ACCOUNT =
+      new ErrorResponse("conta de benefício não participa de transferência");
   private static final ErrorResponse BALANCE_OUT_OF_RANGE =
       new ErrorResponse("saldo da conta fora do limite");
 
@@ -113,6 +115,7 @@ class TransferController {
       case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
       case SAME_ACCOUNT -> ResponseEntity.badRequest().body(SAME_ACCOUNT);
       case CARD_AS_ORIGIN -> ResponseEntity.badRequest().body(CARD_AS_ORIGIN);
+      case BENEFIT_ACCOUNT -> ResponseEntity.badRequest().body(BENEFIT_ACCOUNT);
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
     };
   }

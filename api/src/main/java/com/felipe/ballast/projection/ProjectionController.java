@@ -61,7 +61,7 @@ class ProjectionController {
           "Um ponto por dia, de hoje (America/Sao_Paulo) até hoje + dias - 1. O saldo do dia é o"
               + " saldo inicial das contas mais tudo que é realizado ou previsto com dataCaixa"
               + " até o dia; cancelado nunca entra, e a prevista vencida entra pela própria"
-              + " data. Sem contaId soma as contas ativas (transferência entre duas delas se"
+              + " data. Sem contaId soma as contas ativas, menos as de benefício (transferência entre duas delas se"
               + " anula; de ativa para arquivada sai do total). Com contaId vale só a conta, também"
               + " arquivada, e a transferência conta pelo sinal da perna dela. entradas e saídas"
               + " de um dia são só os lançamentos com dataCaixa naquele dia; a perna de"

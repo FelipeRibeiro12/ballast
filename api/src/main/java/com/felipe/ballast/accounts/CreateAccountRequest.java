@@ -8,7 +8,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
+import java.util.List;
 
 @Schema(name = "CriarContaRequest")
 public record CreateAccountRequest(
@@ -36,14 +38,23 @@ public record CreateAccountRequest(
             requiredMode = Schema.RequiredMode.NOT_REQUIRED,
             description = "Obrigatório quando tipo é cartao_credito e proibido nos outros tipos")
         @Valid
-        CardRequest card) {
+        CardRequest card,
+    @JsonProperty("categoriasPermitidas")
+        @Schema(
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+            description =
+                "Só para tipo beneficio: ids de categorias de despesa que a conta aceita. Ausente"
+                    + " ou vazia aceita qualquer categoria. Proibido nos outros tipos")
+        @Size(max = PermittedCategories.MAX, message = PermittedCategories.SIZE_MESSAGE)
+        List<String> permittedCategories) {
 
   // Number.MAX_SAFE_INTEGER: acima disso o JavaScript perde o centavo (ADR-023).
   static final long MAX_CENTS = 9_007_199_254_740_991L;
 
   static final String NAME_MESSAGE =
       "nome deve ter entre 1 e 100 caracteres e não pode ter caracteres de controle";
-  static final String TYPE_MESSAGE = "tipo deve ser corrente, poupanca, dinheiro ou cartao_credito";
+  static final String TYPE_MESSAGE =
+      "tipo deve ser corrente, poupanca, dinheiro, cartao_credito ou beneficio";
   static final String BALANCE_MESSAGE =
       "saldoInicialCentavos deve ser um inteiro entre -9007199254740991 e 9007199254740991";
 

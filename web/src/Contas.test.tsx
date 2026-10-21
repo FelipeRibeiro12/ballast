@@ -16,6 +16,7 @@ function conta(sobra: Partial<Record<string, unknown>> = {}): Record<string, unk
     arquivada: false,
     criadaEm: '2026-10-19T12:00:00Z',
     cartao: null,
+    categoriasPermitidas: null,
     ...sobra,
   }
 }
@@ -205,7 +206,7 @@ describe('Contas', () => {
     expect(nome).toBeRequired()
     expect(screen.getByLabelText(/saldo inicial/i)).toHaveAttribute('inputmode', 'decimal')
     const opcoes = within(screen.getByLabelText('Tipo')).getAllByRole('option')
-    expect(opcoes.map((opcao) => opcao.textContent)).toEqual(['Corrente', 'Poupança', 'Dinheiro', 'Cartão de crédito'])
+    expect(opcoes.map((opcao) => opcao.textContent)).toEqual(['Corrente', 'Poupança', 'Dinheiro', 'Cartão de crédito', 'Vale-benefício'])
   })
 
   it('cria a conta, mostra na lista sem recarregar e limpa o formulário', async () => {
@@ -434,5 +435,297 @@ describe('Contas', () => {
     const nomes = screen.getAllByRole('listitem').map((item) => item.querySelector('strong')?.textContent)
     // 'Banco' (a0) vem antes de 'banco' (a1) pelo id, e ambos antes de Carteira.
     expect(nomes).toEqual(['Banco', 'banco', 'Carteira'])
+  })
+})
+
+describe('Conta de benefício', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function categoria(id: string, nome: string, tipo = 'despesa'): Record<string, unknown> {
+    return { id, nome, tipo, paiId: null, cor: null, icone: null }
+  }
+
+  const categorias = [
+    categoria('cat-ali', 'Alimentação'),
+    categoria('cat-mer', 'Mercado'),
+    categoria('cat-sal', 'Salário', 'receita'),
+  ]
+
+  const vale = (sobra: Partial<Record<string, unknown>> = {}): Record<string, unknown> =>
+    conta({ id: 'b1', nome: 'VR', tipo: 'beneficio', saldoCentavos: 80000, categoriasPermitidas: [], ...sobra })
+
+  async function abrirNovoBeneficio(): Promise<HTMLElement> {
+    const form = await abrirNovaConta()
+    fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'beneficio' } })
+    return form
+  }
+
+  it('só mostra "O que esta conta pode pagar" com o tipo Vale-benefício, só com despesas', async () => {
+    mockFetch({ ...sessaoViva, 'GET /contas': responde([]), 'GET /categorias': responde(categorias) })
+    render(<App />)
+    await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovaConta()
+    expect(screen.queryByText('O que esta conta pode pagar')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'beneficio' } })
+    const grupo = screen.getByRole('group', { name: 'O que esta conta pode pagar' })
+    expect(within(grupo).getByText(/sem nenhuma marcada, ela aceita qualquer categoria/i)).toBeVisible()
+    expect(within(grupo).getByRole('checkbox', { name: 'Alimentação' })).not.toBeChecked()
+    expect(within(grupo).getByRole('checkbox', { name: 'Mercado' })).not.toBeChecked()
+    expect(within(grupo).queryByRole('checkbox', { name: 'Salário' })).toBeNull()
+  })
+
+  it('cria o benefício com as categorias marcadas', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([]),
+      'GET /categorias': responde(categorias),
+      'POST /contas': responde(vale({ categoriasPermitidas: ['cat-ali'] }), 201),
+    })
+    render(<App />)
+    await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovoBeneficio()
+    preencherNovaConta('VR', '800,00')
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Alimentação' }))
+    enviarNovaConta()
+    const lista = await screen.findByRole('list', { name: 'Categorias permitidas em VR' })
+    expect(within(lista).getByText('Alimentação')).toBeVisible()
+    expect(screen.getByText('Vale-benefício')).toBeVisible()
+    expect(JSON.parse(String(chamadasA('POST /contas')[0][1]?.body))).toEqual({
+      nome: 'VR',
+      tipo: 'beneficio',
+      saldoInicialCentavos: 80000,
+      categoriasPermitidas: ['cat-ali'],
+    })
+  })
+
+  it('cria o benefício sem categorias mandando lista vazia', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([]),
+      'GET /categorias': responde(categorias),
+      'POST /contas': responde(vale(), 201),
+    })
+    render(<App />)
+    await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovoBeneficio()
+    preencherNovaConta('VR')
+    await screen.findByRole('checkbox', { name: 'Alimentação' })
+    enviarNovaConta()
+    expect(await screen.findByText('Aceita qualquer categoria')).toBeVisible()
+    expect(JSON.parse(String(chamadasA('POST /contas')[0][1]?.body))).toEqual({
+      nome: 'VR',
+      tipo: 'beneficio',
+      saldoInicialCentavos: 0,
+      categoriasPermitidas: [],
+    })
+  })
+
+  it('outros tipos não mandam categoriasPermitidas mesmo depois de marcar e trocar de tipo', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([]),
+      'GET /categorias': responde(categorias),
+      'POST /contas': responde(conta(), 201),
+    })
+    render(<App />)
+    await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovoBeneficio()
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Mercado' }))
+    fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'corrente' } })
+    preencherNovaConta('Nubank')
+    enviarNovaConta()
+    await screen.findByRole('listitem')
+    expect(JSON.parse(String(chamadasA('POST /contas')[0][1]?.body))).not.toHaveProperty('categoriasPermitidas')
+  })
+
+  it('erro ao carregar as categorias mostra alerta e "Tentar de novo" busca outra vez', async () => {
+    // A tela de lançamentos também busca categorias, então a falha vale até o clique em "Tentar de novo".
+    let falhando = true
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([]),
+      'GET /categorias': () =>
+        Promise.resolve(falhando ? jsonResponse({ erro: 'x' }, 500) : jsonResponse(categorias, 200)),
+    })
+    render(<App />)
+    await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovoBeneficio()
+    const grupo = screen.getByRole('group', { name: 'O que esta conta pode pagar' })
+    expect(await within(grupo).findByRole('alert')).toHaveTextContent('Não foi possível carregar as categorias.')
+    falhando = false
+    fireEvent.click(within(grupo).getByRole('button', { name: 'Tentar de novo' }))
+    expect(await within(grupo).findByRole('checkbox', { name: 'Alimentação' })).toBeVisible()
+  })
+
+  it('categorias ainda carregando ou com erro não enviam o POST', async () => {
+    let falhando = true
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([]),
+      'GET /categorias': () =>
+        Promise.resolve(falhando ? jsonResponse({ erro: 'x' }, 500) : jsonResponse(categorias, 200)),
+      'POST /contas': responde(vale(), 201),
+    })
+    render(<App />)
+    await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovoBeneficio()
+    preencherNovaConta('VR')
+    const grupo = screen.getByRole('group', { name: 'O que esta conta pode pagar' })
+    await within(grupo).findByRole('alert')
+    enviarNovaConta()
+    expect(await screen.findByText(/espere as categorias carregarem/i)).toBeVisible()
+    expect(within(grupo).getByRole('button', { name: 'Tentar de novo' })).toBeVisible()
+    expect(chamadasA('POST /contas')).toHaveLength(0)
+  })
+
+  it('categorias pendentes não enviam o POST', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([]),
+      'GET /categorias': () => new Promise<Response>(() => {}),
+      'POST /contas': responde(vale(), 201),
+    })
+    render(<App />)
+    await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovoBeneficio()
+    preencherNovaConta('VR')
+    enviarNovaConta()
+    expect(await screen.findByText(/espere as categorias carregarem/i)).toBeVisible()
+    expect(chamadasA('POST /contas')).toHaveLength(0)
+  })
+
+  it('400 do servidor ao criar mostra a mensagem', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([]),
+      'GET /categorias': responde(categorias),
+      'POST /contas': responde({ erro: 'categoria não encontrada' }, 400),
+    })
+    render(<App />)
+    await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovoBeneficio()
+    preencherNovaConta('VR')
+    enviarNovaConta()
+    expect(await screen.findByRole('alert')).toHaveTextContent('categoria não encontrada')
+  })
+
+  it('lista o benefício com saldo, selos das categorias e a ação de editar', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([
+        vale({ categoriasPermitidas: ['cat-ali', 'cat-mer'] }),
+        vale({ id: 'b2', nome: 'VA', categoriasPermitidas: [] }),
+        conta(),
+      ]),
+      'GET /categorias': responde(categorias),
+    })
+    render(<App />)
+    const itens = await screen.findAllByRole('listitem')
+    const restrito = itens.find((item) => item.textContent?.includes('VR'))!
+    expect(restrito.textContent).toMatch(texto('R$ 800,00'))
+    const selos = await within(restrito).findByRole('list', { name: 'Categorias permitidas em VR' })
+    expect(within(selos).getAllByRole('listitem').map((selo) => selo.textContent)).toEqual(['Alimentação', 'Mercado'])
+    expect(within(restrito).getByRole('button', { name: 'Editar categorias de VR' })).toBeVisible()
+    const aberto = itens.find((item) => item.textContent?.includes('VA'))!
+    expect(within(aberto).getByText('Aceita qualquer categoria')).toBeVisible()
+    const corrente = itens.find((item) => item.textContent?.includes('Nubank'))!
+    expect(within(corrente).queryByRole('button', { name: /editar categorias/i })).toBeNull()
+  })
+
+  it('editar categorias manda o PUT com as marcadas e atualiza os selos', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([vale({ categoriasPermitidas: ['cat-ali'] })]),
+      'GET /categorias': responde(categorias),
+      'PUT /contas/b1/categorias-permitidas': responde(vale({ categoriasPermitidas: ['cat-mer'] })),
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar categorias de VR' }))
+    const form = await screen.findByRole('form', { name: 'Categorias de VR' })
+    // A lista atual já vem marcada.
+    expect(await within(form).findByRole('checkbox', { name: 'Alimentação' })).toBeChecked()
+    fireEvent.click(within(form).getByRole('checkbox', { name: 'Alimentação' }))
+    fireEvent.click(within(form).getByRole('checkbox', { name: 'Mercado' }))
+    fireEvent.submit(form)
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Categorias de VR' })).toBeNull())
+    const [url, init] = chamadasA('PUT /contas/b1/categorias-permitidas')[0]
+    expect(url).toBe('/contas/b1/categorias-permitidas')
+    expect(JSON.parse(String(init?.body))).toEqual({ categoriaIds: ['cat-mer'] })
+    const selos = screen.getByRole('list', { name: 'Categorias permitidas em VR' })
+    expect(within(selos).getAllByRole('listitem').map((selo) => selo.textContent)).toEqual(['Mercado'])
+  })
+
+  it('desmarcar tudo manda lista vazia e a conta passa a aceitar qualquer categoria', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([vale({ categoriasPermitidas: ['cat-ali'] })]),
+      'GET /categorias': responde(categorias),
+      'PUT /contas/b1/categorias-permitidas': responde(vale()),
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar categorias de VR' }))
+    const form = await screen.findByRole('form', { name: 'Categorias de VR' })
+    fireEvent.click(await within(form).findByRole('checkbox', { name: 'Alimentação' }))
+    fireEvent.submit(form)
+    expect(await screen.findByText('Aceita qualquer categoria')).toBeVisible()
+    expect(JSON.parse(String(chamadasA('PUT /contas/b1/categorias-permitidas')[0][1]?.body))).toEqual({
+      categoriaIds: [],
+    })
+  })
+
+  it('400 ao editar mostra a mensagem e mantém o painel aberto', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([vale()]),
+      'GET /categorias': responde(categorias),
+      'PUT /contas/b1/categorias-permitidas': responde({ erro: 'categoria não encontrada' }, 400),
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar categorias de VR' }))
+    const form = await screen.findByRole('form', { name: 'Categorias de VR' })
+    await within(form).findByRole('checkbox', { name: 'Alimentação' })
+    fireEvent.submit(form)
+    expect(await within(form).findByRole('alert')).toHaveTextContent('categoria não encontrada')
+  })
+
+  it('404 ao editar avisa que a conta não existe mais e recarrega', async () => {
+    let chamadas = 0
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': () => {
+        chamadas += 1
+        return Promise.resolve(jsonResponse(chamadas === 1 ? [vale()] : [], 200))
+      },
+      'GET /categorias': responde(categorias),
+      'PUT /contas/b1/categorias-permitidas': responde({ erro: 'não encontrado' }, 404),
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar categorias de VR' }))
+    const form = await screen.findByRole('form', { name: 'Categorias de VR' })
+    await within(form).findByRole('checkbox', { name: 'Alimentação' })
+    fireEvent.submit(form)
+    expect(await screen.findByText('Nenhuma conta ainda.')).toBeVisible()
+    expect(screen.getByRole('alert')).toHaveTextContent('Essa conta não existe mais.')
+  })
+
+  it('401 ao editar volta para o login', async () => {
+    let sessao = true
+    mockFetch({
+      'GET /auth/eu': () => Promise.resolve(sessao ? jsonResponse(usuario, 200) : jsonResponse({ erro: 'x' }, 401)),
+      'GET /contas': responde([vale()]),
+      'GET /categorias': responde(categorias),
+      'PUT /contas/b1/categorias-permitidas': () => {
+        sessao = false
+        return Promise.resolve(jsonResponse({ erro: 'x' }, 401))
+      },
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar categorias de VR' }))
+    const form = await screen.findByRole('form', { name: 'Categorias de VR' })
+    await within(form).findByRole('checkbox', { name: 'Alimentação' })
+    fireEvent.submit(form)
+    expect(await screen.findByRole('form', { name: 'Entrar' })).toBeVisible()
   })
 })

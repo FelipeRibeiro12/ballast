@@ -42,9 +42,11 @@ function Destaque({ contas }: { contas: Conta[] | null }) {
       </section>
     )
   }
+  // O benefício só paga o que a lista permite e não cobre aluguel, então tem cartão próprio (ADR-034).
+  const abertas = contas.filter((conta) => conta.tipo !== 'beneficio')
   // BigInt porque a soma de várias contas pode passar do inteiro seguro.
-  const saldo = contas.reduce((soma, conta) => soma + BigInt(conta.saldoCentavos), 0n)
-  const cartoes = contas.flatMap((conta) => (conta.cartao === null ? [] : [conta.cartao]))
+  const saldo = abertas.reduce((soma, conta) => soma + BigInt(conta.saldoCentavos), 0n)
+  const cartoes = abertas.flatMap((conta) => (conta.cartao === null ? [] : [conta.cartao]))
   const disponivel = cartoes.reduce((soma, cartao) => soma + BigInt(cartao.disponivelCentavos), 0n)
   return (
     <section className="cartao destaque" aria-label="Resumo das contas">
@@ -53,7 +55,7 @@ function Destaque({ contas }: { contas: Conta[] | null }) {
       <dl className="destaque-detalhes">
         <div>
           <dt>Contas ativas</dt>
-          <dd>{contas.length}</dd>
+          <dd>{abertas.length}</dd>
         </div>
         {cartoes.length > 0 && (
           <div>
@@ -62,6 +64,31 @@ function Destaque({ contas }: { contas: Conta[] | null }) {
           </div>
         )}
       </dl>
+    </section>
+  )
+}
+
+function Beneficios({ contas }: { contas: Conta[] | null }) {
+  const beneficios = contas?.filter((conta) => conta.tipo === 'beneficio') ?? []
+  if (beneficios.length === 0) return null
+  const saldo = beneficios.reduce((soma, conta) => soma + BigInt(conta.saldoCentavos), 0n)
+  return (
+    <section className="cartao beneficios" aria-labelledby="titulo-beneficios">
+      <h3 id="titulo-beneficios" className="titulo-cartao">
+        Benefícios
+      </h3>
+      <p className="beneficios-valor">{formatarCentavos(saldo)}</p>
+      {/* Com uma conta só, a lista repetiria o total. */}
+      {beneficios.length > 1 && (
+      <ul className="beneficios-lista" aria-label="Contas de benefício">
+        {beneficios.map((conta) => (
+          <li key={conta.id}>
+            <span>{conta.nome}</span>
+            <span className="beneficios-saldo">{formatarCentavos(conta.saldoCentavos)}</span>
+          </li>
+        ))}
+      </ul>
+      )}
     </section>
   )
 }
@@ -196,6 +223,7 @@ export default function Inicio({
       <div className="inicio-grade">
         <div className="coluna">
           <Destaque contas={contas} />
+          <Beneficios contas={contas} />
           <SaldoProjetado aoSessaoExpirar={aoSessaoExpirar} contas={contas} versaoDeSaldo={versaoDeSaldo} />
         </div>
         <div className="coluna">

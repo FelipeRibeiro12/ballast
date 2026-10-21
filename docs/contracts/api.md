@@ -284,7 +284,9 @@ entra no saldo, confirmar dá 400 `conta arquivada` e cancelar funciona.
   realizado futuro mexem num e não no outro.
 - `menorSaldo` é o menor `saldoCentavos` da série e o primeiro dia em que ocorre
   (série toda igual dá hoje).
-- Sem `contaId`: todas as contas ativas do usuário. Transferência entre duas
+- Sem `contaId`: todas as contas ativas do usuário, menos as de benefício
+  (ADR-034). Com `contaId` de uma conta de benefício, a série é só dela.
+  Transferência entre duas
   ativas se anula no saldo; de ativa para arquivada, ou o inverso, só a perna da
   conta ativa conta e o valor sai (ou entra) no total. Com `contaId`: só aquela
   conta, arquivada também, e a transferência conta pelo sinal da perna dela.
@@ -436,3 +438,45 @@ parcela entra na fatura do seu vencimento (`dataCaixa`).
 Quando o vencimento cortado cai no mesmo dia do fechamento cortado (fechamento
 30 e vencimento 31 em fevereiro), o pagamento desse dia conta na própria fatura
 e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
+
+## Benefício com restrição (ADR-034)
+
+- `tipo` ganha `beneficio`. Toda `Conta` ganha `categoriasPermitidas`: lista de
+  ids de categoria de despesa em ordem estável (por id), **vazia quando a conta
+  aceita qualquer categoria** e `null` nos outros tipos. O cliente precisa
+  aceitar `tipo` `beneficio` e o campo novo (sempre presente, anulável).
+- `POST /contas` com `tipo` `beneficio` aceita `categoriasPermitidas` (opcional,
+  até 50 ids, sem repetir). Conta e lista nascem na mesma transação. Recusas,
+  todas 400 sem gravar nada: `categoria não encontrada` (id inexistente, de outro
+  usuário, de categoria de receita ou malformado, a mesma mensagem),
+  `categoriasPermitidas não pode repetir categoria` (a comparação é pelo UUID,
+  maiúscula e minúscula do mesmo id repetem), `categoriasPermitidas deve ter no
+  máximo 50 itens` e `categoriasPermitidas só vale para conta de benefício`
+  (qualquer outro tipo com o campo, até lista vazia).
+- `PUT /contas/{id}/categorias-permitidas` com `{"categoriaIds": [...]}` troca a
+  lista inteira e responde 200 com a `Conta`. Lista vazia libera tudo. Mesmas
+  recusas de lista do `POST` (campo ausente dá 400 `categoriaIds é
+  obrigatório`). Conta do usuário que não é benefício dá 400 `só conta de
+  benefício tem categorias permitidas`; conta de outro usuário, inexistente ou
+  id que não é UUID dá 404 `não encontrado`. Repetível. A conta fica travada até
+  o commit, então escrita de lançamento nela espera a troca (até 2 s, depois 503).
+- A regra vale só para **despesa**. Receita em conta de benefício aceita
+  qualquer categoria. Despesa em conta de benefício com lista não vazia e
+  categoria fora dela dá 400 `categoria não permitida nesta conta`, sem gravar,
+  em `POST /lancamentos`, `PUT /lancamentos/{id}` (inclusive ao mover a despesa
+  para a conta de benefício ou ao virar despesa) e `POST /recorrencias`.
+- O `PUT /lancamentos/{id}` regrava a categoria, então editar uma despesa antiga
+  cuja categoria saiu da lista também dá 400: o cliente manda a categoria nova
+  junto. Mudar a lista não mexe em lançamento já gravado, e `PATCH` de status
+  (confirmar, com ajuste de valor ou data) não muda categoria e continua
+  valendo.
+- O job de recorrência pula o template cuja categoria saiu da lista da conta e
+  segue com os outros. O template continua ativo e sem ocorrência nova até o
+  usuário trocar a categoria dele ou a lista da conta. Hoje não há `PUT` de
+  template, então o caminho do usuário é pôr a categoria de volta na lista.
+- Transferência com origem ou destino de benefício dá 400 `conta de benefício
+  não participa de transferência`, sem gravar. Conta alheia continua dando
+  `conta não encontrada`.
+- `GET /saldo-projetado` sem `contaId` não soma contas de benefício (ver Saldo
+  projetado). O saldo do Início ("Saldo nas contas") é conta do cliente: soma de
+  `saldoCentavos` filtrando `tipo`.

@@ -3,6 +3,7 @@ package com.felipe.ballast.accounts;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Schema(name = "Conta")
@@ -30,7 +31,14 @@ public record AccountResponse(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description = "Dados do cartão; nulo nas contas que não são de cartão de crédito")
-        CardResponse cartao) {
+        CardResponse cartao,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Ids das categorias de despesa que a conta de benefício aceita, em ordem estável."
+                    + " Vazia quando qualquer categoria é aceita; nula nos outros tipos")
+        List<UUID> categoriasPermitidas) {
 
   // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
   // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
@@ -44,7 +52,8 @@ public record AccountResponse(
         toCents(summary.balance()),
         summary.archived(),
         summary.createdAt(),
-        summary.card() == null ? null : CardResponse.from(summary.card(), summary.balance()));
+        summary.card() == null ? null : CardResponse.from(summary.card(), summary.balance()),
+        summary.permittedCategories());
   }
 
   private static long toCents(BigDecimal amount) {

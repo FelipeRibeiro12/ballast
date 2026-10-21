@@ -676,6 +676,74 @@ paths:
       summary: Arquiva ou desarquiva uma conta
       tags:
       - contas
+  /contas/{id}/categorias-permitidas:
+    put:
+      description: Substitui a lista inteira. Lista vazia libera qualquer categoria
+        de despesa. Não mexe em lançamento já gravado.
+      operationId: putContasByIdCategoriasPermitidas
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoriasPermitidasRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conta"
+          description: Conta com a lista nova
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado, mais de 50\
+            \ itens, item repetido, categoria inexistente, de outro usuário, de receita\
+            \ ou id malformado, e conta que não é de benefício"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Troca a lista de categorias permitidas de uma conta de benefício
+      tags:
+      - contas
   /contas/{id}/faturas:
     get:
       description: "Todas as faturas com vencimento entre de e ate (pontas incluí\
@@ -1363,12 +1431,12 @@ paths:
       description: "Um ponto por dia, de hoje (America/Sao_Paulo) até hoje + dias\
         \ - 1. O saldo do dia é o saldo inicial das contas mais tudo que é realizado\
         \ ou previsto com dataCaixa até o dia; cancelado nunca entra, e a prevista\
-        \ vencida entra pela própria data. Sem contaId soma as contas ativas (transferê\
-        ncia entre duas delas se anula; de ativa para arquivada sai do total). Com\
-        \ contaId vale só a conta, também arquivada, e a transferência conta pelo\
-        \ sinal da perna dela. entradas e saídas de um dia são só os lançamentos com\
-        \ dataCaixa naquele dia; a perna de transferência só conta quando a outra\
-        \ perna está fora do filtro."
+        \ vencida entra pela própria data. Sem contaId soma as contas ativas, menos\
+        \ as de benefício (transferência entre duas delas se anula; de ativa para\
+        \ arquivada sai do total). Com contaId vale só a conta, também arquivada,\
+        \ e a transferência conta pelo sinal da perna dela. entradas e saídas de um\
+        \ dia são só os lançamentos com dataCaixa naquele dia; a perna de transferê\
+        ncia só conta quando a outra perna está fora do filtro."
       operationId: getSaldoProjetado
       parameters:
       - description: "Quantos dias a série tem, contando hoje"
@@ -1697,6 +1765,19 @@ components:
       - nome
       - paiId
       - tipo
+    CategoriasPermitidasRequest:
+      type: object
+      properties:
+        categoriaIds:
+          type: array
+          description: Lista inteira que passa a valer. Vazia libera qualquer categoria
+            de despesa
+          items:
+            type: string
+          maxItems: 50
+          minItems: 0
+      required:
+      - categoriaIds
     CompraParcelada:
       type: object
       properties:
@@ -1848,6 +1929,16 @@ components:
           - $ref: "#/components/schemas/Cartao"
           - type: "null"
           description: Dados do cartão; nulo nas contas que não são de cartão de crédito
+        categoriasPermitidas:
+          type:
+          - array
+          - "null"
+          description: "Ids das categorias de despesa que a conta de benefício aceita,\
+            \ em ordem estável. Vazia quando qualquer categoria é aceita; nula nos\
+            \ outros tipos"
+          items:
+            type: string
+            format: uuid
         criadaEm:
           type: string
           format: date-time
@@ -1881,9 +1972,11 @@ components:
           - poupanca
           - dinheiro
           - cartao_credito
+          - beneficio
       required:
       - arquivada
       - cartao
+      - categoriasPermitidas
       - criadaEm
       - id
       - moeda
@@ -1898,6 +1991,15 @@ components:
           $ref: "#/components/schemas/CartaoRequest"
           description: Obrigatório quando tipo é cartao_credito e proibido nos outros
             tipos
+        categoriasPermitidas:
+          type: array
+          description: "Só para tipo beneficio: ids de categorias de despesa que a\
+            \ conta aceita. Ausente ou vazia aceita qualquer categoria. Proibido nos\
+            \ outros tipos"
+          items:
+            type: string
+          maxItems: 50
+          minItems: 0
         nome:
           type: string
           maxLength: 100
@@ -1915,6 +2017,7 @@ components:
           - poupanca
           - dinheiro
           - cartao_credito
+          - beneficio
       required:
       - nome
       - tipo
