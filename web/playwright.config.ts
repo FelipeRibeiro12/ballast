@@ -19,7 +19,8 @@ export default defineConfig({
   use: {
     baseURL,
     browserName: 'chromium',
-    trace: 'retain-on-failure',
+    // No CI o relatório vira artifact baixável, e o trace levaria o corpo do cadastro e o cookie.
+    trace: process.env.CI ? 'off' : 'retain-on-failure',
     // O service worker do PWA cachearia respostas entre os projetos e esconderia erro de proxy.
     serviceWorkers: 'block',
     locale: 'pt-BR',
