@@ -45,6 +45,8 @@ class InstallmentController {
       new ErrorResponse("cada parcela precisa ter ao menos 1 centavo");
   private static final ErrorResponse BALANCE_OUT_OF_RANGE =
       new ErrorResponse("saldo da conta fora do limite");
+  private static final ErrorResponse PURCHASE_OUT_OF_RANGE =
+      new ErrorResponse("compra fora do limite");
   private static final ErrorResponse NOTHING_TO_CHANGE =
       new ErrorResponse("informe titulo, descricao ou categoriaId");
 
@@ -72,8 +74,8 @@ class InstallmentController {
       description =
           "Entrada inválida, inclusive campo não declarado; \"conta não encontrada\", \"compra"
               + " parcelada só em cartão de crédito\", \"conta arquivada\", \"categoria não"
-              + " encontrada\", \"cada parcela precisa ter ao menos 1 centavo\" ou \"saldo da"
-              + " conta fora do limite\"",
+              + " encontrada\", \"cada parcela precisa ter ao menos 1 centavo\", \"saldo da"
+              + " conta fora do limite\" ou \"compra fora do limite\"",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -114,8 +116,10 @@ class InstallmentController {
           user.id(),
           created.purchase().id(),
           request.count());
-      return ResponseEntity.status(HttpStatus.CREATED)
-          .body(InstallmentResponse.from(created.purchase()));
+      return InstallmentResponse.fits(created.purchase())
+          ? ResponseEntity.status(HttpStatus.CREATED)
+              .body(InstallmentResponse.from(created.purchase()))
+          : ResponseEntity.badRequest().body(PURCHASE_OUT_OF_RANGE);
     }
     return switch ((InstallmentService.CreateResult.Rejected) result) {
       case ACCOUNT_NOT_FOUND -> ResponseEntity.badRequest().body(ACCOUNT_NOT_FOUND);
@@ -140,6 +144,11 @@ class InstallmentController {
       description = "Compra",
       content = @Content(schema = @Schema(implementation = InstallmentResponse.class)))
   @ApiResponse(
+      responseCode = "400",
+      description =
+          "\"compra fora do limite\": a soma das parcelas passa de ±9007199254740991 centavos",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "401",
       description = "Sem sessão válida",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -158,7 +167,11 @@ class InstallmentController {
       @AuthenticationPrincipal AuthenticatedUser user, @PathVariable("id") String id) {
     return CanonicalUuid.parse(id)
         .flatMap(purchaseId -> installments.find(user.id(), purchaseId))
-        .<ResponseEntity<?>>map(found -> ResponseEntity.ok(InstallmentResponse.from(found)))
+        .<ResponseEntity<?>>map(
+            found ->
+                InstallmentResponse.fits(found)
+                    ? ResponseEntity.ok(InstallmentResponse.from(found))
+                    : ResponseEntity.badRequest().body(PURCHASE_OUT_OF_RANGE))
         .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND));
   }
 
@@ -178,7 +191,8 @@ class InstallmentController {
   @ApiResponse(
       responseCode = "400",
       description =
-          "Nenhum campo, campo não declarado ou valor inválido; \"categoria não encontrada\"",
+          "Nenhum campo, campo não declarado ou valor inválido; \"categoria não encontrada\" ou"
+              + " \"compra fora do limite\"",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -241,7 +255,9 @@ class InstallmentController {
       case InstallmentService.UpdateResult.Updated updated -> {
         log.info(
             "compra parcelada atualizada usuario_id={} compra_id={}", user.id(), purchaseId.get());
-        yield ResponseEntity.ok(InstallmentResponse.from(updated.purchase()));
+        yield InstallmentResponse.fits(updated.purchase())
+            ? ResponseEntity.ok(InstallmentResponse.from(updated.purchase()))
+            : ResponseEntity.badRequest().body(PURCHASE_OUT_OF_RANGE);
       }
       case InstallmentService.UpdateResult.Rejected rejected ->
           switch (rejected) {

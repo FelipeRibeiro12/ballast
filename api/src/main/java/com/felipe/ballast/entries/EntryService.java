@@ -47,7 +47,8 @@ class EntryService {
       TRANSFER_LEG,
       NOT_PLANNED,
       EDIT_WHOLE_PURCHASE,
-      INSTALLMENT_NOT_EXPENSE
+      INSTALLMENT_NOT_EXPENSE,
+      PURCHASE_OUT_OF_RANGE
     }
   }
 
@@ -246,6 +247,12 @@ class EntryService {
     if (!balanceFits(userId, currentAccount.get()) || !balanceFits(userId, input.accountId())) {
       status.setRollbackOnly();
       return SaveResult.Rejected.BALANCE_OUT_OF_RANGE;
+    }
+    // O saldo do cartão pode ficar na faixa com a soma da compra fora dela (saldo inicial alto).
+    // Recusar aqui evita gravar um estado que GET /compras-parceladas não consegue mostrar.
+    if (installment && !queries.purchaseFits(userId, locked.get().purchaseId())) {
+      status.setRollbackOnly();
+      return SaveResult.Rejected.PURCHASE_OUT_OF_RANGE;
     }
     return saved(userId, id);
   }

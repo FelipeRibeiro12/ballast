@@ -51,6 +51,15 @@ public record InstallmentResponse(
       @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Vencimento da parcela")
           LocalDate dataCaixa) {}
 
+  // 9007199254740991 centavos em reais. Acima disso o JavaScript perde o centavo. Comparado com
+  // compareTo: a escala não conta.
+  private static final BigDecimal LIMIT = new BigDecimal("90071992547409.91");
+
+  // O controller confere antes de montar a resposta: from() só vê soma dentro da faixa.
+  static boolean fits(InstallmentPurchase purchase) {
+    return purchase.total().abs().compareTo(LIMIT) <= 0;
+  }
+
   // Única conversão para centavos, na borda de saída. longValueExact falha alto em vez de
   // arredondar em silêncio.
   static InstallmentResponse from(InstallmentPurchase purchase) {

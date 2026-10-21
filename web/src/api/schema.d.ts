@@ -1319,7 +1319,7 @@ export interface operations {
                     "application/json": components["schemas"]["CompraParcelada"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "compra parcelada só em cartão de crédito", "conta arquivada", "categoria não encontrada", "cada parcela precisa ter ao menos 1 centavo" ou "saldo da conta fora do limite" */
+            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "compra parcelada só em cartão de crédito", "conta arquivada", "categoria não encontrada", "cada parcela precisa ter ao menos 1 centavo", "saldo da conta fora do limite" ou "compra fora do limite" */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1384,6 +1384,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CompraParcelada"];
+                };
+            };
+            /** @description "compra fora do limite": a soma das parcelas passa de ±9007199254740991 centavos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
                 };
             };
             /** @description Sem sessão válida */
@@ -1497,7 +1506,7 @@ export interface operations {
                     "application/json": components["schemas"]["CompraParcelada"];
                 };
             };
-            /** @description Nenhum campo, campo não declarado ou valor inválido; "categoria não encontrada" */
+            /** @description Nenhum campo, campo não declarado ou valor inválido; "categoria não encontrada" ou "compra fora do limite" */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2130,7 +2139,7 @@ export interface operations {
                     "application/json": components["schemas"]["Lancamento"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado e tipo transferencia; "conta não encontrada", "conta arquivada" (só ao trocar de conta), "categoria não encontrada", "saldo da conta fora do limite" (em qualquer das contas afetadas) ou "use a rota de transferência" (o lançamento é perna de transferência) */
+            /** @description Entrada inválida, inclusive campo não declarado e tipo transferencia; "conta não encontrada", "conta arquivada" (só ao trocar de conta), "categoria não encontrada", "saldo da conta fora do limite" (em qualquer das contas afetadas), "compra fora do limite" (parcela cuja soma da compra passaria do teto) ou "use a rota de transferência" (o lançamento é perna de transferência) */
             400: {
                 headers: {
                     [name: string]: unknown;

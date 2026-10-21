@@ -226,6 +226,20 @@ class EntryQueries {
     return balance(userId, accountId).abs().compareTo(BALANCE_LIMIT) <= 0;
   }
 
+  // Soma das parcelas que ainda existem. A faixa é a mesma do saldo: é o que o JSON em centavos
+  // aguenta sem perder o centavo no JavaScript.
+  boolean purchaseFits(UUID userId, UUID purchaseId) {
+    BigDecimal total =
+        jdbc.sql(
+                "SELECT COALESCE(SUM(valor), 0) FROM lancamento"
+                    + " WHERE usuario_id = :userId AND parcela_de_id = :purchaseId")
+            .param("userId", userId)
+            .param("purchaseId", purchaseId)
+            .query(BigDecimal.class)
+            .single();
+    return total.compareTo(BALANCE_LIMIT) <= 0;
+  }
+
   // Confere dono e tipo juntos: categoria de receita não serve para despesa.
   boolean categoryExists(UUID userId, UUID categoryId, EntryType type) {
     return jdbc.sql(

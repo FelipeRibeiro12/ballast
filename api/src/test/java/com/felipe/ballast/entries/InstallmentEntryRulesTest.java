@@ -196,6 +196,50 @@ class InstallmentEntryRulesTest {
   }
 
   @Test
+  void editingAnInstallmentThatPushesThePurchaseTotalOverTheCeilingIs400AndChangesNothing()
+      throws Exception {
+    // Saldo inicial no teto: o saldo do cartão continua dentro da faixa mesmo com a soma fora.
+    InstallmentsApi.Shopper rich = api.newShopper();
+    jdbc.sql("UPDATE conta SET saldo_inicial = 90071992547409.91 WHERE id = :id::uuid")
+        .param("id", rich.cardId())
+        .update();
+    JsonNode small =
+        api.createOk(
+            rich.session(), with(InstallmentsApi.purchaseBody(rich), "valorTotalCentavos", 1000));
+
+    MockHttpServletResponse response =
+        entries.update(
+            rich.session(),
+            InstallmentsApi.lancamentoId(small, 0),
+            with(
+                with(EntriesApi.expenseBody(rich.actor()), "contaId", rich.cardId()),
+                "valorCentavos",
+                CEILING));
+
+    assertThat(response.getStatus()).isEqualTo(400);
+    assertThat(EntriesApi.text(response)).isEqualTo("{\"erro\":\"compra fora do limite\"}");
+    MockHttpServletResponse read = api.find(rich.session(), small.get("id").asString());
+    assertThat(read.getStatus()).isEqualTo(200);
+    assertThat(EntriesApi.body(read)).isEqualTo(small);
+  }
+
+  @Test
+  void readingAPurchaseWhoseTotalIsOverTheCeilingIs400() throws Exception {
+    // Estado que o PUT não grava mais, mas que um dado antigo ou outra via poderia deixar.
+    jdbc.sql("UPDATE lancamento SET valor = 90071992547409.91 WHERE id = :id::uuid")
+        .param("id", first)
+        .update();
+    jdbc.sql("UPDATE lancamento SET valor = 90071992547409.91 WHERE id = :id::uuid")
+        .param("id", middle)
+        .update();
+
+    MockHttpServletResponse response = api.find(shopper.session(), first);
+
+    assertThat(response.getStatus()).isEqualTo(400);
+    assertThat(EntriesApi.text(response)).isEqualTo("{\"erro\":\"compra fora do limite\"}");
+  }
+
+  @Test
   void deletingAMiddleInstallmentRemovesOnlyThatOneAndTheTotalDrops() throws Exception {
     assertThat(entries.remove(shopper.session(), middle).getStatus()).isEqualTo(204);
 

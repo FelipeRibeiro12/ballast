@@ -393,14 +393,18 @@ parcela entra na fatura do seu vencimento (`dataCaixa`).
   `compra parcelada só em cartão de crédito` (corrente, poupança, dinheiro),
   `conta não encontrada` (inexistente, de outro usuário ou id inválido),
   `conta arquivada`, `categoria não encontrada` (inexistente, de outro usuário,
-  de receita), `saldo da conta fora do limite`. Mensagens de título, descrição,
+  de receita), `saldo da conta fora do limite`, `compra fora do limite` (soma
+  das parcelas acima de ±9007199254740991 centavos). Mensagens de título, descrição,
   valor e data iguais às de `POST /lancamentos`.
 - `GET /compras-parceladas/{id}`: mesma forma do 201. `valorTotalCentavos` é a
   **soma das parcelas que ainda existem**: muda se uma parcela for editada ou
   apagada em `/lancamentos`. `parcelas` é o número que a compra teve ao nascer.
   Título, descrição, categoria e conta vêm da primeira parcela. `itens` traz só
   as parcelas que existem, por `parcelaNum`. Outra parcela, outro usuário,
-  inexistente ou id malformado: 404 `{"erro":"não encontrado"}`.
+  inexistente ou id malformado: 404 `{"erro":"não encontrado"}`. Se a soma passar
+  de ±9007199254740991 centavos, 400 `{"erro":"compra fora do limite"}` (o mesmo
+  vale para as respostas do POST e do PATCH). O `PUT` de uma parcela impede esse
+  estado, então só dado antigo chega aqui.
 - `PATCH /compras-parceladas/{id}` com `{"titulo"?, "descricao"?,
   "categoriaId"?}`: pelo menos um (senão 400 `informe titulo, descricao ou
   categoriaId`), campo extra dá 400. Aplica em todas as parcelas numa transação.
@@ -420,7 +424,8 @@ parcela entra na fatura do seu vencimento (`dataCaixa`).
   ou a data (a `data` do corpo é comparada com a `dataCompetencia` gravada, que é
   a data da compra) dá 400 `edite a compra inteira`; `tipo` receita dá 400
   `parcela de compra parcelada só pode ser despesa`. A `dataCaixa` não muda. O
-  teto do saldo vale.
+  teto do saldo vale, e o `PUT` que levaria a soma das parcelas da compra para
+  fora de ±9007199254740991 centavos dá 400 `compra fora do limite` e nada muda.
 - `DELETE` numa parcela que não é a primeira apaga só ela. Na primeira dá 400
   `apague a compra inteira`.
 - `PATCH` de status numa parcela dá 400 `só ocorrência prevista pode mudar de
