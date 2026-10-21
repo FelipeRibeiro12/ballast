@@ -4,7 +4,9 @@ import {
   hojeLocal,
   intervaloDoMes,
   mesDeHoje,
+  rotuloDoDia,
   rotuloDoMes,
+  somarDias,
   somarMeses,
   ultimoDiaDoMes,
 } from './datas'
@@ -54,5 +56,35 @@ describe('formatarDataCompleta', () => {
   it('troca AAAA-MM-DD por dd/mm/aaaa sem passar por Date', () => {
     expect(formatarDataCompleta('2026-09-05')).toBe('05/09/2026')
     expect(formatarDataCompleta('2027-01-01')).toBe('01/01/2027')
+  })
+
+  describe('somarDias', () => {
+    it('vira o mês e o ano', () => {
+      expect(somarDias('2026-10-31', 1)).toBe('2026-11-01')
+      expect(somarDias('2026-12-31', 1)).toBe('2027-01-01')
+      expect(somarDias('2026-01-01', -1)).toBe('2025-12-31')
+    })
+
+    it('respeita fevereiro e o ano bissexto', () => {
+      expect(somarDias('2028-02-28', 1)).toBe('2028-02-29')
+      expect(somarDias('2027-02-28', 1)).toBe('2027-03-01')
+    })
+
+    it('soma 30 dias a partir de hoje', () => {
+      expect(somarDias('2026-10-19', 30)).toBe('2026-11-18')
+    })
+  })
+
+  describe('rotuloDoDia', () => {
+    it('usa Hoje, Ontem e Amanhã perto do dia atual', () => {
+      expect(rotuloDoDia('2026-10-19', '2026-10-19')).toBe('Hoje, 19/10')
+      expect(rotuloDoDia('2026-10-18', '2026-10-19')).toBe('Ontem, 18/10')
+      expect(rotuloDoDia('2026-10-20', '2026-10-19')).toBe('Amanhã, 20/10')
+    })
+
+    it('usa o dia da semana nos outros dias, com inicial maiúscula', () => {
+      expect(rotuloDoDia('2026-10-05', '2026-10-19')).toBe('Segunda-feira, 05/10')
+      expect(rotuloDoDia('2026-10-31', '2026-10-19')).toBe('Sábado, 31/10')
+    })
   })
 })

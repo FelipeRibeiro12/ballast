@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import {
   ContaInvalidaError,
   ContaNaoEncontradaError,
@@ -13,6 +13,9 @@ import {
 import type { Conta, CriarContaRequest } from './api'
 import Faturas from './Faturas'
 import { formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
+import { IconeBanco, IconeCartao, IconeDinheiro, IconeMais } from './icones'
+import Painel from './Painel'
+import { Carregando, EstadoVazio } from './ui'
 
 type EstadoLista =
   | { tipo: 'carregando' }
@@ -29,6 +32,23 @@ const ROTULO_DO_TIPO: Record<TipoDeConta, string> = {
 }
 
 const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito']
+
+const ICONE_DO_TIPO: Record<TipoDeConta, ReactNode> = {
+  corrente: <IconeBanco />,
+  poupanca: <IconeBanco />,
+  dinheiro: <IconeDinheiro />,
+  cartao_credito: <IconeCartao />,
+}
+
+// Só para a largura da barra: percentual inteiro do limite já usado, calculado em BigInt.
+function percentualUsado(limiteCentavos: number, disponivelCentavos: number): number {
+  const limite = BigInt(limiteCentavos)
+  if (limite <= 0n) return 0
+  const usado = limite - BigInt(disponivelCentavos)
+  if (usado <= 0n) return 0
+  if (usado >= limite) return 100
+  return Number((usado * 100n) / limite)
+}
 
 // Mesma ordem do servidor: nome sem diferenciar caixa nem acento, id para desempatar.
 function compararContas(a: Conta, b: Conta): number {
@@ -164,7 +184,6 @@ function NovaConta({
 
   return (
     <form onSubmit={(evento) => void enviar(evento)} aria-label="Nova conta">
-      <h3>Nova conta</h3>
       <div className="campo">
         <label htmlFor="conta-nome">Nome</label>
         <input
@@ -304,6 +323,7 @@ export default function Contas({
   const [tentativa, setTentativa] = useState(0)
   const [ocupada, setOcupada] = useState<string | null>(null)
   const [falhaDeAcao, setFalhaDeAcao] = useState<string | null>(null)
+  const [painelAberto, setPainelAberto] = useState(false)
   const acaoEmVoo = useRef(false)
 
   useEffect(() => {
@@ -385,13 +405,26 @@ export default function Contas({
   const total =
     estado.tipo === 'ok' ? estado.contas.reduce((soma, conta) => soma + BigInt(conta.saldoCentavos), 0n) : 0n
 
+  const contasDePagamento =
+    estado.tipo === 'ok' ? estado.contas.filter((c) => c.tipo === 'corrente' || c.tipo === 'poupanca') : []
+
   return (
     <section aria-labelledby="titulo-contas">
-      <h2 id="titulo-contas">{arquivadas ? 'Contas arquivadas' : 'Contas'}</h2>
-      <button type="button" onClick={alternarVisao}>
-        {arquivadas ? 'Voltar às ativas' : 'Ver arquivadas'}
-      </button>
-      {estado.tipo === 'carregando' && <p>Carregando contas...</p>}
+      <header className="pagina-topo">
+        <h2 id="titulo-contas">{arquivadas ? 'Contas arquivadas' : 'Contas'}</h2>
+        <div className="topo-botoes">
+          <button type="button" className="discreto" onClick={alternarVisao}>
+            {arquivadas ? 'Voltar às ativas' : 'Ver arquivadas'}
+          </button>
+          {!arquivadas && (
+            <button type="button" className="primario" onClick={() => setPainelAberto(true)}>
+              <IconeMais />
+              Nova conta
+            </button>
+          )}
+        </div>
+      </header>
+      {estado.tipo === 'carregando' && <Carregando texto="Carregando contas..." />}
       {estado.tipo === 'erro' && (
         <>
           <p role="alert" className="erro">
@@ -410,47 +443,74 @@ export default function Contas({
       {estado.tipo === 'ok' && (
         <>
           {!arquivadas && estado.contas.length > 0 && (
-            <p>
+            <p className="resumo-total">
               Total: <strong>{formatarCentavos(total)}</strong>
             </p>
           )}
           {estado.contas.length === 0 && (
-            <p>{arquivadas ? 'Nenhuma conta arquivada.' : 'Nenhuma conta ainda.'}</p>
+            <EstadoVazio
+              titulo={arquivadas ? 'Nenhuma conta arquivada.' : 'Nenhuma conta ainda.'}
+              dica={arquivadas ? undefined : 'Comece por uma conta corrente, poupança ou cartão.'}
+              acao={
+                arquivadas ? undefined : (
+                  <button type="button" className="primario" onClick={() => setPainelAberto(true)}>
+                    Criar a primeira conta
+                  </button>
+                )
+              }
+            />
           )}
           <ul className="contas">
-            {estado.contas.map((conta) => (
-              <li key={conta.id}>
-                <div className="conta-dados">
-                  <strong>{conta.nome}</strong>
-                  <span>{ROTULO_DO_TIPO[conta.tipo]}</span>
-                  <span>{formatarCentavos(conta.saldoCentavos)}</span>
-                  {conta.cartao !== null && (
-                    <span>
-                      Disponível: {formatarCentavos(conta.cartao.disponivelCentavos)} de{' '}
-                      {formatarCentavos(conta.cartao.limiteCentavos)}
+            {estado.contas.map((conta) => {
+              const expandida = faturasDe === conta.id && !arquivadas
+              const usado = conta.cartao === null ? 0 : percentualUsado(conta.cartao.limiteCentavos, conta.cartao.disponivelCentavos)
+              return (
+                <li key={conta.id} className={expandida ? 'cartao conta-cartao expandida' : 'cartao conta-cartao'}>
+                  <div className="conta-topo">
+                    <span className="conta-icone">{ICONE_DO_TIPO[conta.tipo]}</span>
+                    <div className="conta-nome">
+                      <strong>{conta.nome}</strong>
+                      <span>{ROTULO_DO_TIPO[conta.tipo]}</span>
+                    </div>
+                    <span className={conta.saldoCentavos < 0 ? 'conta-saldo negativo' : 'conta-saldo'}>
+                      {formatarCentavos(conta.saldoCentavos)}
                     </span>
+                  </div>
+                  {conta.cartao !== null && (
+                    <div className="limite">
+                      <p>
+                        Disponível: <strong>{formatarCentavos(conta.cartao.disponivelCentavos)}</strong> de{' '}
+                        {formatarCentavos(conta.cartao.limiteCentavos)}
+                      </p>
+                      <div className={usado >= 90 ? 'barra critica' : usado >= 70 ? 'barra atencao' : 'barra'} aria-hidden="true">
+                        <div style={{ width: `${usado}%` }} />
+                      </div>
+                      <small>{usado}% do limite em uso</small>
+                    </div>
                   )}
-                </div>
-                {conta.cartao !== null && !arquivadas && (
-                  <button
-                    type="button"
-                    aria-expanded={faturasDe === conta.id}
-                    aria-label={`Faturas de ${conta.nome}`}
-                    onClick={() => setFaturasDe((atual) => (atual === conta.id ? null : conta.id))}
-                  >
-                    Faturas
-                  </button>
-                )}
-                <button
-                  type="button"
-                  disabled={ocupada !== null}
-                  aria-label={`${arquivadas ? 'Desarquivar' : 'Arquivar'} ${conta.nome}`}
-                  onClick={() => void mudarArquivamento(conta, !arquivadas)}
-                >
-                  {arquivadas ? 'Desarquivar' : 'Arquivar'}
-                </button>
-                {faturasDe === conta.id && !arquivadas && (
-                  <div className="confirmacao">
+                  <div className="conta-acoes">
+                    {conta.cartao !== null && !arquivadas && (
+                      <button
+                        type="button"
+                        className="pequeno"
+                        aria-expanded={faturasDe === conta.id}
+                        aria-label={`Faturas de ${conta.nome}`}
+                        onClick={() => setFaturasDe((atual) => (atual === conta.id ? null : conta.id))}
+                      >
+                        Faturas
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="pequeno discreto"
+                      disabled={ocupada !== null}
+                      aria-label={`${arquivadas ? 'Desarquivar' : 'Arquivar'} ${conta.nome}`}
+                      onClick={() => void mudarArquivamento(conta, !arquivadas)}
+                    >
+                      {arquivadas ? 'Desarquivar' : 'Arquivar'}
+                    </button>
+                  </div>
+                  {expandida && (
                     <Faturas
                       cartao={conta}
                       contasAtivas={estado.contas}
@@ -458,25 +518,26 @@ export default function Contas({
                       aoMudarSaldo={aoMudarSaldo}
                       aoSessaoExpirar={aoSessaoExpirar}
                     />
-                  </div>
-                )}
-              </li>
-            ))}
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </>
       )}
-      {!arquivadas && (
-        <NovaConta
-          contasDePagamento={
-            estado.tipo === 'ok' ? estado.contas.filter((c) => c.tipo === 'corrente' || c.tipo === 'poupanca') : []
-          }
-          aoCriar={(conta) =>
-            setEstado((atual) =>
-              atual.tipo === 'ok' ? { tipo: 'ok', contas: [...atual.contas, conta].sort(compararContas) } : atual,
-            )
-          }
-          aoSessaoExpirar={aoSessaoExpirar}
-        />
+      {painelAberto && !arquivadas && (
+        <Painel titulo="Nova conta" aoFechar={() => setPainelAberto(false)}>
+          <NovaConta
+            contasDePagamento={contasDePagamento}
+            aoCriar={(conta) => {
+              setEstado((atual) =>
+                atual.tipo === 'ok' ? { tipo: 'ok', contas: [...atual.contas, conta].sort(compararContas) } : atual,
+              )
+              setPainelAberto(false)
+            }}
+            aoSessaoExpirar={aoSessaoExpirar}
+          />
+        </Painel>
       )}
     </section>
   )

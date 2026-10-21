@@ -49,7 +49,7 @@ describe('opcoesDoPwa', () => {
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        theme_color: '#1a4d8f',
+        theme_color: '#3b4cca',
         background_color: '#ffffff',
       })
       expect(manifest && manifest.description).toBeTruthy()

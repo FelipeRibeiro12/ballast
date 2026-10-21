@@ -72,6 +72,12 @@ const sessaoViva = { 'GET /auth/eu': responde(usuario) }
 // O Intl separa símbolo e número com espaço sem quebra; o texto do teste usa espaço comum.
 const texto = (valor: string): RegExp => new RegExp(valor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(' ', '[\\s\\u00a0]'))
 
+// O formulário abre num painel pelo botão "Nova conta" (ADR-033).
+async function abrirNovaConta(): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('button', { name: 'Nova conta' }))
+  return screen.findByRole('form', { name: 'Nova conta' })
+}
+
 function preencherNovaConta(nome: string, saldo = ''): void {
   fireEvent.change(screen.getByLabelText('Nome'), { target: { value: nome } })
   fireEvent.change(screen.getByLabelText(/saldo inicial/i), { target: { value: saldo } })
@@ -85,6 +91,11 @@ const enviarNovaConta = (): void => {
 const secaoContas = (): HTMLElement => screen.getByRole('region', { name: /^contas/i })
 const contasNubank = async (): Promise<HTMLElement> =>
   within(await screen.findByRole('region', { name: /^contas/i })).findByText('Nubank')
+
+// As seções ficam atrás de rota por hash (ADR-033): cada arquivo abre a que testa.
+beforeEach(() => {
+  window.location.hash = '#/contas'
+})
 
 describe('Contas', () => {
   afterEach(() => {
@@ -178,6 +189,7 @@ describe('Contas', () => {
     })
     render(<App />)
     await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovaConta()
     preencherNovaConta('Itaú')
     enviarNovaConta()
     expect(await screen.findByRole('form', { name: /entrar/i })).toBeVisible()
@@ -187,6 +199,7 @@ describe('Contas', () => {
     mockFetch({ ...sessaoViva, 'GET /contas': responde([]) })
     render(<App />)
     await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovaConta()
     const nome = screen.getByLabelText('Nome')
     expect(nome).toHaveAttribute('maxlength', '100')
     expect(nome).toBeRequired()
@@ -206,6 +219,7 @@ describe('Contas', () => {
     })
     render(<App />)
     await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovaConta()
     preencherNovaConta('Itaú', '1.234,5')
     fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'poupanca' } })
     enviarNovaConta()
@@ -213,6 +227,9 @@ describe('Contas', () => {
     expect(item).toHaveTextContent('Itaú')
     expect(item.textContent).toMatch(texto('R$ 1.234,50'))
     expect(screen.queryByText('Nenhuma conta ainda.')).toBeNull()
+    // Salvou, o painel fecha; ao reabrir os campos voltam vazios.
+    expect(screen.queryByRole('form', { name: 'Nova conta' })).toBeNull()
+    await abrirNovaConta()
     expect(screen.getByLabelText('Nome')).toHaveValue('')
     expect(screen.getByLabelText(/saldo inicial/i)).toHaveValue('')
     const [url, init] = chamadasA('POST /contas')[0]
@@ -230,6 +247,7 @@ describe('Contas', () => {
     })
     render(<App />)
     await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovaConta()
     preencherNovaConta('Itaú')
     enviarNovaConta()
     await screen.findByRole('listitem')
@@ -240,6 +258,7 @@ describe('Contas', () => {
     mockFetch({ ...sessaoViva, 'GET /contas': responde([]) })
     render(<App />)
     await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovaConta()
     preencherNovaConta('Itaú', saldo)
     enviarNovaConta()
     const alerta = await screen.findByRole('alert')
@@ -256,6 +275,7 @@ describe('Contas', () => {
     })
     render(<App />)
     await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovaConta()
     preencherNovaConta('Itaú', '10')
     enviarNovaConta()
     expect(await screen.findByRole('alert')).toHaveTextContent('Já existe uma conta com esse nome.')
@@ -271,6 +291,7 @@ describe('Contas', () => {
     })
     render(<App />)
     await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovaConta()
     preencherNovaConta('Itaú')
     enviarNovaConta()
     expect(await screen.findByRole('alert')).toHaveTextContent('nome com caractere inválido')
@@ -284,6 +305,7 @@ describe('Contas', () => {
     })
     render(<App />)
     await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovaConta()
     preencherNovaConta('Itaú')
     enviarNovaConta()
     const alerta = await screen.findByRole('alert')
@@ -300,6 +322,7 @@ describe('Contas', () => {
     })
     render(<App />)
     await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovaConta()
     preencherNovaConta('Itaú')
     enviarNovaConta()
     expect(await screen.findByRole('button', { name: /criando/i })).toBeDisabled()
@@ -404,6 +427,7 @@ describe('Contas', () => {
     })
     render(<App />)
     await screen.findByText('Carteira')
+    await abrirNovaConta()
     preencherNovaConta('Banco')
     enviarNovaConta()
     await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(3))

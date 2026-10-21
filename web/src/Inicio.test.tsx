@@ -1,0 +1,225 @@
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import App from './App'
+
+type Rotas = Partial<Record<string, (corpo: unknown) => Promise<Response>>>
+
+const usuario = { id: '7f1e2c9a-0b6d-4f43-9a52-1c8d3e5b6a70', email: 'ana@exemplo.com', nome: 'Ana' }
+
+function conta(sobra: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    id: 'c1',
+    nome: 'Nubank',
+    tipo: 'corrente',
+    moeda: 'BRL',
+    saldoInicialCentavos: 0,
+    saldoCentavos: 100000,
+    arquivada: false,
+    criadaEm: '2026-10-19T12:00:00Z',
+    cartao: null,
+    ...sobra,
+  }
+}
+
+const visa = conta({
+  id: 'c9',
+  nome: 'Visa',
+  tipo: 'cartao_credito',
+  saldoCentavos: -20000,
+  cartao: { limiteCentavos: 500000, diaFechamento: 31, diaVencimento: 10, contaPagamentoId: 'c1', disponivelCentavos: 480000 },
+})
+
+function prevista(sobra: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    id: 'o1',
+    tipo: 'despesa',
+    status: 'previsto',
+    titulo: 'Aluguel',
+    descricao: null,
+    valorCentavos: 150000,
+    categoriaId: 'cd1',
+    transferenciaId: null,
+    templateId: 'r1',
+    parcelaOrdem: null,
+    compraParceladaId: null,
+    parcelaNum: null,
+    parcelaTotal: null,
+    direcao: null,
+    contaId: 'c1',
+    dataCompetencia: '2026-10-25',
+    dataCaixa: '2026-10-25',
+    criadoEm: '2026-10-05T12:00:00Z',
+    ...sobra,
+  }
+}
+
+function jsonResponse(corpo: unknown, status: number): Response {
+  return new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } })
+}
+
+const responde = (corpo: unknown, status = 200) => () => Promise.resolve(jsonResponse(corpo, status))
+
+const saldoProjetadoPadrao = {
+  inicio: '2026-10-19',
+  fim: '2026-10-19',
+  contaId: null,
+  saldoAtualCentavos: 0,
+  vencidasCentavos: 0,
+  menorSaldo: { data: '2026-10-19', saldoCentavos: 0 },
+  dias: [{ data: '2026-10-19', entradasCentavos: 0, saidasCentavos: 0, saldoCentavos: 0 }],
+}
+
+// Hoje é 19/10/2026: as previstas dos próximos 30 dias vão até 18/11.
+const PROXIMAS = 'GET /lancamentos?de=2026-10-19&ate=2026-11-18'
+
+function mockFetch(rotas: Rotas): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init?: RequestInit) => {
+      const chave = `${init?.method ?? 'GET'} ${url}`
+      const rota = rotas[chave]
+      if (rota) return rota(init?.body)
+      if (chave === 'GET /auth/eu') return Promise.resolve(jsonResponse(usuario, 200))
+      if (chave === 'GET /healthz') return Promise.resolve(jsonResponse({ mensagem: 'ok' }, 200))
+      if (chave === 'GET /categorias' || chave === 'GET /recorrencias') return Promise.resolve(jsonResponse([], 200))
+      if (chave.startsWith('GET /lancamentos?')) return Promise.resolve(jsonResponse([], 200))
+      if (chave === 'GET /lancamentos/vencidos') {
+        return Promise.resolve(jsonResponse({ lancamentos: [], maisAlgum: false }, 200))
+      }
+      if (chave.startsWith('GET /saldo-projetado?')) return Promise.resolve(jsonResponse(saldoProjetadoPadrao, 200))
+      return Promise.reject(new Error(`rota sem mock: ${chave}`))
+    }),
+  )
+}
+
+function chamadasA(chave: string): number {
+  return vi.mocked(fetch).mock.calls.filter(([url, init]) => `${init?.method ?? 'GET'} ${String(url)}` === chave).length
+}
+
+// O Intl separa símbolo e número com espaço sem quebra; o texto do teste usa espaço comum.
+const texto = (valor: string): RegExp =>
+  new RegExp(valor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll(' ', '[\\s\\u00a0]'))
+
+describe('Início', () => {
+  beforeEach(() => {
+    window.location.hash = '#/inicio'
+    // Só o Date: com os timers falsos o waitFor do testing-library travaria.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 19, 23, 30))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  describe('resumo das contas', () => {
+    it('soma o saldo das contas ativas e o disponível dos cartões', async () => {
+      mockFetch({ 'GET /contas': responde([conta(), visa]) })
+      render(<App />)
+      const resumo = within(await screen.findByRole('region', { name: 'Resumo das contas' }))
+      // 1.000,00 da conta corrente menos 200,00 de fatura em aberto.
+      expect(await resumo.findByText(texto('R$ 800,00'))).toBeVisible()
+      expect(resumo.getByText('Disponível nos cartões').nextSibling).toHaveTextContent(texto('R$ 4.800,00'))
+      expect(resumo.getByText('Contas ativas').nextSibling).toHaveTextContent('2')
+    })
+
+    it('sem cartão não fala de disponível', async () => {
+      mockFetch({ 'GET /contas': responde([conta()]) })
+      render(<App />)
+      const resumo = within(await screen.findByRole('region', { name: 'Resumo das contas' }))
+      expect(await resumo.findByText(texto('R$ 1.000,00'))).toBeVisible()
+      expect(resumo.queryByText('Disponível nos cartões')).toBeNull()
+    })
+
+    it('mostra carregando enquanto as contas não chegam', async () => {
+      mockFetch({ 'GET /contas': () => new Promise<Response>(() => {}) })
+      render(<App />)
+      expect(await screen.findByText('Carregando o resumo das contas...')).toBeVisible()
+    })
+
+    it('sem conta convida a criar a primeira e aponta para Contas', async () => {
+      mockFetch({ 'GET /contas': responde([]) })
+      render(<App />)
+      expect(await screen.findByText('Cadastre sua primeira conta.')).toBeVisible()
+      expect(screen.getByRole('link', { name: 'Ir para Contas' })).toHaveAttribute('href', '#/contas')
+    })
+  })
+
+  describe('próximas previstas', () => {
+    it('lista só as previstas, por data, com sinal, conta e valor', async () => {
+      mockFetch({
+        'GET /contas': responde([conta()]),
+        [PROXIMAS]: responde([
+          prevista({ id: 'o2', titulo: 'Salário', tipo: 'receita', valorCentavos: 500000, dataCaixa: '2026-11-05' }),
+          prevista(),
+          prevista({ id: 'r9', titulo: 'Feira', status: 'realizado', dataCaixa: '2026-10-20' }),
+          prevista({ id: 'c3', titulo: 'Velha', status: 'cancelado', dataCaixa: '2026-10-21' }),
+        ]),
+      })
+      render(<App />)
+      const lista = await screen.findByRole('list', { name: 'Próximas previstas' })
+      // O nome da conta chega com a lista de contas, que pode vir depois das previstas.
+      await within(lista).findAllByText('Nubank')
+      const itens = within(lista).getAllByRole('listitem')
+      expect(itens).toHaveLength(2)
+      expect(itens[0]).toHaveTextContent('25/10')
+      expect(itens[0]).toHaveTextContent('Aluguel')
+      expect(itens[0]).toHaveTextContent('Nubank')
+      expect(itens[0]).toHaveTextContent(texto('− R$ 1.500,00'))
+      expect(itens[1]).toHaveTextContent('Salário')
+      expect(itens[1]).toHaveTextContent(texto('+ R$ 5.000,00'))
+      expect(screen.getByRole('link', { name: 'Ver todos os lançamentos' })).toHaveAttribute('href', '#/lancamentos')
+    })
+
+    it('mostra no máximo seis', async () => {
+      const muitas = Array.from({ length: 8 }, (_, i) => prevista({ id: `o${i}`, titulo: `Conta ${i}` }))
+      mockFetch({ 'GET /contas': responde([conta()]), [PROXIMAS]: responde(muitas) })
+      render(<App />)
+      const lista = await screen.findByRole('list', { name: 'Próximas previstas' })
+      expect(within(lista).getAllByRole('listitem')).toHaveLength(6)
+    })
+
+    it('sem previstas diz isso e aponta para as recorrências', async () => {
+      mockFetch({ 'GET /contas': responde([conta()]), [PROXIMAS]: responde([]) })
+      render(<App />)
+      expect(await screen.findByText('Nada previsto para os próximos 30 dias.')).toBeVisible()
+      expect(screen.getByRole('link', { name: 'Ver recorrências' })).toHaveAttribute('href', '#/recorrencias')
+    })
+
+    it('mostra carregando enquanto a lista não chega', async () => {
+      mockFetch({ 'GET /contas': responde([conta()]), [PROXIMAS]: () => new Promise<Response>(() => {}) })
+      render(<App />)
+      expect(await screen.findByText('Carregando as próximas previstas...')).toBeVisible()
+    })
+
+    it('erro avisa e "Tentar de novo" busca outra vez', async () => {
+      let chamadas = 0
+      mockFetch({
+        'GET /contas': responde([conta()]),
+        [PROXIMAS]: () => {
+          chamadas += 1
+          return Promise.resolve(chamadas === 1 ? jsonResponse({ erro: 'x' }, 500) : jsonResponse([prevista()], 200))
+        },
+      })
+      render(<App />)
+      const alerta = await screen.findByRole('alert')
+      expect(alerta).toHaveTextContent('Não foi possível carregar as próximas previstas.')
+      fireEvent.click(screen.getByRole('button', { name: /tentar de novo/i }))
+      expect(await screen.findByRole('list', { name: 'Próximas previstas' })).toBeVisible()
+      expect(chamadasA(PROXIMAS)).toBe(2)
+    })
+
+    it('503 mostra serviço indisponível', async () => {
+      mockFetch({ 'GET /contas': responde([conta()]), [PROXIMAS]: responde({ erro: 'x' }, 503) })
+      render(<App />)
+      expect(await screen.findByRole('alert')).toHaveTextContent('Serviço indisponível')
+    })
+
+    it('401 volta para o login com o aviso', async () => {
+      mockFetch({ 'GET /contas': responde([conta()]), [PROXIMAS]: responde({ erro: 'x' }, 401) })
+      render(<App />)
+      expect(await screen.findByRole('form', { name: /entrar/i })).toBeVisible()
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/sessão acabou/i))
+    })
+  })
+})

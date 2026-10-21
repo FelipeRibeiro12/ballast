@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import {
   CompraParceladaInvalidaError,
   CompraParceladaNaoEncontradaError,
@@ -25,10 +26,30 @@ import {
 } from './api'
 import type { AjusteDeConfirmacao, Categoria, CompraParceladaAtualizarRequest, Conta, Lancamento } from './api'
 import { vencimentoDaFatura } from './fatura'
-import { formatarDataCompleta, formatarDiaMes, hojeLocal, intervaloDoMes, mesDeHoje, rotuloDoMes, somarMeses } from './datas'
+import {
+  formatarDataCompleta,
+  formatarDiaMes,
+  hojeLocal,
+  intervaloDoMes,
+  mesDeHoje,
+  rotuloDoDia,
+  rotuloDoMes,
+  somarMeses,
+} from './datas'
 import type { Mes } from './datas'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
+import {
+  IconeMais,
+  IconeSetaBaixo,
+  IconeSetaCima,
+  IconeSetaDireita,
+  IconeSetaEsquerda,
+  IconeTroca,
+} from './icones'
+import MenuDeAcoes from './MenuDeAcoes'
+import Painel from './Painel'
 import { calcularParcelas } from './parcelas'
+import { Carregando, EstadoVazio, Selo } from './ui'
 
 type TipoDeLancamento = Lancamento['tipo']
 
@@ -274,7 +295,6 @@ function FormularioDeLancamento({
 
   return (
     <form onSubmit={(evento) => void enviar(evento)} aria-label={nome}>
-      <h3>{nome}</h3>
       <div className="campo">
         <label htmlFor="lancamento-tipo">Tipo</label>
         <select
@@ -419,7 +439,7 @@ function FormularioDeLancamento({
         {enviando ? 'Salvando...' : inicial === null ? 'Adicionar lançamento' : 'Salvar alterações'}
       </button>
       {aoCancelar !== null && (
-        <button type="button" onClick={aoCancelar}>
+        <button type="button" className="discreto" onClick={aoCancelar}>
           Cancelar edição
         </button>
       )}
@@ -531,7 +551,7 @@ function FormularioDeConfirmacao({
       <button type="submit" disabled={enviando}>
         {enviando ? 'Confirmando...' : 'Confirmar'}
       </button>
-      <button type="button" disabled={enviando} onClick={aoVoltar}>
+      <button type="button" className="discreto" disabled={enviando} onClick={aoVoltar}>
         Voltar
       </button>
     </form>
@@ -639,7 +659,7 @@ function FormularioDeCompra({
       <button type="submit" disabled={enviando}>
         {enviando ? 'Salvando...' : 'Salvar compra'}
       </button>
-      <button type="button" disabled={enviando} onClick={aoVoltar}>
+      <button type="button" className="discreto" disabled={enviando} onClick={aoVoltar}>
         Voltar
       </button>
     </form>
@@ -725,7 +745,6 @@ function FormularioDeTransferencia({
 
   return (
     <form onSubmit={(evento) => void enviar(evento)} aria-label="Nova transferência">
-      <h3>Nova transferência</h3>
       <div className="campo">
         <label htmlFor="transferencia-origem">Conta de origem</label>
         <select
@@ -823,6 +842,8 @@ export default function Lancamentos({
   parcelasPorRecorrencia,
   versaoDaLista,
   aoMudarOcorrencia,
+  destinoDasVencidas,
+  aoEditarVencida,
 }: {
   aoSessaoExpirar: () => void
   // Contas ativas, vindas da tela de Contas; null até a primeira carga.
@@ -837,6 +858,10 @@ export default function Lancamentos({
   versaoDaLista: number
   // Avisa a tela de recorrências que a próxima ocorrência pode ter mudado.
   aoMudarOcorrencia: () => void
+  // Onde desenhar o bloco de vencidas (no Início). Sem destino o bloco não aparece.
+  destinoDasVencidas: HTMLElement | null
+  // Chamado ao editar uma vencida: o painel de edição fica na tela de Lançamentos.
+  aoEditarVencida: () => void
 }) {
   const [mes, setMes] = useState<Mes>(() => mesDeHoje())
   const [filtroDeConta, setFiltroDeConta] = useState('')
@@ -861,6 +886,7 @@ export default function Lancamentos({
   // Muda a key do formulário de criação para limpar os campos depois de salvar.
   const [versaoDoFormulario, setVersaoDoFormulario] = useState(0)
   const [modoDoFormulario, setModoDoFormulario] = useState<'lancamento' | 'transferencia'>('lancamento')
+  const [painelAberto, setPainelAberto] = useState(false)
   const acaoEmVoo = useRef(false)
 
   useEffect(() => {
@@ -1143,57 +1169,43 @@ export default function Lancamentos({
   const noUltimoMes = mes.ano >= ANO_MAXIMO && mes.mes === 12
   const rotulo = rotuloDoMes(mes)
 
-  return (
-    <section aria-labelledby="titulo-lancamentos">
-      <h2 id="titulo-lancamentos">Lançamentos</h2>
-      <div className="mes-nav">
-        <button type="button" aria-label="Mês anterior" disabled={noPrimeiroMes} onClick={() => navegar(-1)}>
-          ‹
-        </button>
-        <strong aria-live="polite">{rotulo}</strong>
-        <button type="button" aria-label="Próximo mês" disabled={noUltimoMes} onClick={() => navegar(1)}>
-          ›
-        </button>
-      </div>
-      {contas !== null && (
-        <div className="campo">
-          <label htmlFor="lancamentos-filtro-conta">Filtrar por conta</label>
-          <select
-            id="lancamentos-filtro-conta"
-            value={filtroDeConta}
-            onChange={(evento) => {
-              setEstado({ tipo: 'carregando' })
-              setFiltroDeConta(evento.target.value)
-            }}
-          >
-            <option value="">Todas</option>
-            {contas.map((conta) => (
-              <option key={conta.id} value={conta.id}>
-                {conta.nome}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      {/* Sem as contas a lista mostraria "Conta arquivada" para todo mundo por um instante. */}
-      {(estado.tipo === 'carregando' || (estado.tipo === 'ok' && contas === null)) && (
-        <p>Carregando lançamentos...</p>
-      )}
-      {estado.tipo === 'erro' && (
-        <>
-          <p role="alert" className="erro">
-            {estado.mensagem}
-          </p>
-          <button type="button" onClick={recarregar}>
-            Tentar de novo
-          </button>
-        </>
-      )}
-      {falhaDeAcao !== null && (
-        <p role="alert" className="erro">
-          {falhaDeAcao}
-        </p>
-      )}
+  const semContas = contas !== null && contas.length === 0
+  const painelVisivel = painelAberto || editando !== null
+  const tituloDoPainel =
+    editando !== null
+      ? editando.compraParceladaId !== null
+        ? 'Editar parcela'
+        : 'Editar lançamento'
+      : modoDoFormulario === 'transferencia'
+        ? 'Nova transferência'
+        : 'Novo lançamento'
+
+  function fecharPainel(): void {
+    setPainelAberto(false)
+    setEditando(null)
+  }
+
+  // Lançamentos seguidos com a mesma data de caixa formam um grupo; a ordem é a que a API mandou.
+  const grupos: { data: string; itens: Lancamento[] }[] = []
+  if (estado.tipo === 'ok') {
+    for (const lancamento of estado.lancamentos) {
+      const ultimo = grupos[grupos.length - 1]
+      if (ultimo !== undefined && ultimo.data === lancamento.dataCaixa) ultimo.itens.push(lancamento)
+      else grupos.push({ data: lancamento.dataCaixa, itens: [lancamento] })
+    }
+  }
+
+  const iconeDoItem = (lancamento: Lancamento): ReactNode =>
+    lancamento.tipo === 'transferencia' ? (
+      <IconeTroca tamanho={18} />
+    ) : lancamento.tipo === 'receita' ? (
+      <IconeSetaBaixo tamanho={18} />
+    ) : (
+      <IconeSetaCima tamanho={18} />
+    )
+
+  const blocoDeVencidas = (
+    <>
       {vencidas.tipo === 'erro' && (
         <div className="vencidas-aviso">
           <p role="alert" className="erro">
@@ -1209,8 +1221,10 @@ export default function Lancamentos({
         </div>
       )}
       {vencidas.tipo === 'ok' && vencidas.lancamentos.length > 0 && contas !== null && (
-        <section className="vencidas" aria-labelledby="titulo-vencidas">
-          <h3 id="titulo-vencidas">Vencidas ({vencidas.lancamentos.length})</h3>
+        <section className="cartao vencidas" aria-labelledby="titulo-vencidas">
+          <h3 id="titulo-vencidas" className="titulo-cartao">
+            Vencidas ({vencidas.lancamentos.length})
+          </h3>
           {vencidas.maisAlgum && <p>mostrando as 200 mais antigas</p>}
           <ul className="lancamentos">
             {vencidas.lancamentos.map((vencida) => {
@@ -1219,65 +1233,86 @@ export default function Lancamentos({
                 confirmando?.id === vencida.id && confirmando.lugar === 'vencidas' ? confirmando.acao : null
               return (
                 <li key={vencida.id} className="previsto">
-                  <div className="lancamento-dados">
-                    <span>{formatarDataCompleta(vencida.dataCaixa)}</span>
-                    <strong>{vencida.titulo}</strong>
-                    <span>{nomesDeConta.get(vencida.contaId) ?? 'Conta arquivada'}</span>
-                    <span className={vencida.tipo}>
+                  <span className={`item-icone ${vencida.tipo}`}>{iconeDoItem(vencida)}</span>
+                  <div className="item-corpo">
+                    <strong className="item-titulo">{vencida.titulo}</strong>
+                    <span className="item-meta">
+                      {formatarDataCompleta(vencida.dataCaixa)}
+                      {' · '}
+                      {nomesDeConta.get(vencida.contaId) ?? 'Conta arquivada'}
+                    </span>
+                    <div className="item-selos">
+                      <Selo tom="vencida">Vencida</Selo>
+                    </div>
+                  </div>
+                  <div className="item-lado">
+                    <span className={`item-valor ${vencida.tipo}`}>
                       {sinal} {formatarCentavos(vencida.valorCentavos)}
                     </span>
-                  </div>
-                  <div className="lancamento-acoes">
-                    {confirmandoEsta !== 'ajustar' && (
-                      <button
-                        type="button"
-                        disabled={apagando !== null}
-                        aria-label={`Confirmar ${vencida.titulo}`}
-                        onClick={() => {
-                          setFalhaDeAcao(null)
-                          setConfirmando({ id: vencida.id, acao: 'ajustar', lugar: 'vencidas' })
-                        }}
-                      >
-                        Confirmar
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      disabled={apagando !== null}
-                      aria-label={`Editar ${vencida.titulo}`}
-                      onClick={() => {
-                        setFalhaDeAcao(null)
-                        setConfirmando(null)
-                        setEditando(vencida)
-                      }}
-                    >
-                      Editar
-                    </button>
-                    {confirmandoEsta === 'cancelar' ? (
-                      <>
-                        <button
-                          type="button"
-                          disabled={apagando !== null}
-                          aria-label={`Confirmar cancelar ${vencida.titulo}`}
-                          onClick={() => void cancelarOcorrencia(vencida)}
-                        >
-                          Confirmar cancelar
-                        </button>
-                        <button type="button" disabled={apagando !== null} onClick={() => setConfirmando(null)}>
-                          Manter
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={apagando !== null}
-                        aria-label={`Cancelar ${vencida.titulo}`}
-                        onClick={() => setConfirmando({ id: vencida.id, acao: 'cancelar', lugar: 'vencidas' })}
-                      >
-                        Cancelar
-                      </button>
+                    {confirmandoEsta !== 'cancelar' && (
+                      <div className="item-botoes">
+                        {confirmandoEsta !== 'ajustar' && (
+                          <button
+                            type="button"
+                            className="pequeno destaque-acao"
+                            disabled={apagando !== null}
+                            aria-label={`Confirmar ${vencida.titulo}`}
+                            onClick={() => {
+                              setFalhaDeAcao(null)
+                              setConfirmando({ id: vencida.id, acao: 'ajustar', lugar: 'vencidas' })
+                            }}
+                          >
+                            Confirmar
+                          </button>
+                        )}
+                        <MenuDeAcoes rotulo={`Mais ações de ${vencida.titulo}`}>
+                          <button
+                            type="button"
+                            disabled={apagando !== null}
+                            aria-label={`Editar ${vencida.titulo}`}
+                            onClick={() => {
+                              setFalhaDeAcao(null)
+                              setConfirmando(null)
+                              setEditando(vencida)
+                              aoEditarVencida()
+                            }}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="perigo"
+                            disabled={apagando !== null}
+                            aria-label={`Cancelar ${vencida.titulo}`}
+                            onClick={() => setConfirmando({ id: vencida.id, acao: 'cancelar', lugar: 'vencidas' })}
+                          >
+                            Cancelar
+                          </button>
+                        </MenuDeAcoes>
+                      </div>
                     )}
                   </div>
+                  {confirmandoEsta === 'cancelar' && (
+                    <div className="item-acoes">
+                      <button
+                        type="button"
+                        className="pequeno perigo forte"
+                        disabled={apagando !== null}
+                        aria-label={`Confirmar cancelar ${vencida.titulo}`}
+                        onClick={() => void cancelarOcorrencia(vencida)}
+                      >
+                        Confirmar cancelar
+                      </button>
+                      <button
+                        type="button"
+                        className="pequeno"
+                        disabled={apagando !== null}
+                        onClick={() => setConfirmando(null)}
+                      >
+                        Manter
+                      </button>
+                    </div>
+                  )}
                   {confirmandoEsta === 'ajustar' && (
                     <FormularioDeConfirmacao
                       prevista={vencida}
@@ -1292,276 +1327,76 @@ export default function Lancamentos({
           </ul>
         </section>
       )}
-      {estado.tipo === 'ok' && contas !== null && (
+    </>
+  )
+
+  return (
+    <section aria-labelledby="titulo-lancamentos">
+      <header className="pagina-topo">
+        <h2 id="titulo-lancamentos">Lançamentos</h2>
+        <button
+          type="button"
+          className="primario botao-novo"
+          disabled={contas === null || semContas}
+          onClick={() => {
+            setEditando(null)
+            setPainelAberto(true)
+          }}
+        >
+          <IconeMais />
+          Novo
+        </button>
+      </header>
+      {destinoDasVencidas !== null && createPortal(blocoDeVencidas, destinoDasVencidas)}
+      <div className="mes-barra">
+        <div className="mes-nav">
+          <button type="button" aria-label="Mês anterior" disabled={noPrimeiroMes} onClick={() => navegar(-1)}>
+            <IconeSetaEsquerda />
+          </button>
+          <strong aria-live="polite">{rotulo}</strong>
+          <button type="button" aria-label="Próximo mês" disabled={noUltimoMes} onClick={() => navegar(1)}>
+            <IconeSetaDireita />
+          </button>
+        </div>
+        {contas !== null && (
+          <div className="campo">
+            <label htmlFor="lancamentos-filtro-conta">Filtrar por conta</label>
+            <select
+              id="lancamentos-filtro-conta"
+              value={filtroDeConta}
+              onChange={(evento) => {
+                setEstado({ tipo: 'carregando' })
+                setFiltroDeConta(evento.target.value)
+              }}
+            >
+              <option value="">Todas</option>
+              {contas.map((conta) => (
+                <option key={conta.id} value={conta.id}>
+                  {conta.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+      {/* Sem as contas a lista mostraria "Conta arquivada" para todo mundo por um instante. */}
+      {(estado.tipo === 'carregando' || (estado.tipo === 'ok' && contas === null)) && (
+        <Carregando texto="Carregando lançamentos..." linhas={4} />
+      )}
+      {estado.tipo === 'erro' && (
         <>
-          <dl className="totais">
-            <div>
-              <dt>Receitas</dt>
-              <dd className="receita">{formatarCentavos(receitas)}</dd>
-            </div>
-            <div>
-              <dt>Despesas</dt>
-              <dd className="despesa">{formatarCentavos(despesas)}</dd>
-            </div>
-            <div>
-              <dt>Resultado</dt>
-              <dd>{formatarCentavos(receitas - despesas)}</dd>
-            </div>
-          </dl>
-          <p className="previsto-no-mes">
-            Previsto no mês: <span className="receita">+{formatarCentavos(previstoReceitas)}</span>
-            {' / '}
-            <span className="despesa">−{formatarCentavos(previstoDespesas)}</span>
+          <p role="alert" className="erro">
+            {estado.mensagem}
           </p>
-          {estado.lancamentos.length === 0 && <p>Nenhum lançamento neste mês.</p>}
-          {estado.lancamentos.length > 0 && (
-            <ul className="lancamentos">
-              {estado.lancamentos.map((lancamento) => {
-                const ePerna = lancamento.tipo === 'transferencia'
-                const sinal =
-                  lancamento.tipo === 'receita' || lancamento.direcao === 'entrada' ? '+' : '−'
-                const ePrevista = lancamento.status === 'previsto'
-                const eCancelada = lancamento.status === 'cancelado'
-                // Só vale o aviso se a série ainda gera e a data cai dentro do que ela repõe.
-                const voltaComoPrevista =
-                  lancamento.templateId !== null &&
-                  recorrenciasAtivas.has(lancamento.templateId) &&
-                  lancamento.dataCaixa >= hoje
-                const confirmandoEste =
-                  confirmando?.id === lancamento.id && confirmando.lugar === 'mes' ? confirmando.acao : null
-                const compraId = lancamento.compraParceladaId
-                const parcelaDaCompra =
-                  compraId !== null && lancamento.parcelaNum !== null && lancamento.parcelaTotal !== null
-                    ? { compraId, num: lancamento.parcelaNum, total: lancamento.parcelaTotal }
-                    : null
-                return (
-                  <li
-                    key={lancamento.id}
-                    className={ePrevista ? 'previsto' : eCancelada ? 'cancelado' : undefined}
-                  >
-                    <div className="lancamento-dados">
-                      <span>{formatarDiaMes(lancamento.dataCaixa)}</span>
-                      <strong>{lancamento.titulo}</strong>
-                      {/* Na fatura do cartão o caixa cai depois da compra; mostra as duas. */}
-                      {lancamento.dataCompetencia !== lancamento.dataCaixa && (
-                        <small>compra em {formatarDiaMes(lancamento.dataCompetencia)}</small>
-                      )}
-                      <span>
-                        {ePerna
-                          ? 'Transferência'
-                          : ((lancamento.categoriaId !== null && nomesDeCategoria.get(lancamento.categoriaId)) ||
-                            'Sem categoria')}
-                        {' · '}
-                        {nomesDeConta.get(lancamento.contaId) ?? 'Conta arquivada'}
-                      </span>
-                      {lancamento.parcelaOrdem !== null && (
-                        <small>
-                          {lancamento.templateId !== null && parcelasPorRecorrencia.has(lancamento.templateId)
-                            ? `parcela ${lancamento.parcelaOrdem} de ${parcelasPorRecorrencia.get(lancamento.templateId)}`
-                            : `parcela ${lancamento.parcelaOrdem}`}
-                        </small>
-                      )}
-                      {parcelaDaCompra !== null && (
-                        <small>
-                          parcela {parcelaDaCompra.num} de {parcelaDaCompra.total}
-                        </small>
-                      )}
-                      {(ePrevista || eCancelada) && (
-                        <span className="marca">{ePrevista ? 'Previsto' : 'Cancelado'}</span>
-                      )}
-                      <span className={lancamento.tipo}>
-                        {sinal} {formatarCentavos(lancamento.valorCentavos)}
-                      </span>
-                    </div>
-                    <div className="lancamento-acoes">
-                      {ePrevista && confirmandoEste !== 'ajustar' && (
-                        <button
-                          type="button"
-                          disabled={apagando !== null}
-                          aria-label={`Confirmar ${lancamento.titulo}`}
-                          onClick={() => {
-                            setFalhaDeAcao(null)
-                            setConfirmando({ id: lancamento.id, acao: 'ajustar', lugar: 'mes' })
-                          }}
-                        >
-                          Confirmar
-                        </button>
-                      )}
-                      {parcelaDaCompra !== null && (
-                        <>
-                          <button
-                            type="button"
-                            disabled={apagando !== null}
-                            aria-label={`Editar parcela ${parcelaDaCompra.num} de ${lancamento.titulo}`}
-                            onClick={() => {
-                              setFalhaDeAcao(null)
-                              setConfirmando(null)
-                              setEditando(lancamento)
-                            }}
-                          >
-                            Editar parcela
-                          </button>
-                          <button
-                            type="button"
-                            disabled={apagando !== null}
-                            aria-label={`Editar compra ${lancamento.titulo}`}
-                            onClick={() => {
-                              setFalhaDeAcao(null)
-                              setConfirmando({ id: lancamento.id, acao: 'editar-compra', lugar: 'mes' })
-                            }}
-                          >
-                            Editar compra
-                          </button>
-                          {/* A primeira parcela é a âncora das outras: o servidor só deixa apagar a compra inteira. */}
-                          {parcelaDaCompra.num !== 1 &&
-                            (confirmandoEste === 'apagar-parcela' ? (
-                              <>
-                                <span>Apaga só esta parcela. A soma da compra muda.</span>
-                                <button
-                                  type="button"
-                                  disabled={apagando !== null}
-                                  aria-label={`Confirmar apagar parcela ${parcelaDaCompra.num} de ${lancamento.titulo}`}
-                                  onClick={() => void apagar(lancamento)}
-                                >
-                                  Confirmar apagar parcela
-                                </button>
-                                <button type="button" disabled={apagando !== null} onClick={() => setConfirmando(null)}>
-                                  Manter parcela
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={apagando !== null}
-                                aria-label={`Apagar parcela ${parcelaDaCompra.num} de ${lancamento.titulo}`}
-                                onClick={() => setConfirmando({ id: lancamento.id, acao: 'apagar-parcela', lugar: 'mes' })}
-                              >
-                                Apagar parcela
-                              </button>
-                            ))}
-                          {confirmandoEste === 'apagar-compra' ? (
-                            <>
-                              <span>
-                                Apaga a compra inteira: somem {confirmando?.quantidade ?? parcelaDaCompra.total} parcelas.
-                              </span>
-                              <button
-                                type="button"
-                                disabled={apagando !== null}
-                                aria-label={`Confirmar apagar compra ${lancamento.titulo}`}
-                                onClick={() => void apagarCompra(lancamento, parcelaDaCompra.compraId)}
-                              >
-                                Confirmar apagar compra
-                              </button>
-                              <button type="button" disabled={apagando !== null} onClick={() => setConfirmando(null)}>
-                                Manter compra
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={apagando !== null}
-                              aria-label={`Apagar compra ${lancamento.titulo}`}
-                              onClick={() => void pedirApagarCompra(lancamento, parcelaDaCompra.compraId)}
-                            >
-                              Apagar compra
-                            </button>
-                          )}
-                        </>
-                      )}
-                      {parcelaDaCompra === null && !ePerna && !eCancelada && (
-                        <button
-                          type="button"
-                          disabled={apagando !== null}
-                          aria-label={`Editar ${lancamento.titulo}`}
-                          onClick={() => {
-                            setFalhaDeAcao(null)
-                            setConfirmando(null)
-                            setEditando(lancamento)
-                          }}
-                        >
-                          Editar
-                        </button>
-                      )}
-                      {ePrevista &&
-                        (confirmandoEste === 'cancelar' ? (
-                          <>
-                            <button
-                              type="button"
-                              disabled={apagando !== null}
-                              aria-label={`Confirmar cancelar ${lancamento.titulo}`}
-                              onClick={() => void cancelarOcorrencia(lancamento)}
-                            >
-                              Confirmar cancelar
-                            </button>
-                            <button type="button" disabled={apagando !== null} onClick={() => setConfirmando(null)}>
-                              Manter
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={apagando !== null}
-                            aria-label={`Cancelar ${lancamento.titulo}`}
-                            onClick={() => setConfirmando({ id: lancamento.id, acao: 'cancelar', lugar: 'mes' })}
-                          >
-                            Cancelar
-                          </button>
-                        ))}
-                      {/* Apagar prevista é recusado pela API: o caminho é cancelar. */}
-                      {!ePrevista &&
-                        parcelaDaCompra === null &&
-                        (confirmandoEste === 'apagar' ? (
-                          <>
-                            {ePerna && <span>Apaga as duas pernas da transferência.</span>}
-                            {voltaComoPrevista && <span>Essa ocorrência volta como prevista.</span>}
-                            <button
-                              type="button"
-                              disabled={apagando !== null}
-                              aria-label={`Confirmar apagar ${lancamento.titulo}`}
-                              onClick={() => void apagar(lancamento)}
-                            >
-                              Confirmar apagar
-                            </button>
-                            <button type="button" disabled={apagando !== null} onClick={() => setConfirmando(null)}>
-                              Cancelar
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={apagando !== null}
-                            aria-label={`Apagar ${lancamento.titulo}`}
-                            onClick={() => setConfirmando({ id: lancamento.id, acao: 'apagar', lugar: 'mes' })}
-                          >
-                            Apagar
-                          </button>
-                        ))}
-                    </div>
-                    {confirmandoEste === 'editar-compra' && parcelaDaCompra !== null && apoio.tipo === 'ok' && (
-                      <FormularioDeCompra
-                        parcela={lancamento}
-                        categorias={apoio.categorias}
-                        aoSalvar={(dados) => editarCompra(lancamento, parcelaDaCompra.compraId, dados)}
-                        aoVoltar={() => setConfirmando(null)}
-                      />
-                    )}
-                    {confirmandoEste === 'ajustar' && (
-                      <FormularioDeConfirmacao
-                        prevista={lancamento}
-                        cartao={cartaoDaConta(lancamento.contaId)}
-                        aoConfirmar={(ajuste) => confirmar(lancamento, ajuste)}
-                        aoVoltar={() => setConfirmando(null)}
-                      />
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+          <button type="button" onClick={recarregar}>
+            Tentar de novo
+          </button>
         </>
       )}
-      {(apoio.tipo === 'carregando' || (apoio.tipo === 'ok' && contas === null)) && (
-        <p>Preparando o formulário...</p>
+      {falhaDeAcao !== null && (
+        <p role="alert" className="erro">
+          {falhaDeAcao}
+        </p>
       )}
       {apoio.tipo === 'erro' && (
         <>
@@ -1579,54 +1414,396 @@ export default function Lancamentos({
           </button>
         </>
       )}
-      {contas !== null && editando === null && (
-        <div role="group" aria-label="Tipo de registro">
-          <button
-            type="button"
-            aria-pressed={modoDoFormulario === 'lancamento'}
-            onClick={() => setModoDoFormulario('lancamento')}
-          >
-            Lançamento
-          </button>
-          <button
-            type="button"
-            aria-pressed={modoDoFormulario === 'transferencia'}
-            onClick={() => setModoDoFormulario('transferencia')}
-          >
-            Transferência
-          </button>
-        </div>
+      {semContas && <p className="vazio-dica">Crie uma conta antes de lançar.</p>}
+      {estado.tipo === 'ok' && contas !== null && (
+        <>
+          <dl className="pilulas">
+            <div className="pilula">
+              <dt>Receitas</dt>
+              <dd className="receita">{formatarCentavos(receitas)}</dd>
+            </div>
+            <div className="pilula">
+              <dt>Despesas</dt>
+              <dd className="despesa">{formatarCentavos(despesas)}</dd>
+            </div>
+            <div className="pilula">
+              <dt>Resultado</dt>
+              <dd className={receitas - despesas < 0n ? 'despesa' : undefined}>{formatarCentavos(receitas - despesas)}</dd>
+            </div>
+          </dl>
+          <p className="previsto-no-mes">
+            Previsto no mês: <span className="receita">+{formatarCentavos(previstoReceitas)}</span>
+            {' / '}
+            <span className="despesa">−{formatarCentavos(previstoDespesas)}</span>
+          </p>
+          {estado.lancamentos.length === 0 && (
+            <EstadoVazio
+              titulo="Nenhum lançamento neste mês."
+              dica="Registre uma receita, uma despesa ou uma transferência."
+              acao={
+                semContas ? undefined : (
+                  <button type="button" className="primario" onClick={() => setPainelAberto(true)}>
+                    Adicionar o primeiro
+                  </button>
+                )
+              }
+            />
+          )}
+          {grupos.map((grupo) => (
+            <div className="dia-grupo" key={grupo.itens[0].id}>
+              <h3 className="dia-titulo">{rotuloDoDia(grupo.data, hoje)}</h3>
+              <ul className="lancamentos lista-cartao">
+                {grupo.itens.map((lancamento) => {
+                  const ePerna = lancamento.tipo === 'transferencia'
+                  const sinal = lancamento.tipo === 'receita' || lancamento.direcao === 'entrada' ? '+' : '−'
+                  const ePrevista = lancamento.status === 'previsto'
+                  const eCancelada = lancamento.status === 'cancelado'
+                  // Só vale o aviso se a série ainda gera e a data cai dentro do que ela repõe.
+                  const voltaComoPrevista =
+                    lancamento.templateId !== null &&
+                    recorrenciasAtivas.has(lancamento.templateId) &&
+                    lancamento.dataCaixa >= hoje
+                  const confirmandoEste =
+                    confirmando?.id === lancamento.id && confirmando.lugar === 'mes' ? confirmando.acao : null
+                  const compraId = lancamento.compraParceladaId
+                  const parcelaDaCompra =
+                    compraId !== null && lancamento.parcelaNum !== null && lancamento.parcelaTotal !== null
+                      ? { compraId, num: lancamento.parcelaNum, total: lancamento.parcelaTotal }
+                      : null
+                  const emConfirmacao =
+                    confirmandoEste === 'apagar' ||
+                    confirmandoEste === 'apagar-parcela' ||
+                    confirmandoEste === 'apagar-compra' ||
+                    confirmandoEste === 'cancelar'
+                  // Toda linha tem ao menos Apagar, Editar ou Cancelar.
+                  const temMenu = true
+                  return (
+                    <li
+                      key={lancamento.id}
+                      className={ePrevista ? 'previsto' : eCancelada ? 'cancelado' : undefined}
+                    >
+                      <span className={`item-icone ${lancamento.tipo}`}>{iconeDoItem(lancamento)}</span>
+                      <div className="item-corpo">
+                        <strong className="item-titulo">{lancamento.titulo}</strong>
+                        <span className="item-meta">
+                          {ePerna
+                            ? ''
+                            : ((lancamento.categoriaId !== null && nomesDeCategoria.get(lancamento.categoriaId)) ||
+                              'Sem categoria') + ' · '}
+                          {nomesDeConta.get(lancamento.contaId) ?? 'Conta arquivada'}
+                        </span>
+                        {/* Na fatura do cartão o caixa cai depois da compra; mostra as duas. */}
+                        {lancamento.dataCompetencia !== lancamento.dataCaixa && (
+                          <small>compra em {formatarDiaMes(lancamento.dataCompetencia)}</small>
+                        )}
+                        {(ePrevista || eCancelada || ePerna || lancamento.parcelaOrdem !== null || parcelaDaCompra !== null) && (
+                          <div className="item-selos">
+                            {ePrevista && <Selo tom="previsto">Previsto</Selo>}
+                            {eCancelada && <Selo tom="cancelado">Cancelado</Selo>}
+                            {ePerna && <Selo tom="transferencia">Transferência</Selo>}
+                            {lancamento.parcelaOrdem !== null && (
+                              <Selo tom="neutro">
+                                {lancamento.templateId !== null && parcelasPorRecorrencia.has(lancamento.templateId)
+                                  ? `parcela ${lancamento.parcelaOrdem} de ${parcelasPorRecorrencia.get(lancamento.templateId)}`
+                                  : `parcela ${lancamento.parcelaOrdem}`}
+                              </Selo>
+                            )}
+                            {parcelaDaCompra !== null && (
+                              <Selo tom="neutro">
+                                parcela {parcelaDaCompra.num} de {parcelaDaCompra.total}
+                              </Selo>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="item-lado">
+                        <span className={`item-valor ${lancamento.tipo}`}>
+                          {sinal} {formatarCentavos(lancamento.valorCentavos)}
+                        </span>
+                        {!emConfirmacao && (
+                          <div className="item-botoes">
+                            {ePrevista && confirmandoEste !== 'ajustar' && (
+                              <button
+                                type="button"
+                                className="pequeno destaque-acao"
+                                disabled={apagando !== null}
+                                aria-label={`Confirmar ${lancamento.titulo}`}
+                                onClick={() => {
+                                  setFalhaDeAcao(null)
+                                  setConfirmando({ id: lancamento.id, acao: 'ajustar', lugar: 'mes' })
+                                }}
+                              >
+                                Confirmar
+                              </button>
+                            )}
+                            {temMenu && (
+                              <MenuDeAcoes rotulo={`Mais ações de ${lancamento.titulo}`}>
+                                {parcelaDaCompra !== null && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={apagando !== null}
+                                      aria-label={`Editar parcela ${parcelaDaCompra.num} de ${lancamento.titulo}`}
+                                      onClick={() => {
+                                        setFalhaDeAcao(null)
+                                        setConfirmando(null)
+                                        setEditando(lancamento)
+                                      }}
+                                    >
+                                      Editar parcela
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={apagando !== null}
+                                      aria-label={`Editar compra ${lancamento.titulo}`}
+                                      onClick={() => {
+                                        setFalhaDeAcao(null)
+                                        setConfirmando({ id: lancamento.id, acao: 'editar-compra', lugar: 'mes' })
+                                      }}
+                                    >
+                                      Editar compra
+                                    </button>
+                                    {/* A primeira parcela é a âncora das outras: o servidor só deixa apagar a compra inteira. */}
+                                    {parcelaDaCompra.num !== 1 && (
+                                      <button
+                                        type="button"
+                                        className="perigo"
+                                        disabled={apagando !== null}
+                                        aria-label={`Apagar parcela ${parcelaDaCompra.num} de ${lancamento.titulo}`}
+                                        onClick={() =>
+                                          setConfirmando({ id: lancamento.id, acao: 'apagar-parcela', lugar: 'mes' })
+                                        }
+                                      >
+                                        Apagar parcela
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="perigo"
+                                      disabled={apagando !== null}
+                                      aria-label={`Apagar compra ${lancamento.titulo}`}
+                                      onClick={() => void pedirApagarCompra(lancamento, parcelaDaCompra.compraId)}
+                                    >
+                                      Apagar compra
+                                    </button>
+                                  </>
+                                )}
+                                {parcelaDaCompra === null && !ePerna && !eCancelada && (
+                                  <button
+                                    type="button"
+                                    disabled={apagando !== null}
+                                    aria-label={`Editar ${lancamento.titulo}`}
+                                    onClick={() => {
+                                      setFalhaDeAcao(null)
+                                      setConfirmando(null)
+                                      setEditando(lancamento)
+                                    }}
+                                  >
+                                    Editar
+                                  </button>
+                                )}
+                                {ePrevista && (
+                                  <button
+                                    type="button"
+                                    className="perigo"
+                                    disabled={apagando !== null}
+                                    aria-label={`Cancelar ${lancamento.titulo}`}
+                                    onClick={() => setConfirmando({ id: lancamento.id, acao: 'cancelar', lugar: 'mes' })}
+                                  >
+                                    Cancelar
+                                  </button>
+                                )}
+                                {/* Apagar prevista é recusado pela API: o caminho é cancelar. */}
+                                {!ePrevista && parcelaDaCompra === null && (
+                                  <button
+                                    type="button"
+                                    className="perigo"
+                                    disabled={apagando !== null}
+                                    aria-label={`Apagar ${lancamento.titulo}`}
+                                    onClick={() => setConfirmando({ id: lancamento.id, acao: 'apagar', lugar: 'mes' })}
+                                  >
+                                    Apagar
+                                  </button>
+                                )}
+                              </MenuDeAcoes>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {emConfirmacao && (
+                        <div className="item-acoes">
+                          {confirmandoEste === 'apagar-parcela' && parcelaDaCompra !== null && (
+                            <>
+                              <span className="aviso-acao">Apaga só esta parcela. A soma da compra muda.</span>
+                              <button
+                                type="button"
+                                className="pequeno perigo forte"
+                                disabled={apagando !== null}
+                                aria-label={`Confirmar apagar parcela ${parcelaDaCompra.num} de ${lancamento.titulo}`}
+                                onClick={() => void apagar(lancamento)}
+                              >
+                                Confirmar apagar parcela
+                              </button>
+                              <button
+                                type="button"
+                                className="pequeno"
+                                disabled={apagando !== null}
+                                onClick={() => setConfirmando(null)}
+                              >
+                                Manter parcela
+                              </button>
+                            </>
+                          )}
+                          {confirmandoEste === 'apagar-compra' && parcelaDaCompra !== null && (
+                            <>
+                              <span className="aviso-acao">
+                                Apaga a compra inteira: somem {confirmando?.quantidade ?? parcelaDaCompra.total} parcelas.
+                              </span>
+                              <button
+                                type="button"
+                                className="pequeno perigo forte"
+                                disabled={apagando !== null}
+                                aria-label={`Confirmar apagar compra ${lancamento.titulo}`}
+                                onClick={() => void apagarCompra(lancamento, parcelaDaCompra.compraId)}
+                              >
+                                Confirmar apagar compra
+                              </button>
+                              <button
+                                type="button"
+                                className="pequeno"
+                                disabled={apagando !== null}
+                                onClick={() => setConfirmando(null)}
+                              >
+                                Manter compra
+                              </button>
+                            </>
+                          )}
+                          {confirmandoEste === 'cancelar' && (
+                            <>
+                              <button
+                                type="button"
+                                className="pequeno perigo forte"
+                                disabled={apagando !== null}
+                                aria-label={`Confirmar cancelar ${lancamento.titulo}`}
+                                onClick={() => void cancelarOcorrencia(lancamento)}
+                              >
+                                Confirmar cancelar
+                              </button>
+                              <button
+                                type="button"
+                                className="pequeno"
+                                disabled={apagando !== null}
+                                onClick={() => setConfirmando(null)}
+                              >
+                                Manter
+                              </button>
+                            </>
+                          )}
+                          {confirmandoEste === 'apagar' && (
+                            <>
+                              {ePerna && <span className="aviso-acao">Apaga as duas pernas da transferência.</span>}
+                              {voltaComoPrevista && <span className="aviso-acao">Essa ocorrência volta como prevista.</span>}
+                              <button
+                                type="button"
+                                className="pequeno perigo forte"
+                                disabled={apagando !== null}
+                                aria-label={`Confirmar apagar ${lancamento.titulo}`}
+                                onClick={() => void apagar(lancamento)}
+                              >
+                                Confirmar apagar
+                              </button>
+                              <button
+                                type="button"
+                                className="pequeno"
+                                disabled={apagando !== null}
+                                onClick={() => setConfirmando(null)}
+                              >
+                                Cancelar
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {confirmandoEste === 'editar-compra' && parcelaDaCompra !== null && apoio.tipo === 'ok' && (
+                        <FormularioDeCompra
+                          parcela={lancamento}
+                          categorias={apoio.categorias}
+                          aoSalvar={(dados) => editarCompra(lancamento, parcelaDaCompra.compraId, dados)}
+                          aoVoltar={() => setConfirmando(null)}
+                        />
+                      )}
+                      {confirmandoEste === 'ajustar' && (
+                        <FormularioDeConfirmacao
+                          prevista={lancamento}
+                          cartao={cartaoDaConta(lancamento.contaId)}
+                          aoConfirmar={(ajuste) => confirmar(lancamento, ajuste)}
+                          aoVoltar={() => setConfirmando(null)}
+                        />
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
+        </>
       )}
-      {contas !== null && editando === null && modoDoFormulario === 'transferencia' && (
-        <FormularioDeTransferencia
-          key={`transferencia-${versaoDoFormulario}`}
-          contas={contas}
-          aoSalvar={() => {
-            setVersaoDoFormulario((n) => n + 1)
-            depoisDeMudar()
-          }}
-          aoSessaoExpirar={aoSessaoExpirar}
-        />
-      )}
-      {(editando !== null || modoDoFormulario === 'lancamento') && apoio.tipo === 'ok' && contas !== null && (
-        <FormularioDeLancamento
-          key={editando?.id ?? `novo-${versaoDoFormulario}`}
-          contas={contas}
-          categorias={apoio.categorias}
-          inicial={editando}
-          aoSalvar={() => {
-            if (editando === null) setVersaoDoFormulario((n) => n + 1)
-            setEditando(null)
-            depoisDeMudar()
-          }}
-          aoNaoExistir={() => {
-            setEditando(null)
-            setFalhaDeAcao(MENSAGEM_NAO_EXISTE)
-            depoisDeMudar()
-          }}
-          aoCancelar={editando === null ? null : () => setEditando(null)}
-          aoSessaoExpirar={aoSessaoExpirar}
-        />
+      {painelVisivel && (
+        <Painel titulo={tituloDoPainel} aoFechar={fecharPainel}>
+          {editando === null && contas !== null && (
+            <div role="group" aria-label="Tipo de registro" className="segmentos cheio">
+              <button
+                type="button"
+                aria-pressed={modoDoFormulario === 'lancamento'}
+                onClick={() => setModoDoFormulario('lancamento')}
+              >
+                Lançamento
+              </button>
+              <button
+                type="button"
+                aria-pressed={modoDoFormulario === 'transferencia'}
+                onClick={() => setModoDoFormulario('transferencia')}
+              >
+                Transferência
+              </button>
+            </div>
+          )}
+          {editando === null && contas !== null && modoDoFormulario === 'transferencia' && (
+            <FormularioDeTransferencia
+              key={`transferencia-${versaoDoFormulario}`}
+              contas={contas}
+              aoSalvar={() => {
+                setVersaoDoFormulario((n) => n + 1)
+                setPainelAberto(false)
+                depoisDeMudar()
+              }}
+              aoSessaoExpirar={aoSessaoExpirar}
+            />
+          )}
+          {(editando !== null || modoDoFormulario === 'lancamento') &&
+            (apoio.tipo === 'ok' && contas !== null ? (
+              <FormularioDeLancamento
+                key={editando?.id ?? `novo-${versaoDoFormulario}`}
+                contas={contas}
+                categorias={apoio.categorias}
+                inicial={editando}
+                aoSalvar={() => {
+                  if (editando === null) setVersaoDoFormulario((n) => n + 1)
+                  fecharPainel()
+                  depoisDeMudar()
+                }}
+                aoNaoExistir={() => {
+                  fecharPainel()
+                  setFalhaDeAcao(MENSAGEM_NAO_EXISTE)
+                  depoisDeMudar()
+                }}
+                aoCancelar={editando === null ? null : fecharPainel}
+                aoSessaoExpirar={aoSessaoExpirar}
+              />
+            ) : (
+              apoio.tipo !== 'erro' && <Carregando texto="Preparando o formulário..." linhas={4} />
+            ))}
+        </Painel>
       )}
     </section>
   )

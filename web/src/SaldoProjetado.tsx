@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { RefObject } from 'react'
 import {
   ContaNaoEncontradaError,
   ProjecaoInvalidaError,
@@ -9,6 +10,8 @@ import {
 import type { Conta, DiaProjetado, SaldoProjetado as Projecao } from './api'
 import { formatarDiaMes } from './datas'
 import { formatarCentavos } from './dinheiro'
+import { IconeAlerta, IconeRelogio } from './icones'
+import { Carregando } from './ui'
 
 type EstadoProjecao =
   | { tipo: 'carregando' }
@@ -31,11 +34,14 @@ function mensagemDeLeitura(erro: unknown): string {
   return 'Não foi possível carregar o saldo projetado.'
 }
 
-const LARGURA = 320
-const ALTURA = 160
-const MARGEM_LATERAL = 8
-const TOPO = 12
-const BASE = 136
+// O gráfico usa a largura real do cartão como viewBox: texto e traço saem em pixels de verdade,
+// no celular e no desktop, sem esticar a fonte.
+const LARGURA_PADRAO = 320
+const ALTURA = 200
+const MARGEM_LATERAL = 12
+// Espaço em cima para o valor do menor saldo e embaixo para as datas.
+const TOPO = 30
+const BASE = 168
 
 type Ponto = { x: number; y: number }
 
@@ -51,65 +57,115 @@ function coordenadaY(fracao: number): number {
   return BASE - fracao * (BASE - TOPO)
 }
 
-function calcularPontos(dias: DiaProjetado[], minimo: number, maximo: number): Ponto[] {
-  const passo = dias.length > 1 ? (LARGURA - 2 * MARGEM_LATERAL) / (dias.length - 1) : 0
+function calcularPontos(dias: DiaProjetado[], minimo: number, maximo: number, largura: number): Ponto[] {
+  const passo = dias.length > 1 ? (largura - 2 * MARGEM_LATERAL) / (dias.length - 1) : 0
   // Um dia só fica no meio; sem isso o ponto cairia na borda esquerda.
-  const inicio = dias.length > 1 ? MARGEM_LATERAL : LARGURA / 2
+  const inicio = dias.length > 1 ? MARGEM_LATERAL : largura / 2
   return dias.map((dia, indice) => ({
     x: inicio + indice * passo,
     y: coordenadaY(fracaoDoIntervalo(dia.saldoCentavos, minimo, maximo)),
   }))
 }
 
+// ResizeObserver não existe no jsdom: lá vale a largura padrão.
+function useLargura(caixa: RefObject<HTMLDivElement | null>): number {
+  const [largura, setLargura] = useState(LARGURA_PADRAO)
+  useEffect(() => {
+    const elemento = caixa.current
+    if (elemento === null || typeof ResizeObserver === 'undefined') return
+    const observador = new ResizeObserver(([entrada]) => {
+      const nova = Math.round(entrada.contentRect.width)
+      if (nova > 0) setLargura(nova)
+    })
+    observador.observe(elemento)
+    return () => observador.disconnect()
+  }, [caixa])
+  return largura
+}
+
 function Grafico({ projecao, descricao }: { projecao: Projecao; descricao: string }) {
+  const caixa = useRef<HTMLDivElement>(null)
+  const largura = useLargura(caixa)
   const { dias, menorSaldo } = projecao
   const saldos = dias.map((dia) => dia.saldoCentavos)
   const minimo = Math.min(...saldos)
   const maximo = Math.max(...saldos)
-  const pontos = calcularPontos(dias, minimo, maximo)
+  const pontos = calcularPontos(dias, minimo, maximo, largura)
   const indiceDoMenor = dias.findIndex((dia) => dia.data === menorSaldo.data)
   const destaque = indiceDoMenor === -1 ? null : pontos[indiceDoMenor]
   const cruzaZero = minimo < 0 && maximo > 0
   const yDoZero = coordenadaY(fracaoDoIntervalo(0, minimo, maximo))
+  const lista = pontos.map((ponto) => `${ponto.x.toFixed(1)},${ponto.y.toFixed(1)}`)
+  const primeiro = pontos[0]
+  const ultimo = pontos[pontos.length - 1]
+  // A área fecha pela base para o degradê morrer no eixo.
+  const area = `M${primeiro.x.toFixed(1)},${BASE} L${lista.join(' L')} L${ultimo.x.toFixed(1)},${BASE} Z`
+  // O valor do menor saldo fica ao lado do ponto, não em cima: o traço desce reto até ele e passaria por cima do texto.
+  const aEsquerda = destaque !== null && destaque.x > 80
+  const ancora = aEsquerda ? 'end' : 'start'
+  const xDoValor = destaque === null ? 0 : destaque.x + (aEsquerda ? -10 : 10)
+  const yDoValor = destaque === null ? 0 : destaque.y + 4
 
   return (
-    <svg
-      className="grafico"
-      viewBox={`0 0 ${LARGURA} ${ALTURA}`}
-      width="100%"
-      role="img"
-      aria-label={descricao}
-    >
-      {cruzaZero && (
-        <line
-          data-zero
-          className="grafico-zero"
-          x1={MARGEM_LATERAL}
-          x2={LARGURA - MARGEM_LATERAL}
-          y1={yDoZero}
-          y2={yDoZero}
-        />
-      )}
-      <polyline
-        className="grafico-linha"
-        fill="none"
-        points={pontos.map((ponto) => `${ponto.x.toFixed(1)},${ponto.y.toFixed(1)}`).join(' ')}
-      />
-      {destaque !== null && (
-        <circle
-          className={menorSaldo.saldoCentavos < 0 ? 'grafico-menor negativo' : 'grafico-menor'}
-          cx={destaque.x}
-          cy={destaque.y}
-          r={4}
-        />
-      )}
-      <text className="grafico-rotulo" x={MARGEM_LATERAL} y={ALTURA - 6} textAnchor="start">
-        {formatarDiaMes(dias[0].data)}
-      </text>
-      <text className="grafico-rotulo" x={LARGURA - MARGEM_LATERAL} y={ALTURA - 6} textAnchor="end">
-        {formatarDiaMes(dias[dias.length - 1].data)}
-      </text>
-    </svg>
+    <div ref={caixa} className="grafico-caixa">
+      <svg
+        className="grafico"
+        viewBox={`0 0 ${largura} ${ALTURA}`}
+        width="100%"
+        height={ALTURA}
+        role="img"
+        aria-label={descricao}
+      >
+        <defs>
+          <linearGradient id="grafico-degrade" x1="0" y1="0" x2="0" y2="1">
+            <stop className="grafico-area-topo" offset="0" />
+            <stop className="grafico-area-base" offset="1" />
+          </linearGradient>
+        </defs>
+        <line className="grafico-base" x1={MARGEM_LATERAL} x2={largura - MARGEM_LATERAL} y1={BASE} y2={BASE} />
+        {cruzaZero && (
+          <>
+            <line
+              data-zero
+              className="grafico-zero"
+              x1={MARGEM_LATERAL}
+              x2={largura - MARGEM_LATERAL}
+              y1={yDoZero}
+              y2={yDoZero}
+            />
+            <text className="grafico-rotulo" x={largura - MARGEM_LATERAL} y={yDoZero - 5} textAnchor="end">
+              0
+            </text>
+          </>
+        )}
+        {dias.length > 1 && <path d={area} fill="url(#grafico-degrade)" />}
+        <polyline className="grafico-linha" fill="none" points={lista.join(' ')} />
+        {destaque !== null && (
+          <>
+            <circle
+              className={menorSaldo.saldoCentavos < 0 ? 'grafico-menor negativo' : 'grafico-menor'}
+              cx={destaque.x}
+              cy={destaque.y}
+              r={5}
+            />
+            <text
+              className={menorSaldo.saldoCentavos < 0 ? 'grafico-valor negativo' : 'grafico-valor'}
+              x={xDoValor}
+              y={yDoValor}
+              textAnchor={ancora}
+            >
+              {formatarCentavos(menorSaldo.saldoCentavos)}
+            </text>
+          </>
+        )}
+        <text className="grafico-rotulo" x={MARGEM_LATERAL} y={ALTURA - 8} textAnchor="start">
+          {formatarDiaMes(dias[0].data)}
+        </text>
+        <text className="grafico-rotulo" x={largura - MARGEM_LATERAL} y={ALTURA - 8} textAnchor="end">
+          {formatarDiaMes(dias[dias.length - 1].data)}
+        </text>
+      </svg>
+    </div>
   )
 }
 
@@ -132,30 +188,58 @@ function Resultado({ projecao }: { projecao: Projecao }) {
 
   return (
     <>
-      <p>Saldo atual: {formatarCentavos(projecao.saldoAtualCentavos)}</p>
-      <p>
-        Saldo em {formatarDiaMes(ultimo.data)}: {formatarCentavos(ultimo.saldoCentavos)}
-      </p>
-      <p>
-        Menor saldo: {formatarCentavos(menorSaldo.saldoCentavos)} em {formatarDiaMes(menorSaldo.data)}
-      </p>
       {primeiroNegativo !== undefined && (
-        <p className="negativo">Fica negativo em {formatarDiaMes(primeiroNegativo.data)}</p>
+        <p className="aviso-negativo">
+          <IconeAlerta tamanho={18} />
+          Fica negativo em {formatarDiaMes(primeiroNegativo.data)}
+        </p>
       )}
+      <dl className="resumo-dl">
+        <div>
+          <dt>Saldo atual</dt>
+          <dd>{formatarCentavos(projecao.saldoAtualCentavos)}</dd>
+        </div>
+        <div>
+          <dt>Saldo em {formatarDiaMes(ultimo.data)}</dt>
+          <dd>{formatarCentavos(ultimo.saldoCentavos)}</dd>
+        </div>
+        <div>
+          <dt>Menor saldo em {formatarDiaMes(menorSaldo.data)}</dt>
+          <dd className={menorSaldo.saldoCentavos < 0 ? 'despesa' : undefined}>
+            {formatarCentavos(menorSaldo.saldoCentavos)}
+          </dd>
+        </div>
+      </dl>
       {projecao.vencidasCentavos !== 0 && (
-        <p>Inclui {comSinal(projecao.vencidasCentavos)} de previstas vencidas</p>
+        <p className="aviso-nota">
+          <IconeRelogio tamanho={18} />
+          Inclui {comSinal(projecao.vencidasCentavos)} de previstas vencidas
+        </p>
       )}
       <Grafico projecao={projecao} descricao={descricao} />
-      <h3>Dias com movimento</h3>
-      {comMovimento.length === 0 && <p>Nenhum dia com movimento no período.</p>}
+      <h4>Dias com movimento</h4>
+      {comMovimento.length === 0 && <p className="vazio-dica">Nenhum dia com movimento no período.</p>}
       {comMovimento.length > 0 && (
         <ul className="dias-movimento" aria-label="Dias com movimento">
           {comMovimento.map((dia) => (
             <li key={dia.data}>
               <strong>{formatarDiaMes(dia.data)}</strong>
-              <span>Entradas: {formatarCentavos(dia.entradasCentavos)}</span>
-              <span>Saídas: {formatarCentavos(dia.saidasCentavos)}</span>
-              <span>Saldo: {formatarCentavos(dia.saldoCentavos)}</span>
+              <span className={dia.saldoCentavos < 0 ? 'saldo-dia negativo' : 'saldo-dia'}>
+                <span className="so-leitor">Saldo: </span>
+                {formatarCentavos(dia.saldoCentavos)}
+              </span>
+              <div className="movimento">
+                {dia.entradasCentavos !== 0 && (
+                  <span className="entrada">
+                    <span className="so-leitor">Entradas: </span>+{formatarCentavos(dia.entradasCentavos)}
+                  </span>
+                )}
+                {dia.saidasCentavos !== 0 && (
+                  <span className="saida">
+                    <span className="so-leitor">Saídas: </span>−{formatarCentavos(dia.saidasCentavos)}
+                  </span>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -223,36 +307,40 @@ export default function SaldoProjetado({
   }
 
   return (
-    <section aria-labelledby="titulo-saldo-projetado">
-      <h2 id="titulo-saldo-projetado">Saldo projetado</h2>
-      <div role="group" aria-label="Período" className="periodos">
-        {PERIODOS.map((opcao) => (
-          <button
-            key={opcao}
-            type="button"
-            aria-pressed={opcao === periodo}
-            onClick={() => escolherPeriodo(opcao)}
-          >
-            {opcao} dias
-          </button>
-        ))}
-      </div>
-      <div className="campo">
-        <label htmlFor="projecao-conta">Conta</label>
-        <select
-          id="projecao-conta"
-          value={contaId}
-          onChange={(evento) => escolherConta(evento.target.value)}
-        >
-          <option value="">Todas as contas ativas</option>
-          {(contas ?? []).map((conta) => (
-            <option key={conta.id} value={conta.id}>
-              {conta.nome}
-            </option>
+    <section className="cartao" aria-labelledby="titulo-saldo-projetado">
+      <h3 id="titulo-saldo-projetado" className="titulo-cartao">
+        Saldo projetado
+      </h3>
+      <div className="projecao-controles">
+        <div role="group" aria-label="Período" className="segmentos">
+          {PERIODOS.map((opcao) => (
+            <button
+              key={opcao}
+              type="button"
+              aria-pressed={opcao === periodo}
+              onClick={() => escolherPeriodo(opcao)}
+            >
+              {opcao} dias
+            </button>
           ))}
-        </select>
+        </div>
+        <div className="campo">
+          <label htmlFor="projecao-conta">Conta</label>
+          <select
+            id="projecao-conta"
+            value={contaId}
+            onChange={(evento) => escolherConta(evento.target.value)}
+          >
+            <option value="">Todas as contas ativas</option>
+            {(contas ?? []).map((conta) => (
+              <option key={conta.id} value={conta.id}>
+                {conta.nome}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
-      {estado.tipo === 'carregando' && <p>Carregando saldo projetado...</p>}
+      {estado.tipo === 'carregando' && <Carregando texto="Carregando saldo projetado..." linhas={4} />}
       {estado.tipo === 'erro' && (
         <>
           <p role="alert" className="erro">

@@ -15,8 +15,11 @@ import { formatarDataCompleta, hojeLocal } from './datas'
 import { somarLinhas, validarDivisao, valoresGerados } from './divisao'
 import type { LinhaDeParcela, ModoDivisao } from './divisao'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
+import { IconeMais, IconeRelogio } from './icones'
+import Painel from './Painel'
 import { formatarPercentual } from './percentual'
 import { descreverParcelas, descreverRegra } from './regra'
+import { Carregando, EstadoVazio, Selo } from './ui'
 
 type Tipo = Recorrencia['tipo']
 type Frequencia = RegraRecorrencia['frequencia']
@@ -239,7 +242,6 @@ function FormularioDeRecorrencia({
 
   return (
     <form onSubmit={(evento) => void enviar(evento)} aria-label="Nova recorrência">
-      <h3>Nova recorrência</h3>
       <div className="campo">
         <label htmlFor="recorrencia-tipo">Tipo</label>
         <select
@@ -439,7 +441,11 @@ function FormularioDeRecorrencia({
                 />
                 {geradas !== null && <small>{`Gera ${formatarCentavos(geradas[indice])}`}</small>}
                 {linhas.length > MINIMO_DE_PARCELAS && (
-                  <button type="button" onClick={() => setLinhas((atuais) => atuais.filter((l) => l.chave !== linha.chave))}>
+                  <button
+                    type="button"
+                    className="pequeno perigo"
+                    onClick={() => setLinhas((atuais) => atuais.filter((l) => l.chave !== linha.chave))}
+                  >
                     {`Remover parcela ${numero}`}
                   </button>
                 )}
@@ -449,6 +455,7 @@ function FormularioDeRecorrencia({
           {linhas.length < MAXIMO_DE_PARCELAS && (
             <button
               type="button"
+              className="pequeno"
               onClick={() => {
                 setLinhas((atuais) => [...atuais, linhaVazia(proximaChave.current)])
                 proximaChave.current += 1
@@ -574,6 +581,7 @@ export default function Recorrencias({
   const [falhaDeAcao, setFalhaDeAcao] = useState<string | null>(null)
   // Muda a key do formulário para limpar os campos depois de salvar.
   const [versaoDoFormulario, setVersaoDoFormulario] = useState(0)
+  const [painelAberto, setPainelAberto] = useState(false)
   const acaoEmVoo = useRef(false)
 
   useEffect(() => {
@@ -663,12 +671,25 @@ export default function Recorrencias({
       ? [...estado.recorrencias.filter((r) => r.ativo), ...estado.recorrencias.filter((r) => !r.ativo)]
       : []
 
+  const semContas = contas !== null && contas.length === 0
+
   return (
     <section aria-labelledby="titulo-recorrencias">
-      <h2 id="titulo-recorrencias">Recorrências</h2>
+      <header className="pagina-topo">
+        <h2 id="titulo-recorrencias">Recorrências</h2>
+        <button
+          type="button"
+          className="primario"
+          disabled={contas === null || semContas}
+          onClick={() => setPainelAberto(true)}
+        >
+          <IconeMais />
+          Nova recorrência
+        </button>
+      </header>
       {/* Sem as contas a lista mostraria "Conta arquivada" para todo mundo por um instante. */}
       {(estado.tipo === 'carregando' || (estado.tipo === 'ok' && contas === null)) && (
-        <p>Carregando recorrências...</p>
+        <Carregando texto="Carregando recorrências..." />
       )}
       {estado.tipo === 'erro' && (
         <>
@@ -684,74 +705,6 @@ export default function Recorrencias({
         <p role="alert" className="erro">
           {falhaDeAcao}
         </p>
-      )}
-      {estado.tipo === 'ok' && contas !== null && estado.recorrencias.length === 0 && <p>Nenhuma recorrência.</p>}
-      {estado.tipo === 'ok' && contas !== null && estado.recorrencias.length > 0 && (
-        <ul className="recorrencias">
-          {ordenadas.map((recorrencia) => (
-            <li key={recorrencia.id} className={recorrencia.ativo ? undefined : 'desativada'}>
-              <div className="recorrencia-dados">
-                <strong>{recorrencia.titulo}</strong>
-                <span className={recorrencia.tipo}>
-                  {recorrencia.tipo === 'receita' ? '+' : '−'} {formatarCentavos(recorrencia.valorCentavos)}
-                </span>
-                <span>{nomesDeConta.get(recorrencia.contaId) ?? 'Conta arquivada'}</span>
-                <span>{descreverRegra(recorrencia.regra, recorrencia.divisao)}</span>
-                {recorrencia.divisao !== null && (
-                  <ul className="parcelas" aria-label={`Parcelas de ${recorrencia.titulo}`}>
-                    {descreverParcelas(recorrencia.divisao).map((texto) => (
-                      <li key={texto}>{texto}</li>
-                    ))}
-                  </ul>
-                )}
-                {recorrencia.ativo ? (
-                  <span>
-                    {recorrencia.proximaOcorrencia === null
-                      ? 'Sem próximas'
-                      : `Próxima: ${formatarDataCompleta(recorrencia.proximaOcorrencia)}`}
-                  </span>
-                ) : (
-                  <span className="marca">Desativada</span>
-                )}
-              </div>
-              {recorrencia.ativo && (
-                <div className="lancamento-acoes">
-                  {confirmando === recorrencia.id ? (
-                    <>
-                      <span>As previstas de hoje em diante somem.</span>
-                      <button
-                        type="button"
-                        disabled={desativando !== null}
-                        aria-label={`Confirmar desativar ${recorrencia.titulo}`}
-                        onClick={() => void desativar(recorrencia)}
-                      >
-                        Confirmar desativar
-                      </button>
-                      <button type="button" disabled={desativando !== null} onClick={() => setConfirmando(null)}>
-                        Manter
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={desativando !== null}
-                      aria-label={`Desativar ${recorrencia.titulo}`}
-                      onClick={() => {
-                        setFalhaDeAcao(null)
-                        setConfirmando(recorrencia.id)
-                      }}
-                    >
-                      Desativar
-                    </button>
-                  )}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {(apoio.tipo === 'carregando' || (apoio.tipo === 'ok' && contas === null)) && (
-        <p>Preparando o formulário...</p>
       )}
       {apoio.tipo === 'erro' && (
         <>
@@ -769,19 +722,116 @@ export default function Recorrencias({
           </button>
         </>
       )}
-      {contas !== null && contas.length === 0 && <p>Crie uma conta antes de criar uma recorrência.</p>}
-      {contas !== null && contas.length > 0 && apoio.tipo === 'ok' && (
-        <FormularioDeRecorrencia
-          key={versaoDoFormulario}
-          contas={contas}
-          categorias={apoio.categorias}
-          aoSalvar={() => {
-            setVersaoDoFormulario((n) => n + 1)
-            recarregar()
-            aoMudarOcorrencias()
-          }}
-          aoSessaoExpirar={aoSessaoExpirar}
+      {semContas && <p className="vazio-dica">Crie uma conta antes de criar uma recorrência.</p>}
+      {estado.tipo === 'ok' && contas !== null && estado.recorrencias.length === 0 && (
+        <EstadoVazio
+          titulo="Nenhuma recorrência."
+          dica="Aluguel, salário e assinaturas entram sozinhos como previstos."
+          acao={
+            semContas ? undefined : (
+              <button type="button" className="primario" onClick={() => setPainelAberto(true)}>
+                Criar a primeira recorrência
+              </button>
+            )
+          }
         />
+      )}
+      {estado.tipo === 'ok' && contas !== null && estado.recorrencias.length > 0 && (
+        <ul className="recorrencias">
+          {ordenadas.map((recorrencia) => (
+            <li
+              key={recorrencia.id}
+              className={recorrencia.ativo ? 'cartao recorrencia-cartao' : 'cartao recorrencia-cartao desativada'}
+            >
+              <div className="recorrencia-topo">
+                <strong>{recorrencia.titulo}</strong>
+                <span className={`item-valor ${recorrencia.tipo}`}>
+                  {recorrencia.tipo === 'receita' ? '+' : '−'} {formatarCentavos(recorrencia.valorCentavos)}
+                </span>
+              </div>
+              <p className="recorrencia-regra">{descreverRegra(recorrencia.regra, recorrencia.divisao)}</p>
+              {recorrencia.divisao !== null && (
+                <ul className="parcelas" aria-label={`Parcelas de ${recorrencia.titulo}`}>
+                  {descreverParcelas(recorrencia.divisao).map((texto) => (
+                    <li key={texto}>{texto}</li>
+                  ))}
+                </ul>
+              )}
+              <div className="recorrencia-meta">
+                <span>{nomesDeConta.get(recorrencia.contaId) ?? 'Conta arquivada'}</span>
+                {recorrencia.ativo ? (
+                  <span className="proxima">
+                    <IconeRelogio tamanho={14} />
+                    {recorrencia.proximaOcorrencia === null
+                      ? 'Sem próximas'
+                      : `Próxima: ${formatarDataCompleta(recorrencia.proximaOcorrencia)}`}
+                  </span>
+                ) : (
+                  <Selo tom="cancelado">Desativada</Selo>
+                )}
+              </div>
+              {recorrencia.ativo && (
+                <div className="item-acoes">
+                  {confirmando === recorrencia.id ? (
+                    <>
+                      <span className="aviso-acao">As previstas de hoje em diante somem.</span>
+                      <button
+                        type="button"
+                        className="pequeno perigo forte"
+                        disabled={desativando !== null}
+                        aria-label={`Confirmar desativar ${recorrencia.titulo}`}
+                        onClick={() => void desativar(recorrencia)}
+                      >
+                        Confirmar desativar
+                      </button>
+                      <button
+                        type="button"
+                        className="pequeno"
+                        disabled={desativando !== null}
+                        onClick={() => setConfirmando(null)}
+                      >
+                        Manter
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="pequeno perigo"
+                      disabled={desativando !== null}
+                      aria-label={`Desativar ${recorrencia.titulo}`}
+                      onClick={() => {
+                        setFalhaDeAcao(null)
+                        setConfirmando(recorrencia.id)
+                      }}
+                    >
+                      Desativar
+                    </button>
+                  )}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {painelAberto && contas !== null && contas.length > 0 && (
+        <Painel titulo="Nova recorrência" aoFechar={() => setPainelAberto(false)}>
+          {apoio.tipo === 'ok' ? (
+            <FormularioDeRecorrencia
+              key={versaoDoFormulario}
+              contas={contas}
+              categorias={apoio.categorias}
+              aoSalvar={() => {
+                setVersaoDoFormulario((n) => n + 1)
+                setPainelAberto(false)
+                recarregar()
+                aoMudarOcorrencias()
+              }}
+              aoSessaoExpirar={aoSessaoExpirar}
+            />
+          ) : (
+            <Carregando texto="Preparando o formulário..." linhas={4} />
+          )}
+        </Painel>
       )}
     </section>
   )

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import App from './App'
+import { acao } from './testeAcoes'
 
 type Rotas = Partial<Record<string, (corpo: unknown) => Promise<Response>>>
 
@@ -106,7 +107,16 @@ const texto = (valor: string): RegExp =>
 const secaoContas = (): HTMLElement => screen.getByRole('region', { name: /^contas/i })
 const novaConta = (): HTMLElement => within(secaoContas()).getByRole('form', { name: 'Nova conta' })
 
-function escolherCartao(): HTMLElement {
+// Os formulários de criar abrem em painéis, pelos botões do cabeçalho de cada seção (ADR-033).
+async function abrirPainel(botao: string, formulario: string): Promise<HTMLElement> {
+  const abrir = await screen.findByRole('button', { name: botao })
+  await waitFor(() => expect(abrir).toBeEnabled())
+  fireEvent.click(abrir)
+  return screen.findByRole('form', { name: formulario })
+}
+
+async function escolherCartao(): Promise<HTMLElement> {
+  await abrirPainel('Nova conta', 'Nova conta')
   const form = novaConta()
   fireEvent.change(within(form).getByLabelText('Tipo'), { target: { value: 'cartao_credito' } })
   return form
@@ -115,6 +125,11 @@ function escolherCartao(): HTMLElement {
 async function abrirFaturas(): Promise<void> {
   fireEvent.click(await screen.findByRole('button', { name: 'Faturas de Visa' }))
 }
+
+// As seções ficam atrás de rota por hash (ADR-033): o cartão mora em Contas; o bloco de recorrência troca de seção.
+beforeEach(() => {
+  window.location.hash = '#/contas'
+})
 
 describe('Cartão de crédito', () => {
   beforeEach(() => {
@@ -137,7 +152,7 @@ describe('Cartão de crédito', () => {
       })
       render(<App />)
       await within(await screen.findByRole('region', { name: /^contas/i })).findByText('Nubank')
-      const form = escolherCartao()
+      const form = await escolherCartao()
       fireEvent.change(within(form).getByLabelText('Nome'), { target: { value: 'Visa' } })
       expect(within(form).getByText('Fatura em aberto hoje (opcional)')).toBeVisible()
       fireEvent.change(within(form).getByLabelText('Fatura em aberto hoje (opcional)'), {
@@ -166,7 +181,7 @@ describe('Cartão de crédito', () => {
       })
       render(<App />)
       await within(await screen.findByRole('region', { name: /^contas/i })).findByText('Carteira')
-      const form = escolherCartao()
+      const form = await escolherCartao()
       expect(within(form).getByText('Crie uma conta corrente ou poupança para pagar o cartão.')).toBeVisible()
       expect(within(form).getByRole('button', { name: 'Criar conta' })).toBeDisabled()
       expect(within(form).queryByLabelText('Conta de pagamento')).not.toBeInTheDocument()
@@ -178,7 +193,7 @@ describe('Cartão de crédito', () => {
       mockFetch({ ...sessaoViva, 'GET /contas': responde([conta()]) })
       render(<App />)
       await within(await screen.findByRole('region', { name: /^contas/i })).findByText('Nubank')
-      const form = escolherCartao()
+      const form = await escolherCartao()
       fireEvent.change(within(form).getByLabelText('Nome'), { target: { value: 'Visa' } })
       fireEvent.change(within(form).getByLabelText('Limite em reais'), { target: { value: '0' } })
       fireEvent.change(within(form).getByLabelText('Dia de fechamento'), { target: { value: '5' } })
@@ -200,7 +215,7 @@ describe('Cartão de crédito', () => {
       })
       render(<App />)
       await within(await screen.findByRole('region', { name: /^contas/i })).findByText('Nubank')
-      const form = escolherCartao()
+      const form = await escolherCartao()
       fireEvent.change(within(form).getByLabelText('Nome'), { target: { value: 'Visa' } })
       fireEvent.change(within(form).getByLabelText('Limite em reais'), { target: { value: '100,00' } })
       fireEvent.change(within(form).getByLabelText('Dia de fechamento'), { target: { value: '5' } })
@@ -246,14 +261,43 @@ describe('Cartão de crédito', () => {
       const itens = within(screen.getByRole('heading', { name: 'Faturas de Visa' }).parentElement as HTMLElement).getAllByRole('listitem')
       expect(itens).toHaveLength(3)
       expect(itens[0]).toHaveTextContent('Situação: Paga')
+      expect(itens[0].textContent).toMatch(texto('Pago: R$ 200,00'))
+      expect(itens[0].textContent).not.toMatch(/Restante/)
       expect(itens[1]).toHaveTextContent('Fecha em 31/10/2026')
       expect(itens[1].textContent).toMatch(texto('Total: R$ 200,00'))
-      expect(itens[1].textContent).toMatch(texto('Pago: R$ 0,00'))
+      // Pago zero não aparece; restante só quando há valor.
+      expect(itens[1].textContent).not.toMatch(/Pago/)
       expect(itens[1].textContent).toMatch(texto('Restante: R$ 200,00'))
       expect(itens[1]).toHaveTextContent('Situação: Fechada')
       expect(itens[2]).toHaveTextContent('Situação: Aberta')
       // Só a fechada com restante tem o botão.
       expect(screen.getAllByRole('button', { name: /pagar fatura/i })).toHaveLength(1)
+    })
+
+    it('fatura sem compras vira linha esmaecida, a aberta é destacada e a fechada com restante traz o botão', async () => {
+      mockFetch({
+        ...sessaoViva,
+        'GET /contas': responde([conta(), cartaoVisa()]),
+        [FATURAS]: responde({
+          contaId: 'c9',
+          faturas: [
+            fatura({ vencimento: '2026-09-10', fechamento: '2026-08-31', situacao: 'paga', totalCentavos: 0, pagoCentavos: 0, restanteCentavos: 0 }),
+            fatura(),
+            fatura({ vencimento: '2026-12-10', fechamento: '2026-11-30', situacao: 'aberta', totalCentavos: 5000, restanteCentavos: 5000 }),
+          ],
+        }),
+      })
+      render(<App />)
+      await abrirFaturas()
+      const itens = within(
+        (await screen.findByRole('heading', { name: 'Faturas de Visa' })).parentElement as HTMLElement,
+      ).getAllByRole('listitem')
+      expect(itens[0]).toHaveTextContent('sem compras')
+      expect(itens[0].textContent).not.toMatch(/Total/)
+      expect(itens[1]).toHaveClass('a-pagar')
+      expect(within(itens[1]).getByRole('button', { name: 'Pagar fatura de 10/11/2026' })).toBeVisible()
+      expect(itens[2]).toHaveClass('atual')
+      expect(itens[0]).not.toHaveClass('atual')
     })
 
     it('mostra carregando, erro com nova tentativa e vazio', async () => {
@@ -389,10 +433,14 @@ describe('Cartão de crédito', () => {
   })
 
   describe('lançamento e recorrência em conta de cartão', () => {
+    beforeEach(() => {
+      window.location.hash = '#/lancamentos'
+    })
+
     it('troca o rótulo da data e mostra a fatura em que a compra entra', async () => {
       mockFetch({ ...sessaoViva, 'GET /contas': responde([conta(), cartaoVisa()]) })
       render(<App />)
-      const form = await screen.findByRole('form', { name: 'Novo lançamento' })
+      const form = await abrirPainel('Novo', 'Novo lançamento')
       expect(within(form).getByLabelText('Data')).toBeVisible()
       expect(within(form).queryByText(/entra na fatura/i)).not.toBeInTheDocument()
       fireEvent.change(within(form).getByLabelText('Conta'), { target: { value: 'c9' } })
@@ -435,7 +483,7 @@ describe('Cartão de crédito', () => {
         'PUT /lancamentos/l1': responde(lancamento),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Editar Feira' }))
+      fireEvent.click(await acao('Editar Feira'))
       const form = await screen.findByRole('form', { name: 'Editar lançamento' })
       fireEvent.submit(form)
       await waitFor(() => expect(chamadasA('PUT /lancamentos/l1')).toHaveLength(1))
@@ -450,7 +498,7 @@ describe('Cartão de crédito', () => {
         'PUT /lancamentos/l1': responde(compra({})),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Editar Feira' }))
+      fireEvent.click(await acao('Editar Feira'))
       const form = await screen.findByRole('form', { name: 'Editar lançamento' })
       expect(within(form).getByLabelText('Data da compra')).toHaveValue('2026-10-03')
       fireEvent.submit(form)
@@ -541,6 +589,7 @@ describe('Cartão de crédito', () => {
       async function abrirTransferencia(contas: Record<string, unknown>[]): Promise<void> {
         mockFetch({ ...sessaoViva, 'GET /contas': responde(contas) })
         render(<App />)
+        await abrirPainel('Novo', 'Novo lançamento')
         fireEvent.click(await screen.findByRole('button', { name: 'Transferência' }))
       }
 
@@ -572,6 +621,7 @@ describe('Cartão de crédito', () => {
           'GET /contas': responde([conta(), cartaoVisa(), cartaoVisa({ id: 'c8', nome: 'Master' })]),
           [FATURAS]: responde({ contaId: 'c9', faturas: [fatura()] }),
         })
+        window.location.hash = '#/contas'
         render(<App />)
         await abrirFaturas()
         fireEvent.click(await screen.findByRole('button', { name: 'Pagar fatura de 10/11/2026' }))
@@ -583,8 +633,9 @@ describe('Cartão de crédito', () => {
 
     it('recorrência em cartão avisa que as ocorrências entram na fatura de cada mês', async () => {
       mockFetch({ ...sessaoViva, 'GET /contas': responde([conta(), cartaoVisa()]) })
+      window.location.hash = '#/recorrencias'
       render(<App />)
-      const form = await screen.findByRole('form', { name: 'Nova recorrência' })
+      const form = await abrirPainel('Nova recorrência', 'Nova recorrência')
       expect(within(form).queryByText(/entram na fatura de cada mês/i)).not.toBeInTheDocument()
       fireEvent.change(within(form).getByLabelText('Conta'), { target: { value: 'c9' } })
       expect(within(form).getByText('As ocorrências entram na fatura de cada mês.')).toBeVisible()

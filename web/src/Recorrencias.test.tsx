@@ -102,7 +102,13 @@ const base = {
 }
 
 const secao = async (): Promise<HTMLElement> => screen.findByRole('region', { name: 'Recorrências' })
-const formulario = async (): Promise<HTMLElement> => screen.findByRole('form', { name: 'Nova recorrência' })
+// O formulário abre num painel pelo botão "Nova recorrência" (ADR-033).
+const formulario = async (): Promise<HTMLElement> => {
+  const abrir = await screen.findByRole('button', { name: 'Nova recorrência' })
+  await waitFor(() => expect(abrir).toBeEnabled())
+  fireEvent.click(abrir)
+  return screen.findByRole('form', { name: 'Nova recorrência' })
+}
 
 function preencher(form: HTMLElement, titulo: string, valor: string): void {
   fireEvent.change(within(form).getByLabelText('Título'), { target: { value: titulo } })
@@ -114,6 +120,11 @@ function mudar(form: HTMLElement, rotulo: string, valor: string): void {
 }
 
 const criada = { recorrencia: recorrencia(), ocorrenciasMaterializadas: 12 }
+
+// As seções ficam atrás de rota por hash (ADR-033): cada arquivo abre a que testa.
+beforeEach(() => {
+  window.location.hash = '#/recorrencias'
+})
 
 describe('Recorrencias', () => {
   beforeEach(() => {

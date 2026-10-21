@@ -2,6 +2,7 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { configDefaults } from 'vitest/config'
 import { opcoesDoPwa } from './src/pwa.ts'
 import { padraoDoProxy } from './src/rotasDaApi.ts'
 
@@ -21,5 +22,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/setupTests.ts',
+    // e2e/ é do Playwright; o vitest tentaria rodar o *.spec.ts e falharia no import.
+    exclude: [...configDefaults.exclude, 'e2e/**'],
   },
 })
