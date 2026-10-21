@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import App from './App'
 
 type Rota = (corpo: unknown) => Promise<Response>
@@ -80,11 +80,13 @@ describe('App: saúde da API', () => {
     expect(screen.getByText(/carregando/i)).toBeVisible()
   })
 
-  it('mostra a mensagem lida do banco quando a API responde 200', async () => {
+  it('com a API bem não mostra nada do /healthz na tela', async () => {
     mockFetch(anonimo)
     render(<App />)
-    expect(await screen.findByText('ok')).toBeVisible()
-    expect(fetch).toHaveBeenCalledWith('/healthz')
+    await screen.findByLabelText(/e-mail/i)
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/healthz'))
+    expect(screen.queryByText('ok')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('mostra erro genérico quando a API responde 503', async () => {
@@ -128,15 +130,51 @@ describe('App: sessão', () => {
     expect(screen.queryByLabelText(/senha/i)).toBeNull()
   })
 
-  it('mostra o saldo projetado logo abaixo de Contas e antes de Lançamentos', async () => {
+  it('abre no Início com o saldo projetado, o resumo das contas e a navegação por seções', async () => {
+    window.location.hash = ''
     mockFetch({ 'GET /auth/eu': () => Promise.resolve(jsonResponse(usuario, 200)) })
     render(<App />)
-    const projetado = await screen.findByRole('heading', { name: 'Saldo projetado' })
-    const titulos = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
-    expect(titulos.indexOf('Saldo projetado')).toBe(titulos.indexOf('Contas') + 1)
-    expect(titulos.indexOf('Lançamentos')).toBeGreaterThan(titulos.indexOf('Saldo projetado'))
-    expect(projetado).toBeVisible()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Início' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Saldo projetado' })).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Resumo das contas' })).toBeVisible()
+    const navegacao = screen.getByRole('navigation', { name: 'Seções' })
+    expect(within(navegacao).getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'Início',
+      'Lançamentos',
+      'Contas',
+      'Recorrências',
+    ])
+    expect(within(navegacao).getByRole('link', { name: 'Início' })).toHaveAttribute('aria-current', 'page')
     expect(chamadasA('GET /saldo-projetado?dias=90').length).toBeGreaterThan(0)
+  })
+
+  it('cada link da navegação mostra só a sua seção e o hash acompanha', async () => {
+    window.location.hash = ''
+    mockFetch({ 'GET /auth/eu': () => Promise.resolve(jsonResponse(usuario, 200)) })
+    render(<App />)
+    await screen.findByRole('heading', { level: 2, name: 'Início' })
+    const navegacao = screen.getByRole('navigation', { name: 'Seções' })
+
+    fireEvent.click(within(navegacao).getByRole('link', { name: 'Contas' }))
+    expect(await screen.findByRole('region', { name: 'Contas' })).toBeVisible()
+    expect(window.location.hash).toBe('#/contas')
+    expect(screen.queryByRole('heading', { name: 'Saldo projetado' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Lançamentos' })).toBeNull()
+    expect(within(navegacao).getByRole('link', { name: 'Contas' })).toHaveAttribute('aria-current', 'page')
+
+    fireEvent.click(within(navegacao).getByRole('link', { name: 'Recorrências' }))
+    expect(await screen.findByRole('region', { name: 'Recorrências' })).toBeVisible()
+    expect(screen.queryByRole('region', { name: 'Contas' })).toBeNull()
+
+    fireEvent.click(within(navegacao).getByRole('link', { name: 'Lançamentos' }))
+    expect(await screen.findByRole('region', { name: 'Lançamentos' })).toBeVisible()
+  })
+
+  it('um hash desconhecido abre o Início', async () => {
+    window.location.hash = '#/nao-existe'
+    mockFetch({ 'GET /auth/eu': () => Promise.resolve(jsonResponse(usuario, 200)) })
+    render(<App />)
+    expect(await screen.findByRole('heading', { level: 2, name: 'Início' })).toBeVisible()
   })
 
   it('mostra o e-mail quando o nome é nulo', async () => {

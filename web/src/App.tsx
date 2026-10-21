@@ -9,14 +9,17 @@ import {
   fetchUsuarioAtual,
   postLogin,
   postCadastro,
-  postLogout,
 } from './api'
 import type { Conta, Usuario } from './api'
 import AvisoDeAtualizacao from './AvisoDeAtualizacao'
 import Contas from './Contas'
+import { Logo } from './icones'
+import Inicio from './Inicio'
 import Lancamentos from './Lancamentos'
 import Recorrencias from './Recorrencias'
-import SaldoProjetado from './SaldoProjetado'
+import { useRota } from './rota'
+import Topo from './Topo'
+import { Carregando } from './ui'
 
 type EstadoSessao =
   | { tipo: 'carregando' }
@@ -26,7 +29,7 @@ type EstadoSessao =
 
 type EstadoHealthz =
   | { tipo: 'carregando' }
-  | { tipo: 'ok'; mensagem: string }
+  | { tipo: 'ok' }
   | { tipo: 'erro' }
 
 function mensagemDeLogin(erro: unknown): string {
@@ -126,7 +129,7 @@ function Login({
         {enviando ? 'Entrando...' : 'Entrar'}
       </button>
       {aoCriarConta !== null && (
-        <button type="button" onClick={aoCriarConta}>
+        <button type="button" className="discreto" onClick={aoCriarConta}>
           Criar conta
         </button>
       )}
@@ -247,45 +250,10 @@ function Cadastro({
       <button type="submit" disabled={enviando}>
         {enviando ? 'Criando...' : 'Criar conta'}
       </button>
-      <button type="button" onClick={aoVoltar}>
+      <button type="button" className="discreto" onClick={aoVoltar}>
         Já tenho conta
       </button>
     </form>
-  )
-}
-
-function Logado({ usuario, aoSair }: { usuario: Usuario; aoSair: () => void }) {
-  const [saindo, setSaindo] = useState(false)
-  const [falhou, setFalhou] = useState(false)
-
-  async function sair(): Promise<void> {
-    setSaindo(true)
-    setFalhou(false)
-    try {
-      await postLogout()
-      aoSair()
-    } catch {
-      // Sem confirmação do servidor a sessão pode seguir viva: continua logado e avisa.
-      setFalhou(true)
-      setSaindo(false)
-    }
-  }
-
-  return (
-    <section>
-      <p>
-        Você está logado como <strong>{usuario.nome ?? usuario.email}</strong>
-        {usuario.nome !== null && <> ({usuario.email})</>}.
-      </p>
-      {falhou && (
-        <p role="alert" className="erro">
-          Não foi possível sair. Tente de novo.
-        </p>
-      )}
-      <button type="button" disabled={saindo} onClick={() => void sair()}>
-        Sair
-      </button>
-    </section>
   )
 }
 
@@ -296,8 +264,8 @@ function Rodape() {
     // Evita setState depois de desmontar (e no segundo disparo do StrictMode).
     let ativo = true
     fetchHealthz().then(
-      (resposta) => {
-        if (ativo) setEstado({ tipo: 'ok', mensagem: resposta.mensagem })
+      () => {
+        if (ativo) setEstado({ tipo: 'ok' })
       },
       () => {
         if (ativo) setEstado({ tipo: 'erro' })
@@ -308,13 +276,11 @@ function Rodape() {
     }
   }, [])
 
+  // Com a API bem não há o que dizer: só a falha ocupa espaço na tela.
+  if (estado.tipo !== 'erro') return null
   return (
-    <footer>
-      {estado.tipo === 'carregando' && <p>Verificando a API...</p>}
-      {estado.tipo === 'ok' && <p>{estado.mensagem}</p>}
-      {estado.tipo === 'erro' && (
-        <p role="alert">Não foi possível falar com o servidor.</p>
-      )}
+    <footer className="rodape">
+      <p role="alert">Não foi possível falar com o servidor.</p>
     </footer>
   )
 }
@@ -332,6 +298,9 @@ function App() {
   const [versaoDeRecorrencias, setVersaoDeRecorrencias] = useState(0)
   const [recorrenciasAtivas, setRecorrenciasAtivas] = useState<ReadonlySet<string>>(new Set())
   const [parcelasPorRecorrencia, setParcelasPorRecorrencia] = useState<ReadonlyMap<string, number>>(new Map())
+  // Onde o Início abre espaço para as vencidas que a tela de Lançamentos desenha.
+  const [slotDeVencidas, setSlotDeVencidas] = useState<HTMLElement | null>(null)
+  const [rota, irPara] = useRota()
 
   useEffect(() => {
     let ativo = true
@@ -356,61 +325,112 @@ function App() {
     setSessao({ tipo: 'anonimo' })
   }, [])
 
+  // O painel de edição vive em Lançamentos: quem edita uma vencida no Início vai até lá.
+  const irParaLancamentos = useCallback((): void => irPara('lancamentos'), [irPara])
+
   function tentarDeNovo(): void {
     setSessao({ tipo: 'carregando' })
     setTentativa((n) => n + 1)
   }
 
-  return (
-    <main>
+  const marca = (
+    <div className="auth-marca">
+      <Logo tamanho={48} />
       <h1>Ballast</h1>
-      <AvisoDeAtualizacao />
-      {sessao.tipo === 'carregando' && <p>Carregando...</p>}
-      {sessao.tipo === 'erro' && (
-        <>
-          <p role="alert" className="erro">
-            Não foi possível carregar sua sessão.
-          </p>
-          <button type="button" onClick={tentarDeNovo}>
-            Tentar de novo
-          </button>
-        </>
-      )}
-      {sessao.tipo === 'anonimo' && telaAnonima === 'login' && (
-        <Login
-          aoEntrar={(usuario) => setSessao({ tipo: 'logado', usuario })}
-          aoCriarConta={
-            registroAberto()
-              ? () => {
-                  setAviso(null)
-                  setTelaAnonima('cadastro')
+      <p>Controle financeiro pessoal</p>
+    </div>
+  )
+
+  if (sessao.tipo !== 'logado') {
+    return (
+      <main className="auth">
+        <div className="auth-cartao">
+          <AvisoDeAtualizacao />
+          {marca}
+          {sessao.tipo === 'carregando' && <Carregando texto="Carregando..." linhas={2} />}
+          {sessao.tipo === 'erro' && (
+            <div className="cartao">
+              <p role="alert" className="erro">
+                Não foi possível carregar sua sessão.
+              </p>
+              <button type="button" onClick={tentarDeNovo}>
+                Tentar de novo
+              </button>
+            </div>
+          )}
+          {sessao.tipo === 'anonimo' && telaAnonima === 'login' && (
+            <div className="cartao">
+              <Login
+                aoEntrar={(usuario) => setSessao({ tipo: 'logado', usuario })}
+                aoCriarConta={
+                  registroAberto()
+                    ? () => {
+                        setAviso(null)
+                        setTelaAnonima('cadastro')
+                      }
+                    : null
                 }
-              : null
-          }
-          aviso={aviso}
-        />
-      )}
-      {sessao.tipo === 'anonimo' && telaAnonima === 'cadastro' && registroAberto() && (
-        <Cadastro
-          aoEntrar={(usuario) => setSessao({ tipo: 'logado', usuario })}
-          aoContaCriadaSemLogin={() => {
-            setAviso('Conta criada. Entre com seu e-mail e senha.')
-            setTelaAnonima('login')
-          }}
-          aoVoltar={() => setTelaAnonima('login')}
-        />
-      )}
-      {sessao.tipo === 'logado' && (
-        <>
-          <Logado
+                aviso={aviso}
+              />
+            </div>
+          )}
+          {sessao.tipo === 'anonimo' && telaAnonima === 'cadastro' && registroAberto() && (
+            <div className="cartao">
+              <Cadastro
+                aoEntrar={(usuario) => setSessao({ tipo: 'logado', usuario })}
+                aoContaCriadaSemLogin={() => {
+                  setAviso('Conta criada. Entre com seu e-mail e senha.')
+                  setTelaAnonima('login')
+                }}
+                aoVoltar={() => setTelaAnonima('login')}
+              />
+            </div>
+          )}
+          <Rodape />
+        </div>
+      </main>
+    )
+  }
+
+  // Lançamentos, Contas e Recorrências ficam montadas e só escondidas: elas carregam o que as
+  // outras usam (contas ativas, recorrências ativas). O Início é só leitura e remonta a cada visita.
+  return (
+    <div className="app">
+      <AvisoDeAtualizacao />
+      <Topo
+        secao={rota}
+        aoSair={() => {
+          // Quem entrou pelo cadastro não deve voltar a ver o formulário de cadastro.
+          setTelaAnonima('login')
+          setAviso(null)
+          setSessao({ tipo: 'anonimo' })
+        }}
+      />
+      <main className="conteudo">
+        {rota === 'inicio' && (
+          <Inicio
             usuario={sessao.usuario}
-            aoSair={() => {
-              // Quem entrou pelo cadastro não deve voltar a ver o formulário de cadastro.
-              setTelaAnonima('login')
-              setAviso(null)
-              setSessao({ tipo: 'anonimo' })
-            }}
+            contas={contasAtivas}
+            versaoDeSaldo={versaoDeSaldo}
+            versaoDaLista={versaoDaLista}
+            aoSessaoExpirar={aoSessaoExpirar}
+            aoMontarVencidas={setSlotDeVencidas}
           />
+        )}
+        <div className="secao" hidden={rota !== 'lancamentos'}>
+          <Lancamentos
+            aoSessaoExpirar={aoSessaoExpirar}
+            contas={contasAtivas}
+            aoMudarSaldo={() => setVersaoDeSaldo((n) => n + 1)}
+            recorrenciasAtivas={recorrenciasAtivas}
+            parcelasPorRecorrencia={parcelasPorRecorrencia}
+            versaoDaLista={versaoDaLista}
+            aoMudarOcorrencia={() => setVersaoDeRecorrencias((n) => n + 1)}
+            destinoDasVencidas={slotDeVencidas}
+            aoEditarVencida={irParaLancamentos}
+          />
+        </div>
+        <div className="secao" hidden={rota !== 'contas'}>
           <Contas
             aoSessaoExpirar={aoSessaoExpirar}
             versaoDeSaldo={versaoDeSaldo}
@@ -421,21 +441,8 @@ function App() {
               setVersaoDaLista((n) => n + 1)
             }}
           />
-          {/* Logo abaixo das contas: é a resposta principal do app, antes de qualquer formulário. */}
-          <SaldoProjetado
-            aoSessaoExpirar={aoSessaoExpirar}
-            contas={contasAtivas}
-            versaoDeSaldo={versaoDeSaldo}
-          />
-          <Lancamentos
-            aoSessaoExpirar={aoSessaoExpirar}
-            contas={contasAtivas}
-            aoMudarSaldo={() => setVersaoDeSaldo((n) => n + 1)}
-            recorrenciasAtivas={recorrenciasAtivas}
-            parcelasPorRecorrencia={parcelasPorRecorrencia}
-            versaoDaLista={versaoDaLista}
-            aoMudarOcorrencia={() => setVersaoDeRecorrencias((n) => n + 1)}
-          />
+        </div>
+        <div className="secao" hidden={rota !== 'recorrencias'}>
           <Recorrencias
             aoSessaoExpirar={aoSessaoExpirar}
             contas={contasAtivas}
@@ -447,10 +454,10 @@ function App() {
               setVersaoDeSaldo((n) => n + 1)
             }}
           />
-        </>
-      )}
-      <Rodape />
-    </main>
+        </div>
+        <Rodape />
+      </main>
+    </div>
   )
 }
 

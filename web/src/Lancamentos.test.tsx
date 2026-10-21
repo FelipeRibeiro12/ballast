@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import App from './App'
+import { abrirMenus, acao } from './testeAcoes'
 
 type Rotas = Partial<Record<string, (corpo: unknown) => Promise<Response>>>
 
@@ -167,7 +168,15 @@ const texto = (valor: string): RegExp =>
 
 const secao = async (): Promise<HTMLElement> => screen.findByRole('region', { name: 'Lançamentos' })
 
+// Os formulários de criar abrem num painel pelo botão "Novo" (ADR-033). Edição e confirmação abrem sozinhas.
+async function abrirNovo(): Promise<void> {
+  const abrir = await screen.findByRole('button', { name: 'Novo' })
+  await waitFor(() => expect(abrir).toBeEnabled())
+  fireEvent.click(abrir)
+}
+
 async function formulario(nome = 'Novo lançamento'): Promise<HTMLElement> {
+  if (nome === 'Novo lançamento') await abrirNovo()
   return screen.findByRole('form', { name: nome })
 }
 
@@ -185,6 +194,11 @@ async function abrirConfirmacao(titulo: string): Promise<HTMLElement> {
 function enviarConfirmacao(form: HTMLElement): void {
   fireEvent.click(within(form).getByRole('button', { name: 'Confirmar' }))
 }
+
+// As seções ficam atrás de rota por hash (ADR-033): cada arquivo abre a que testa.
+beforeEach(() => {
+  window.location.hash = '#/lancamentos'
+})
 
 describe('Lancamentos', () => {
   beforeEach(() => {
@@ -223,7 +237,9 @@ describe('Lancamentos', () => {
     const area = within(await secao())
     const itens = await area.findAllByRole('listitem')
     expect(itens).toHaveLength(2)
-    expect(itens[0]).toHaveTextContent('05/10')
+    // A data virou o título do grupo do dia; cada item fica dentro do grupo da sua data.
+    expect(area.getByRole('heading', { name: /05\/10$/ }).nextElementSibling).toContainElement(itens[0])
+    expect(area.getByRole('heading', { name: /01\/10$/ }).nextElementSibling).toContainElement(itens[1])
     expect(itens[0]).toHaveTextContent('Feira')
     expect(itens[0]).toHaveTextContent('Mercado · Nubank')
     expect(itens[0]).toHaveTextContent(texto('− R$ 123,45'))
@@ -403,7 +419,7 @@ describe('Lancamentos', () => {
       },
     })
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Editar Feira' }))
+    fireEvent.click(await acao('Editar Feira'))
     const form = await formulario('Editar lançamento')
     expect(within(form).getByLabelText(/valor em reais/i)).toHaveValue('123,45')
     expect(within(form).getByLabelText('Data')).toHaveValue('2026-10-05')
@@ -426,7 +442,7 @@ describe('Lancamentos', () => {
       'DELETE /lancamentos/l1': () => Promise.resolve(new Response(null, { status: 204 })),
     })
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Apagar Feira' }))
+    fireEvent.click(await acao('Apagar Feira'))
     expect(chamadasA('DELETE /lancamentos/l1')).toHaveLength(0)
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar Feira' }))
     await waitFor(() => expect(chamadasA('DELETE /lancamentos/l1')).toHaveLength(1))
@@ -441,19 +457,19 @@ describe('Lancamentos', () => {
       'DELETE /lancamentos/l1': responde({ erro: 'saldo da conta fora do limite' }, 400),
     })
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Apagar Feira' }))
+    fireEvent.click(await acao('Apagar Feira'))
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar Feira' }))
     expect(await screen.findByText('saldo da conta fora do limite')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Apagar Feira' })).toBeVisible()
+    expect(await acao('Apagar Feira')).toBeVisible()
   })
 
   it('cancelar a confirmação não apaga', async () => {
     mockFetch({ ...base, [MES_ATUAL]: responde([lancamento()]) })
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Apagar Feira' }))
+    fireEvent.click(await acao('Apagar Feira'))
     const area = within(await secao())
     fireEvent.click(area.getByRole('button', { name: 'Cancelar' }))
-    expect(area.getByRole('button', { name: 'Apagar Feira' })).toBeVisible()
+    expect(await acao('Apagar Feira')).toBeVisible()
     expect(chamadasA('DELETE /lancamentos/l1')).toHaveLength(0)
   })
 
@@ -464,7 +480,7 @@ describe('Lancamentos', () => {
       'DELETE /lancamentos/l1': responde({ erro: 'x' }, 404),
     })
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Apagar Feira' }))
+    fireEvent.click(await acao('Apagar Feira'))
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar Feira' }))
     expect(await screen.findByText('Esse lançamento não existe mais.')).toBeVisible()
     await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
@@ -477,7 +493,7 @@ describe('Lancamentos', () => {
       'PUT /lancamentos/l1': responde({ erro: 'x' }, 404),
     })
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Editar Feira' }))
+    fireEvent.click(await acao('Editar Feira'))
     fireEvent.submit(await formulario('Editar lançamento'))
     expect(await screen.findByText('Esse lançamento não existe mais.')).toBeVisible()
     await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
@@ -505,8 +521,11 @@ describe('Lancamentos', () => {
     render(<App />)
     const form = await formulario()
     expect(within(within(form).getByLabelText('Conta')).queryByText('Reserva')).toBeNull()
+    // Desarquivar mora em Contas: a navegação leva até lá e volta.
+    fireEvent.click(screen.getByRole('link', { name: 'Contas' }))
     fireEvent.click(await screen.findByRole('button', { name: /ver arquivadas/i }))
     fireEvent.click(await screen.findByRole('button', { name: 'Desarquivar Reserva' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Lançamentos' }))
     await waitFor(async () =>
       expect(within(within(await formulario()).getByLabelText('Conta')).getByText('Reserva')).toBeVisible(),
     )
@@ -515,6 +534,7 @@ describe('Lancamentos', () => {
     const duasContas = { ...base, 'GET /contas': responde([conta(), contaB]) }
 
     async function abrirTransferencia(): Promise<HTMLElement> {
+      await abrirNovo()
       fireEvent.click(await screen.findByRole('button', { name: 'Transferência' }))
       return formulario('Nova transferência')
     }
@@ -532,9 +552,11 @@ describe('Lancamentos', () => {
       const area = within(await secao())
       const itens = await area.findAllByRole('listitem')
       expect(itens).toHaveLength(3)
-      expect(itens[1]).toHaveTextContent('Transferência · Nubank')
+      expect(within(itens[1]).getByText('Transferência')).toBeVisible()
+      expect(itens[1]).toHaveTextContent('Nubank')
       expect(itens[1]).toHaveTextContent(texto('− R$ 500,00'))
-      expect(itens[2]).toHaveTextContent('Transferência · Carteira')
+      expect(within(itens[2]).getByText('Transferência')).toBeVisible()
+      expect(itens[2]).toHaveTextContent('Carteira')
       expect(itens[2]).toHaveTextContent(texto('+ R$ 500,00'))
       expect(area.getByText('Receitas').nextSibling).toHaveTextContent(texto('R$ 0,00'))
       expect(area.getByText('Despesas').nextSibling).toHaveTextContent(texto('R$ 123,45'))
@@ -544,7 +566,7 @@ describe('Lancamentos', () => {
     it('perna não tem Editar', async () => {
       mockFetch({ ...duasContas, [MES_ATUAL]: responde([perna()]) })
       render(<App />)
-      expect(await screen.findByRole('button', { name: 'Apagar Reserva' })).toBeVisible()
+      expect(await acao('Apagar Reserva')).toBeVisible()
       expect(screen.queryByRole('button', { name: 'Editar Reserva' })).toBeNull()
     })
 
@@ -555,7 +577,7 @@ describe('Lancamentos', () => {
         'DELETE /transferencias/t1': () => Promise.resolve(new Response(null, { status: 204 })),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Apagar Reserva' }))
+      fireEvent.click(await acao('Apagar Reserva'))
       expect(screen.getByText(/as duas pernas/i)).toBeVisible()
       expect(chamadasA('DELETE /transferencias/t1')).toHaveLength(0)
       fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar Reserva' }))
@@ -635,6 +657,7 @@ describe('Lancamentos', () => {
     it('com menos de duas contas mostra o aviso', async () => {
       mockFetch({ ...base, [MES_ATUAL]: responde([]) })
       render(<App />)
+      await abrirNovo()
       fireEvent.click(await screen.findByRole('button', { name: 'Transferência' }))
       expect(await screen.findByText('Crie duas contas para transferir.')).toBeVisible()
       expect(screen.queryByRole('form', { name: 'Nova transferência' })).toBeNull()
@@ -754,7 +777,7 @@ describe('Lancamentos', () => {
         },
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Cancelar Aluguel' }))
+      fireEvent.click(await acao('Cancelar Aluguel'))
       expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(0)
       fireEvent.click(screen.getByRole('button', { name: 'Confirmar cancelar Aluguel' }))
       await waitFor(() => expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(1))
@@ -766,9 +789,9 @@ describe('Lancamentos', () => {
     it('desistir do cancelamento não envia nada', async () => {
       mockFetch({ ...base, [MES_ATUAL]: responde([prevista()]) })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Cancelar Aluguel' }))
+      fireEvent.click(await acao('Cancelar Aluguel'))
       fireEvent.click(screen.getByRole('button', { name: 'Manter' }))
-      expect(screen.getByRole('button', { name: 'Cancelar Aluguel' })).toBeVisible()
+      expect(await acao('Cancelar Aluguel')).toBeVisible()
       expect(chamadasA('PATCH /lancamentos/o1')).toHaveLength(0)
     })
 
@@ -832,7 +855,7 @@ describe('Lancamentos', () => {
         },
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Editar Aluguel' }))
+      fireEvent.click(await acao('Editar Aluguel'))
       const form = await formulario('Editar lançamento')
       expect(within(form).getByLabelText('Data')).toHaveValue('2026-10-25')
       fireEvent.change(within(form).getByLabelText('Título'), { target: { value: 'Aluguel novo' } })
@@ -853,7 +876,7 @@ describe('Lancamentos', () => {
         'DELETE /lancamentos/o1': () => Promise.resolve(new Response(null, { status: 204 })),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Apagar Aluguel' }))
+      fireEvent.click(await acao('Apagar Aluguel'))
       expect(screen.getByText(/volta como prevista/i)).toBeVisible()
       fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar Aluguel' }))
       await waitFor(() => expect(chamadasA('DELETE /lancamentos/o1')).toHaveLength(1))
@@ -870,10 +893,10 @@ describe('Lancamentos', () => {
         ]),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Apagar Aluguel' }))
+      fireEvent.click(await acao('Apagar Aluguel'))
       expect(screen.queryByText(/volta como prevista/i)).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Apagar Seguro' }))
+      fireEvent.click(await acao('Apagar Seguro'))
       expect(screen.queryByText(/volta como prevista/i)).toBeNull()
     })
   })
@@ -985,6 +1008,7 @@ describe('Lancamentos', () => {
 
     it('sem vencidas o bloco não aparece', async () => {
       mockFetch({ ...base, [MES_ATUAL]: responde([]) })
+      window.location.hash = '#/inicio'
       render(<App />)
       await screen.findByText(/nenhum lançamento neste mês/i)
       expect(screen.queryByRole('region', { name: /vencidas/i })).toBeNull()
@@ -996,6 +1020,7 @@ describe('Lancamentos', () => {
         [MES_ATUAL]: responde([]),
         [VENCIDAS]: vencidasCom([vencida(), vencida({ id: 'v2', titulo: 'Bônus', tipo: 'receita', valorCentavos: 20000 })]),
       })
+      window.location.hash = '#/inicio'
       render(<App />)
       const bloco = within(await blocoVencidas())
       expect(bloco.getByRole('heading', { name: 'Vencidas (2)' })).toBeVisible()
@@ -1010,6 +1035,7 @@ describe('Lancamentos', () => {
 
     it('maisAlgum mostra o aviso de corte', async () => {
       mockFetch({ ...base, [MES_ATUAL]: responde([]), [VENCIDAS]: vencidasCom([vencida()], true) })
+      window.location.hash = '#/inicio'
       render(<App />)
       expect(within(await blocoVencidas()).getByText('mostrando as 200 mais antigas')).toBeVisible()
     })
@@ -1022,6 +1048,7 @@ describe('Lancamentos', () => {
         [VENCIDAS]: vencidasCom([vencida()]),
         ...patchQueCaptura('v1', guarda),
       })
+      window.location.hash = '#/inicio'
       render(<App />)
       const bloco = within(await blocoVencidas())
       fireEvent.click(bloco.getByRole('button', { name: 'Confirmar Internet' }))
@@ -1043,9 +1070,11 @@ describe('Lancamentos', () => {
         [VENCIDAS]: vencidasCom([vencida()]),
         ...patchQueCaptura('v1', guarda),
       })
+      window.location.hash = '#/inicio'
       render(<App />)
       const bloco = within(await blocoVencidas())
-      fireEvent.click(bloco.getByRole('button', { name: 'Cancelar Internet' }))
+      await bloco.findByText('Internet')
+      fireEvent.click(await acao('Cancelar Internet'))
       expect(chamadasA('PATCH /lancamentos/v1')).toHaveLength(0)
       fireEvent.click(bloco.getByRole('button', { name: 'Confirmar cancelar Internet' }))
       await waitFor(() => expect(chamadasA('PATCH /lancamentos/v1')).toHaveLength(1))
@@ -1055,8 +1084,10 @@ describe('Lancamentos', () => {
 
     it('Editar vencida abre o formulário de edição', async () => {
       mockFetch({ ...base, [MES_ATUAL]: responde([]), [VENCIDAS]: vencidasCom([vencida()]) })
+      window.location.hash = '#/inicio'
       render(<App />)
-      fireEvent.click(within(await blocoVencidas()).getByRole('button', { name: 'Editar Internet' }))
+      await blocoVencidas()
+      fireEvent.click(await acao('Editar Internet'))
       const form = await formulario('Editar lançamento')
       expect(within(form).getByLabelText('Título')).toHaveValue('Internet')
     })
@@ -1075,11 +1106,12 @@ describe('Lancamentos', () => {
           )
         },
       })
+      window.location.hash = '#/inicio'
       render(<App />)
-      const area = within(await secao())
-      expect(await area.findByText('Feira')).toBeVisible()
-      expect(await area.findByText('Não foi possível carregar as vencidas.')).toBeVisible()
-      fireEvent.click(area.getByRole('button', { name: /tentar carregar as vencidas de novo/i }))
+      expect(await screen.findByText('Não foi possível carregar as vencidas.')).toBeVisible()
+      // O mês continua carregado na seção de Lançamentos, que está escondida.
+      expect(await screen.findByText('Feira')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: /tentar carregar as vencidas de novo/i }))
       expect(await blocoVencidas()).toBeVisible()
       expect(screen.queryByText('Não foi possível carregar as vencidas.')).toBeNull()
     })
@@ -1332,6 +1364,7 @@ describe('Lancamentos', () => {
       mockFetch({ ...comCartao, [MES_ATUAL]: responde([parcela(), segunda]) })
       render(<App />)
       const itens = await within(await secao()).findAllByRole('listitem')
+      abrirMenus()
       expect(within(itens[0]).queryByRole('button', { name: /apagar parcela/i })).toBeNull()
       expect(within(itens[0]).getByRole('button', { name: /editar parcela/i })).toBeVisible()
       expect(within(itens[1]).getByRole('button', { name: 'Apagar parcela 2 de Notebook' })).toBeVisible()
@@ -1340,7 +1373,7 @@ describe('Lancamentos', () => {
     it('parcela não tem o Editar e o Apagar comuns', async () => {
       mockFetch({ ...comCartao, [MES_ATUAL]: responde([segunda]) })
       render(<App />)
-      await screen.findByRole('button', { name: 'Apagar compra Notebook' })
+      await acao('Apagar compra Notebook')
       expect(screen.queryByRole('button', { name: 'Editar Notebook' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Apagar Notebook' })).toBeNull()
     })
@@ -1356,7 +1389,7 @@ describe('Lancamentos', () => {
         },
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Editar parcela 2 de Notebook' }))
+      fireEvent.click(await acao('Editar parcela 2 de Notebook'))
       const form = await formulario('Editar parcela')
       const conta = within(form).getByLabelText('Conta')
       const data = within(form).getByLabelText(/data/i)
@@ -1391,7 +1424,7 @@ describe('Lancamentos', () => {
         },
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Editar compra Notebook' }))
+      fireEvent.click(await acao('Editar compra Notebook'))
       const form = await screen.findByRole('form', { name: 'Editar compra Notebook' })
       fireEvent.change(within(form).getByLabelText('Título da compra'), { target: { value: 'Notebook novo' } })
       fireEvent.change(within(form).getByLabelText('Categoria da compra'), { target: { value: 'cd2' } })
@@ -1406,7 +1439,7 @@ describe('Lancamentos', () => {
     it('editar compra sem mudança não envia', async () => {
       mockFetch({ ...comCartao, [MES_ATUAL]: responde([segunda]) })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Editar compra Notebook' }))
+      fireEvent.click(await acao('Editar compra Notebook'))
       fireEvent.submit(await screen.findByRole('form', { name: 'Editar compra Notebook' }))
       expect(await screen.findByText(/nada mudou/i)).toBeVisible()
       expect(chamadasA('PATCH /compras-parceladas/l1')).toHaveLength(0)
@@ -1419,7 +1452,7 @@ describe('Lancamentos', () => {
         'PATCH /compras-parceladas/l1': responde({ erro: 'categoria não encontrada' }, 400),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Editar compra Notebook' }))
+      fireEvent.click(await acao('Editar compra Notebook'))
       const form = await screen.findByRole('form', { name: 'Editar compra Notebook' })
       fireEvent.change(within(form).getByLabelText('Título da compra'), { target: { value: 'Outro' } })
       fireEvent.submit(form)
@@ -1433,7 +1466,7 @@ describe('Lancamentos', () => {
         'DELETE /lancamentos/l3': () => Promise.resolve(new Response(null, { status: 204 })),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Apagar parcela 3 de Notebook' }))
+      fireEvent.click(await acao('Apagar parcela 3 de Notebook'))
       expect(chamadasA('DELETE /lancamentos/l3')).toHaveLength(0)
       expect(screen.getByText(/a soma da compra muda/i)).toBeVisible()
       fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar parcela 3 de Notebook' }))
@@ -1445,9 +1478,9 @@ describe('Lancamentos', () => {
     it('desistir de apagar a parcela não envia nada', async () => {
       mockFetch({ ...comCartao, [MES_ATUAL]: responde([terceira]) })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Apagar parcela 3 de Notebook' }))
+      fireEvent.click(await acao('Apagar parcela 3 de Notebook'))
       fireEvent.click(screen.getByRole('button', { name: 'Manter parcela' }))
-      expect(screen.getByRole('button', { name: 'Apagar parcela 3 de Notebook' })).toBeVisible()
+      expect(await acao('Apagar parcela 3 de Notebook')).toBeVisible()
       expect(chamadasA('DELETE /lancamentos/l3')).toHaveLength(0)
     })
 
@@ -1459,7 +1492,7 @@ describe('Lancamentos', () => {
         'DELETE /compras-parceladas/l1': () => Promise.resolve(new Response(null, { status: 204 })),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Apagar compra Notebook' }))
+      fireEvent.click(await acao('Apagar compra Notebook'))
       expect(await screen.findByText(/somem 2 parcelas/)).toBeVisible()
       expect(chamadasA('DELETE /compras-parceladas/l1')).toHaveLength(0)
       fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar compra Notebook' }))
@@ -1476,7 +1509,7 @@ describe('Lancamentos', () => {
         'DELETE /compras-parceladas/l1': responde({ erro: 'não encontrado' }, 404),
       })
       render(<App />)
-      fireEvent.click(await screen.findByRole('button', { name: 'Apagar compra Notebook' }))
+      fireEvent.click(await acao('Apagar compra Notebook'))
       fireEvent.click(await screen.findByRole('button', { name: 'Confirmar apagar compra Notebook' }))
       expect(await screen.findByText('Essa compra não existe mais.')).toBeVisible()
       await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
@@ -1492,9 +1525,12 @@ describe('Lancamentos', () => {
         'DELETE /compras-parceladas/l1': () => Promise.resolve(new Response(null, { status: 204 })),
       })
       render(<App />)
+      // As faturas abrem em Contas; a compra se apaga em Lançamentos. A fatura aberta continua montada.
+      fireEvent.click(await screen.findByRole('link', { name: 'Contas' }))
       fireEvent.click(await screen.findByRole('button', { name: 'Faturas de Visa' }))
       await waitFor(() => expect(chamadasA(faturas)).toHaveLength(1))
-      fireEvent.click(await screen.findByRole('button', { name: 'Apagar compra Notebook' }))
+      fireEvent.click(screen.getByRole('link', { name: 'Lançamentos' }))
+      fireEvent.click(await acao('Apagar compra Notebook'))
       fireEvent.click(await screen.findByRole('button', { name: 'Confirmar apagar compra Notebook' }))
       await waitFor(() => expect(chamadasA(faturas)).toHaveLength(2))
     })

@@ -139,9 +139,10 @@ describe('SaldoProjetado', () => {
   it('mostra saldo atual, saldo no fim do período e menor saldo com a data', async () => {
     mockFetch(responde(serie()))
     renderizar()
-    expect(await screen.findByText(texto(`Saldo atual: ${formatarCentavos(10000)}`))).toBeVisible()
-    expect(screen.getByText(texto(`Saldo em 24/10: ${formatarCentavos(15000)}`))).toBeVisible()
-    expect(screen.getByText(texto(`Menor saldo: ${formatarCentavos(-5000)} em 22/10`))).toBeVisible()
+    // Rótulo e valor ficam em dt e dd vizinhos: o resumo é uma lista de definição.
+    expect((await screen.findByText('Saldo atual')).nextSibling).toHaveTextContent(texto(formatarCentavos(10000)))
+    expect(screen.getByText('Saldo em 24/10').nextSibling).toHaveTextContent(texto(formatarCentavos(15000)))
+    expect(screen.getByText('Menor saldo em 22/10').nextSibling).toHaveTextContent(texto(formatarCentavos(-5000)))
   })
 
   it('avisa em texto o primeiro dia em que o saldo fica negativo', async () => {
@@ -182,10 +183,10 @@ describe('SaldoProjetado', () => {
     const itens = within(lista).getAllByRole('listitem')
     expect(itens).toHaveLength(3)
     expect(itens[0]).toHaveTextContent('21/10')
-    expect(itens[0]).toHaveTextContent(texto(`Saídas: ${formatarCentavos(12000)}`))
+    expect(itens[0]).toHaveTextContent(texto(`Saídas: −${formatarCentavos(12000)}`))
     expect(itens[0]).toHaveTextContent(texto(`Saldo: ${formatarCentavos(-2000)}`))
     expect(itens[2]).toHaveTextContent('23/10')
-    expect(itens[2]).toHaveTextContent(texto(`Entradas: ${formatarCentavos(20000)}`))
+    expect(itens[2]).toHaveTextContent(texto(`Entradas: +${formatarCentavos(20000)}`))
     expect(lista).not.toHaveTextContent('20/10')
     expect(lista).not.toHaveTextContent('24/10')
   })
@@ -242,7 +243,7 @@ describe('SaldoProjetado', () => {
 
     mockFetch(responde(serie({ saldoAtualCentavos: 77700 })))
     rerender(<SaldoProjetado {...props} versaoDeSaldo={1} />)
-    expect(await screen.findByText(texto(`Saldo atual: ${formatarCentavos(77700)}`))).toBeVisible()
+    expect((await screen.findByText('Saldo atual')).nextSibling).toHaveTextContent(texto(formatarCentavos(77700)))
   })
 
   it('busca de novo quando a lista de contas ativas muda', async () => {

@@ -56,3 +56,24 @@ const formatadorDoMes = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 
 export function rotuloDoMes({ ano, mes }: Mes): string {
   return formatadorDoMes.format(new Date(ano, mes - 1, 1))
 }
+
+// Soma dias no calendário local. Date resolve virada de mês e ano bissexto; a conta
+// nunca passa por UTC, então a hora de verão não desloca o dia.
+export function somarDias(data: string, dias: number): string {
+  const base = new Date(Number(data.slice(0, 4)), Number(data.slice(5, 7)) - 1, Number(data.slice(8, 10)) + dias)
+  return formatarData(base.getFullYear(), base.getMonth() + 1, base.getDate())
+}
+
+const formatadorDaSemana = new Intl.DateTimeFormat('pt-BR', { weekday: 'long' })
+
+// Título do grupo de um dia na lista: "Hoje, 19/10", "Ontem, 18/10" ou "Segunda-feira, 05/10".
+export function rotuloDoDia(data: string, hoje: string): string {
+  const dataCurta = formatarDiaMes(data)
+  if (data === hoje) return `Hoje, ${dataCurta}`
+  if (data === somarDias(hoje, -1)) return `Ontem, ${dataCurta}`
+  if (data === somarDias(hoje, 1)) return `Amanhã, ${dataCurta}`
+  const diaDaSemana = formatadorDaSemana.format(
+    new Date(Number(data.slice(0, 4)), Number(data.slice(5, 7)) - 1, Number(data.slice(8, 10))),
+  )
+  return `${diaDaSemana.charAt(0).toUpperCase()}${diaDaSemana.slice(1)}, ${dataCurta}`
+}

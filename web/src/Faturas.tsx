@@ -10,6 +10,7 @@ import {
 import type { Conta, Fatura } from './api'
 import { formatarDataCompleta, intervaloDoMes, mesDeHoje, somarMeses } from './datas'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
+import { Carregando, Selo } from './ui'
 
 const MENSAGEM_INDISPONIVEL = 'Serviço indisponível. Tente de novo em instantes.'
 const MENSAGEM_VALOR_INVALIDO =
@@ -200,7 +201,7 @@ function FormularioDePagamento({
       <button type="submit" disabled={enviando}>
         {enviando ? 'Pagando...' : 'Confirmar pagamento'}
       </button>
-      <button type="button" onClick={aoCancelar}>
+      <button type="button" className="discreto" onClick={aoCancelar}>
         Cancelar
       </button>
     </form>
@@ -255,10 +256,13 @@ export default function Faturas({
     setTentativa((n) => n + 1)
   }
 
+  const vencimentoAtual =
+    estado.tipo === 'ok' ? estado.faturas.find((fatura) => fatura.situacao === 'aberta')?.vencimento : undefined
+
   return (
     <div className="faturas">
       <h3>Faturas de {cartao.nome}</h3>
-      {estado.tipo === 'carregando' && <p>Carregando faturas...</p>}
+      {estado.tipo === 'carregando' && <Carregando texto="Carregando faturas..." linhas={2} />}
       {estado.tipo === 'erro' && (
         <>
           <p role="alert" className="erro">
@@ -269,30 +273,64 @@ export default function Faturas({
           </button>
         </>
       )}
-      {estado.tipo === 'ok' && estado.faturas.length === 0 && <p>Nenhuma fatura no período.</p>}
+      {estado.tipo === 'ok' && estado.faturas.length === 0 && <p className="vazio-dica">Nenhuma fatura no período.</p>}
       {estado.tipo === 'ok' && estado.faturas.length > 0 && (
-        <ul className="contas">
-          {estado.faturas.map((fatura) => (
-            <li key={fatura.vencimento}>
-              <div className="conta-dados">
-                <strong>Vence em {formatarDataCompleta(fatura.vencimento)}</strong>
-                <span>Fecha em {formatarDataCompleta(fatura.fechamento)}</span>
-                <span>Total: {formatarCentavos(fatura.totalCentavos)}</span>
-                <span>Pago: {formatarCentavos(fatura.pagoCentavos)}</span>
-                <span>Restante: {formatarCentavos(fatura.restanteCentavos)}</span>
-                <span>Situação: {ROTULO_DA_SITUACAO[fatura.situacao]}</span>
-              </div>
-              {fatura.situacao === 'fechada' && fatura.restanteCentavos > 0 && (
-                <button
-                  type="button"
-                  aria-label={`Pagar fatura de ${formatarDataCompleta(fatura.vencimento)}`}
-                  onClick={() => setPagando(fatura)}
-                >
-                  Pagar fatura
-                </button>
-              )}
-            </li>
-          ))}
+        <ul className="faturas-lista">
+          {estado.faturas.map((fatura) => {
+            const semCompras = fatura.totalCentavos === 0 && fatura.pagoCentavos === 0
+            const aPagar = fatura.situacao === 'fechada' && fatura.restanteCentavos > 0
+            // A fatura aberta mais próxima é a que está recebendo compras agora.
+            const atual = fatura.vencimento === vencimentoAtual
+            const classe = ['fatura-linha', semCompras ? 'sem-compras' : '', aPagar ? 'a-pagar' : '', atual ? 'atual' : '']
+              .filter((nome) => nome !== '')
+              .join(' ')
+            return (
+              <li key={fatura.vencimento} className={classe}>
+                <div className="fatura-esq">
+                  <div className="fatura-topo">
+                    <strong>Vence em {formatarDataCompleta(fatura.vencimento)}</strong>
+                    <Selo tom={fatura.situacao}>
+                      <span className="so-leitor">Situação: </span>
+                      {ROTULO_DA_SITUACAO[fatura.situacao]}
+                    </Selo>
+                  </div>
+                  <span className="item-meta">Fecha em {formatarDataCompleta(fatura.fechamento)}</span>
+                </div>
+                <div className="fatura-dir">
+                  {semCompras ? (
+                    <span className="fatura-detalhe">sem compras</span>
+                  ) : (
+                    <>
+                      <span className="fatura-total">
+                        <span className="so-leitor">Total: </span>
+                        {formatarCentavos(fatura.totalCentavos)}
+                      </span>
+                      {fatura.pagoCentavos > 0 && (
+                        <span className="fatura-detalhe">Pago: {formatarCentavos(fatura.pagoCentavos)}</span>
+                      )}
+                      {fatura.restanteCentavos > 0 && (
+                        <span className="fatura-detalhe">
+                          Restante: <strong>{formatarCentavos(fatura.restanteCentavos)}</strong>
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+                {aPagar && (
+                  <div className="fatura-acao">
+                    <button
+                      type="button"
+                      className="pequeno primario"
+                      aria-label={`Pagar fatura de ${formatarDataCompleta(fatura.vencimento)}`}
+                      onClick={() => setPagando(fatura)}
+                    >
+                      Pagar fatura
+                    </button>
+                  </div>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
       {pagando !== null && (
