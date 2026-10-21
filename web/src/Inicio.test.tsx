@@ -16,6 +16,7 @@ function conta(sobra: Partial<Record<string, unknown>> = {}): Record<string, unk
     arquivada: false,
     criadaEm: '2026-10-19T12:00:00Z',
     cartao: null,
+    categoriasPermitidas: null,
     ...sobra,
   }
 }
@@ -142,6 +143,42 @@ describe('Início', () => {
       render(<App />)
       expect(await screen.findByText('Cadastre sua primeira conta.')).toBeVisible()
       expect(screen.getByRole('link', { name: 'Ir para Contas' })).toHaveAttribute('href', '#/contas')
+    })
+  })
+
+  describe('benefícios', () => {
+    const vr = conta({ id: 'b1', nome: 'VR', tipo: 'beneficio', saldoCentavos: 80000, categoriasPermitidas: ['cd1'] })
+    const va = conta({ id: 'b2', nome: 'VA', tipo: 'beneficio', saldoCentavos: 25050, categoriasPermitidas: [] })
+
+    it('tira o benefício de "Saldo nas contas" e mostra o saldo somado num cartão próprio', async () => {
+      mockFetch({ 'GET /contas': responde([conta(), vr, va]) })
+      render(<App />)
+      const resumo = within(await screen.findByRole('region', { name: 'Resumo das contas' }))
+      // Só os 1.000,00 da corrente: os 800,00 do VR e os 250,50 do VA ficam de fora.
+      expect(await resumo.findByText(texto('R$ 1.000,00'))).toBeVisible()
+      expect(resumo.getByText('Contas ativas').nextSibling).toHaveTextContent('1')
+      const beneficios = within(screen.getByRole('region', { name: 'Benefícios' }))
+      expect(beneficios.getByText(texto('R$ 1.050,50'), { selector: 'p' })).toBeVisible()
+      const itens = beneficios.getAllByRole('listitem')
+      expect(itens[0]).toHaveTextContent('VR')
+      expect(itens[0]).toHaveTextContent(texto('R$ 800,00'))
+      expect(itens[1]).toHaveTextContent('VA')
+      expect(itens[1]).toHaveTextContent(texto('R$ 250,50'))
+    })
+
+    it('sem conta de benefício não mostra o cartão', async () => {
+      mockFetch({ 'GET /contas': responde([conta()]) })
+      render(<App />)
+      const resumo = within(await screen.findByRole('region', { name: 'Resumo das contas' }))
+      expect(await resumo.findByText(texto('R$ 1.000,00'))).toBeVisible()
+      expect(screen.queryByRole('region', { name: 'Benefícios' })).toBeNull()
+    })
+
+    it('benefício com saldo negativo aparece com o sinal', async () => {
+      mockFetch({ 'GET /contas': responde([conta(), conta({ id: 'b3', nome: 'VR', tipo: 'beneficio', saldoCentavos: -1000, categoriasPermitidas: [] })]) })
+      render(<App />)
+      const beneficios = within(await screen.findByRole('region', { name: 'Benefícios' }))
+      expect(beneficios.getByText(texto('-R$ 10,00'), { selector: 'p' })).toBeVisible()
     })
   })
 

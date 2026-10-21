@@ -25,6 +25,7 @@ import {
   putLancamento,
 } from './api'
 import type { AjusteDeConfirmacao, Categoria, CompraParceladaAtualizarRequest, Conta, Lancamento } from './api'
+import { categoriaEfetiva, categoriasDaConta } from './categoriasDaConta'
 import { vencimentoDaFatura } from './fatura'
 import {
   formatarDataCompleta,
@@ -194,18 +195,22 @@ function FormularioDeLancamento({
 
   // Conta e data de uma parcela só mudam apagando a compra (ADR-032); o servidor recusa com 400.
   const eParcela = inicial !== null && inicial.compraParceladaId !== null
-  const categoriasDoTipo = categorias.filter((categoria) => categoria.tipo === tipo)
-  // Ao trocar o tipo a escolha antiga some da lista; cai na primeira em vez de guardar id inválido.
-  const categoriaId = categoriasDoTipo.some((c) => c.id === categoriaEscolhida)
-    ? categoriaEscolhida
-    : (categoriasDoTipo[0]?.id ?? '')
   const contaId = contas.some((c) => c.id === contaEscolhida)
     ? contaEscolhida
     : // Lançamento numa conta arquivada continua editável sem trocar de conta.
       inicial !== null && contaEscolhida === inicial.contaId
       ? contaEscolhida
       : (contas[0]?.id ?? '')
-  const cartaoEscolhido = contas.find((c) => c.id === contaId)?.cartao ?? null
+  const contaSelecionada = contas.find((c) => c.id === contaId)
+  const cartaoEscolhido = contaSelecionada?.cartao ?? null
+  const { categorias: categoriasDoTipo, restrita: categoriasRestritas } = categoriasDaConta(
+    categorias,
+    tipo,
+    contaSelecionada,
+  )
+  // Ao trocar o tipo a escolha antiga some da lista; cai na primeira em vez de guardar id inválido.
+  const categoriaId = categoriaEfetiva(categoriaEscolhida, categoriasDoTipo, categoriasRestritas)
+  const categoriaForaDaConta = categoriasRestritas && categoriaEscolhida !== '' && categoriaId === ''
   const contaArquivadaDoLancamento =
     inicial !== null && !contas.some((c) => c.id === inicial.contaId) ? inicial.contaId : null
 
@@ -347,14 +352,27 @@ function FormularioDeLancamento({
           id="lancamento-categoria"
           value={categoriaId}
           required
+          aria-describedby={categoriasRestritas ? 'lancamento-aviso-categoria' : undefined}
           onChange={(evento) => setCategoriaEscolhida(evento.target.value)}
         >
+          {categoriaId === '' && (
+            <option value="" disabled>
+              Escolha uma categoria
+            </option>
+          )}
           {categoriasDoTipo.map((categoria) => (
             <option key={categoria.id} value={categoria.id}>
               {categoria.nome}
             </option>
           ))}
         </select>
+        {categoriasRestritas && (
+          <small id="lancamento-aviso-categoria" aria-live="polite">
+            {categoriaForaDaConta
+              ? 'A categoria escolhida não vale nesta conta. Escolha outra.'
+              : 'Esta conta só aceita algumas categorias de despesa.'}
+          </small>
+        )}
       </div>
       <div className="campo">
         <label htmlFor="lancamento-conta">Conta</label>
@@ -675,11 +693,13 @@ function FormularioDeTransferencia({
   aoSalvar: () => void
   aoSessaoExpirar: () => void
 }) {
+  // Benefício não participa de transferência em nenhum dos lados (ADR-034).
+  const destinos = contas.filter((c) => c.tipo !== 'beneficio')
   // O servidor recusa cartão como origem de transferência; ele só entra como destino (pagar fatura).
-  const origens = contas.filter((c) => c.tipo !== 'cartao_credito')
+  const origens = destinos.filter((c) => c.tipo !== 'cartao_credito')
   const [origemEscolhida, setOrigemEscolhida] = useState(origens[0]?.id ?? '')
   const [destinoEscolhido, setDestinoEscolhido] = useState(
-    contas.find((c) => c.id !== origens[0]?.id)?.id ?? '',
+    destinos.find((c) => c.id !== origens[0]?.id)?.id ?? '',
   )
   const [titulo, setTitulo] = useState('')
   const [valor, setValor] = useState('')
@@ -692,11 +712,11 @@ function FormularioDeTransferencia({
 
   // A conta escolhida pode ter sido arquivada e sumido da lista; cai na primeira disponível.
   const contaOrigemId = origens.some((c) => c.id === origemEscolhida) ? origemEscolhida : (origens[0]?.id ?? '')
-  const contaDestinoId = contas.some((c) => c.id === destinoEscolhido)
+  const contaDestinoId = destinos.some((c) => c.id === destinoEscolhido)
     ? destinoEscolhido
-    : (contas.find((c) => c.id !== contaOrigemId)?.id ?? '')
+    : (destinos.find((c) => c.id !== contaOrigemId)?.id ?? '')
 
-  if (origens.length === 0 || contas.length < 2) {
+  if (origens.length === 0 || destinos.length < 2) {
     return <p>Crie duas contas para transferir.</p>
   }
 
@@ -768,7 +788,7 @@ function FormularioDeTransferencia({
           required
           onChange={(evento) => setDestinoEscolhido(evento.target.value)}
         >
-          {contas.map((conta) => (
+          {destinos.map((conta) => (
             <option key={conta.id} value={conta.id}>
               {conta.nome}
             </option>

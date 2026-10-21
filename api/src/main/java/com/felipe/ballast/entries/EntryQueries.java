@@ -82,6 +82,17 @@ class EntryQueries {
         .optional();
   }
 
+  // Conta de benefício não participa de transferência (ADR-034).
+  boolean isBenefitAccount(UUID userId, UUID accountId) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM conta WHERE usuario_id = :userId AND id = :id"
+                + " AND tipo = 'beneficio')")
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(Boolean.class)
+        .single();
+  }
+
   // Fechamento e vencimento do cartão da conta; vazio quando a conta não é de cartão. Os dois dias
   // não mudam depois que o cartão nasce (ADR-031), então não precisa travar nada para ler.
   Optional<CardBilling> findCardBilling(UUID userId, UUID accountId) {
@@ -238,6 +249,25 @@ class EntryQueries {
             .query(BigDecimal.class)
             .single();
     return total.compareTo(BALANCE_LIMIT) <= 0;
+  }
+
+  // Regra do ADR-034 para despesa. Conta sem linha na lista (qualquer tipo de conta que não seja
+  // benefício, ou benefício com lista vazia) aceita tudo. Só roda depois de travar a conta: quem
+  // troca a lista segura essa mesma trava, então a leitura vê a lista que vale no commit.
+  boolean isCategoryPermitted(UUID userId, UUID accountId, UUID categoryId) {
+    return jdbc.sql(
+            """
+            SELECT NOT EXISTS (SELECT 1 FROM conta_categoria_permitida
+                               WHERE usuario_id = :userId AND conta_id = :accountId)
+                   OR EXISTS (SELECT 1 FROM conta_categoria_permitida
+                              WHERE usuario_id = :userId AND conta_id = :accountId
+                                AND categoria_id = :categoryId)
+            """)
+        .param("userId", userId)
+        .param("accountId", accountId)
+        .param("categoryId", categoryId)
+        .query(Boolean.class)
+        .single();
   }
 
   // Confere dono e tipo juntos: categoria de receita não serve para despesa.

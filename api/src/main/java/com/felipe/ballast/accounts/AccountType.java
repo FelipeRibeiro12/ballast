@@ -8,7 +8,8 @@ public enum AccountType {
   CHECKING("corrente"),
   SAVINGS("poupanca"),
   CASH("dinheiro"),
-  CREDIT_CARD("cartao_credito");
+  CREDIT_CARD("cartao_credito"),
+  BENEFIT("beneficio");
 
   private final String value;
 

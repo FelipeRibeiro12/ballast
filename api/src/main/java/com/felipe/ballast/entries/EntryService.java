@@ -1,5 +1,6 @@
 package com.felipe.ballast.entries;
 
+import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -26,6 +27,8 @@ class EntryService {
 
   private static final String ACCOUNT_FK = "lancamento_conta_mesmo_usuario";
   private static final String CATEGORY_FK = "lancamento_categoria_mesmo_usuario_e_tipo";
+  // Gatilho da V12: a lista da conta de benefício mudou entre a conferência e o INSERT.
+  private static final String PERMITTED_TRIGGER = "lancamento_categoria_permitida_no_beneficio";
 
   // As FKs das pernas recusam apagar ou mover lançamento com a ligação viva. A checagem de
   // isTransferLeg já barra antes; isto cobre o que passar dela.
@@ -43,6 +46,7 @@ class EntryService {
       ACCOUNT_NOT_FOUND,
       ACCOUNT_ARCHIVED,
       CATEGORY_NOT_FOUND,
+      CATEGORY_NOT_PERMITTED,
       BALANCE_OUT_OF_RANGE,
       TRANSFER_LEG,
       NOT_PLANNED,
@@ -318,6 +322,11 @@ class EntryService {
         || !queries.categoryExists(userId, input.categoryId(), input.type())) {
       return Optional.of(SaveResult.Rejected.CATEGORY_NOT_FOUND);
     }
+    // Só despesa é restrita. A conta já está travada, então a lista lida aqui é a que vale.
+    if (input.type() == EntryType.EXPENSE
+        && !queries.isCategoryPermitted(userId, input.accountId(), input.categoryId())) {
+      return Optional.of(SaveResult.Rejected.CATEGORY_NOT_PERMITTED);
+    }
     return Optional.empty();
   }
 
@@ -336,6 +345,9 @@ class EntryService {
   // outro tipo) que passou pela conferência acima ainda é recusada pelo banco. O detalhe do
   // Postgres não é logado.
   private static Optional<SaveResult.Rejected> rejectionOf(Throwable error) {
+    if (Constraints.isViolated(error, PERMITTED_TRIGGER)) {
+      return Optional.of(SaveResult.Rejected.CATEGORY_NOT_PERMITTED);
+    }
     for (Throwable cause = error; cause != null; cause = cause.getCause()) {
       if (cause instanceof ConstraintViolationException violation) {
         if (ACCOUNT_FK.equals(violation.getConstraintName())) {

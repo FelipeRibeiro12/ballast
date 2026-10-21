@@ -56,7 +56,8 @@ class CardPaymentForeignKeyTest {
                 "Cartão",
                 AccountType.CREDIT_CARD,
                 BigDecimal.ZERO,
-                new CardInput(new BigDecimal("1000.00"), 5, 10, UUID.fromString(ofB)));
+                new CardInput(new BigDecimal("1000.00"), 5, 10, UUID.fromString(ofB)),
+                null);
 
     assertThat(result).isEqualTo(AccountService.CreateResult.Rejected.PAYMENT_ACCOUNT_NOT_FOUND);
     assertThat(countAccounts(a.id())).isZero();
@@ -81,7 +82,8 @@ class CardPaymentForeignKeyTest {
                 "Cartão",
                 AccountType.CREDIT_CARD,
                 BigDecimal.ZERO,
-                new CardInput(new BigDecimal("1000.00"), 5, 10, cash));
+                new CardInput(new BigDecimal("1000.00"), 5, 10, cash),
+                null);
 
     assertThat(result).isEqualTo(AccountService.CreateResult.Rejected.PAYMENT_ACCOUNT_NOT_FOUND);
     assertThat(countAccounts(a.id())).isEqualTo(1);

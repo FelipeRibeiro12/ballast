@@ -1,12 +1,12 @@
 package com.felipe.ballast.accounts;
 
+import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
-import org.postgresql.util.PSQLException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +16,8 @@ class AccountService {
 
   private static final String NAME_UNIQUE_INDEX = "conta_usuario_nome_unico";
   private static final String PAYMENT_FK = "cartao_pagamento_mesmo_usuario_e_tipo";
+  private static final String PERMITTED_CATEGORY_FK =
+      "conta_categoria_permitida_categoria_despesa_do_usuario";
 
   private final AccountRepository accounts;
   private final AccountQueries queries;
@@ -33,27 +35,84 @@ class AccountService {
     enum Rejected implements CreateResult {
       NAME_TAKEN,
       PAYMENT_ACCOUNT_NOT_FOUND,
-      PAYMENT_ACCOUNT_NOT_ELIGIBLE
+      PAYMENT_ACCOUNT_NOT_ELIGIBLE,
+      CATEGORY_NOT_FOUND
     }
   }
 
-  // Conta e cartão na mesma transação: ou nascem os dois, ou nenhum. A violação do índice de nome
-  // e a da FK do cartão saem da transação já com rollback e são capturadas aqui fora. Não há
+  sealed interface ReplaceResult {
+    record Replaced(AccountSummary account) implements ReplaceResult {}
+
+    enum Rejected implements ReplaceResult {
+      ACCOUNT_NOT_FOUND,
+      NOT_BENEFIT,
+      CATEGORY_NOT_FOUND
+    }
+  }
+
+  // Conta, cartão e lista de categorias na mesma transação: ou nasce tudo, ou nada. A violação do
+  // índice de nome e a das FKs saem da transação já com rollback e são capturadas aqui fora. Não há
   // SELECT de nome antes: duas requisições simultâneas passariam juntas, só o índice segura.
+  // permitted é nulo fora de conta de benefício.
   CreateResult create(
-      UUID userId, String name, AccountType type, BigDecimal initialBalance, CardInput card) {
+      UUID userId,
+      String name,
+      AccountType type,
+      BigDecimal initialBalance,
+      CardInput card,
+      List<UUID> permitted) {
     try {
-      return transaction.execute(status -> createLocked(userId, name, type, initialBalance, card));
+      return transaction.execute(
+          status -> createLocked(userId, name, type, initialBalance, card, permitted));
     } catch (DataIntegrityViolationException e) {
       if (isDuplicateName(e)) {
         return CreateResult.Rejected.NAME_TAKEN;
       }
-      return paymentRejectionOf(e).orElseThrow(() -> e);
+      return rejectionOf(e).orElseThrow(() -> e);
     }
   }
 
+  // Troca a lista inteira. A conta fica travada FOR UPDATE até o commit (V12): lançamento de
+  // despesa nessa conta espera aqui e é avaliado contra a lista nova. Apagar e reinserir na mesma
+  // transação não deixa o gatilho ver a conta sem lista no meio.
+  ReplaceResult replacePermitted(UUID userId, UUID id, List<UUID> ids) {
+    try {
+      return transaction.execute(status -> replaceLocked(userId, id, ids));
+    } catch (DataIntegrityViolationException e) {
+      if (Constraints.isViolated(e, PERMITTED_CATEGORY_FK)) {
+        return ReplaceResult.Rejected.CATEGORY_NOT_FOUND;
+      }
+      throw e;
+    }
+  }
+
+  private ReplaceResult replaceLocked(UUID userId, UUID id, List<UUID> ids) {
+    Optional<AccountType> type = queries.lockAccountType(userId, id);
+    if (type.isEmpty()) {
+      return ReplaceResult.Rejected.ACCOUNT_NOT_FOUND;
+    }
+    if (type.get() != AccountType.BENEFIT) {
+      return ReplaceResult.Rejected.NOT_BENEFIT;
+    }
+    if (queries.countExpenseCategories(userId, ids) != ids.size()) {
+      return ReplaceResult.Rejected.CATEGORY_NOT_FOUND;
+    }
+    queries.deletePermitted(userId, id);
+    queries.insertPermitted(userId, id, ids);
+    return queries.find(userId, id).<ReplaceResult>map(ReplaceResult.Replaced::new).orElseThrow();
+  }
+
   private CreateResult createLocked(
-      UUID userId, String name, AccountType type, BigDecimal initialBalance, CardInput card) {
+      UUID userId,
+      String name,
+      AccountType type,
+      BigDecimal initialBalance,
+      CardInput card,
+      List<UUID> permitted) {
+    if (permitted != null
+        && queries.countExpenseCategories(userId, permitted) != permitted.size()) {
+      return CreateResult.Rejected.CATEGORY_NOT_FOUND;
+    }
     if (card != null) {
       // Conta de outro usuário e conta inexistente dão a mesma resposta. A conferência de dentro
       // só dá a mensagem; quem segura a corrida é a FK composta da V10.
@@ -71,6 +130,9 @@ class AccountService {
     UUID id = accounts.saveAndFlush(new Account(userId, name, type, initialBalance)).getId();
     if (card != null) {
       queries.insertCard(userId, id, card);
+    }
+    if (permitted != null) {
+      queries.insertPermitted(userId, id, permitted);
     }
     return queries.find(userId, id).<CreateResult>map(CreateResult.Created::new).orElseThrow();
   }
@@ -93,15 +155,14 @@ class AccountService {
     return queries.find(userId, id);
   }
 
-  // Só a FK da conta de pagamento chega aqui com dado vindo do cliente. Quando a conferência de
-  // dentro passou e a FK recusou, a conta mudou no meio do caminho.
-  private static Optional<CreateResult> paymentRejectionOf(Throwable error) {
-    for (Throwable cause = error; cause != null; cause = cause.getCause()) {
-      if (cause instanceof PSQLException psql
-          && psql.getServerErrorMessage() != null
-          && PAYMENT_FK.equals(psql.getServerErrorMessage().getConstraint())) {
-        return Optional.of(CreateResult.Rejected.PAYMENT_ACCOUNT_NOT_FOUND);
-      }
+  // Só as FKs da conta de pagamento e da categoria chegam aqui com dado vindo do cliente. Quando a
+  // conferência de dentro passou e a FK recusou, o recurso mudou no meio do caminho.
+  private static Optional<CreateResult> rejectionOf(Throwable error) {
+    if (Constraints.isViolated(error, PAYMENT_FK)) {
+      return Optional.of(CreateResult.Rejected.PAYMENT_ACCOUNT_NOT_FOUND);
+    }
+    if (Constraints.isViolated(error, PERMITTED_CATEGORY_FK)) {
+      return Optional.of(CreateResult.Rejected.CATEGORY_NOT_FOUND);
     }
     return Optional.empty();
   }

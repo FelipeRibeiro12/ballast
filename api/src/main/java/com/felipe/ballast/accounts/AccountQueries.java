@@ -41,7 +41,12 @@ class AccountQueries {
       SELECT c.id, c.nome, c.tipo, c.moeda, c.saldo_inicial,
              c.saldo_inicial + COALESCE(m.movimento, 0) AS saldo,
              c.arquivada, c.criada_em,
-             ca.limite, ca.dia_fechamento, ca.dia_vencimento, ca.conta_pagamento_id
+             ca.limite, ca.dia_fechamento, ca.dia_vencimento, ca.conta_pagamento_id,
+             CASE WHEN c.tipo = 'beneficio' THEN
+               ARRAY(SELECT p.categoria_id FROM conta_categoria_permitida p
+                     WHERE p.conta_id = c.id AND p.usuario_id = c.usuario_id
+                     ORDER BY p.categoria_id)
+             END AS categorias_permitidas
       FROM conta c
       LEFT JOIN movement m ON m.conta_id = c.id
       LEFT JOIN cartao ca ON ca.conta_id = c.id AND ca.usuario_id = c.usuario_id
@@ -97,6 +102,57 @@ class AccountQueries {
         .optional();
   }
 
+  // Trava a linha da conta até o fim da transação e devolve o tipo. Vazio para conta alheia ou
+  // inexistente. É a trava que a V12 exige de quem troca a lista: o gatilho dos lançamentos espera
+  // este commit e já enxerga a lista nova.
+  Optional<AccountType> lockAccountType(UUID userId, UUID id) {
+    return jdbc.sql("SELECT tipo FROM conta WHERE usuario_id = :userId AND id = :id FOR UPDATE")
+        .param("userId", userId)
+        .param("id", id)
+        .query((rs, row) -> AccountType.fromValue(rs.getString("tipo")))
+        .optional();
+  }
+
+  // Quantas das categorias são despesa do dono. Só dá a mensagem certa: a FK composta da V12 é
+  // quem segura a corrida.
+  long countExpenseCategories(UUID userId, List<UUID> ids) {
+    if (ids.isEmpty()) {
+      return 0;
+    }
+    return jdbc.sql(
+            "SELECT count(*) FROM categoria"
+                + " WHERE usuario_id = :userId AND tipo = 'despesa' AND id IN (:ids)")
+        .param("userId", userId)
+        .param("ids", ids)
+        .query(Long.class)
+        .single();
+  }
+
+  // tipo_conta e tipo_categoria são colunas geradas: o INSERT não as cita. O SELECT na categoria
+  // amarra o dono de novo, além da FK.
+  void insertPermitted(UUID userId, UUID accountId, List<UUID> ids) {
+    if (ids.isEmpty()) {
+      return;
+    }
+    jdbc.sql(
+            "INSERT INTO conta_categoria_permitida (conta_id, categoria_id, usuario_id)"
+                + " SELECT :accountId, id, :userId FROM categoria"
+                + " WHERE usuario_id = :userId AND tipo = 'despesa' AND id IN (:ids)")
+        .param("accountId", accountId)
+        .param("userId", userId)
+        .param("ids", ids)
+        .update();
+  }
+
+  void deletePermitted(UUID userId, UUID accountId) {
+    jdbc.sql(
+            "DELETE FROM conta_categoria_permitida"
+                + " WHERE usuario_id = :userId AND conta_id = :accountId")
+        .param("userId", userId)
+        .param("accountId", accountId)
+        .update();
+  }
+
   // tipo_conta e pagamento_aceito são colunas geradas: o INSERT não as cita.
   void insertCard(UUID userId, UUID accountId, CardInput card) {
     jdbc.sql(
@@ -124,7 +180,17 @@ class AccountQueries {
         rs.getBigDecimal("saldo"),
         rs.getBoolean("arquivada"),
         rs.getObject("criada_em", OffsetDateTime.class).toInstant(),
-        mapCard(rs));
+        mapCard(rs),
+        mapPermitted(rs));
+  }
+
+  // Nulo fora de conta de benefício; vazio quando a conta aceita qualquer categoria.
+  private static List<UUID> mapPermitted(ResultSet rs) throws SQLException {
+    java.sql.Array array = rs.getArray("categorias_permitidas");
+    if (array == null) {
+      return null;
+    }
+    return List.of((UUID[]) array.getArray());
   }
 
   private static AccountSummary.CardSummary mapCard(ResultSet rs) throws SQLException {

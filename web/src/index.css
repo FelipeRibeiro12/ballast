@@ -1067,6 +1067,37 @@ p[role='status'] {
   font-weight: 650;
 }
 
+.beneficios-valor {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.beneficios-lista {
+  margin-top: var(--esp-3);
+}
+
+.beneficios-lista li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--esp-3);
+  padding: var(--esp-2) 0;
+  border-top: 1px solid var(--borda);
+  font-size: 0.9375rem;
+  color: var(--texto-suave);
+  overflow-wrap: anywhere;
+}
+
+.beneficios-saldo {
+  flex: none;
+  color: var(--texto);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
 .cartao-rodape {
   margin-top: var(--esp-3);
   text-align: right;
@@ -1665,6 +1696,49 @@ p[role='status'] {
 
 .barra.critica > div {
   background: var(--despesa);
+}
+
+.conta-categorias {
+  font-size: 0.875rem;
+  color: var(--texto-fraco);
+}
+
+.conta-categorias ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-1) var(--esp-2);
+}
+
+/* Nome comprido de categoria quebra dentro do selo em vez de estourar o cartão. */
+.conta-categorias .selo {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.categorias-permitidas-ajuda {
+  margin-bottom: var(--esp-3);
+  font-size: 0.875rem;
+  color: var(--texto-suave);
+  line-height: 1.4;
+}
+
+.categorias-lista {
+  display: grid;
+  gap: var(--esp-1);
+}
+
+.categorias-lista label {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--texto);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.categorias-lista input[type='checkbox'] {
+  flex: none;
 }
 
 .conta-acoes {

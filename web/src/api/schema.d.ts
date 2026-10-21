@@ -191,6 +191,26 @@ export interface paths {
         patch: operations["patchContasById"];
         trace?: never;
     };
+    "/contas/{id}/categorias-permitidas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Troca a lista de categorias permitidas de uma conta de benefício
+         * @description Substitui a lista inteira. Lista vazia libera qualquer categoria de despesa. Não mexe em lançamento já gravado.
+         */
+        put: operations["putContasByIdCategoriasPermitidas"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/contas/{id}/faturas": {
         parameters: {
             query?: never;
@@ -355,7 +375,7 @@ export interface paths {
         };
         /**
          * Série diária do saldo projetado por dataCaixa
-         * @description Um ponto por dia, de hoje (America/Sao_Paulo) até hoje + dias - 1. O saldo do dia é o saldo inicial das contas mais tudo que é realizado ou previsto com dataCaixa até o dia; cancelado nunca entra, e a prevista vencida entra pela própria data. Sem contaId soma as contas ativas (transferência entre duas delas se anula; de ativa para arquivada sai do total). Com contaId vale só a conta, também arquivada, e a transferência conta pelo sinal da perna dela. entradas e saídas de um dia são só os lançamentos com dataCaixa naquele dia; a perna de transferência só conta quando a outra perna está fora do filtro.
+         * @description Um ponto por dia, de hoje (America/Sao_Paulo) até hoje + dias - 1. O saldo do dia é o saldo inicial das contas mais tudo que é realizado ou previsto com dataCaixa até o dia; cancelado nunca entra, e a prevista vencida entra pela própria data. Sem contaId soma as contas ativas, menos as de benefício (transferência entre duas delas se anula; de ativa para arquivada sai do total). Com contaId vale só a conta, também arquivada, e a transferência conta pelo sinal da perna dela. entradas e saídas de um dia são só os lançamentos com dataCaixa naquele dia; a perna de transferência só conta quando a outra perna está fora do filtro.
          */
         get: operations["getSaldoProjetado"];
         put?: never;
@@ -461,6 +481,10 @@ export interface components {
             /** @enum {string} */
             tipo: "receita" | "despesa";
         };
+        CategoriasPermitidasRequest: {
+            /** @description Lista inteira que passa a valer. Vazia libera qualquer categoria de despesa */
+            categoriaIds: string[];
+        };
         CompraParcelada: {
             /** Format: uuid */
             categoriaId: string;
@@ -544,6 +568,8 @@ export interface components {
             arquivada: boolean;
             /** @description Dados do cartão; nulo nas contas que não são de cartão de crédito */
             cartao: components["schemas"]["Cartao"] | null;
+            /** @description Ids das categorias de despesa que a conta de benefício aceita, em ordem estável. Vazia quando qualquer categoria é aceita; nula nos outros tipos */
+            categoriasPermitidas: string[] | null;
             /** Format: date-time */
             criadaEm: string;
             /** Format: uuid */
@@ -562,11 +588,13 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio";
         };
         CriarContaRequest: {
             /** @description Obrigatório quando tipo é cartao_credito e proibido nos outros tipos */
             cartao?: components["schemas"]["CartaoRequest"];
+            /** @description Só para tipo beneficio: ids de categorias de despesa que a conta aceita. Ausente ou vazia aceita qualquer categoria. Proibido nos outros tipos */
+            categoriasPermitidas?: string[];
             nome: string;
             /**
              * Format: int64
@@ -574,7 +602,7 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio";
         };
         DiaProjetado: {
             /** Format: date */
@@ -1763,6 +1791,86 @@ export interface operations {
                 };
             };
             /** @description Entrada inválida, inclusive campo não declarado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putContasByIdCategoriasPermitidas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoriasPermitidasRequest"];
+            };
+        };
+        responses: {
+            /** @description Conta com a lista nova */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conta"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado, mais de 50 itens, item repetido, categoria inexistente, de outro usuário, de receita ou id malformado, e conta que não é de benefício */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -60,6 +60,8 @@ function FormularioDePagamento({
   aoSessaoExpirar: () => void
 }) {
   const pagadoras = contasAtivas.filter(eContaDePagamento)
+  // Benefício não recebe transferência (ADR-034); a origem já exclui porque só vale corrente e poupança.
+  const destinos = contasAtivas.filter((c) => c.tipo !== 'beneficio')
   const contaPagamentoId = cartao.cartao?.contaPagamentoId ?? ''
   // Conta de pagamento arquivada não aparece nas ativas: o usuário escolhe outra.
   const pagamentoArquivada = !pagadoras.some((c) => c.id === contaPagamentoId)
@@ -74,7 +76,7 @@ function FormularioDePagamento({
   const emVoo = useRef(false)
 
   const origemId = pagadoras.some((c) => c.id === origemEscolhida) ? origemEscolhida : (pagadoras[0]?.id ?? '')
-  const destinoId = contasAtivas.some((c) => c.id === destinoEscolhido) ? destinoEscolhido : cartao.id
+  const destinoId = destinos.some((c) => c.id === destinoEscolhido) ? destinoEscolhido : cartao.id
 
   async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
     evento.preventDefault()
@@ -151,7 +153,7 @@ function FormularioDePagamento({
           required
           onChange={(evento) => setDestinoEscolhido(evento.target.value)}
         >
-          {contasAtivas.map((conta) => (
+          {destinos.map((conta) => (
             <option key={conta.id} value={conta.id}>
               {conta.nome}
             </option>

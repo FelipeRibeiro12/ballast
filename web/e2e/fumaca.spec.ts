@@ -101,6 +101,19 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await expect(conta('Cartão E2E')).toContainText('Disponível')
   })
 
+  await test.step('vale-benefício com Alimentação permitida', async () => {
+    const novaConta = await abrirNovaConta()
+    await novaConta.getByLabel('Nome').fill('VR E2E')
+    await novaConta.getByLabel('Tipo').selectOption({ label: 'Vale-benefício' })
+    await novaConta.getByLabel('Saldo inicial em reais (opcional)').fill('500,00')
+    await novaConta.getByRole('checkbox', { name: 'Alimentação' }).check()
+    await capturar(page, projeto, '04a-novo-beneficio')
+    await novaConta.getByRole('button', { name: 'Criar conta' }).click()
+    await expect(painel).toHaveCount(0)
+    await expect(conta('VR E2E')).toContainText(reais('500,00'))
+    await expect(conta('VR E2E').getByRole('list', { name: 'Categorias permitidas em VR E2E' })).toContainText('Alimentação')
+  })
+
   const lancamento = page.getByRole('form', { name: 'Novo lançamento' })
 
   async function abrirNovoLancamento(): Promise<void> {
@@ -121,6 +134,22 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await capturar(page, projeto, '06-despesa')
     await irPara(page, 'Contas')
     await expect(conta('Corrente E2E')).toContainText(reais('900,00'))
+  })
+
+  await test.step('despesa de Alimentação no vale-benefício', async () => {
+    await abrirNovoLancamento()
+    await lancamento.getByLabel('Título').fill('Almoço')
+    await lancamento.getByLabel('Valor em reais').fill('50,00')
+    await lancamento.getByLabel('Conta').selectOption({ label: 'VR E2E' })
+    // O select só oferece o que a conta aceita e o campo pede a escolha.
+    const categoria = lancamento.getByLabel('Categoria')
+    await expect(categoria.locator('option:not([disabled])')).toHaveText(['Alimentação'])
+    await categoria.selectOption({ label: 'Alimentação' })
+    await capturar(page, projeto, '06a-despesa-beneficio')
+    await lancamento.getByRole('button', { name: 'Adicionar lançamento' }).click()
+    await expect(painel).toHaveCount(0)
+    await irPara(page, 'Contas')
+    await expect(conta('VR E2E')).toContainText(reais('450,00'))
   })
 
   await test.step('compra parcelada no cartão', async () => {
@@ -153,6 +182,9 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await abrirNovoLancamento()
     await page.getByRole('button', { name: 'Transferência', exact: true }).click()
     const transferencia = page.getByRole('form', { name: 'Nova transferência' })
+    // Benefício não participa de transferência.
+    await expect(transferencia.getByLabel('Conta de origem').locator('option', { hasText: 'VR E2E' })).toHaveCount(0)
+    await expect(transferencia.getByLabel('Conta de destino').locator('option', { hasText: 'VR E2E' })).toHaveCount(0)
     await transferencia.getByLabel('Conta de origem').selectOption({ label: 'Corrente E2E' })
     await transferencia.getByLabel('Conta de destino').selectOption({ label: 'Poupança E2E' })
     await transferencia.getByLabel('Valor em reais').fill('200,00')
@@ -197,6 +229,9 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
   await test.step('capturas das seções', async () => {
     await irPara(page, 'Início')
     await expect(page.getByRole('list', { name: 'Próximas previstas' })).toBeVisible()
+    // O saldo do vale fica no cartão próprio e fora de "Saldo nas contas".
+    await expect(page.getByRole('region', { name: 'Benefícios' })).toContainText(reais('450,00'))
+    await expect(page.getByRole('region', { name: 'Resumo das contas' })).not.toContainText(reais('450,00'))
     await capturar(page, projeto, '12-inicio')
     await irPara(page, 'Lançamentos')
     await expect(page.getByRole('region', { name: 'Lançamentos' })).toContainText('Mercado')

@@ -40,6 +40,8 @@ class RecurrenceController {
   private static final ErrorResponse NOT_FOUND = new ErrorResponse("não encontrado");
   private static final ErrorResponse ACCOUNT_NOT_FOUND = new ErrorResponse("conta não encontrada");
   private static final ErrorResponse ACCOUNT_ARCHIVED = new ErrorResponse("conta arquivada");
+  private static final ErrorResponse CATEGORY_NOT_PERMITTED =
+      new ErrorResponse("categoria não permitida nesta conta");
   private static final ErrorResponse CATEGORY_NOT_FOUND =
       new ErrorResponse("categoria não encontrada");
   private static final ErrorResponse INVALID_TYPE =
@@ -132,6 +134,7 @@ class RecurrenceController {
       case ACCOUNT_NOT_FOUND -> ResponseEntity.badRequest().body(ACCOUNT_NOT_FOUND);
       case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
       case CATEGORY_NOT_FOUND -> ResponseEntity.badRequest().body(CATEGORY_NOT_FOUND);
+      case CATEGORY_NOT_PERMITTED -> ResponseEntity.badRequest().body(CATEGORY_NOT_PERMITTED);
     };
   }
 

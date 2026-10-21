@@ -203,6 +203,24 @@ class RecurrenceQueries {
         .single();
   }
 
+  // Regra do ADR-034 para despesa: conta sem lista (qualquer tipo que não seja benefício, ou
+  // benefício com lista vazia) aceita tudo. Roda com a conta travada na criação.
+  boolean isCategoryPermitted(UUID userId, UUID accountId, UUID categoryId) {
+    return jdbc.sql(
+            """
+            SELECT NOT EXISTS (SELECT 1 FROM conta_categoria_permitida
+                               WHERE usuario_id = :userId AND conta_id = :accountId)
+                   OR EXISTS (SELECT 1 FROM conta_categoria_permitida
+                              WHERE usuario_id = :userId AND conta_id = :accountId
+                                AND categoria_id = :categoryId)
+            """)
+        .param("userId", userId)
+        .param("accountId", accountId)
+        .param("categoryId", categoryId)
+        .query(Boolean.class)
+        .single();
+  }
+
   UUID insertRule(UUID userId, RecurrenceRule rule) {
     UUID id = newId();
     jdbc.sql(

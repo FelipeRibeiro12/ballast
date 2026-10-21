@@ -1,5 +1,6 @@
 package com.felipe.ballast.recurrences;
 
+import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.LockTimeouts;
 import com.felipe.ballast.web.UnexpectedErrorLog;
 import java.util.List;
@@ -58,6 +59,17 @@ class RecurrenceJob {
             skipped++;
             log.warn(
                 "recorrência pulada por trava ocupada usuario_id={} template_id={}",
+                ref.userId(),
+                ref.templateId());
+            after = ref.templateId();
+            continue;
+          }
+          if (Constraints.isViolated(e, RecurrenceService.PERMITTED_TRIGGER)) {
+            // A categoria saiu da lista da conta de benefício depois que o template nasceu. Fica
+            // parado até o usuário trocar a categoria ou a lista; a rodada segue.
+            skipped++;
+            log.warn(
+                "recorrência pulada: categoria fora da lista da conta usuario_id={} template_id={}",
                 ref.userId(),
                 ref.templateId());
             after = ref.templateId();

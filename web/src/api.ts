@@ -174,7 +174,7 @@ export class ContaInvalidaError extends ApiError {
   }
 }
 
-const TIPOS_DE_CONTA: readonly string[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito']
+const TIPOS_DE_CONTA: readonly string[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito', 'beneficio']
 
 function isDiaDoMes(valor: unknown): boolean {
   return Number.isSafeInteger(valor) && (valor as number) >= 1 && (valor as number) <= 31
@@ -202,6 +202,13 @@ function cartaoCoerenteComOTipo(tipo: unknown, cartao: unknown): boolean {
   return tipo === 'cartao_credito' ? isCartao(cartao) : cartao === null
 }
 
+// Lista (vazia quando tudo é aceito) só no benefício; null nos outros tipos.
+function categoriasCoerentesComOTipo(tipo: unknown, categorias: unknown): boolean {
+  return tipo === 'beneficio'
+    ? Array.isArray(categorias) && categorias.every((id) => typeof id === 'string')
+    : categorias === null
+}
+
 function isConta(valor: unknown): valor is Conta {
   return (
     typeof valor === 'object' &&
@@ -225,7 +232,9 @@ function isConta(valor: unknown): valor is Conta {
     'criadaEm' in valor &&
     typeof valor.criadaEm === 'string' &&
     'cartao' in valor &&
-    cartaoCoerenteComOTipo(valor.tipo, valor.cartao)
+    cartaoCoerenteComOTipo(valor.tipo, valor.cartao) &&
+    'categoriasPermitidas' in valor &&
+    categoriasCoerentesComOTipo(valor.tipo, valor.categoriasPermitidas)
   )
 }
 
@@ -279,6 +288,18 @@ export async function patchConta(id: string, arquivada: boolean): Promise<Conta>
   })
   if (!resposta.ok) return recusarResposta(resposta, 'PATCH /contas/{id}')
   return lerConta(resposta, 'PATCH /contas/{id}')
+}
+
+// Troca a lista inteira; vazia libera qualquer categoria de despesa.
+export async function putCategoriasPermitidas(contaId: string, categoriaIds: string[]): Promise<Conta> {
+  const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(contaId)}/categorias-permitidas`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ categoriaIds }),
+  })
+  if (!resposta.ok) return recusarResposta(resposta, 'PUT /contas/{id}/categorias-permitidas')
+  return lerConta(resposta, 'PUT /contas/{id}/categorias-permitidas')
 }
 
 export type Fatura = components['schemas']['Fatura']

@@ -62,6 +62,15 @@ export function IconeRecorrencias({ tamanho }: Props) {
   )
 }
 
+export function IconeBeneficio({ tamanho }: Props) {
+  return (
+    <Base tamanho={tamanho}>
+      <path d="M3 9V7a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v2a2.5 2.5 0 0 0 0 5v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3a2.5 2.5 0 0 0 0-5Z" />
+      <path d="M14 8.5v1M14 11.5v1M14 14.5v1" />
+    </Base>
+  )
+}
+
 export function IconeMais({ tamanho }: Props) {
   return (
     <Base tamanho={tamanho}>

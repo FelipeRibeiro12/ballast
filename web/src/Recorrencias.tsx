@@ -14,6 +14,7 @@ import type { Categoria, Conta, Recorrencia, RegraRecorrencia } from './api'
 import { formatarDataCompleta, hojeLocal } from './datas'
 import { somarLinhas, validarDivisao, valoresGerados } from './divisao'
 import type { LinhaDeParcela, ModoDivisao } from './divisao'
+import { categoriaEfetiva, categoriasDaConta } from './categoriasDaConta'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
 import { IconeMais, IconeRelogio } from './icones'
 import Painel from './Painel'
@@ -138,12 +139,15 @@ function FormularioDeRecorrencia({
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
   const emVoo = useRef(false)
 
-  const categoriasDoTipo = categorias.filter((categoria) => categoria.tipo === tipo)
-  // Ao trocar o tipo a escolha antiga some da lista; cai na primeira em vez de guardar id inválido.
-  const categoriaId = categoriasDoTipo.some((c) => c.id === categoriaEscolhida)
-    ? categoriaEscolhida
-    : (categoriasDoTipo[0]?.id ?? '')
   const contaId = contas.some((c) => c.id === contaEscolhida) ? contaEscolhida : (contas[0]?.id ?? '')
+  const { categorias: categoriasDoTipo, restrita: categoriasRestritas } = categoriasDaConta(
+    categorias,
+    tipo,
+    contas.find((c) => c.id === contaId),
+  )
+  // Ao trocar o tipo a escolha antiga some da lista; cai na primeira em vez de guardar id inválido.
+  const categoriaId = categoriaEfetiva(categoriaEscolhida, categoriasDoTipo, categoriasRestritas)
+  const categoriaForaDaConta = categoriasRestritas && categoriaEscolhida !== '' && categoriaId === ''
   // A divisão só existe em mensal; trocar a frequência esconde o bloco sem perder o que foi digitado.
   const dividindo = dividir && frequencia === 'mensal'
   const valorTotal = lerValorPositivo(valor)
@@ -291,14 +295,27 @@ function FormularioDeRecorrencia({
           id="recorrencia-categoria"
           value={categoriaId}
           required
+          aria-describedby={categoriasRestritas ? 'recorrencia-aviso-categoria' : undefined}
           onChange={(evento) => setCategoriaEscolhida(evento.target.value)}
         >
+          {categoriaId === '' && (
+            <option value="" disabled>
+              Escolha uma categoria
+            </option>
+          )}
           {categoriasDoTipo.map((categoria) => (
             <option key={categoria.id} value={categoria.id}>
               {categoria.nome}
             </option>
           ))}
         </select>
+        {categoriasRestritas && (
+          <small id="recorrencia-aviso-categoria" aria-live="polite">
+            {categoriaForaDaConta
+              ? 'A categoria escolhida não vale nesta conta. Escolha outra.'
+              : 'Esta conta só aceita algumas categorias de despesa.'}
+          </small>
+        )}
       </div>
       <div className="campo">
         <label htmlFor="recorrencia-conta">Conta</label>

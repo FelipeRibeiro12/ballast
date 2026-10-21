@@ -27,6 +27,7 @@ import {
   postLancamento,
   putLancamento,
   patchConta,
+  putCategoriasPermitidas,
   postCadastro,
   postConta,
   RecorrenciaInvalidaError,
@@ -160,6 +161,7 @@ describe('rotas de contas', () => {
     arquivada: false,
     criadaEm: '2026-10-19T12:00:00Z',
     cartao: null,
+    categoriasPermitidas: null,
   }
 
   function responder(corpo: unknown, status: number): void {
@@ -219,6 +221,11 @@ describe('rotas de contas', () => {
     ['cartão de crédito sem cartao', { ...conta, tipo: 'cartao_credito', cartao: null }],
     ['corrente com cartao', { ...conta, cartao }],
     ['sem a chave cartao', (({ cartao: _omitido, ...resto }) => resto)({ ...conta, cartao: null })],
+    ['sem a chave categoriasPermitidas', (({ categoriasPermitidas: _omitido, ...resto }) => resto)(conta)],
+    ['benefício com categoriasPermitidas nula', { ...conta, tipo: 'beneficio', categoriasPermitidas: null }],
+    ['corrente com lista de categorias', { ...conta, categoriasPermitidas: [] }],
+    ['benefício com item que não é string', { ...conta, tipo: 'beneficio', categoriasPermitidas: [7] }],
+    ['benefício com categoriasPermitidas que não é lista', { ...conta, tipo: 'beneficio', categoriasPermitidas: 'x' }],
     ['dia de fechamento 0', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, diaFechamento: 0 } }],
     ['dia de vencimento 32', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, diaVencimento: 32 } }],
     ['dia fracionado', { ...conta, tipo: 'cartao_credito', cartao: { ...cartao, diaVencimento: 1.5 } }],
@@ -229,6 +236,13 @@ describe('rotas de contas', () => {
   ])('fetchContas recusa incoerência: %s', async (_nome, invalida) => {
     responder([invalida], 200)
     await expect(fetchContas(false)).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('fetchContas aceita benefício com lista vazia ou preenchida', async () => {
+    const aberta = { ...conta, tipo: 'beneficio', categoriasPermitidas: [] }
+    const restrita = { ...conta, id: 'b2', tipo: 'beneficio', categoriasPermitidas: ['cat-1', 'cat-2'] }
+    responder([aberta, restrita], 200)
+    expect(await fetchContas(false)).toEqual([aberta, restrita])
   })
 
   it('fetchContas recusa corpo que não é lista', async () => {
@@ -259,8 +273,38 @@ describe('rotas de contas', () => {
     })
   })
 
+  it('postConta manda categoriasPermitidas do benefício', async () => {
+    const beneficio = { ...conta, tipo: 'beneficio', categoriasPermitidas: ['cat-1'] }
+    responder(beneficio, 201)
+    const dados: CriarContaRequest = { nome: 'VR', tipo: 'beneficio', saldoInicialCentavos: 0, categoriasPermitidas: ['cat-1'] }
+    expect(await postConta(dados)).toEqual(beneficio)
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))).toEqual(dados)
+  })
+
+  it('putCategoriasPermitidas põe o id codificado na URL, manda categoriaIds e devolve a conta', async () => {
+    const beneficio = { ...conta, tipo: 'beneficio', categoriasPermitidas: ['cat-1'] }
+    responder(beneficio, 200)
+    expect(await putCategoriasPermitidas('a/b', ['cat-1'])).toEqual(beneficio)
+    expect(fetch).toHaveBeenCalledWith('/contas/a%2Fb/categorias-permitidas', {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"categoriaIds":["cat-1"]}',
+    })
+  })
+
+  it('putCategoriasPermitidas recusa resposta fora do formato', async () => {
+    responder({ ...conta, tipo: 'beneficio', categoriasPermitidas: null }, 200)
+    await expect(putCategoriasPermitidas('1', [])).rejects.toBeInstanceOf(ApiError)
+  })
+
   it('mapeia 401, 404, 409, 400, 503 e o resto em erros tipados', async () => {
-    const chamadas = [() => fetchContas(false), () => postConta({ nome: 'x', tipo: 'corrente', saldoInicialCentavos: 0 }), () => patchConta('1', true)]
+    const chamadas = [
+      () => fetchContas(false),
+      () => postConta({ nome: 'x', tipo: 'corrente', saldoInicialCentavos: 0 }),
+      () => patchConta('1', true),
+      () => putCategoriasPermitidas('1', []),
+    ]
     for (const chamar of chamadas) {
       responder({ erro: 'x' }, 401)
       await expect(chamar()).rejects.toBeInstanceOf(SessaoExpiradaError)

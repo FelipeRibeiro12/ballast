@@ -15,6 +15,7 @@ const conta = {
   arquivada: false,
   criadaEm: '2026-10-19T12:00:00Z',
   cartao: null,
+  categoriasPermitidas: null,
 }
 
 const categorias = [
@@ -788,6 +789,55 @@ describe('Recorrencias', () => {
       expect(texto).toContain('Todo mês nos dias 15 e 30')
       expect(texto).toContain('dia 15: R$ 2.000,00 (40%)')
       expect(texto).toContain('dia 30: R$ 3.000,00 (60%)')
+    })
+  })
+
+  describe('benefício com restrição', () => {
+    const vr = { ...conta, id: 'b1', nome: 'VR', tipo: 'beneficio', categoriasPermitidas: ['cd2'] }
+    const comBeneficio = {
+      ...base,
+      'GET /contas': responde([conta, vr]),
+      'GET /categorias': responde([
+        ...categorias,
+        { id: 'cd2', nome: 'Mercado', tipo: 'despesa', paiId: null, cor: null, icone: null },
+      ]),
+    }
+    const opcoes = (select: HTMLElement): (string | null)[] =>
+      within(select).getAllByRole('option').map((opcao) => opcao.textContent)
+
+    it('despesa em benefício com lista mostra só as permitidas e receita mostra todas', async () => {
+      mockFetch(comBeneficio)
+      render(<App />)
+      const form = await formulario()
+      expect(opcoes(within(form).getByLabelText('Categoria'))).toEqual(['Moradia', 'Mercado'])
+      mudar(form, 'Conta', 'b1')
+      expect(opcoes(within(form).getByLabelText('Categoria'))).toEqual(['Escolha uma categoria', 'Mercado'])
+      mudar(form, 'Tipo', 'receita')
+      expect(opcoes(within(form).getByLabelText('Categoria'))).toEqual(['Salário'])
+    })
+
+    it('trocar para benefício limpa a categoria que não vale e pede outra', async () => {
+      mockFetch(comBeneficio)
+      render(<App />)
+      const form = await formulario()
+      mudar(form, 'Categoria', 'cd1')
+      mudar(form, 'Conta', 'b1')
+      expect(within(form).getByLabelText('Categoria')).toHaveValue('')
+      expect(within(form).getByText(/a categoria escolhida não vale nesta conta/i)).toBeVisible()
+    })
+
+    it('400 de categoria não permitida mostra a mensagem do servidor', async () => {
+      mockFetch({
+        ...comBeneficio,
+        'POST /recorrencias': responde({ erro: 'categoria não permitida nesta conta' }, 400),
+      })
+      render(<App />)
+      const form = await formulario()
+      preencher(form, 'Feira', '200,00')
+      mudar(form, 'Conta', 'b1')
+      mudar(form, 'Categoria', 'cd2')
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent('categoria não permitida nesta conta')
     })
   })
 })

@@ -6,21 +6,28 @@ import {
   NomeDeContaRepetidoError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
+  fetchCategorias,
   fetchContas,
   patchConta,
   postConta,
+  putCategoriasPermitidas,
 } from './api'
-import type { Conta, CriarContaRequest } from './api'
+import type { Categoria, Conta, CriarContaRequest } from './api'
 import Faturas from './Faturas'
 import { formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
-import { IconeBanco, IconeCartao, IconeDinheiro, IconeMais } from './icones'
+import { IconeBanco, IconeBeneficio, IconeCartao, IconeDinheiro, IconeMais } from './icones'
 import Painel from './Painel'
-import { Carregando, EstadoVazio } from './ui'
+import { Carregando, EstadoVazio, Selo } from './ui'
 
 type EstadoLista =
   | { tipo: 'carregando' }
   | { tipo: 'erro'; mensagem: string }
   | { tipo: 'ok'; contas: Conta[] }
+
+type EstadoCategorias =
+  | { tipo: 'carregando' }
+  | { tipo: 'erro' }
+  | { tipo: 'ok'; despesas: Categoria[] }
 
 type TipoDeConta = Conta['tipo']
 
@@ -29,15 +36,17 @@ const ROTULO_DO_TIPO: Record<TipoDeConta, string> = {
   poupanca: 'Poupança',
   dinheiro: 'Dinheiro',
   cartao_credito: 'Cartão de crédito',
+  beneficio: 'Vale-benefício',
 }
 
-const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito']
+const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito', 'beneficio']
 
 const ICONE_DO_TIPO: Record<TipoDeConta, ReactNode> = {
   corrente: <IconeBanco />,
   poupanca: <IconeBanco />,
   dinheiro: <IconeDinheiro />,
   cartao_credito: <IconeCartao />,
+  beneficio: <IconeBeneficio />,
 }
 
 // Só para a largura da barra: percentual inteiro do limite já usado, calculado em BigInt.
@@ -79,6 +88,13 @@ function mensagemDeArquivamento(erro: unknown): string {
   return 'Não foi possível alterar a conta. Tente de novo.'
 }
 
+function mensagemDeCategorias(erro: unknown): string {
+  if (erro instanceof ContaNaoEncontradaError) return 'Essa conta não existe mais.'
+  if (erro instanceof ContaInvalidaError && erro.mensagemServidor !== null) return erro.mensagemServidor
+  if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
+  return 'Não foi possível salvar as categorias. Tente de novo.'
+}
+
 const MENSAGEM_SEM_CONTA_DE_PAGAMENTO = 'Crie uma conta corrente ou poupança para pagar o cartão.'
 
 // Só inteiro puro de 1 a 31; "1e1" e "2.5" são recusados.
@@ -88,13 +104,150 @@ function lerDiaDoMes(texto: string): number | null {
   return dia >= 1 && dia <= 31 ? dia : null
 }
 
+// Nenhuma marcada vale como "qualquer categoria" (ADR-034); o texto avisa para ninguém achar que bloqueou tudo.
+function CategoriasPermitidasCampo({
+  categorias,
+  marcadas,
+  aoAlternar,
+  aoTentarDeNovo,
+}: {
+  categorias: EstadoCategorias
+  marcadas: string[]
+  aoAlternar: (categoriaId: string) => void
+  aoTentarDeNovo: () => void
+}) {
+  return (
+    <fieldset className="categorias-permitidas">
+      <legend>O que esta conta pode pagar</legend>
+      <p id="categorias-permitidas-ajuda" className="categorias-permitidas-ajuda">
+        Marque as categorias de despesa que a conta aceita. Sem nenhuma marcada, ela aceita qualquer categoria. Receita
+        não tem restrição.
+      </p>
+      {categorias.tipo === 'carregando' && <Carregando texto="Carregando categorias..." linhas={2} />}
+      {categorias.tipo === 'erro' && (
+        <>
+          <p role="alert" className="erro">
+            Não foi possível carregar as categorias.
+          </p>
+          <button type="button" onClick={aoTentarDeNovo}>
+            Tentar de novo
+          </button>
+        </>
+      )}
+      {categorias.tipo === 'ok' && categorias.despesas.length === 0 && (
+        <p>Nenhuma categoria de despesa cadastrada.</p>
+      )}
+      {categorias.tipo === 'ok' && categorias.despesas.length > 0 && (
+        <ul className="categorias-lista" aria-describedby="categorias-permitidas-ajuda">
+          {categorias.despesas.map((categoria) => (
+            <li key={categoria.id}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={marcadas.includes(categoria.id)}
+                  onChange={() => aoAlternar(categoria.id)}
+                />
+                {categoria.nome}
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+    </fieldset>
+  )
+}
+
+function alternarMarca(marcadas: string[], categoriaId: string): string[] {
+  return marcadas.includes(categoriaId) ? marcadas.filter((id) => id !== categoriaId) : [...marcadas, categoriaId]
+}
+
+// Só manda ids que ainda são categoria de despesa da lista carregada, na ordem da tela.
+function idsMarcados(categorias: EstadoCategorias, marcadas: string[]): string[] {
+  if (categorias.tipo !== 'ok') return []
+  return categorias.despesas.filter((categoria) => marcadas.includes(categoria.id)).map((categoria) => categoria.id)
+}
+
+function EditarCategorias({
+  conta,
+  categorias,
+  aoTentarDeNovo,
+  aoSalvar,
+  aoNaoExistir,
+  aoSessaoExpirar,
+}: {
+  conta: Conta
+  categorias: EstadoCategorias
+  aoTentarDeNovo: () => void
+  aoSalvar: (conta: Conta) => void
+  aoNaoExistir: () => void
+  aoSessaoExpirar: () => void
+}) {
+  const [marcadas, setMarcadas] = useState<string[]>(conta.categoriasPermitidas ?? [])
+  const [enviando, setEnviando] = useState(false)
+  const [mensagem, setMensagem] = useState<string | null>(null)
+  // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
+  const emVoo = useRef(false)
+
+  async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
+    evento.preventDefault()
+    if (emVoo.current) return
+    // Sem a lista carregada o envio mandaria vazio e liberaria tudo sem o usuário ter pedido.
+    if (categorias.tipo !== 'ok') {
+      setMensagem('Espere as categorias carregarem para salvar.')
+      return
+    }
+    emVoo.current = true
+    setEnviando(true)
+    setMensagem(null)
+    try {
+      aoSalvar(await putCategoriasPermitidas(conta.id, idsMarcados(categorias, marcadas)))
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return
+      }
+      if (erro instanceof ContaNaoEncontradaError) {
+        aoNaoExistir()
+        return
+      }
+      setMensagem(mensagemDeCategorias(erro))
+    } finally {
+      emVoo.current = false
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <form onSubmit={(evento) => void enviar(evento)} aria-label={`Categorias de ${conta.nome}`}>
+      <CategoriasPermitidasCampo
+        categorias={categorias}
+        marcadas={marcadas}
+        aoAlternar={(id) => setMarcadas((atual) => alternarMarca(atual, id))}
+        aoTentarDeNovo={aoTentarDeNovo}
+      />
+      {mensagem !== null && (
+        <p role="alert" className="erro">
+          {mensagem}
+        </p>
+      )}
+      <button type="submit" disabled={enviando}>
+        {enviando ? 'Salvando...' : 'Salvar categorias'}
+      </button>
+    </form>
+  )
+}
+
 function NovaConta({
   contasDePagamento,
+  categorias,
+  aoTentarCategoriasDeNovo,
   aoCriar,
   aoSessaoExpirar,
 }: {
   // Contas ativas, correntes ou poupanças: as únicas que o servidor aceita para pagar um cartão.
   contasDePagamento: Conta[]
+  categorias: EstadoCategorias
+  aoTentarCategoriasDeNovo: () => void
   aoCriar: (conta: Conta) => void
   aoSessaoExpirar: () => void
 }) {
@@ -105,12 +258,14 @@ function NovaConta({
   const [diaFechamento, setDiaFechamento] = useState('')
   const [diaVencimento, setDiaVencimento] = useState('')
   const [pagamentoEscolhido, setPagamentoEscolhido] = useState('')
+  const [categoriasMarcadas, setCategoriasMarcadas] = useState<string[]>([])
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
   const emVoo = useRef(false)
 
   const eCartao = tipo === 'cartao_credito'
+  const eBeneficio = tipo === 'beneficio'
   const contaPagamentoId = contasDePagamento.some((c) => c.id === pagamentoEscolhido)
     ? pagamentoEscolhido
     : (contasDePagamento[0]?.id ?? '')
@@ -160,6 +315,7 @@ function NovaConta({
         tipo,
         saldoInicialCentavos: saldoParaEnviar,
         ...(cartao === undefined ? {} : { cartao }),
+        ...(eBeneficio ? { categoriasPermitidas: idsMarcados(categorias, categoriasMarcadas) } : {}),
       })
       aoCriar(conta)
       setNome('')
@@ -168,6 +324,7 @@ function NovaConta({
       setLimite('')
       setDiaFechamento('')
       setDiaVencimento('')
+      setCategoriasMarcadas([])
     } catch (erro) {
       if (erro instanceof SessaoExpiradaError) {
         aoSessaoExpirar()
@@ -291,6 +448,14 @@ function NovaConta({
           )}
         </>
       )}
+      {eBeneficio && (
+        <CategoriasPermitidasCampo
+          categorias={categorias}
+          marcadas={categoriasMarcadas}
+          aoAlternar={(id) => setCategoriasMarcadas((atual) => alternarMarca(atual, id))}
+          aoTentarDeNovo={aoTentarCategoriasDeNovo}
+        />
+      )}
       {mensagem !== null && (
         <p id="erro-nova-conta" role="alert" className="erro">
           {mensagem}
@@ -324,6 +489,9 @@ export default function Contas({
   const [ocupada, setOcupada] = useState<string | null>(null)
   const [falhaDeAcao, setFalhaDeAcao] = useState<string | null>(null)
   const [painelAberto, setPainelAberto] = useState(false)
+  const [categoriasDe, setCategoriasDe] = useState<Conta | null>(null)
+  const [categorias, setCategorias] = useState<EstadoCategorias>({ tipo: 'carregando' })
+  const [tentativaDeCategorias, setTentativaDeCategorias] = useState(0)
   const acaoEmVoo = useRef(false)
 
   useEffect(() => {
@@ -348,6 +516,26 @@ export default function Contas({
   }, [arquivadas, tentativa, versaoDeSaldo, aoSessaoExpirar])
 
   useEffect(() => {
+    let ativo = true
+    fetchCategorias().then(
+      (todas) => {
+        if (ativo) setCategorias({ tipo: 'ok', despesas: todas.filter((categoria) => categoria.tipo === 'despesa') })
+      },
+      (erro: unknown) => {
+        if (!ativo) return
+        if (erro instanceof SessaoExpiradaError) {
+          aoSessaoExpirar()
+          return
+        }
+        setCategorias({ tipo: 'erro' })
+      },
+    )
+    return () => {
+      ativo = false
+    }
+  }, [tentativaDeCategorias, aoSessaoExpirar])
+
+  useEffect(() => {
     if (!arquivadas && estado.tipo === 'ok') aoCarregarAtivas(estado.contas)
   }, [arquivadas, estado, aoCarregarAtivas])
 
@@ -355,6 +543,14 @@ export default function Contas({
     setEstado({ tipo: 'carregando' })
     setTentativa((n) => n + 1)
   }
+
+  function recarregarCategorias(): void {
+    setCategorias({ tipo: 'carregando' })
+    setTentativaDeCategorias((n) => n + 1)
+  }
+
+  const nomesDeCategoria = new Map<string, string>()
+  if (categorias.tipo === 'ok') categorias.despesas.forEach((categoria) => nomesDeCategoria.set(categoria.id, categoria.nome))
 
   function alternarVisao(): void {
     setFalhaDeAcao(null)
@@ -488,7 +684,34 @@ export default function Contas({
                       <small>{usado}% do limite em uso</small>
                     </div>
                   )}
+                  {conta.categoriasPermitidas !== null && (
+                    <div className="conta-categorias">
+                      {conta.categoriasPermitidas.length === 0 ? (
+                        <p>Aceita qualquer categoria</p>
+                      ) : categorias.tipo === 'ok' ? (
+                        <ul aria-label={`Categorias permitidas em ${conta.nome}`}>
+                          {conta.categoriasPermitidas.map((id) => (
+                            <li key={id}>
+                              <Selo tom="neutro">{nomesDeCategoria.get(id) ?? 'Categoria desconhecida'}</Selo>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>{conta.categoriasPermitidas.length} categorias permitidas</p>
+                      )}
+                    </div>
+                  )}
                   <div className="conta-acoes">
+                    {conta.categoriasPermitidas !== null && !arquivadas && (
+                      <button
+                        type="button"
+                        className="pequeno"
+                        aria-label={`Editar categorias de ${conta.nome}`}
+                        onClick={() => setCategoriasDe(conta)}
+                      >
+                        Editar categorias
+                      </button>
+                    )}
                     {conta.cartao !== null && !arquivadas && (
                       <button
                         type="button"
@@ -529,11 +752,36 @@ export default function Contas({
         <Painel titulo="Nova conta" aoFechar={() => setPainelAberto(false)}>
           <NovaConta
             contasDePagamento={contasDePagamento}
+            categorias={categorias}
+            aoTentarCategoriasDeNovo={recarregarCategorias}
             aoCriar={(conta) => {
               setEstado((atual) =>
                 atual.tipo === 'ok' ? { tipo: 'ok', contas: [...atual.contas, conta].sort(compararContas) } : atual,
               )
               setPainelAberto(false)
+            }}
+            aoSessaoExpirar={aoSessaoExpirar}
+          />
+        </Painel>
+      )}
+      {categoriasDe !== null && !arquivadas && (
+        <Painel titulo={`Categorias de ${categoriasDe.nome}`} aoFechar={() => setCategoriasDe(null)}>
+          <EditarCategorias
+            conta={categoriasDe}
+            categorias={categorias}
+            aoTentarDeNovo={recarregarCategorias}
+            aoSalvar={(salva) => {
+              setEstado((atual) =>
+                atual.tipo === 'ok'
+                  ? { tipo: 'ok', contas: atual.contas.map((outra) => (outra.id === salva.id ? salva : outra)) }
+                  : atual,
+              )
+              setCategoriasDe(null)
+            }}
+            aoNaoExistir={() => {
+              setCategoriasDe(null)
+              setFalhaDeAcao('Essa conta não existe mais.')
+              recarregar()
             }}
             aoSessaoExpirar={aoSessaoExpirar}
           />
