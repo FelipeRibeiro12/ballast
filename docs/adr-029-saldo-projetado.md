@@ -23,7 +23,8 @@ a prevista vencida e o formato da resposta.
 - **Realizado com data futura** entra no dia dele, não hoje. O saldo de `GET
   /contas` continua somando todo realizado (ADR-024); por isso o primeiro dia
   da projeção pode diferir do saldo atual, e a resposta traz os dois.
-- **Contas.** Todas as contas ativas do usuário por padrão. Com `contaId`,
+- **Contas.** Todas as contas ativas do usuário por padrão, exceto as de
+  benefício (emenda do ADR-034: VR não paga o aluguel). Com `contaId`,
   só aquela (inclusive arquivada, se for dele). Transferência entre duas
   contas ativas se anula no total.
 - **Entradas e saídas do dia.** Uma perna de transferência só conta em
