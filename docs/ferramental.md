@@ -33,7 +33,7 @@ CLAUDE.md                         # lei do projeto, toda sessão
 │   └── comentarios.md, seguranca.md, solidity.md
 ├── hooks/bloqueia-segredo.sh     # bloqueia escrita em .env, *.key, *.pem
 └── settings.json                 # registra o hook
-.github/workflows/ci.yml          # spotless, mvnw verify, spec, web
+.github/workflows/ci.yml          # spotless, mvnw verify, spec, web, e2e
 .github/workflows/seguranca.yml   # gitleaks, osv-scanner, pnpm audit, CodeQL
 docs/                             # visão, ADRs, modelo, backlog, ameaças
 ```
@@ -93,6 +93,17 @@ Vale registrar, porque muda o que se pode confiar:
 
 Regra prática: se algo **precisa** valer sempre, vai para hook ou CI. Se é
 orientação de como escrever, vai para rule.
+
+## Job `e2e`
+
+O job `e2e` do `ci.yml` roda o mesmo `scripts/e2e.sh` do `make e2e` (ADR-033):
+Postgres, API e web descartáveis, fluxo no Chromium com o Playwright. As
+capturas e o relatório sobem como artifact por 7 dias.
+
+Ele **não está no ruleset**. É um job novo, com navegador, Docker e três
+processos, e ainda não se sabe se roda estável no runner. Entra nos checks
+obrigatórios depois de algumas execuções verdes seguidas, pelo nome do job
+(`e2e`), seguindo a ordem da seção abaixo.
 
 ## Ruleset da `main`
 

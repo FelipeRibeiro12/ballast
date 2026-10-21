@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: setup dev dev-api dev-web build build-api build-web test test-api test-web lint lint-api lint-web db-up db-down spec seed
+.PHONY: setup dev dev-api dev-web build build-api build-web test test-api test-web lint lint-api lint-web db-up db-down spec seed e2e
 
 setup:
 	pnpm --dir web install --frozen-lockfile
@@ -57,3 +57,8 @@ spec:
 # servidor web e sai.
 seed:
 	cd api && SPRING_PROFILES_ACTIVE=seed ./mvnw -B -q spring-boot:run
+
+# Verificação em navegador (ADR-033): Postgres, API e web descartáveis em portas altas.
+# Precisa de Docker e, na primeira vez, de `pnpm --dir web exec playwright install chromium`.
+e2e:
+	./scripts/e2e.sh

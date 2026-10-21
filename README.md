@@ -81,6 +81,15 @@ make build   # jar da API e build de produção da web
 
 `make test` precisa do Docker rodando e de `make setup` feito antes. Não precisa de `.env` nem de banco subido.
 
+## Verificação em navegador
+
+```bash
+pnpm --dir web exec playwright install chromium   # só na primeira vez
+make e2e
+```
+
+Sobe Postgres, API e web descartáveis em portas altas, roda o fluxo de ponta a ponta no Chromium e derruba tudo. As capturas de tela (360×780 e 1280×800, claro e escuro) ficam em `web/e2e/capturas/`, fora do git. Precisa de Docker e não usa o `.env` nem as portas do `make dev`.
+
 ## Contrato da API
 
 `api/openapi.yaml` é gerado do código pelo springdoc e commitado (ADR-019). O teste `OpenApiSpecTest`, dentro do `make test`, falha se o arquivo commitado diverge do gerado.

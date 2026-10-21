@@ -10,3 +10,6 @@ coverage/
 *.pem
 .DS_Store
 target/
+web/e2e/capturas/
+web/test-results/
+web/playwright-report/
