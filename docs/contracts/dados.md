@@ -144,7 +144,7 @@ invariante de dinheiro. A regra vale **só para despesa** (ADR-034): a recarga
 
 Migration `V12` (ADR-034):
 
-- `conta_tipo_valido` aceita também `beneficio`. `cripto` continua fora.
+- `conta_tipo_valido` aceita também `beneficio`. `cripto` entra na `V13`.
 - FKs compostas pelo padrão de coluna gerada da `V10`:
   `conta_categoria_permitida_conta_beneficio_do_usuario` (`conta_id`,
   `usuario_id`, `tipo_conta`) para `conta (id, usuario_id, tipo)`, e
@@ -235,47 +235,123 @@ Migration `V10` (ADR-031):
 
 ### Cripto
 
+Recorte da F13 (ADR-035), migration `V13`. Cripto digitada à mão, sem carteira
+observada e sem sincronização. `quantidade` é a verdade; valor em reais é
+sempre derivado de uma cotação (ADR-006).
+
 ```
 ativo_cripto
-  id          uuid pk
-  rede        text not null         -- ethereum | base | arbitrum | polygon | solana
-  contrato    text null             -- null = ativo nativo (ETH, SOL)
-  simbolo     text not null         -- BTC, ETH, USDC
-  nome        text
-  decimais    smallint not null     -- BTC 8, ETH 18, USDC 6
+  id          uuid pk (sem DEFAULT, gerado na aplicação)
+  usuario_id  uuid fk not null on delete cascade
+  rede        text not null         -- bitcoin | ethereum | base | arbitrum | polygon | solana
+  contrato    text null             -- null = ativo nativo (BTC, ETH, SOL)
+  simbolo     text not null         -- 1 a 20, sem espaço nas pontas
+  nome        text null             -- até 100
+  decimais    smallint not null     -- 0 a 18 (BTC 8, ETH 18, USDC 6)
   confiavel   bool not null default false
-  unique (rede, contrato)
+  criado_em   timestamptz not null default now()
+  unique nulls not distinct (usuario_id, rede, contrato)
+  unique (id, usuario_id)           -- alvo das FKs compostas
 
-posicao_cripto
-  id          uuid pk
-  conta_id    uuid fk not null
-  ativo_id    uuid fk not null
-  quantidade  numeric(38,18) not null default 0
-  origem      text not null default 'manual'   -- manual | sincronizada
-  unique (conta_id, ativo_id)
+movimento_cripto
+  id          uuid pk (sem DEFAULT)
+  usuario_id  uuid fk not null on delete cascade
+  conta_id    uuid not null         -- FK composta: conta do mesmo usuário, tipo cripto
+  ativo_id    uuid not null         -- FK composta: ativo do mesmo usuário
+  tipo        text not null         -- compra | venda
+  quantidade  numeric(38,18) not null   -- > 0
+  data        date not null         -- 1900-01-01 a 2199-12-31
+  custo       numeric(18,2) not null    -- > 0 e até 90071992547409.91, em reais
+  criado_em   timestamptz not null default now()
+  tipo_conta  text generated always as ('cripto') stored   -- a aplicação não escreve
 
 cotacao
-  ativo_id    uuid fk
-  momento     timestamptz
-  preco       numeric(20,8) not null    -- em BRL
-  fonte       text not null
+  usuario_id  uuid fk not null on delete cascade
+  ativo_id    uuid not null         -- FK composta: ativo do mesmo usuário
+  momento     timestamptz not null
+  preco       numeric(20,8) not null    -- > 0, em reais por unidade
+  fonte       text not null             -- 'manual' (a F14 alarga o CHECK)
   primary key (ativo_id, momento)
 ```
 
-`quantidade` é a verdade; valor em reais é sempre derivado (ADR-006).
+**Desvios do rascunho anterior desta seção, decididos no ADR-035:**
+
+- `ativo_cripto` tem `usuario_id`. Não há catálogo global: `confiavel` é decisão
+  de cada usuário, e a promoção de um não pode mudar o patrimônio de outro. A
+  identidade é `(usuario_id, rede, contrato)`.
+- **Não existe `posicao_cripto` na F13.** A posição de um ativo numa conta é a
+  soma dos movimentos (compras menos vendas) até uma data, como o saldo é a
+  soma dos lançamentos. `posicao_cripto` com quantidade guardada e `origem`
+  fica para a sincronização da F24, com ADR próprio.
+- `movimento_cripto` substitui `movimentacao_cripto` (abaixo) na F13: liga
+  direto conta e ativo, só tem `compra` e `venda`, e o custo é o total em reais
+  (`custo`), não `preco_unitario` nullable. Entrada e saída on-chain, `hash_tx`
+  e `origem` chegam com a F24.
+- `cotacao` tem `usuario_id`: a cotação manual é do usuário que a digitou. A
+  F14 grava na mesma tabela com outra `fonte`.
 
 **`rede` + `contrato` é a identidade do ativo, não o símbolo.** USDC na
 Ethereum e USDC na Base são registros diferentes, com contratos diferentes. Dois
-tokens podem ter o mesmo símbolo e nenhuma relação — é assim que token falso se
+tokens podem ter o mesmo símbolo e nenhuma relação, e é assim que token falso se
 disfarça.
 
-**`confiavel`** começa `false`. Ativo desconhecido entra oculto e o usuário
-promove o que interessa. Sem isso, a primeira sincronização de carteira traz
-airdrop de spam com cotação inventada e o patrimônio exibido fica errado
-(ADR-009).
+**`confiavel`** nasce `false` no banco. O ativo digitado pelo usuário é gravado
+com `true` pela aplicação (foi ele quem disse que existe); o `false` é para o
+que vier da sincronização (ADR-009).
 
-**`origem`** separa o que você digitou do que veio da rede. Posição
-`sincronizada` não é editável à mão — a próxima sincronização sobrescreveria.
+**Conta cripto.** `conta_tipo_valido` aceita `cripto`, e
+`conta_cripto_sem_saldo` exige `saldo_inicial = 0` nela. Conta cripto não
+recebe lançamento (ver abaixo).
+
+**O que o banco garante na V13:**
+
+- Contrato por rede (`ativo_cripto_contrato_formato`): nulo em qualquer rede;
+  nas redes EVM (`ethereum`, `base`, `arbitrum`, `polygon`) `0x` mais 40
+  hexadecimais em minúsculas; em `solana` base58 de 32 a 44 caracteres;
+  `bitcoin` sempre nulo. A aplicação normaliza o EVM para minúsculas antes de
+  gravar.
+- Ativo repetido recusado, inclusive o nativo (`NULLS NOT DISTINCT`), e
+  aceito em outro usuário.
+- Movimento só em conta do mesmo usuário e do tipo `cripto`
+  (`movimento_cripto_conta_cripto_do_usuario`, pela coluna gerada `tipo_conta`
+  e a FK para `conta (id, usuario_id, tipo)`, a técnica da `V10`) e só com ativo
+  do mesmo usuário (`movimento_cripto_ativo_do_usuario`). Mesma coisa em
+  `cotacao_ativo_do_usuario`.
+- **Lançamento recusado em conta cripto, sem gatilho.** FK composta só exige
+  igualdade, então `conta` ganhou `aceita_lancamento` (gerada,
+  `tipo <> 'cripto'`) com `unique (id, usuario_id, aceita_lancamento)`, e
+  `lancamento` ganhou `conta_aceita_lancamento` (gerada, sempre `true`) com a FK
+  `lancamento_conta_aceita_lancamento`. O `INSERT` não cita as duas colunas. O
+  custo foi uma reescrita de `lancamento` sob lock, como na `V11`, e um boolean
+  por linha. A mesma FK também recusa trocar para `cripto` o tipo de uma conta
+  que já tem lançamento.
+- Apagar conta ou ativo que tenha movimento é recusado (`NO ACTION`, como na
+  `V6`). Apagar o usuário limpa tudo no cascade.
+
+**Fica com a aplicação:**
+
+- Quantidade com no máximo as casas decimais do ativo: depende de outra tabela,
+  e CHECK não olha tabela.
+- Venda não deixar a posição negativa, e apagar compra que deixaria alguma data
+  negativa: a escrita trava a linha da conta com `FOR UPDATE` e confere a soma
+  (ADR-035).
+- `cotacao.fonte` só aceita `manual` por enquanto.
+
+**Índice da F13.** `movimento_cripto_usuario_conta_data (usuario_id, conta_id,
+data)` serve as três leituras de movimento. Medido num Postgres 17 descartável
+com 205 mil movimentos (5 mil do usuário testado, 2 mil cotações):
+
+| Query | Antes | Depois |
+| --- | --- | --- |
+| Posição de um ativo numa conta até uma data | Parallel Seq Scan, 10,6 ms | Bitmap Index Scan, 0,35 ms |
+| Lista de movimentos da conta por data, 50 linhas | Parallel Seq Scan e sort, 7,0 ms | Index Scan Backward, 0,06 ms |
+| Patrimônio do usuário até uma data | Parallel Seq Scan, 7,5 ms | Bitmap Index Scan, 0,64 ms |
+
+A última cotação até um momento (`WHERE ativo_id = ? AND momento <= ? ORDER BY
+momento DESC LIMIT 1`) usa a PK `(ativo_id, momento)` lida de trás para frente
+(Index Scan Backward, 0,02 ms), então `cotacao` não ganha índice descendente. A
+linha `create index on cotacao (ativo_id, momento desc)` de "Índices iniciais"
+não é necessária.
 
 ### Carteira observada
 
@@ -303,6 +379,8 @@ o endereço certo.
 
 `erro_ultima_sync` existe porque o indexador vai falhar, e a interface precisa
 mostrar "última leitura em tal data" em vez de um saldo silenciosamente velho.
+
+Rascunho para a F24 (a F13 usa `movimento_cripto`, acima):
 
 ```
 movimentacao_cripto
@@ -915,7 +993,8 @@ apenas em código:
 9. `hash_arquivo` único por usuário (mesmo arquivo não reimporta)
 10. `hash_tx` único por posição (mesma transação não duplica)
 11. `carteira_observada`: endereço único por usuário e rede
-12. `posicao_cripto` com `origem = 'sincronizada'` não aceita escrita manual
+12. `posicao_cripto` com `origem = 'sincronizada'` não aceita escrita manual (F24; a F13 não tem a tabela)
+13. Cripto (V13, ADR-035): conta `cripto` com `saldo_inicial` 0 e sem lançamento; ativo único por usuário, rede e contrato; contrato no formato da rede; movimento só em conta cripto e ativo do mesmo usuário, com quantidade e custo positivos; cotação só de ativo do mesmo usuário, com preço positivo e um valor por momento
 
 ## Índices iniciais
 
@@ -932,7 +1011,7 @@ create index on lancamento (usuario_id, hash_externo) where hash_externo is not 
 create index on importacao_linha (importacao_id, decisao);
 ```
 
-Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`. A `V12` não acrescenta nenhum (a PK de `conta_categoria_permitida` serve, conferido com `EXPLAIN`).
+Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`. A `V12` não acrescenta nenhum (a PK de `conta_categoria_permitida` serve, conferido com `EXPLAIN`). A `V13` cria `movimento_cripto (usuario_id, conta_id, data)` e dispensa o índice descendente de `cotacao`, porque a PK serve (seção Cripto).
 O primeiro serve saldo e fluxo de caixa; o segundo, gráfico por categoria e
 orçamento. Antes de adicionar qualquer outro, rode `EXPLAIN ANALYZE` e mostre o
 antes e o depois.
