@@ -84,6 +84,7 @@ class AppRolePrivilegesTest {
     assertDenied("TRUNCATE template_lancamento");
     assertDenied("TRUNCATE template_divisao");
     assertDenied("TRUNCATE cartao");
+    assertDenied("TRUNCATE conta_categoria_permitida");
   }
 
   @Test
@@ -135,6 +136,51 @@ class AppRolePrivilegesTest {
     assertThat(titulo).isEqualTo("Ração premium");
     assertThat(deleted).isEqualTo(1);
     assertThat(deletedCategoria).isEqualTo(1);
+  }
+
+  @Test
+  void allowsDmlOnContaCategoriaPermitida() {
+    UUID usuarioId = UUID.randomUUID();
+    UUID contaId = UUID.randomUUID();
+    UUID categoriaId = UUID.randomUUID();
+    jdbc.sql("INSERT INTO usuario (id, email, senha_hash) VALUES (:id, :email, 'hash')")
+        .param("id", usuarioId)
+        .param("email", "permitida-dml-" + usuarioId + "@example.com")
+        .update();
+    jdbc.sql(
+            "INSERT INTO conta (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'VR',"
+                + " 'beneficio')")
+        .param("id", contaId)
+        .param("usuarioId", usuarioId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO categoria (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'Pets',"
+                + " 'despesa')")
+        .param("id", categoriaId)
+        .param("usuarioId", usuarioId)
+        .update();
+
+    int inserted =
+        jdbc.sql(
+                "INSERT INTO conta_categoria_permitida (conta_id, categoria_id, usuario_id)"
+                    + " VALUES (:conta, :categoria, :usuario)")
+            .param("conta", contaId)
+            .param("categoria", categoriaId)
+            .param("usuario", usuarioId)
+            .update();
+    long found =
+        jdbc.sql("SELECT count(*) FROM conta_categoria_permitida WHERE conta_id = :conta")
+            .param("conta", contaId)
+            .query(Long.class)
+            .single();
+    int deleted =
+        jdbc.sql("DELETE FROM conta_categoria_permitida WHERE conta_id = :conta")
+            .param("conta", contaId)
+            .update();
+
+    assertThat(inserted).isEqualTo(1);
+    assertThat(found).isEqualTo(1);
+    assertThat(deleted).isEqualTo(1);
   }
 
   @Test

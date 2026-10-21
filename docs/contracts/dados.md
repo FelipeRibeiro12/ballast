@@ -129,14 +129,51 @@ O VR só paga comida. Isso é propriedade da conta, não tag do lançamento.
 
 ```
 conta_categoria_permitida
-  conta_id      uuid fk
-  categoria_id  uuid fk
+  conta_id        uuid fk not null    -- conta de tipo beneficio do mesmo usuário
+  categoria_id    uuid fk not null    -- categoria de tipo despesa do mesmo usuário
+  usuario_id      uuid fk not null    -- ON DELETE CASCADE
+  tipo_conta      text gerada         -- sempre 'beneficio'
+  tipo_categoria  text gerada         -- sempre 'despesa'
   primary key (conta_id, categoria_id)
 ```
 
 Conta de benefício sem nenhuma linha aqui aceita qualquer categoria. Com
-linhas, só as listadas — validado na aplicação **e** por trigger, porque é
-invariante de dinheiro.
+linhas, só as listadas, validado na aplicação **e** por gatilho, porque é
+invariante de dinheiro. A regra vale **só para despesa** (ADR-034): a recarga
+é receita e usa a categoria que o usuário quiser, e transferência não participa.
+
+Migration `V12` (ADR-034):
+
+- `conta_tipo_valido` aceita também `beneficio`. `cripto` continua fora.
+- FKs compostas pelo padrão de coluna gerada da `V10`:
+  `conta_categoria_permitida_conta_beneficio_do_usuario` (`conta_id`,
+  `usuario_id`, `tipo_conta`) para `conta (id, usuario_id, tipo)`, e
+  `conta_categoria_permitida_categoria_despesa_do_usuario` (`categoria_id`,
+  `usuario_id`, `tipo_categoria`) para `categoria (id, usuario_id, tipo)`. A
+  aplicação não escreve nas colunas geradas.
+- `ON DELETE`: apagar a conta apaga a lista (`CASCADE`, a lista é propriedade
+  da conta). Apagar a categoria listada é recusado (`NO ACTION`): `CASCADE`
+  tiraria a categoria da lista em silêncio e, sendo a última, a conta passaria
+  a aceitar tudo. O `ON UPDATE` padrão recusa mudar o tipo de uma conta que
+  tem lista.
+- Gatilho `lancamento_categoria_permitida_no_beneficio`, `BEFORE INSERT OR
+  UPDATE OF tipo, conta_id, categoria_id` em `lancamento`, `WHEN (NEW.tipo =
+  'despesa')`, função com `search_path = public, pg_temp` e `SECURITY INVOKER`.
+  Se a conta é de benefício e tem ao menos uma linha na lista, a categoria
+  tem de estar nela; senão `RAISE` com `ERRCODE` `23514` e `CONSTRAINT`
+  `lancamento_categoria_permitida_no_beneficio`, que a aplicação traduz pelo
+  nome. Editar título, valor, data ou status não revalida: lançamento já
+  gravado não muda quando a lista muda.
+- Concorrência: o gatilho segura a conta com `FOR SHARE` (só quando é
+  benefício) antes de ler a lista. A aplicação troca a lista segurando a conta
+  `FOR UPDATE` e grava lançamento também com `FOR UPDATE` na conta (ADR-024),
+  então as duas escritas se serializam e a leitura do gatilho, com snapshot
+  novo em `READ COMMITTED`, vê a lista já confirmada. Quem trocar a lista sem
+  travar a conta reabre a janela.
+- Sem índice novo: a PK atende a busca por `(conta_id, categoria_id)` e por
+  `conta_id`. A FK da categoria não tem índice, já que categoria não é apagada.
+- Desfazer: bloco comentado no fim da `V12`. Apaga listas, contas de benefício
+  e os lançamentos delas.
 
 ### Cartão de crédito
 
@@ -870,7 +907,7 @@ apenas em código:
 1. Soma de `template_divisao` = 100% ou = `valor_total`
 2. `percentual` e `valor_fixo` mutuamente exclusivos (`CHECK` já acima)
 3. `valor > 0` em todo lançamento
-4. Lançamento em conta de benefício só com categoria permitida (trigger)
+4. Despesa em conta de benefício com lista só com categoria permitida (V12, ADR-034, trigger `lancamento_categoria_permitida_no_beneficio`). Receita não é restrita; a lista aceita só conta de benefício e categoria de despesa do mesmo usuário (FK composta)
 5. Compra parcelada (V11, ADR-032): `parcela_num` entre 1 e `parcela_total`, `parcela_total` entre 2 e 48, as três colunas juntas, parcela só em cartão, só despesa realizada, e toda parcela aponta para uma primeira do mesmo usuário e do mesmo total (FK composta)
 6. `regra_recorrencia`: `fim` e `ocorrencias_max` não coexistem
 7. Transferência: `saida_id` e `entrada_id` em contas diferentes (V7, `CHECK` mais FKs compostas)
@@ -895,7 +932,7 @@ create index on lancamento (usuario_id, hash_externo) where hash_externo is not 
 create index on importacao_linha (importacao_id, decisao);
 ```
 
-Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`.
+Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`. A `V12` não acrescenta nenhum (a PK de `conta_categoria_permitida` serve, conferido com `EXPLAIN`).
 O primeiro serve saldo e fluxo de caixa; o segundo, gráfico por categoria e
 orçamento. Antes de adicionar qualquer outro, rode `EXPLAIN ANALYZE` e mostre o
 antes e o depois.
