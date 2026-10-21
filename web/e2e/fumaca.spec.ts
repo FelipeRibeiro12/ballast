@@ -21,7 +21,7 @@ async function capturar(page: Page, projeto: string, passo: string): Promise<voi
 
 // O espaço antes do valor é não separável no Intl, então \s cobre.
 function reais(texto: string): RegExp {
-  return new RegExp(`R\\$\\s${texto.replace(/[.]/g, '\\.')}`)
+  return new RegExp(`R\\$\\s${texto.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}`)
 }
 
 type Secao = 'Início' | 'Lançamentos' | 'Contas' | 'Recorrências'
