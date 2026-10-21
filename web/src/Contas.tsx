@@ -306,6 +306,11 @@ function NovaConta({
       saldoParaEnviar = saldoInicialCentavos === 0 ? 0 : -saldoInicialCentavos
       cartao = { limiteCentavos, diaFechamento: fechamento, diaVencimento: vencimento, contaPagamentoId }
     }
+    // Sem a lista carregada o envio mandaria vazio e a conta nasceria aceitando tudo sem o usuário pedir.
+    if (eBeneficio && categorias.tipo !== 'ok') {
+      setMensagem('Espere as categorias carregarem para criar o benefício.')
+      return
+    }
     emVoo.current = true
     setEnviando(true)
     setMensagem(null)

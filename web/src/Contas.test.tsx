@@ -559,6 +559,43 @@ describe('Conta de benefício', () => {
     expect(await within(grupo).findByRole('checkbox', { name: 'Alimentação' })).toBeVisible()
   })
 
+  it('categorias ainda carregando ou com erro não enviam o POST', async () => {
+    let falhando = true
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([]),
+      'GET /categorias': () =>
+        Promise.resolve(falhando ? jsonResponse({ erro: 'x' }, 500) : jsonResponse(categorias, 200)),
+      'POST /contas': responde(vale(), 201),
+    })
+    render(<App />)
+    await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovoBeneficio()
+    preencherNovaConta('VR')
+    const grupo = screen.getByRole('group', { name: 'O que esta conta pode pagar' })
+    await within(grupo).findByRole('alert')
+    enviarNovaConta()
+    expect(await screen.findByText(/espere as categorias carregarem/i)).toBeVisible()
+    expect(within(grupo).getByRole('button', { name: 'Tentar de novo' })).toBeVisible()
+    expect(chamadasA('POST /contas')).toHaveLength(0)
+  })
+
+  it('categorias pendentes não enviam o POST', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([]),
+      'GET /categorias': () => new Promise<Response>(() => {}),
+      'POST /contas': responde(vale(), 201),
+    })
+    render(<App />)
+    await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovoBeneficio()
+    preencherNovaConta('VR')
+    enviarNovaConta()
+    expect(await screen.findByText(/espere as categorias carregarem/i)).toBeVisible()
+    expect(chamadasA('POST /contas')).toHaveLength(0)
+  })
+
   it('400 do servidor ao criar mostra a mensagem', async () => {
     mockFetch({
       ...sessaoViva,
