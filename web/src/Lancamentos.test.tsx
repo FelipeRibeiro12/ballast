@@ -463,6 +463,19 @@ describe('Lancamentos', () => {
     expect(await acao('Apagar Feira')).toBeVisible()
   })
 
+  it.each([
+    ['Escape', () => fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })],
+    ['o botão Fechar painel', () => fireEvent.click(screen.getByRole('button', { name: 'Fechar painel' }))],
+  ])('fechar o painel aberto por Editar com %s devolve o foco ao botão do menu', async (_nome, fechar) => {
+    mockFetch({ ...base, [MES_ATUAL]: responde([lancamento()]) })
+    render(<App />)
+    fireEvent.click(await acao('Editar Feira'))
+    await formulario('Editar lançamento')
+    fechar()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Mais ações de Feira' })).toHaveFocus()
+  })
+
   it('cancelar a confirmação não apaga', async () => {
     mockFetch({ ...base, [MES_ATUAL]: responde([lancamento()]) })
     render(<App />)

@@ -29,11 +29,13 @@ export default function Painel({
     const bloqueio = document.body.classList
     bloqueio.add('painel-aberto')
     // Foca o primeiro campo: quem abre o painel quer digitar.
-    const primeiro = caixa.current?.querySelector<HTMLElement>('input, select, textarea')
+    // Sem campo, o próprio painel recebe o foco: sem isso Escape e Tab não chegariam a ele.
+    const primeiro = caixa.current?.querySelector<HTMLElement>('input, select, textarea') ?? caixa.current
     primeiro?.focus()
     return () => {
       bloqueio.remove('painel-aberto')
-      if (anterior instanceof HTMLElement) anterior.focus()
+      // Quem abriu pode ter saído da tela (item de menu desmontado); aí não há para onde devolver.
+      if (anterior instanceof HTMLElement && anterior.isConnected) anterior.focus()
     }
   }, [])
 
@@ -72,6 +74,7 @@ export default function Painel({
         role="dialog"
         aria-modal="true"
         aria-labelledby={idDoTitulo}
+        tabIndex={-1}
         onKeyDown={aoTeclar}
       >
         <header className="painel-topo">

@@ -74,4 +74,48 @@ describe('Painel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fechar painel' }))
     expect(document.body).not.toHaveClass('painel-aberto')
   })
+
+  it('sem campo, o próprio painel recebe o foco e Escape fecha', () => {
+    function SemCampo() {
+      const [aberto, setAberto] = useState(true)
+      return aberto ? (
+        <Painel titulo="Só texto" aoFechar={() => setAberto(false)}>
+          <p>Nada para digitar.</p>
+        </Painel>
+      ) : null
+    }
+    render(<SemCampo />)
+    const dialogo = screen.getByRole('dialog', { name: 'Só texto' })
+    expect(dialogo).toHaveFocus()
+    fireEvent.keyDown(dialogo, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('não tenta devolver o foco a quem saiu do documento', () => {
+    function Saiu() {
+      const [fase, setFase] = useState<'item' | 'painel' | 'fechado'>('item')
+      return (
+        <>
+          <button type="button">Outro</button>
+          {fase === 'item' && (
+            <button type="button" onClick={() => setFase('painel')}>
+              Item do menu
+            </button>
+          )}
+          {fase === 'painel' && (
+            <Painel titulo="Aberto pelo menu" aoFechar={() => setFase('fechado')}>
+              <input aria-label="Campo" />
+            </Painel>
+          )}
+        </>
+      )
+    }
+    render(<Saiu />)
+    const item = screen.getByRole('button', { name: 'Item do menu' })
+    item.focus()
+    fireEvent.click(item)
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar painel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.body).toHaveFocus()
+  })
 })

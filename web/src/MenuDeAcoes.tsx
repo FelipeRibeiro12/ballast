@@ -44,7 +44,15 @@ export default function MenuDeAcoes({ rotulo, children }: { rotulo: string; chil
         <IconePontos />
       </button>
       {aberto && (
-        <div className="menu-acoes-lista" onClick={() => setAberto(false)}>
+        <div
+          className="menu-acoes-lista"
+          onClick={() => {
+            // O item clicado some com o menu. O foco vai para o botão do menu antes disso, e quem
+            // abrir um painel a partir da ação devolve o foco para ele ao fechar.
+            gatilho.current?.focus()
+            setAberto(false)
+          }}
+        >
           {children}
         </div>
       )}
