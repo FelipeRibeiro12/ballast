@@ -55,6 +55,16 @@ class EntryController {
   private static final ErrorResponse BALANCE_OUT_OF_RANGE =
       new ErrorResponse("saldo da conta fora do limite");
 
+  private static final ErrorResponse EDIT_WHOLE_PURCHASE =
+      new ErrorResponse("edite a compra inteira");
+  private static final ErrorResponse DELETE_WHOLE_PURCHASE =
+      new ErrorResponse("apague a compra inteira");
+  private static final ErrorResponse INSTALLMENT_NOT_EXPENSE =
+      new ErrorResponse("parcela de compra parcelada só pode ser despesa");
+
+  private static final ErrorResponse PURCHASE_OUT_OF_RANGE =
+      new ErrorResponse("compra fora do limite");
+
   private static final ErrorResponse NOT_PLANNED =
       new ErrorResponse("só ocorrência prevista pode mudar de status");
   private static final ErrorResponse INVALID_STATUS =
@@ -290,7 +300,8 @@ class EntryController {
           "Entrada inválida, inclusive campo não declarado e tipo transferencia;"
               + " \"conta não encontrada\", \"conta arquivada\" (só ao trocar de conta),"
               + " \"categoria não encontrada\", \"saldo da conta fora do limite\" (em qualquer"
-              + " das contas afetadas) ou \"use a rota de transferência\" (o lançamento é perna"
+              + " das contas afetadas), \"compra fora do limite\" (parcela cuja soma da compra"
+              + " passaria do teto) ou \"use a rota de transferência\" (o lançamento é perna"
               + " de transferência)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
@@ -460,6 +471,7 @@ class EntryController {
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
       case TRANSFER_LEG -> ResponseEntity.badRequest().body(TRANSFER_LEG);
       case CANCEL_OCCURRENCE -> ResponseEntity.badRequest().body(CANCEL_OCCURRENCE);
+      case FIRST_INSTALLMENT -> ResponseEntity.badRequest().body(DELETE_WHOLE_PURCHASE);
       case DELETED -> {
         log.info("lançamento apagado usuario_id={} lancamento_id={}", user.id(), entryId.get());
         yield ResponseEntity.noContent().build();
@@ -487,6 +499,9 @@ class EntryController {
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
       case TRANSFER_LEG -> ResponseEntity.badRequest().body(TRANSFER_LEG);
       case NOT_PLANNED -> ResponseEntity.badRequest().body(NOT_PLANNED);
+      case EDIT_WHOLE_PURCHASE -> ResponseEntity.badRequest().body(EDIT_WHOLE_PURCHASE);
+      case INSTALLMENT_NOT_EXPENSE -> ResponseEntity.badRequest().body(INSTALLMENT_NOT_EXPENSE);
+      case PURCHASE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(PURCHASE_OUT_OF_RANGE);
     };
   }
 }

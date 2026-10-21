@@ -62,7 +62,28 @@ public record EntryResponse(
                 "Ordem da parcela na divisão de salário (1 é a primeira); nulo fora de divisão",
             minimum = "1",
             maximum = "10")
-        Integer parcelaOrdem) {
+        Integer parcelaOrdem,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Id da compra parcelada (o da primeira parcela) a que o lançamento pertence; nulo"
+                    + " nos outros")
+        UUID compraParceladaId,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description = "Número da parcela na compra parcelada; nulo nos outros",
+            minimum = "1",
+            maximum = "48")
+        Integer parcelaNum,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description = "Quantas parcelas a compra teve ao nascer; nulo nos outros",
+            minimum = "2",
+            maximum = "48")
+        Integer parcelaTotal) {
 
   // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
   // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
@@ -82,7 +103,10 @@ public record EntryResponse(
         summary.transferId(),
         summary.direction(),
         summary.templateId(),
-        summary.parcelOrder());
+        summary.parcelOrder(),
+        summary.purchaseId(),
+        summary.installment(),
+        summary.installmentTotal());
   }
 
   private static long toCents(BigDecimal amount) {

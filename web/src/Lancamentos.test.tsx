@@ -42,6 +42,9 @@ function lancamento(sobra: Partial<Record<string, unknown>> = {}): Record<string
     transferenciaId: null,
     templateId: null,
     parcelaOrdem: null,
+    compraParceladaId: null,
+    parcelaNum: null,
+    parcelaTotal: null,
     direcao: null,
     contaId: 'c1',
     dataCompetencia: '2026-10-05',
@@ -1113,6 +1116,387 @@ describe('Lancamentos', () => {
       render(<App />)
       await screen.findByRole('button', { name: 'Confirmar Aluguel' })
       expect(screen.queryByText(/^parcela/)).toBeNull()
+    })
+  })
+
+  describe('compra parcelada', () => {
+    const visa = conta({
+      id: 'c9',
+      nome: 'Visa',
+      tipo: 'cartao_credito',
+      saldoCentavos: 0,
+      cartao: { limiteCentavos: 500000, disponivelCentavos: 500000, diaFechamento: 3, diaVencimento: 10, contaPagamentoId: 'c1' },
+    })
+    const comCartao = { ...base, 'GET /contas': responde([conta(), visa]) }
+
+    function parcela(sobra: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+      return lancamento({
+        id: 'l1',
+        titulo: 'Notebook',
+        contaId: 'c9',
+        valorCentavos: 33333,
+        dataCompetencia: '2026-10-01',
+        dataCaixa: '2026-10-10',
+        compraParceladaId: 'l1',
+        parcelaNum: 1,
+        parcelaTotal: 3,
+        ...sobra,
+      })
+    }
+
+    const terceira = parcela({ id: 'l3', parcelaNum: 3, valorCentavos: 33334 })
+    const segunda = parcela({ id: 'l2', parcelaNum: 2 })
+
+    function compra(itens: number): Record<string, unknown> {
+      return {
+        id: 'l1',
+        titulo: 'Notebook',
+        descricao: null,
+        valorTotalCentavos: 33333 * itens,
+        parcelas: 3,
+        categoriaId: 'cd1',
+        contaId: 'c9',
+        dataCompra: '2026-10-01',
+        criadaEm: '2026-10-01T12:00:00Z',
+        itens: Array.from({ length: itens }, (_, i) => ({
+          lancamentoId: `l${i + 1}`,
+          parcelaNum: i + 1,
+          valorCentavos: 33333,
+          dataCaixa: '2026-10-10',
+        })),
+      }
+    }
+
+    async function escolherCartao(form: HTMLElement): Promise<void> {
+      await waitFor(() => expect(within(form).getByRole('option', { name: 'Visa' })).toBeInTheDocument())
+      fireEvent.change(within(form).getByLabelText('Conta'), { target: { value: 'c9' } })
+    }
+
+    it('conta que não é cartão não oferece Parcelar', async () => {
+      mockFetch({ ...comCartao, [MES_ATUAL]: responde([]) })
+      render(<App />)
+      const form = await formulario()
+      expect(within(form).queryByLabelText('Parcelar')).toBeNull()
+      await escolherCartao(form)
+      expect(within(form).getByLabelText('Parcelar')).toHaveValue('')
+    })
+
+    it('receita no cartão não oferece Parcelar', async () => {
+      mockFetch({ ...comCartao, [MES_ATUAL]: responde([]) })
+      render(<App />)
+      const form = await formulario()
+      await escolherCartao(form)
+      fireEvent.change(within(form).getByLabelText('Tipo'), { target: { value: 'receita' } })
+      expect(within(form).queryByLabelText('Parcelar')).toBeNull()
+    })
+
+    it('com parcelas o valor vira total e a prévia mostra valores e datas', async () => {
+      mockFetch({ ...comCartao, [MES_ATUAL]: responde([]) })
+      render(<App />)
+      const form = await formulario()
+      await escolherCartao(form)
+      expect(within(form).getByLabelText(/valor em reais/i)).toBeVisible()
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '1.000,00' } })
+      fireEvent.change(within(form).getByLabelText('Parcelar'), { target: { value: '3' } })
+      expect(within(form).getByLabelText('Valor total em reais')).toHaveValue('1.000,00')
+      expect(within(form).getByText(texto('3x de R$ 333,33 (última R$ 333,34), de 10/11 a 10/01'))).toBeVisible()
+    })
+
+    it('prévia sem sobra não fala da última', async () => {
+      mockFetch({ ...comCartao, [MES_ATUAL]: responde([]) })
+      render(<App />)
+      const form = await formulario()
+      await escolherCartao(form)
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '900,00' } })
+      fireEvent.change(within(form).getByLabelText('Parcelar'), { target: { value: '3' } })
+      const previa = within(form).getByText(texto('3x de R$ 300,00'))
+      expect(previa).not.toHaveTextContent('última')
+    })
+
+    it('parcela de zero centavo avisa e não envia', async () => {
+      mockFetch({ ...comCartao, [MES_ATUAL]: responde([]) })
+      render(<App />)
+      const form = await formulario()
+      await escolherCartao(form)
+      preencher(form, 'Bala', '0,47')
+      fireEvent.change(within(form).getByLabelText('Parcelar'), { target: { value: '48' } })
+      expect(within(form).getByText(/ao menos 1 centavo/)).toBeVisible()
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent(/ao menos 1 centavo/)
+      expect(chamadasA('POST /compras-parceladas')).toHaveLength(0)
+    })
+
+    it('envia para /compras-parceladas com o total em centavos, as parcelas e a data local', async () => {
+      let corpoEnviado: unknown
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([]),
+        'POST /compras-parceladas': (corpo) => {
+          corpoEnviado = corpo
+          return Promise.resolve(jsonResponse(compra(3), 201))
+        },
+      })
+      render(<App />)
+      const form = await formulario()
+      await escolherCartao(form)
+      preencher(form, '  Notebook ', '1.000,00')
+      fireEvent.change(within(form).getByLabelText('Parcelar'), { target: { value: '3' } })
+      fireEvent.submit(form)
+      await waitFor(() => expect(chamadasA('POST /compras-parceladas')).toHaveLength(1))
+      expect(JSON.parse(String(corpoEnviado))).toEqual({
+        titulo: 'Notebook',
+        valorTotalCentavos: 100000,
+        parcelas: 3,
+        categoriaId: 'cd1',
+        contaId: 'c9',
+        data: '2026-10-19',
+      })
+      expect(chamadasA('POST /lancamentos')).toHaveLength(0)
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+      await waitFor(() => expect(chamadasA('GET /contas')).toHaveLength(2))
+    })
+
+    it('à vista no cartão continua indo para /lancamentos', async () => {
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([]),
+        'POST /lancamentos': responde(lancamento({ contaId: 'c9' }), 201),
+      })
+      render(<App />)
+      const form = await formulario()
+      await escolherCartao(form)
+      preencher(form, 'Feira', '10,00')
+      fireEvent.submit(form)
+      await waitFor(() => expect(chamadasA('POST /lancamentos')).toHaveLength(1))
+      expect(chamadasA('POST /compras-parceladas')).toHaveLength(0)
+    })
+
+    it('400 do servidor aparece e mantém o formulário preenchido', async () => {
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([]),
+        'POST /compras-parceladas': responde({ erro: 'saldo da conta fora do limite' }, 400),
+      })
+      render(<App />)
+      const form = await formulario()
+      await escolherCartao(form)
+      preencher(form, 'Notebook', '1.000,00')
+      fireEvent.change(within(form).getByLabelText('Parcelar'), { target: { value: '3' } })
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent('saldo da conta fora do limite')
+      expect(within(form).getByLabelText('Título')).toHaveValue('Notebook')
+      expect(within(form).getByLabelText('Parcelar')).toHaveValue('3')
+    })
+
+    it('submit duplo manda uma só compra', async () => {
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([]),
+        'POST /compras-parceladas': () => new Promise<Response>(() => {}),
+      })
+      render(<App />)
+      const form = await formulario()
+      await escolherCartao(form)
+      preencher(form, 'Notebook', '1.000,00')
+      fireEvent.change(within(form).getByLabelText('Parcelar'), { target: { value: '3' } })
+      fireEvent.submit(form)
+      fireEvent.submit(form)
+      await waitFor(() => expect(chamadasA('POST /compras-parceladas')).toHaveLength(1))
+    })
+
+    it('401 ao criar volta para o login', async () => {
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([]),
+        'POST /compras-parceladas': responde({ erro: 'x' }, 401),
+      })
+      render(<App />)
+      const form = await formulario()
+      await escolherCartao(form)
+      preencher(form, 'Notebook', '1.000,00')
+      fireEvent.change(within(form).getByLabelText('Parcelar'), { target: { value: '3' } })
+      fireEvent.submit(form)
+      expect(await screen.findByRole('status')).toHaveTextContent(/sessão acabou/i)
+    })
+
+    it('a lista mostra "parcela k de N" e o valor da parcela', async () => {
+      mockFetch({ ...comCartao, [MES_ATUAL]: responde([segunda, lancamento()]) })
+      render(<App />)
+      const itens = await within(await secao()).findAllByRole('listitem')
+      expect(itens[0]).toHaveTextContent('parcela 2 de 3')
+      expect(itens[0]).toHaveTextContent(texto('− R$ 333,33'))
+      expect(itens[1]).not.toHaveTextContent('parcela')
+    })
+
+    it('a primeira parcela não tem Apagar parcela, mas as outras têm', async () => {
+      mockFetch({ ...comCartao, [MES_ATUAL]: responde([parcela(), segunda]) })
+      render(<App />)
+      const itens = await within(await secao()).findAllByRole('listitem')
+      expect(within(itens[0]).queryByRole('button', { name: /apagar parcela/i })).toBeNull()
+      expect(within(itens[0]).getByRole('button', { name: /editar parcela/i })).toBeVisible()
+      expect(within(itens[1]).getByRole('button', { name: 'Apagar parcela 2 de Notebook' })).toBeVisible()
+    })
+
+    it('parcela não tem o Editar e o Apagar comuns', async () => {
+      mockFetch({ ...comCartao, [MES_ATUAL]: responde([segunda]) })
+      render(<App />)
+      await screen.findByRole('button', { name: 'Apagar compra Notebook' })
+      expect(screen.queryByRole('button', { name: 'Editar Notebook' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Apagar Notebook' })).toBeNull()
+    })
+
+    it('editar parcela deixa conta e data desabilitadas, explica e manda o PUT sem mudá-las', async () => {
+      let corpoEnviado: unknown
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([segunda]),
+        'PUT /lancamentos/l2': (corpo) => {
+          corpoEnviado = corpo
+          return Promise.resolve(jsonResponse(segunda, 200))
+        },
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Editar parcela 2 de Notebook' }))
+      const form = await formulario('Editar parcela')
+      const conta = within(form).getByLabelText('Conta')
+      const data = within(form).getByLabelText(/data/i)
+      expect(conta).toBeDisabled()
+      expect(data).toBeDisabled()
+      expect(data).toHaveValue('2026-10-01')
+      expect(within(form).getByText('Para mudar conta ou data, apague a compra e lance de novo.')).toBeVisible()
+      expect(conta).toHaveAccessibleDescription(/apague a compra/)
+      expect(within(form).queryByLabelText('Parcelar')).toBeNull()
+      fireEvent.change(within(form).getByLabelText(/valor em reais/i), { target: { value: '400,00' } })
+      fireEvent.submit(form)
+      await waitFor(() => expect(chamadasA('PUT /lancamentos/l2')).toHaveLength(1))
+      expect(JSON.parse(String(corpoEnviado))).toEqual({
+        tipo: 'despesa',
+        titulo: 'Notebook',
+        valorCentavos: 40000,
+        categoriaId: 'cd1',
+        contaId: 'c9',
+        data: '2026-10-01',
+      })
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+    })
+
+    it('editar compra manda PATCH só com o que mudou e recarrega', async () => {
+      let corpoEnviado: unknown
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([segunda]),
+        'PATCH /compras-parceladas/l1': (corpo) => {
+          corpoEnviado = corpo
+          return Promise.resolve(jsonResponse(compra(3), 200))
+        },
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Editar compra Notebook' }))
+      const form = await screen.findByRole('form', { name: 'Editar compra Notebook' })
+      fireEvent.change(within(form).getByLabelText('Título da compra'), { target: { value: 'Notebook novo' } })
+      fireEvent.change(within(form).getByLabelText('Categoria da compra'), { target: { value: 'cd2' } })
+      fireEvent.submit(form)
+      await waitFor(() => expect(chamadasA('PATCH /compras-parceladas/l1')).toHaveLength(1))
+      expect(JSON.parse(String(corpoEnviado))).toEqual({ titulo: 'Notebook novo', categoriaId: 'cd2' })
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+      await waitFor(() => expect(chamadasA('GET /contas')).toHaveLength(2))
+      expect(screen.queryByRole('form', { name: 'Editar compra Notebook' })).toBeNull()
+    })
+
+    it('editar compra sem mudança não envia', async () => {
+      mockFetch({ ...comCartao, [MES_ATUAL]: responde([segunda]) })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Editar compra Notebook' }))
+      fireEvent.submit(await screen.findByRole('form', { name: 'Editar compra Notebook' }))
+      expect(await screen.findByText(/nada mudou/i)).toBeVisible()
+      expect(chamadasA('PATCH /compras-parceladas/l1')).toHaveLength(0)
+    })
+
+    it('400 ao editar a compra mostra a mensagem e mantém o formulário', async () => {
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([segunda]),
+        'PATCH /compras-parceladas/l1': responde({ erro: 'categoria não encontrada' }, 400),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Editar compra Notebook' }))
+      const form = await screen.findByRole('form', { name: 'Editar compra Notebook' })
+      fireEvent.change(within(form).getByLabelText('Título da compra'), { target: { value: 'Outro' } })
+      fireEvent.submit(form)
+      expect(await within(form).findByRole('alert')).toHaveTextContent('categoria não encontrada')
+    })
+
+    it('apagar parcela pede confirmação, avisa que a soma muda e recarrega lista e saldo', async () => {
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([terceira]),
+        'DELETE /lancamentos/l3': () => Promise.resolve(new Response(null, { status: 204 })),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Apagar parcela 3 de Notebook' }))
+      expect(chamadasA('DELETE /lancamentos/l3')).toHaveLength(0)
+      expect(screen.getByText(/a soma da compra muda/i)).toBeVisible()
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar parcela 3 de Notebook' }))
+      await waitFor(() => expect(chamadasA('DELETE /lancamentos/l3')).toHaveLength(1))
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+      await waitFor(() => expect(chamadasA('GET /contas')).toHaveLength(2))
+    })
+
+    it('desistir de apagar a parcela não envia nada', async () => {
+      mockFetch({ ...comCartao, [MES_ATUAL]: responde([terceira]) })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Apagar parcela 3 de Notebook' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Manter parcela' }))
+      expect(screen.getByRole('button', { name: 'Apagar parcela 3 de Notebook' })).toBeVisible()
+      expect(chamadasA('DELETE /lancamentos/l3')).toHaveLength(0)
+    })
+
+    it('apagar compra diz quantas parcelas somem, confirma e recarrega', async () => {
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([segunda]),
+        'GET /compras-parceladas/l1': responde(compra(2)),
+        'DELETE /compras-parceladas/l1': () => Promise.resolve(new Response(null, { status: 204 })),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Apagar compra Notebook' }))
+      expect(await screen.findByText(/somem 2 parcelas/)).toBeVisible()
+      expect(chamadasA('DELETE /compras-parceladas/l1')).toHaveLength(0)
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar compra Notebook' }))
+      await waitFor(() => expect(chamadasA('DELETE /compras-parceladas/l1')).toHaveLength(1))
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+      await waitFor(() => expect(chamadasA('GET /contas')).toHaveLength(2))
+    })
+
+    it('404 ao apagar a compra avisa e recarrega', async () => {
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([segunda]),
+        'GET /compras-parceladas/l1': responde(compra(2)),
+        'DELETE /compras-parceladas/l1': responde({ erro: 'não encontrado' }, 404),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Apagar compra Notebook' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar apagar compra Notebook' }))
+      expect(await screen.findByText('Essa compra não existe mais.')).toBeVisible()
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+    })
+
+    it('apagar a compra recarrega também as faturas abertas', async () => {
+      const faturas = 'GET /contas/c9/faturas?de=2026-07-01&ate=2027-04-30'
+      mockFetch({
+        ...comCartao,
+        [MES_ATUAL]: responde([segunda]),
+        [faturas]: responde({ contaId: 'c9', faturas: [] }),
+        'GET /compras-parceladas/l1': responde(compra(2)),
+        'DELETE /compras-parceladas/l1': () => Promise.resolve(new Response(null, { status: 204 })),
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Faturas de Visa' }))
+      await waitFor(() => expect(chamadasA(faturas)).toHaveLength(1))
+      fireEvent.click(await screen.findByRole('button', { name: 'Apagar compra Notebook' }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar apagar compra Notebook' }))
+      await waitFor(() => expect(chamadasA(faturas)).toHaveLength(2))
     })
   })
 })

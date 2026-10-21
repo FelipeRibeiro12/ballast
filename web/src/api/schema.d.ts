@@ -101,6 +101,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/compras-parceladas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cria uma compra parcelada no cartão
+         * @description Cria de 2 a 48 parcelas de despesa realizada na conta de cartão, numa transação só. O saldo do cartão cai pelo total na hora, e cada parcela aparece na fatura do seu vencimento. Conta e categoria precisam ser do usuário; conta inexistente, de outro usuário e id inválido têm a mesma mensagem.
+         */
+        post: operations["postComprasParceladas"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/compras-parceladas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Devolve uma compra parcelada
+         * @description O id é o da primeira parcela. valorTotalCentavos é a soma das parcelas que ainda existem: depois de editar ou apagar uma parcela em /lancamentos, ele muda. parcelas continua sendo o número de parcelas da compra ao nascer.
+         */
+        get: operations["getComprasParceladasById"];
+        put?: never;
+        post?: never;
+        /**
+         * Apaga a compra parcelada inteira
+         * @description Apaga todas as parcelas que ainda existem numa instrução só. O saldo do cartão volta.
+         */
+        delete: operations["deleteComprasParceladasById"];
+        options?: never;
+        head?: never;
+        /**
+         * Muda o texto e a categoria da compra inteira
+         * @description Aplica titulo, descricao e categoriaId em todas as parcelas na mesma transação. Pelo menos um dos três; campo ausente não muda, e descricao vazia limpa a descrição. Valor, número de parcelas, data e conta não se editam: apague a compra e lance de novo. Vale também com o cartão arquivado.
+         */
+        patch: operations["patchComprasParceladasById"];
+        trace?: never;
+    };
     "/contas": {
         parameters: {
             query?: never;
@@ -413,6 +461,85 @@ export interface components {
             /** @enum {string} */
             tipo: "receita" | "despesa";
         };
+        CompraParcelada: {
+            /** Format: uuid */
+            categoriaId: string;
+            /** Format: uuid */
+            contaId: string;
+            /** Format: date-time */
+            criadaEm: string;
+            /**
+             * Format: date
+             * @description Data da compra, a dataCompetencia de todas as parcelas
+             */
+            dataCompra: string;
+            descricao: string | null;
+            /**
+             * Format: uuid
+             * @description Id da primeira parcela; as rotas da compra usam este id
+             */
+            id: string;
+            /** @description As parcelas que ainda existem, na ordem de parcelaNum */
+            itens: components["schemas"]["CompraParceladaItem"][];
+            /**
+             * Format: int32
+             * @description Quantas parcelas a compra teve ao nascer, de 2 a 48
+             */
+            parcelas: number;
+            titulo: string;
+            /**
+             * Format: int64
+             * @description Soma das parcelas que ainda existem, em centavos. Muda se uma parcela for editada ou apagada em /lancamentos
+             */
+            valorTotalCentavos: number;
+        };
+        CompraParceladaAtualizarRequest: {
+            /** Format: uuid */
+            categoriaId?: string;
+            /** @description Vazia ou em branco limpa a descrição */
+            descricao?: string;
+            titulo?: string;
+        };
+        CompraParceladaItem: {
+            /**
+             * Format: date
+             * @description Vencimento da parcela
+             */
+            dataCaixa: string;
+            /**
+             * Format: uuid
+             * @description Id em /lancamentos
+             */
+            lancamentoId: string;
+            /** Format: int32 */
+            parcelaNum: number;
+            /** Format: int64 */
+            valorCentavos: number;
+        };
+        CompraParceladaRequest: {
+            /** Format: uuid */
+            categoriaId: string;
+            /**
+             * Format: uuid
+             * @description Só conta de cartão de crédito do usuário e ativa
+             */
+            contaId: string;
+            /**
+             * Format: date
+             * @description Data da compra: vira dataCompetencia de todas as parcelas. A dataCaixa da primeira é o vencimento da fatura da compra e a das outras avança um mês por parcela
+             * @example 2026-03-10
+             */
+            data: string;
+            descricao?: string | null;
+            /** Format: int32 */
+            parcelas: number;
+            titulo: string;
+            /**
+             * Format: int64
+             * @description Centavos de real. Cada parcela recebe o total dividido por parcelas, truncado em centavos, e a última leva o resto; o total precisa dar ao menos 1 centavo por parcela
+             */
+            valorTotalCentavos: number;
+        };
         Conta: {
             arquivada: boolean;
             /** @description Dados do cartão; nulo nas contas que não são de cartão de crédito */
@@ -528,6 +655,11 @@ export interface components {
              * @description Nulo só nas pernas de transferência
              */
             categoriaId: string | null;
+            /**
+             * Format: uuid
+             * @description Id da compra parcelada (o da primeira parcela) a que o lançamento pertence; nulo nos outros
+             */
+            compraParceladaId: string | null;
             /** Format: uuid */
             contaId: string;
             /** Format: date-time */
@@ -552,9 +684,19 @@ export interface components {
             id: string;
             /**
              * Format: int32
+             * @description Número da parcela na compra parcelada; nulo nos outros
+             */
+            parcelaNum: number | null;
+            /**
+             * Format: int32
              * @description Ordem da parcela na divisão de salário (1 é a primeira); nulo fora de divisão
              */
             parcelaOrdem: number | null;
+            /**
+             * Format: int32
+             * @description Quantas parcelas a compra teve ao nascer; nulo nos outros
+             */
+            parcelaTotal: number | null;
             /** @enum {string} */
             status: "previsto" | "realizado" | "cancelado";
             /**
@@ -1155,6 +1297,271 @@ export interface operations {
             };
         };
     };
+    postComprasParceladas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompraParceladaRequest"];
+            };
+        };
+        responses: {
+            /** @description Compra criada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompraParcelada"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "compra parcelada só em cartão de crédito", "conta arquivada", "categoria não encontrada", "cada parcela precisa ter ao menos 1 centavo", "saldo da conta fora do limite" ou "compra fora do limite" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getComprasParceladasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Compra */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompraParcelada"];
+                };
+            };
+            /** @description "compra fora do limite": a soma das parcelas passa de ±9007199254740991 centavos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Compra de outro usuário, inexistente, id de outra parcela ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível; pode tentar de novo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteComprasParceladasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Compra apagada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description "saldo da conta fora do limite": apagar tiraria o saldo da faixa e nada é apagado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Compra de outro usuário, inexistente, id de outra parcela ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    patchComprasParceladasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompraParceladaAtualizarRequest"];
+            };
+        };
+        responses: {
+            /** @description Compra com os valores novos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompraParcelada"];
+                };
+            };
+            /** @description Nenhum campo, campo não declarado ou valor inválido; "categoria não encontrada" ou "compra fora do limite" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Compra de outro usuário, inexistente, id de outra parcela ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     getContas: {
         parameters: {
             query?: {
@@ -1732,7 +2139,7 @@ export interface operations {
                     "application/json": components["schemas"]["Lancamento"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado e tipo transferencia; "conta não encontrada", "conta arquivada" (só ao trocar de conta), "categoria não encontrada", "saldo da conta fora do limite" (em qualquer das contas afetadas) ou "use a rota de transferência" (o lançamento é perna de transferência) */
+            /** @description Entrada inválida, inclusive campo não declarado e tipo transferencia; "conta não encontrada", "conta arquivada" (só ao trocar de conta), "categoria não encontrada", "saldo da conta fora do limite" (em qualquer das contas afetadas), "compra fora do limite" (parcela cuja soma da compra passaria do teto) ou "use a rota de transferência" (o lançamento é perna de transferência) */
             400: {
                 headers: {
                     [name: string]: unknown;

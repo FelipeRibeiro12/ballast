@@ -80,7 +80,10 @@ class EntryCreationTest {
             "transferenciaId",
             "direcao",
             "templateId",
-            "parcelaOrdem");
+            "parcelaOrdem",
+            "compraParceladaId",
+            "parcelaNum",
+            "parcelaTotal");
     assertThat(body.get("templateId").isNull()).isTrue();
     assertThat(body.get("parcelaOrdem").isNull()).isTrue();
     assertThat(UUID.fromString(body.get("id").asString())).isNotNull();

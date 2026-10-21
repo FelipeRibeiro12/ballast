@@ -1,27 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  CompraParceladaInvalidaError,
+  CompraParceladaNaoEncontradaError,
   LancamentoInvalidoError,
   LancamentoNaoEncontradoError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
   TransferenciaInvalidaError,
   TransferenciaNaoEncontradaError,
+  deleteCompraParcelada,
   deleteLancamento,
   deleteTransferencia,
   fetchCategorias,
+  fetchCompraParcelada,
   fetchLancamentos,
   fetchVencidos,
+  patchCompraParcelada,
   patchStatusLancamento,
+  postCompraParcelada,
   postLancamento,
   postTransferencia,
   putLancamento,
 } from './api'
-import type { AjusteDeConfirmacao, Categoria, Conta, Lancamento } from './api'
+import type { AjusteDeConfirmacao, Categoria, CompraParceladaAtualizarRequest, Conta, Lancamento } from './api'
 import { vencimentoDaFatura } from './fatura'
 import { formatarDataCompleta, formatarDiaMes, hojeLocal, intervaloDoMes, mesDeHoje, rotuloDoMes, somarMeses } from './datas'
 import type { Mes } from './datas'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
+import { calcularParcelas } from './parcelas'
 
 type TipoDeLancamento = Lancamento['tipo']
 
@@ -42,6 +49,10 @@ const ANO_MAXIMO = 2199
 const MENSAGEM_INDISPONIVEL = 'Serviço indisponível. Tente de novo em instantes.'
 const MENSAGEM_NAO_EXISTE = 'Esse lançamento não existe mais.'
 const MENSAGEM_DATA_INVALIDA = `Data inválida. Use uma data de ${ANO_MINIMO} a ${ANO_MAXIMO}.`
+const MENSAGEM_PARCELA_ZERO = 'Valor pequeno demais: cada parcela precisa ter ao menos 1 centavo.'
+const MENSAGEM_COMPRA_NAO_EXISTE = 'Essa compra não existe mais.'
+const AVISO_DE_PARCELA = 'Para mudar conta ou data, apague a compra e lance de novo.'
+const NUMEROS_DE_PARCELAS = Array.from({ length: 47 }, (_, i) => i + 2)
 const MENSAGEM_VALOR_INVALIDO =
   'Valor inválido. Use o formato 1.234,56, maior que zero e até 90.071.992.547.409,91.'
 
@@ -69,6 +80,9 @@ function mensagemDeGravacao(erro: unknown): string {
   if (erro instanceof LancamentoInvalidoError && erro.mensagemServidor !== null) {
     return erro.mensagemServidor
   }
+  if (erro instanceof CompraParceladaInvalidaError && erro.mensagemServidor !== null) {
+    return erro.mensagemServidor
+  }
   if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
   return 'Não foi possível salvar o lançamento. Tente de novo.'
 }
@@ -90,6 +104,15 @@ function mensagemDeStatus(erro: unknown): string {
   return 'Não foi possível alterar a ocorrência. Tente de novo.'
 }
 
+function mensagemDeCompra(erro: unknown, verbo: 'alterar' | 'apagar'): string {
+  if (erro instanceof CompraParceladaNaoEncontradaError) return MENSAGEM_COMPRA_NAO_EXISTE
+  if (erro instanceof CompraParceladaInvalidaError && erro.mensagemServidor !== null) {
+    return erro.mensagemServidor
+  }
+  if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
+  return `Não foi possível ${verbo} a compra. Tente de novo.`
+}
+
 function mensagemDeExclusao(erro: unknown): string {
   if (erro instanceof LancamentoNaoEncontradoError || erro instanceof TransferenciaNaoEncontradaError) {
     return MENSAGEM_NAO_EXISTE
@@ -102,6 +125,15 @@ function mensagemDeExclusao(erro: unknown): string {
   }
   if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
   return 'Não foi possível apagar o lançamento. Tente de novo.'
+}
+
+// "3x de R$ 333,33 (última R$ 333,34), de 10/11 a 10/01": a última só aparece quando leva o resto.
+function textoDaPrevia(parcelas: { valorCentavos: number; vencimento: string }[]): string {
+  const primeira = parcelas[0]
+  const ultima = parcelas[parcelas.length - 1]
+  const dividido = `${parcelas.length}x de ${formatarCentavos(primeira.valorCentavos)}`
+  const resto = ultima.valorCentavos === primeira.valorCentavos ? '' : ` (última ${formatarCentavos(ultima.valorCentavos)})`
+  return `${dividido}${resto}, de ${formatarDiaMes(primeira.vencimento)} a ${formatarDiaMes(ultima.vencimento)}`
 }
 
 function FormularioDeLancamento({
@@ -132,11 +164,15 @@ function FormularioDeLancamento({
   const [contaEscolhida, setContaEscolhida] = useState(inicial?.contaId ?? '')
   const [data, setData] = useState(inicial?.dataCompetencia ?? hojeLocal())
   const [descricao, setDescricao] = useState(inicial?.descricao ?? '')
+  // Vazio é à vista; o resto é o número de parcelas, de 2 a 48.
+  const [parcelas, setParcelas] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
   const emVoo = useRef(false)
 
+  // Conta e data de uma parcela só mudam apagando a compra (ADR-032); o servidor recusa com 400.
+  const eParcela = inicial !== null && inicial.compraParceladaId !== null
   const categoriasDoTipo = categorias.filter((categoria) => categoria.tipo === tipo)
   // Ao trocar o tipo a escolha antiga some da lista; cai na primeira em vez de guardar id inválido.
   const categoriaId = categoriasDoTipo.some((c) => c.id === categoriaEscolhida)
@@ -156,6 +192,16 @@ function FormularioDeLancamento({
     return <p>Crie uma conta antes de lançar.</p>
   }
 
+  // Parcelar vale só para despesa nova em cartão; trocar conta ou tipo desfaz o parcelamento sem estado extra.
+  const cartaoParcelavel = inicial === null && tipo === 'despesa' ? cartaoEscolhido : null
+  const quantidadeDeParcelas = Number(parcelas)
+  const parcelando = cartaoParcelavel !== null && quantidadeDeParcelas >= 2
+  const totalParaPrevia = parcelando ? lerValorPositivo(valor) : null
+  const previa =
+    cartaoParcelavel !== null && totalParaPrevia !== null && /^\d{4}-\d{2}-\d{2}$/.test(data)
+      ? calcularParcelas(totalParaPrevia, quantidadeDeParcelas, data, cartaoParcelavel)
+      : null
+
   async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
     evento.preventDefault()
     if (emVoo.current) return
@@ -163,6 +209,12 @@ function FormularioDeLancamento({
     if (valorCentavos === null) {
       setMensagem(MENSAGEM_VALOR_INVALIDO)
       return
+    }
+    if (cartaoParcelavel !== null && parcelando) {
+      if (calcularParcelas(valorCentavos, quantidadeDeParcelas, data, cartaoParcelavel).tipo === 'parcela-zero') {
+        setMensagem(MENSAGEM_PARCELA_ZERO)
+        return
+      }
     }
     emVoo.current = true
     setEnviando(true)
@@ -178,7 +230,20 @@ function FormularioDeLancamento({
     }
     try {
       if (inicial === null) {
-        await postLancamento(corpo)
+        if (parcelando) {
+          await postCompraParcelada({
+            titulo: corpo.titulo,
+            ...(descricao.trim() === '' ? {} : { descricao: descricao.trim() }),
+            valorTotalCentavos: valorCentavos,
+            parcelas: quantidadeDeParcelas,
+            categoriaId,
+            contaId,
+            data,
+          })
+        } else {
+          await postLancamento(corpo)
+        }
+        setParcelas('')
         setTitulo('')
         setValor('')
         setDescricao('')
@@ -204,7 +269,8 @@ function FormularioDeLancamento({
   }
 
   const descricaoDoErro = mensagem === null ? undefined : 'erro-lancamento'
-  const nome = inicial === null ? 'Novo lançamento' : 'Editar lançamento'
+  const nome = inicial === null ? 'Novo lançamento' : eParcela ? 'Editar parcela' : 'Editar lançamento'
+  const avisoDaParcela = eParcela ? 'lancamento-aviso-parcela' : undefined
 
   return (
     <form onSubmit={(evento) => void enviar(evento)} aria-label={nome}>
@@ -214,6 +280,7 @@ function FormularioDeLancamento({
         <select
           id="lancamento-tipo"
           value={tipo}
+          disabled={eParcela}
           onChange={(evento) => {
             const escolhido = TIPOS.find((opcao) => opcao === evento.target.value)
             if (escolhido !== undefined) setTipo(escolhido)
@@ -239,7 +306,9 @@ function FormularioDeLancamento({
         />
       </div>
       <div className="campo">
-        <label htmlFor="lancamento-valor">Valor em reais</label>
+        <label htmlFor="lancamento-valor">
+          {parcelando ? 'Valor total em reais' : eParcela ? 'Valor em reais (desta parcela)' : 'Valor em reais'}
+        </label>
         <input
           id="lancamento-valor"
           type="text"
@@ -273,6 +342,8 @@ function FormularioDeLancamento({
           id="lancamento-conta"
           value={contaId}
           required
+          disabled={eParcela}
+          aria-describedby={avisoDaParcela}
           onChange={(evento) => setContaEscolhida(evento.target.value)}
         >
           {contaArquivadaDoLancamento !== null && (
@@ -291,18 +362,44 @@ function FormularioDeLancamento({
           id="lancamento-data"
           type="date"
           required
+          disabled={eParcela}
+          aria-describedby={avisoDaParcela}
           min="1900-01-01"
           max="2199-12-31"
           value={data}
           onChange={(evento) => setData(evento.target.value)}
         />
-        {cartaoEscolhido !== null && /^\d{4}-\d{2}-\d{2}$/.test(data) && (
+        {cartaoEscolhido !== null && !eParcela && /^\d{4}-\d{2}-\d{2}$/.test(data) && (
           <small>
             Entra na fatura que vence em{' '}
             {formatarDiaMes(vencimentoDaFatura(data, cartaoEscolhido.diaFechamento, cartaoEscolhido.diaVencimento))}
           </small>
         )}
+        {eParcela && <small id="lancamento-aviso-parcela">{AVISO_DE_PARCELA}</small>}
       </div>
+      {cartaoParcelavel !== null && (
+        <div className="campo">
+          <label htmlFor="lancamento-parcelas">Parcelar</label>
+          <select
+            id="lancamento-parcelas"
+            value={parcelas}
+            onChange={(evento) => setParcelas(evento.target.value)}
+          >
+            <option value="">À vista</option>
+            {NUMEROS_DE_PARCELAS.map((n) => (
+              <option key={n} value={String(n)}>
+                {n}x
+              </option>
+            ))}
+          </select>
+          {previa?.tipo === 'ok' && <small aria-live="polite">{textoDaPrevia(previa.parcelas)}</small>}
+          {previa?.tipo === 'parcela-zero' && (
+            <small aria-live="polite" className="erro">
+              {MENSAGEM_PARCELA_ZERO}
+            </small>
+          )}
+        </div>
+      )}
       <div className="campo">
         <label htmlFor="lancamento-descricao">Descrição (opcional)</label>
         <input
@@ -433,6 +530,114 @@ function FormularioDeConfirmacao({
       )}
       <button type="submit" disabled={enviando}>
         {enviando ? 'Confirmando...' : 'Confirmar'}
+      </button>
+      <button type="button" disabled={enviando} onClick={aoVoltar}>
+        Voltar
+      </button>
+    </form>
+  )
+}
+
+function FormularioDeCompra({
+  parcela,
+  categorias,
+  aoSalvar,
+  aoVoltar,
+}: {
+  parcela: Lancamento
+  categorias: Categoria[]
+  // Devolve a mensagem de erro, ou null quando deu certo e o formulário vai fechar.
+  aoSalvar: (dados: CompraParceladaAtualizarRequest) => Promise<string | null>
+  aoVoltar: () => void
+}) {
+  const [titulo, setTitulo] = useState(parcela.titulo)
+  const [descricao, setDescricao] = useState(parcela.descricao ?? '')
+  const [categoriaId, setCategoriaId] = useState(parcela.categoriaId ?? '')
+  const [enviando, setEnviando] = useState(false)
+  const [mensagem, setMensagem] = useState<string | null>(null)
+  // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
+  const emVoo = useRef(false)
+
+  async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
+    evento.preventDefault()
+    if (emVoo.current) return
+    // Só o que mudou vai no PATCH: a parcela pode ter sido editada à parte e não deve ditar o título das outras.
+    const dados: CompraParceladaAtualizarRequest = {
+      ...(titulo.trim() === parcela.titulo ? {} : { titulo: titulo.trim() }),
+      // Descrição em branco limpa no servidor, então a string vazia é um valor válido.
+      ...(descricao.trim() === (parcela.descricao ?? '') ? {} : { descricao: descricao.trim() }),
+      ...(categoriaId === parcela.categoriaId ? {} : { categoriaId }),
+    }
+    if (Object.keys(dados).length === 0) {
+      setMensagem('Nada mudou. Altere título, descrição ou categoria.')
+      return
+    }
+    emVoo.current = true
+    setEnviando(true)
+    setMensagem(null)
+    try {
+      setMensagem(await aoSalvar(dados))
+    } finally {
+      emVoo.current = false
+      setEnviando(false)
+    }
+  }
+
+  const id = `compra-${parcela.id}`
+  const descricaoDoErro = mensagem === null ? undefined : `${id}-erro`
+  const despesas = categorias.filter((categoria) => categoria.tipo === 'despesa')
+
+  return (
+    <form
+      className="confirmacao"
+      onSubmit={(evento) => void enviar(evento)}
+      aria-label={`Editar compra ${parcela.titulo}`}
+    >
+      <div className="campo">
+        <label htmlFor={`${id}-titulo`}>Título da compra</label>
+        <input
+          id={`${id}-titulo`}
+          type="text"
+          maxLength={100}
+          required
+          value={titulo}
+          aria-describedby={descricaoDoErro}
+          onChange={(evento) => setTitulo(evento.target.value)}
+        />
+      </div>
+      <div className="campo">
+        <label htmlFor={`${id}-descricao`}>Descrição da compra (opcional)</label>
+        <input
+          id={`${id}-descricao`}
+          type="text"
+          maxLength={500}
+          value={descricao}
+          onChange={(evento) => setDescricao(evento.target.value)}
+        />
+      </div>
+      <div className="campo">
+        <label htmlFor={`${id}-categoria`}>Categoria da compra</label>
+        <select
+          id={`${id}-categoria`}
+          value={categoriaId}
+          required
+          onChange={(evento) => setCategoriaId(evento.target.value)}
+        >
+          {despesas.map((categoria) => (
+            <option key={categoria.id} value={categoria.id}>
+              {categoria.nome}
+            </option>
+          ))}
+        </select>
+      </div>
+      <small>Muda todas as parcelas. Valor, parcelas, data e conta não mudam.</small>
+      {mensagem !== null && (
+        <p id={`${id}-erro`} role="alert" className="erro">
+          {mensagem}
+        </p>
+      )}
+      <button type="submit" disabled={enviando}>
+        {enviando ? 'Salvando...' : 'Salvar compra'}
       </button>
       <button type="button" disabled={enviando} onClick={aoVoltar}>
         Voltar
@@ -646,8 +851,10 @@ export default function Lancamentos({
   // "ajustar" abre o mini formulário de confirmar. O lugar separa a mesma prevista na lista do mês e em Vencidas.
   const [confirmando, setConfirmando] = useState<{
     id: string
-    acao: 'apagar' | 'cancelar' | 'ajustar'
+    acao: 'apagar' | 'cancelar' | 'ajustar' | 'apagar-parcela' | 'apagar-compra' | 'editar-compra'
     lugar: 'mes' | 'vencidas'
+    // Quantas parcelas a compra tem agora, lido do servidor antes de pedir a confirmação.
+    quantidade?: number
   } | null>(null)
   const [apagando, setApagando] = useState<string | null>(null)
   const [falhaDeAcao, setFalhaDeAcao] = useState<string | null>(null)
@@ -761,6 +968,86 @@ export default function Lancamentos({
       if (erro instanceof LancamentoNaoEncontradoError || erro instanceof TransferenciaNaoEncontradaError) {
         depoisDeMudar()
       }
+    } finally {
+      acaoEmVoo.current = false
+      setApagando(null)
+    }
+  }
+
+  // O total de parcelas da compra pode ter diminuído (parcela apagada à parte), então a contagem vem do servidor.
+  async function pedirApagarCompra(lancamento: Lancamento, compraId: string): Promise<void> {
+    if (acaoEmVoo.current) return
+    acaoEmVoo.current = true
+    setApagando(lancamento.id)
+    setFalhaDeAcao(null)
+    try {
+      const compra = await fetchCompraParcelada(compraId)
+      setConfirmando({ id: lancamento.id, acao: 'apagar-compra', lugar: 'mes', quantidade: compra.itens.length })
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return
+      }
+      setFalhaDeAcao(mensagemDeCompra(erro, 'apagar'))
+      if (erro instanceof CompraParceladaNaoEncontradaError) depoisDeMudar()
+    } finally {
+      acaoEmVoo.current = false
+      setApagando(null)
+    }
+  }
+
+  async function apagarCompra(lancamento: Lancamento, compraId: string): Promise<void> {
+    if (acaoEmVoo.current) return
+    acaoEmVoo.current = true
+    setApagando(lancamento.id)
+    setFalhaDeAcao(null)
+    try {
+      await deleteCompraParcelada(compraId)
+      setConfirmando(null)
+      if (editando?.compraParceladaId === compraId) setEditando(null)
+      depoisDeMudar()
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return
+      }
+      setFalhaDeAcao(mensagemDeCompra(erro, 'apagar'))
+      setConfirmando(null)
+      // A lista na tela está velha: busca de novo o que o servidor tem.
+      if (erro instanceof CompraParceladaNaoEncontradaError) depoisDeMudar()
+    } finally {
+      acaoEmVoo.current = false
+      setApagando(null)
+    }
+  }
+
+  async function editarCompra(
+    lancamento: Lancamento,
+    compraId: string,
+    dados: CompraParceladaAtualizarRequest,
+  ): Promise<string | null> {
+    if (acaoEmVoo.current) return null
+    acaoEmVoo.current = true
+    setApagando(lancamento.id)
+    setFalhaDeAcao(null)
+    try {
+      await patchCompraParcelada(compraId, dados)
+      setConfirmando(null)
+      depoisDeMudar()
+      return null
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return null
+      }
+      if (erro instanceof CompraParceladaNaoEncontradaError) {
+        setConfirmando(null)
+        setFalhaDeAcao(MENSAGEM_COMPRA_NAO_EXISTE)
+        depoisDeMudar()
+        return null
+      }
+      // O formulário continua aberto para o usuário corrigir.
+      return mensagemDeCompra(erro, 'alterar')
     } finally {
       acaoEmVoo.current = false
       setApagando(null)
@@ -1042,6 +1329,11 @@ export default function Lancamentos({
                   lancamento.dataCaixa >= hoje
                 const confirmandoEste =
                   confirmando?.id === lancamento.id && confirmando.lugar === 'mes' ? confirmando.acao : null
+                const compraId = lancamento.compraParceladaId
+                const parcelaDaCompra =
+                  compraId !== null && lancamento.parcelaNum !== null && lancamento.parcelaTotal !== null
+                    ? { compraId, num: lancamento.parcelaNum, total: lancamento.parcelaTotal }
+                    : null
                 return (
                   <li
                     key={lancamento.id}
@@ -1069,6 +1361,11 @@ export default function Lancamentos({
                             : `parcela ${lancamento.parcelaOrdem}`}
                         </small>
                       )}
+                      {parcelaDaCompra !== null && (
+                        <small>
+                          parcela {parcelaDaCompra.num} de {parcelaDaCompra.total}
+                        </small>
+                      )}
                       {(ePrevista || eCancelada) && (
                         <span className="marca">{ePrevista ? 'Previsto' : 'Cancelado'}</span>
                       )}
@@ -1090,7 +1387,88 @@ export default function Lancamentos({
                           Confirmar
                         </button>
                       )}
-                      {!ePerna && !eCancelada && (
+                      {parcelaDaCompra !== null && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={apagando !== null}
+                            aria-label={`Editar parcela ${parcelaDaCompra.num} de ${lancamento.titulo}`}
+                            onClick={() => {
+                              setFalhaDeAcao(null)
+                              setConfirmando(null)
+                              setEditando(lancamento)
+                            }}
+                          >
+                            Editar parcela
+                          </button>
+                          <button
+                            type="button"
+                            disabled={apagando !== null}
+                            aria-label={`Editar compra ${lancamento.titulo}`}
+                            onClick={() => {
+                              setFalhaDeAcao(null)
+                              setConfirmando({ id: lancamento.id, acao: 'editar-compra', lugar: 'mes' })
+                            }}
+                          >
+                            Editar compra
+                          </button>
+                          {/* A primeira parcela é a âncora das outras: o servidor só deixa apagar a compra inteira. */}
+                          {parcelaDaCompra.num !== 1 &&
+                            (confirmandoEste === 'apagar-parcela' ? (
+                              <>
+                                <span>Apaga só esta parcela. A soma da compra muda.</span>
+                                <button
+                                  type="button"
+                                  disabled={apagando !== null}
+                                  aria-label={`Confirmar apagar parcela ${parcelaDaCompra.num} de ${lancamento.titulo}`}
+                                  onClick={() => void apagar(lancamento)}
+                                >
+                                  Confirmar apagar parcela
+                                </button>
+                                <button type="button" disabled={apagando !== null} onClick={() => setConfirmando(null)}>
+                                  Manter parcela
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={apagando !== null}
+                                aria-label={`Apagar parcela ${parcelaDaCompra.num} de ${lancamento.titulo}`}
+                                onClick={() => setConfirmando({ id: lancamento.id, acao: 'apagar-parcela', lugar: 'mes' })}
+                              >
+                                Apagar parcela
+                              </button>
+                            ))}
+                          {confirmandoEste === 'apagar-compra' ? (
+                            <>
+                              <span>
+                                Apaga a compra inteira: somem {confirmando?.quantidade ?? parcelaDaCompra.total} parcelas.
+                              </span>
+                              <button
+                                type="button"
+                                disabled={apagando !== null}
+                                aria-label={`Confirmar apagar compra ${lancamento.titulo}`}
+                                onClick={() => void apagarCompra(lancamento, parcelaDaCompra.compraId)}
+                              >
+                                Confirmar apagar compra
+                              </button>
+                              <button type="button" disabled={apagando !== null} onClick={() => setConfirmando(null)}>
+                                Manter compra
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={apagando !== null}
+                              aria-label={`Apagar compra ${lancamento.titulo}`}
+                              onClick={() => void pedirApagarCompra(lancamento, parcelaDaCompra.compraId)}
+                            >
+                              Apagar compra
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {parcelaDaCompra === null && !ePerna && !eCancelada && (
                         <button
                           type="button"
                           disabled={apagando !== null}
@@ -1131,6 +1509,7 @@ export default function Lancamentos({
                         ))}
                       {/* Apagar prevista é recusado pela API: o caminho é cancelar. */}
                       {!ePrevista &&
+                        parcelaDaCompra === null &&
                         (confirmandoEste === 'apagar' ? (
                           <>
                             {ePerna && <span>Apaga as duas pernas da transferência.</span>}
@@ -1158,6 +1537,14 @@ export default function Lancamentos({
                           </button>
                         ))}
                     </div>
+                    {confirmandoEste === 'editar-compra' && parcelaDaCompra !== null && apoio.tipo === 'ok' && (
+                      <FormularioDeCompra
+                        parcela={lancamento}
+                        categorias={apoio.categorias}
+                        aoSalvar={(dados) => editarCompra(lancamento, parcelaDaCompra.compraId, dados)}
+                        aoVoltar={() => setConfirmando(null)}
+                      />
+                    )}
                     {confirmandoEste === 'ajustar' && (
                       <FormularioDeConfirmacao
                         prevista={lancamento}

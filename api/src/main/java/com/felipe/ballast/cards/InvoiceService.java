@@ -68,8 +68,9 @@ class InvoiceService {
     }
     LocalDate lastDue = cycles.getLast().due();
     // O pagamento de uma fatura vai do dia seguinte ao fechamento dela até o fechamento da
-    // seguinte, então o atraso de poucos dias ainda é dela. Pode começar antes de from.
-    LocalDate paymentsFrom = cycles.getFirst().closing().plusDays(1);
+    // seguinte, então o atraso de poucos dias ainda é dela. Pode começar antes de from. Começa no
+    // próprio fechamento porque, quando o vencimento cortado cai nesse dia, o dia é da fatura.
+    LocalDate paymentsFrom = cycles.getFirst().closing();
     LocalDate paymentsTo = cycles.getLast().nextClosing();
     Map<LocalDate, BigDecimal> totals =
         queries.totalsByCashDate(userId, accountId, cycles.getFirst().due(), lastDue);
@@ -79,7 +80,7 @@ class InvoiceService {
     List<Invoice> invoices = new ArrayList<>(cycles.size());
     for (CardBilling.Cycle cycle : cycles) {
       BigDecimal total = totals.getOrDefault(cycle.due(), BigDecimal.ZERO);
-      BigDecimal paid = sumBetween(payments, cycle.closing(), cycle.nextClosing());
+      BigDecimal paid = paidIn(payments, billing.get(), cycle);
       BigDecimal remaining = total.subtract(paid);
       if (!fits(total) || !fits(paid) || !fits(remaining)) {
         return Result.Refused.OUT_OF_RANGE;
@@ -97,12 +98,24 @@ class InvoiceService {
   }
 
   // Depois do fechamento da fatura e até o da seguinte, inclusive: (closing, nextClosing].
-  private static BigDecimal sumBetween(
-      Map<LocalDate, BigDecimal> byDate, LocalDate exclusiveFrom, LocalDate inclusiveTo) {
+  // Fevereiro
+  // com fechamento 30 e vencimento 31 corta os dois no dia 28: o pagamento desse dia é do
+  // vencimento daquela fatura, então o dia entra na própria e sai da anterior (ADR-032).
+  private static BigDecimal paidIn(
+      Map<LocalDate, BigDecimal> payments, CardBilling billing, CardBilling.Cycle cycle) {
+    boolean startsOnClosingDay = cycle.due().equals(cycle.closing());
+    boolean endsBeforeNextClosingDay =
+        billing.dueDate(cycle.nextClosing()).equals(cycle.nextClosing());
     BigDecimal sum = BigDecimal.ZERO;
-    for (Map.Entry<LocalDate, BigDecimal> entry : byDate.entrySet()) {
+    for (Map.Entry<LocalDate, BigDecimal> entry : payments.entrySet()) {
       LocalDate day = entry.getKey();
-      if (day.isAfter(exclusiveFrom) && !day.isAfter(inclusiveTo)) {
+      boolean afterStart =
+          startsOnClosingDay ? !day.isBefore(cycle.closing()) : day.isAfter(cycle.closing());
+      boolean beforeEnd =
+          endsBeforeNextClosingDay
+              ? day.isBefore(cycle.nextClosing())
+              : !day.isAfter(cycle.nextClosing());
+      if (afterStart && beforeEnd) {
         sum = sum.add(entry.getValue());
       }
     }

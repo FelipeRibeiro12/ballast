@@ -238,6 +238,234 @@ paths:
       summary: Lista as categorias do usuário
       tags:
       - categorias
+  /compras-parceladas:
+    post:
+      description: "Cria de 2 a 48 parcelas de despesa realizada na conta de cartã\
+        o, numa transação só. O saldo do cartão cai pelo total na hora, e cada parcela\
+        \ aparece na fatura do seu vencimento. Conta e categoria precisam ser do usuá\
+        rio; conta inexistente, de outro usuário e id inválido têm a mesma mensagem."
+      operationId: postComprasParceladas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompraParceladaRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompraParcelada"
+          description: Compra criada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado; \"conta nã\
+            o encontrada\", \"compra parcelada só em cartão de crédito\", \"conta\
+            \ arquivada\", \"categoria não encontrada\", \"cada parcela precisa ter\
+            \ ao menos 1 centavo\", \"saldo da conta fora do limite\" ou \"compra\
+            \ fora do limite\""
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
+      security:
+      - cookieAuth: []
+      summary: Cria uma compra parcelada no cartão
+      tags:
+      - compras-parceladas
+  /compras-parceladas/{id}:
+    delete:
+      description: Apaga todas as parcelas que ainda existem numa instrução só. O
+        saldo do cartão volta.
+      operationId: deleteComprasParceladasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Compra apagada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "\"saldo da conta fora do limite\": apagar tiraria o saldo\
+            \ da faixa e nada é apagado"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Compra de outro usuário, inexistente, id de outra parcela\
+            \ ou id que não é UUID; todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
+      security:
+      - cookieAuth: []
+      summary: Apaga a compra parcelada inteira
+      tags:
+      - compras-parceladas
+    get:
+      description: "O id é o da primeira parcela. valorTotalCentavos é a soma das\
+        \ parcelas que ainda existem: depois de editar ou apagar uma parcela em /lancamentos,\
+        \ ele muda. parcelas continua sendo o número de parcelas da compra ao nascer."
+      operationId: getComprasParceladasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompraParcelada"
+          description: Compra
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "\"compra fora do limite\": a soma das parcelas passa de ±\
+            9007199254740991 centavos"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Compra de outro usuário, inexistente, id de outra parcela\
+            \ ou id que não é UUID; todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível; pode tentar de novo
+      security:
+      - cookieAuth: []
+      summary: Devolve uma compra parcelada
+      tags:
+      - compras-parceladas
+    patch:
+      description: "Aplica titulo, descricao e categoriaId em todas as parcelas na\
+        \ mesma transação. Pelo menos um dos três; campo ausente não muda, e descricao\
+        \ vazia limpa a descrição. Valor, número de parcelas, data e conta não se\
+        \ editam: apague a compra e lance de novo. Vale também com o cartão arquivado."
+      operationId: patchComprasParceladasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompraParceladaAtualizarRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompraParcelada"
+          description: Compra com os valores novos
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Nenhum campo, campo não declarado ou valor inválido; \"categoria\
+            \ não encontrada\" ou \"compra fora do limite\""
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Compra de outro usuário, inexistente, id de outra parcela\
+            \ ou id que não é UUID; todos com o mesmo corpo"
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou trava ocupada por mais de 2 s; pode tentar
+            de novo
+      security:
+      - cookieAuth: []
+      summary: Muda o texto e a categoria da compra inteira
+      tags:
+      - compras-parceladas
   /contas:
     get:
       description: "Ordenada por nome sem diferenciar caixa. Sem o parâmetro, devolve\
@@ -893,8 +1121,9 @@ paths:
           description: "Entrada inválida, inclusive campo não declarado e tipo transferencia;\
             \ \"conta não encontrada\", \"conta arquivada\" (só ao trocar de conta),\
             \ \"categoria não encontrada\", \"saldo da conta fora do limite\" (em\
-            \ qualquer das contas afetadas) ou \"use a rota de transferência\" (o\
-            \ lançamento é perna de transferência)"
+            \ qualquer das contas afetadas), \"compra fora do limite\" (parcela cuja\
+            \ soma da compra passaria do teto) ou \"use a rota de transferência\"\
+            \ (o lançamento é perna de transferência)"
         "401":
           content:
             application/json:
@@ -1468,6 +1697,147 @@ components:
       - nome
       - paiId
       - tipo
+    CompraParcelada:
+      type: object
+      properties:
+        categoriaId:
+          type: string
+          format: uuid
+        contaId:
+          type: string
+          format: uuid
+        criadaEm:
+          type: string
+          format: date-time
+        dataCompra:
+          type: string
+          format: date
+          description: "Data da compra, a dataCompetencia de todas as parcelas"
+        descricao:
+          type:
+          - string
+          - "null"
+          maxLength: 500
+        id:
+          type: string
+          format: uuid
+          description: Id da primeira parcela; as rotas da compra usam este id
+        itens:
+          type: array
+          description: "As parcelas que ainda existem, na ordem de parcelaNum"
+          items:
+            $ref: "#/components/schemas/CompraParceladaItem"
+        parcelas:
+          type: integer
+          format: int32
+          description: "Quantas parcelas a compra teve ao nascer, de 2 a 48"
+          maximum: 48
+          minimum: 2
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+        valorTotalCentavos:
+          type: integer
+          format: int64
+          description: "Soma das parcelas que ainda existem, em centavos. Muda se\
+            \ uma parcela for editada ou apagada em /lancamentos"
+      required:
+      - categoriaId
+      - contaId
+      - criadaEm
+      - dataCompra
+      - descricao
+      - id
+      - itens
+      - parcelas
+      - titulo
+      - valorTotalCentavos
+    CompraParceladaAtualizarRequest:
+      type: object
+      properties:
+        categoriaId:
+          type: string
+          format: uuid
+        descricao:
+          type: string
+          description: Vazia ou em branco limpa a descrição
+          maxLength: 500
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+    CompraParceladaItem:
+      type: object
+      properties:
+        dataCaixa:
+          type: string
+          format: date
+          description: Vencimento da parcela
+        lancamentoId:
+          type: string
+          format: uuid
+          description: Id em /lancamentos
+        parcelaNum:
+          type: integer
+          format: int32
+          maximum: 48
+          minimum: 1
+        valorCentavos:
+          type: integer
+          format: int64
+          minimum: 1
+      required:
+      - dataCaixa
+      - lancamentoId
+      - parcelaNum
+      - valorCentavos
+    CompraParceladaRequest:
+      type: object
+      properties:
+        categoriaId:
+          type: string
+          format: uuid
+        contaId:
+          type: string
+          format: uuid
+          description: Só conta de cartão de crédito do usuário e ativa
+        data:
+          type: string
+          format: date
+          description: "Data da compra: vira dataCompetencia de todas as parcelas.\
+            \ A dataCaixa da primeira é o vencimento da fatura da compra e a das outras\
+            \ avança um mês por parcela"
+          example: 2026-03-10
+        descricao:
+          type:
+          - string
+          - "null"
+          maxLength: 500
+        parcelas:
+          type: integer
+          format: int32
+          maximum: 48
+          minimum: 2
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+        valorTotalCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de real. Cada parcela recebe o total dividido por\
+            \ parcelas, truncado em centavos, e a última leva o resto; o total precisa\
+            \ dar ao menos 1 centavo por parcela"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - categoriaId
+      - contaId
+      - data
+      - parcelas
+      - titulo
+      - valorTotalCentavos
     Conta:
       type: object
       properties:
@@ -1697,6 +2067,13 @@ components:
           - "null"
           format: uuid
           description: Nulo só nas pernas de transferência
+        compraParceladaId:
+          type:
+          - string
+          - "null"
+          format: uuid
+          description: Id da compra parcelada (o da primeira parcela) a que o lançamento
+            pertence; nulo nos outros
         contaId:
           type: string
           format: uuid
@@ -1729,6 +2106,14 @@ components:
         id:
           type: string
           format: uuid
+        parcelaNum:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: Número da parcela na compra parcelada; nulo nos outros
+          maximum: 48
+          minimum: 1
         parcelaOrdem:
           type:
           - integer
@@ -1738,6 +2123,14 @@ components:
             fora de divisão
           maximum: 10
           minimum: 1
+        parcelaTotal:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: Quantas parcelas a compra teve ao nascer; nulo nos outros
+          maximum: 48
+          minimum: 2
         status:
           type: string
           enum:
@@ -1775,6 +2168,7 @@ components:
           minimum: 1
       required:
       - categoriaId
+      - compraParceladaId
       - contaId
       - criadoEm
       - dataCaixa
@@ -1782,7 +2176,9 @@ components:
       - descricao
       - direcao
       - id
+      - parcelaNum
       - parcelaOrdem
+      - parcelaTotal
       - status
       - templateId
       - tipo

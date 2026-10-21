@@ -370,3 +370,69 @@ entra no saldo, confirmar dá 400 `conta arquivada` e cancelar funciona.
   cartão. 401 sem sessão. 503 com o banco fora.
 - Pagar a fatura continua sendo `POST /transferencias` da conta de pagamento
   para o cartão; o web preenche valor com o restante e data com o vencimento.
+
+## Compra parcelada (ADR-032)
+
+Só em conta de cartão de crédito, só despesa, de 2 a 48 parcelas. Todas as
+parcelas nascem `realizado`: o saldo do cartão cai pelo total na hora, e cada
+parcela entra na fatura do seu vencimento (`dataCaixa`).
+
+- `POST /compras-parceladas` com `{"titulo", "descricao"?, "valorTotalCentavos",
+  "parcelas", "categoriaId", "contaId", "data"}` responde 201 com
+  `{id, titulo, descricao, valorTotalCentavos, parcelas, categoriaId, contaId,
+  dataCompra, criadaEm, itens: [{lancamentoId, parcelaNum, valorCentavos,
+  dataCaixa}]}`. `id` é o da primeira parcela e é o id das rotas da compra.
+  Campo fora do esperado dá 400.
+- Valor: o total dividido por `parcelas`, truncado em centavos, em todas menos a
+  última, que leva o resto (a soma fecha no total). Total que dá zero centavo
+  por parcela dá 400 `cada parcela precisa ter ao menos 1 centavo`.
+- Datas: todas têm `dataCompetencia` = `data`. A primeira vence na fatura da
+  compra; a parcela `k` vence `k - 1` meses depois, no dia de vencimento do
+  cartão, cortado no último dia do mês curto.
+- 400 sem gravar nada: `parcelas deve ser um inteiro entre 2 e 48`,
+  `compra parcelada só em cartão de crédito` (corrente, poupança, dinheiro),
+  `conta não encontrada` (inexistente, de outro usuário ou id inválido),
+  `conta arquivada`, `categoria não encontrada` (inexistente, de outro usuário,
+  de receita), `saldo da conta fora do limite`, `compra fora do limite` (soma
+  das parcelas acima de ±9007199254740991 centavos). Mensagens de título, descrição,
+  valor e data iguais às de `POST /lancamentos`.
+- `GET /compras-parceladas/{id}`: mesma forma do 201. `valorTotalCentavos` é a
+  **soma das parcelas que ainda existem**: muda se uma parcela for editada ou
+  apagada em `/lancamentos`. `parcelas` é o número que a compra teve ao nascer.
+  Título, descrição, categoria e conta vêm da primeira parcela. `itens` traz só
+  as parcelas que existem, por `parcelaNum`. Outra parcela, outro usuário,
+  inexistente ou id malformado: 404 `{"erro":"não encontrado"}`. Se a soma passar
+  de ±9007199254740991 centavos, 400 `{"erro":"compra fora do limite"}` (o mesmo
+  vale para as respostas do POST e do PATCH). O `PUT` de uma parcela impede esse
+  estado, então só dado antigo chega aqui.
+- `PATCH /compras-parceladas/{id}` com `{"titulo"?, "descricao"?,
+  "categoriaId"?}`: pelo menos um (senão 400 `informe titulo, descricao ou
+  categoriaId`), campo extra dá 400. Aplica em todas as parcelas numa transação.
+  `descricao` vazia ou em branco limpa a descrição. Responde 200 com a compra.
+  Valor, parcelas, data e conta não se editam: apague e lance de novo.
+- `DELETE /compras-parceladas/{id}` apaga todas as parcelas que existem: 204. O
+  saldo do cartão volta. 404 como no GET.
+- 401 sem sessão, 503 com o banco fora ou trava ocupada por mais de 2 s.
+
+### Uma parcela em `/lancamentos`
+
+- `GET /lancamentos` e `GET /lancamentos/{id}` (e as respostas de POST, PUT e
+  PATCH) ganham `compraParceladaId` (id da primeira parcela), `parcelaNum` e
+  `parcelaTotal`, `null` nos lançamentos que não são parcela.
+- `POST /lancamentos` não aceita esses campos (campo extra dá 400).
+- `PUT` numa parcela muda título, descrição, categoria e valor. Trocar a conta
+  ou a data (a `data` do corpo é comparada com a `dataCompetencia` gravada, que é
+  a data da compra) dá 400 `edite a compra inteira`; `tipo` receita dá 400
+  `parcela de compra parcelada só pode ser despesa`. A `dataCaixa` não muda. O
+  teto do saldo vale, e o `PUT` que levaria a soma das parcelas da compra para
+  fora de ±9007199254740991 centavos dá 400 `compra fora do limite` e nada muda.
+- `DELETE` numa parcela que não é a primeira apaga só ela. Na primeira dá 400
+  `apague a compra inteira`.
+- `PATCH` de status numa parcela dá 400 `só ocorrência prevista pode mudar de
+  status` (ela já é realizada).
+
+### Fatura (correção da F10)
+
+Quando o vencimento cortado cai no mesmo dia do fechamento cortado (fechamento
+30 e vencimento 31 em fevereiro), o pagamento desse dia conta na própria fatura
+e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
