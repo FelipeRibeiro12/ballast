@@ -8,8 +8,8 @@ O que entrou: migration V11 com `parcela_de_id`, `parcela_num` e `parcela_total`
 Decisões: ADR-032. Só cartão e só despesa; todas realizadas; a primeira parcela aponta para si mesma; valor, número de parcelas, data e conta não se editam.
 Dívida registrada: `descricao` nula no PATCH da compra.
 Achados do QA: 0 bloquearam; 1 dívida (soma da compra acima da faixa do JSON com 200) tratada como contrato violado e corrigida na fatia; 3 sugestões sem ação (título de uma parcela diferente do da compra, documentado; bidi, já na dívida dos invisíveis; ordem das mensagens).
-Achados do revisor: PENDENTE
-Pipeline: PENDENTE
+Achados do revisor: 0 bloquearam, 2 dívidas (título e categoria de uma parcela, registrada; a dívida de fevereiro paga e tirada do backlog), 3 sugestões sem ação. Security: 0 críticos, 0 altos, 1 médio (48 linhas por POST, somado ao teto por usuário da F20.5), 2 baixos sem ação.
+Pipeline: verde na primeira tentativa, os 7 checks obrigatórios; nenhum alerta do CodeQL.
 Em aberto: o backend parou uma vez pelo limite de uso, com um laço de espera que nunca terminaria por causa do mvnw do make dev; encerrado sem tocar no make dev. O teste que compara o proxy com a spec pegou a rota nova esquecida.
 
 ## 2026-10-20 — F10: cartão de crédito (PR #16)
