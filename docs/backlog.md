@@ -139,6 +139,8 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Os `isConstraint` antigos de `EntryService` e `InstallmentService` repetem o que `web/Constraints.isViolated` faz (F12). Trocar todos pelo helper num refator próprio. Dono: backend, na próxima fatia que mexer em `entries`.
 - **DÍVIDA** — As descrições de 400 em `/lancamentos`, `/recorrencias` e `/transferencias` no OpenAPI não listam as mensagens novas da F12; elas estão só em `api.md` (F12). Dono: backend, junto do refator acima.
 - **DÍVIDA** — Recorrência cuja categoria saiu da lista de um benefício é pulada pelo job em toda rodada, com warn, até a lista voltar; não há como editar o template (F12). Avisar o usuário na tela de recorrências ou permitir trocar a categoria do template. Dono: frontend e backend, na fatia que trouxer edição de template.
+- **DÍVIDA** — `isCategoryPermitted` repetida em `EntryQueries` e `RecurrenceQueries` (revisão do PR #19). Juntar num lugar só no refator dos helpers de constraint. Dono: backend.
+- **DÍVIDA** — `PUT /contas/{id}/categorias-permitidas` aceita conta arquivada (QA da F12, S2). Inofensivo, porque lançar em conta arquivada já é recusado; decidir se recusa para o contrato ficar coerente com o resto das escritas. Dono: backend.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

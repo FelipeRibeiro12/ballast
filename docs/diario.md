@@ -8,7 +8,7 @@ O que entrou: migration V12 com o tipo `beneficio`, `conta_categoria_permitida` 
 Decisões: ADR-034, com emenda do ADR-029. A regra vale só para despesa e só na escrita; o gatilho trava a conta com FOR SHARE e a troca da lista trava com FOR UPDATE.
 Dívida registrada: helpers de constraint repetidos, mensagens novas fora das descrições do OpenAPI, recorrência pulada para sempre quando a categoria sai da lista.
 Achados do QA: 0 bloquearam, 0 dívidas, 2 sugestões (texto do invariante 4 corrigido para "no momento da escrita"; lista editável em conta arquivada, inofensivo). 150 checagens, inclusive 180 operações cruzadas de corrida.
-Achados do revisor: PENDENTE
+Achados do revisor: 0 bloquearam, 2 dívidas (criar benefício sem as categorias carregadas gravava lista vazia, corrigido na fatia; consulta repetida, registrada), 3 sugestões (texto do ADR-034 sobre confirmar e PUT, corrigido; as duas do QA, registradas). Security: 0 críticos, 0 altos, 0 médios, 2 baixos sem ação.
 Pipeline: PENDENTE
 Em aberto: o backend parou uma vez pelo limite de uso antes de mexer em arquivo; dois laços de espera do PR #18 que nunca terminariam foram encerrados.
 

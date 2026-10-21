@@ -35,7 +35,9 @@ categoria; com linhas, só as listadas, validado na aplicação e por gatilho
   paga comida".
 - Despesa em conta de benefício com lista não vazia precisa de categoria da
   lista: 400 `categoria não permitida nesta conta`. Vale para `POST` e `PUT
-  /lancamentos`, confirmar com ajuste, recorrência na criação e no job.
+  /lancamentos` (o `PUT` revalida sempre, porque regrava a categoria) e para a
+  recorrência na criação e no job. Confirmar com ajuste não revalida: ele só
+  muda status, valor e data, nunca a categoria.
 - **Gatilho no banco** (`BEFORE INSERT OR UPDATE` em `lancamento`, com
   `search_path` fixo) recusa a mesma coisa, com nome de constraint próprio,
   para a regra não depender só da aplicação (invariante 4).
