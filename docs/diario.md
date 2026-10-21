@@ -9,7 +9,7 @@ Decisões: ADR-034, com emenda do ADR-029. A regra vale só para despesa e só n
 Dívida registrada: helpers de constraint repetidos, mensagens novas fora das descrições do OpenAPI, recorrência pulada para sempre quando a categoria sai da lista.
 Achados do QA: 0 bloquearam, 0 dívidas, 2 sugestões (texto do invariante 4 corrigido para "no momento da escrita"; lista editável em conta arquivada, inofensivo). 150 checagens, inclusive 180 operações cruzadas de corrida.
 Achados do revisor: 0 bloquearam, 2 dívidas (criar benefício sem as categorias carregadas gravava lista vazia, corrigido na fatia; consulta repetida, registrada), 3 sugestões (texto do ADR-034 sobre confirmar e PUT, corrigido; as duas do QA, registradas). Security: 0 críticos, 0 altos, 0 médios, 2 baixos sem ação.
-Pipeline: PENDENTE
+Pipeline: verde nos 9 checks em duas rodadas (o e2e incluído); nenhum alerta do CodeQL.
 Em aberto: o backend parou uma vez pelo limite de uso antes de mexer em arquivo; dois laços de espera do PR #18 que nunca terminariam foram encerrados.
 
 ## 2026-10-20 — Redesenho visual e e2e em navegador (PR #18)
