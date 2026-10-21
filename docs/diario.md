@@ -7,8 +7,8 @@ Uma entrada por fatia fechada, a mais recente no topo.
 O que entrou: Playwright 1.63.0 com `make e2e`, que sobe Postgres, API e web descartáveis e roda o fluxo principal em 360px e 1280px com capturas no claro e no escuro, e o job `e2e` no CI fora do ruleset; o web redesenhado com quatro seções por hash, tokens de cor e espaço, modo escuro com seletor, cartões, selos, painéis acessíveis para criar, menu de ações por lançamento, faturas compactas, Início com saldo, projeção e próximas previstas, ícone próprio do app.
 Decisões: ADR-033. Sem biblioteca de UI nem de ícones. As capturas não vão para o git.
 Dívida registrada: tornar o e2e obrigatório depois de estabilizar; a conferência em navegador deixou de ser dívida.
-Achados do revisor: PENDENTE
-Pipeline: PENDENTE
+Achados do revisor: 0 bloquearam, 3 dívidas (foco perdido ao fechar painel aberto pelo menu e painel sem campo sem foco, corrigidas na fatia; duas asserções trocadas por mudança de UI com teste equivalente, aceitas), 2 sugestões sem ação. Security: 0 críticos, 0 altos, 1 médio (trace do Playwright no artifact com credencial de teste, desligado no CI e retenção de 1 dia), 3 baixos sem ação.
+Pipeline: o job e2e passou no primeiro run no GitHub; o CodeQL acusou escape incompleto num helper de teste (só o ponto), corrigido escapando todos os metacaracteres.
 Em aberto: duas rodadas de revisão nas capturas pelo frontend e uma pelo tech-lead (cartão de destaque no escuro, "ok" do healthz solto na tela, aviso de negativo encoberto pela barra fixa, faturas vazias ocupando a tela, ações ocupando uma linha por item).
 
 ## 2026-10-20 — F11: compra parcelada (PR #17)
