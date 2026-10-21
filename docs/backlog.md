@@ -11,10 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F12 — Benefícios com restrição
-Conta tipo benefício, categorias permitidas, validação na aplicação e por
-trigger. Saldo do VR separado no painel.
-
 ### F13 — Cripto manual
 Ativo identificado por `rede` + `contrato`, posição em quantidade,
 movimentação com custo de aquisição informado por você.

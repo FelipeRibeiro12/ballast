@@ -907,7 +907,7 @@ apenas em código:
 1. Soma de `template_divisao` = 100% ou = `valor_total`
 2. `percentual` e `valor_fixo` mutuamente exclusivos (`CHECK` já acima)
 3. `valor > 0` em todo lançamento
-4. Despesa em conta de benefício com lista só com categoria permitida (V12, ADR-034, trigger `lancamento_categoria_permitida_no_beneficio`). Receita não é restrita; a lista aceita só conta de benefício e categoria de despesa do mesmo usuário (FK composta)
+4. Despesa em conta de benefício com lista só com categoria permitida **no momento da escrita** (V12, ADR-034, trigger `lancamento_categoria_permitida_no_beneficio`): encolher a lista não mexe em despesa já gravada. Receita não é restrita; a lista aceita só conta de benefício e categoria de despesa do mesmo usuário (FK composta)
 5. Compra parcelada (V11, ADR-032): `parcela_num` entre 1 e `parcela_total`, `parcela_total` entre 2 e 48, as três colunas juntas, parcela só em cartão, só despesa realizada, e toda parcela aponta para uma primeira do mesmo usuário e do mesmo total (FK composta)
 6. `regra_recorrencia`: `fim` e `ocorrencias_max` não coexistem
 7. Transferência: `saida_id` e `entrada_id` em contas diferentes (V7, `CHECK` mais FKs compostas)
