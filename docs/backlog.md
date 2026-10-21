@@ -11,10 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F11 — Compra parcelada
-N lançamentos ligados por `parcela_de_id`, mesma competência, caixa avançando.
-Editar ou cancelar a compra inteira versus uma parcela só.
-
 ### F12 — Benefícios com restrição
 Conta tipo benefício, categorias permitidas, validação na aplicação e por
 trigger. Saldo do VR separado no painel.
