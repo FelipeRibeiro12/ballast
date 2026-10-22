@@ -5,17 +5,20 @@ import {
   RecorrenciaNaoEncontradaError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
+  deleteRecorrencia,
   desativarRecorrencia,
   fetchCategorias,
   fetchRecorrencias,
   postRecorrencia,
+  putRecorrencia,
+  reativarRecorrencia,
 } from './api'
 import type { Categoria, Conta, Recorrencia, RegraRecorrencia } from './api'
 import { formatarDataCompleta, hojeLocal } from './datas'
 import { somarLinhas, validarDivisao, valoresGerados } from './divisao'
 import type { LinhaDeParcela, ModoDivisao } from './divisao'
 import { categoriaEfetiva, categoriasDaConta } from './categoriasDaConta'
-import { formatarCentavos, lerValorPositivo } from './dinheiro'
+import { centavosParaCampo, formatarCentavos, lerValorPositivo } from './dinheiro'
 import { IconeMais, IconeRelogio } from './icones'
 import Painel from './Painel'
 import { formatarPercentual } from './percentual'
@@ -76,13 +79,21 @@ function mensagemDeCriacao(erro: unknown): string {
   return 'Não foi possível salvar a recorrência. Tente de novo.'
 }
 
-function mensagemDeDesativacao(erro: unknown): string {
+type Acao = 'desativar' | 'reativar' | 'apagar'
+
+function mensagemDeAcao(erro: unknown, acao: Acao): string {
   if (erro instanceof RecorrenciaNaoEncontradaError) return MENSAGEM_NAO_EXISTE
   if (erro instanceof RecorrenciaInvalidaError && erro.mensagemServidor !== null) {
     return erro.mensagemServidor
   }
   if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
-  return 'Não foi possível desativar a recorrência. Tente de novo.'
+  return `Não foi possível ${acao} a recorrência. Tente de novo.`
+}
+
+// Desativar e apagar pedem um segundo clique; o aviso diz o que acontece com as previstas.
+const AVISO_DA_ACAO: Record<'desativar' | 'apagar', string> = {
+  desativar: 'As previstas de hoje em diante somem.',
+  apagar: 'Some a recorrência e todas as previstas. Realizadas ficam como lançamentos avulsos.',
 }
 
 // Texto digitado só vale se for inteiro puro na faixa; o type=number do navegador aceita "1e2".
@@ -105,35 +116,57 @@ function linhaVazia(chave: number): LinhaComChave {
   return { chave, dia: '', valor: '' }
 }
 
+// Linhas da divisão no formato que o formulário lê de volta: "40" ou "33,5" no percentual,
+// "1.234,56" no valor.
+function linhasDaDivisao(divisao: Recorrencia['divisao']): LinhaComChave[] {
+  if (divisao === null) return [linhaVazia(1), linhaVazia(2)]
+  return divisao.parcelas.map((parcela, indice) => ({
+    chave: indice + 1,
+    dia: String(parcela.diaDoMes),
+    valor:
+      divisao.modo === 'percentual'
+        ? formatarPercentual(parcela.percentualCentesimos ?? 0).replace('%', '')
+        : centavosParaCampo(parcela.valorCentavos ?? 0),
+  }))
+}
+
+// Com inicial, o formulário edita aquela recorrência (PUT, ADR-036) e o tipo fica travado.
 function FormularioDeRecorrencia({
   contas,
   categorias,
+  inicial,
   aoSalvar,
   aoSessaoExpirar,
 }: {
   contas: Conta[]
   categorias: Categoria[]
+  inicial: Recorrencia | null
   aoSalvar: () => void
   aoSessaoExpirar: () => void
 }) {
-  const [tipo, setTipo] = useState<Tipo>('despesa')
-  const [titulo, setTitulo] = useState('')
-  const [valor, setValor] = useState('')
-  const [categoriaEscolhida, setCategoriaEscolhida] = useState('')
-  const [contaEscolhida, setContaEscolhida] = useState('')
-  const [descricao, setDescricao] = useState('')
-  const [frequencia, setFrequencia] = useState<Frequencia>('mensal')
-  const [intervalo, setIntervalo] = useState('1')
-  const [diaDoMes, setDiaDoMes] = useState(() => String(Number(hojeLocal().slice(8, 10))))
-  const [diaDaSemana, setDiaDaSemana] = useState(() => String(new Date().getDay()))
-  const [inicio, setInicio] = useState(hojeLocal())
-  const [termino, setTermino] = useState<Termino>('nenhum')
-  const [dataFinal, setDataFinal] = useState('')
-  const [vezes, setVezes] = useState('')
-  const [dividir, setDividir] = useState(false)
-  const [modoDivisao, setModoDivisao] = useState<ModoDivisao>('percentual')
-  const [linhas, setLinhas] = useState<LinhaComChave[]>([linhaVazia(1), linhaVazia(2)])
-  const proximaChave = useRef(3)
+  const regraInicial = inicial?.regra
+  const [tipo, setTipo] = useState<Tipo>(inicial?.tipo ?? 'despesa')
+  const [titulo, setTitulo] = useState(inicial?.titulo ?? '')
+  const [valor, setValor] = useState(inicial === null ? '' : centavosParaCampo(inicial.valorCentavos))
+  const [categoriaEscolhida, setCategoriaEscolhida] = useState(inicial?.categoriaId ?? '')
+  const [contaEscolhida, setContaEscolhida] = useState(inicial?.contaId ?? '')
+  const [descricao, setDescricao] = useState(inicial?.descricao ?? '')
+  const [frequencia, setFrequencia] = useState<Frequencia>(regraInicial?.frequencia ?? 'mensal')
+  const [intervalo, setIntervalo] = useState(String(regraInicial?.intervalo ?? 1))
+  const [diaDoMes, setDiaDoMes] = useState(() =>
+    String(regraInicial?.diaDoMes ?? Number(hojeLocal().slice(8, 10))),
+  )
+  const [diaDaSemana, setDiaDaSemana] = useState(() => String(regraInicial?.diaDaSemana ?? new Date().getDay()))
+  const [inicio, setInicio] = useState(regraInicial?.inicio ?? hojeLocal())
+  const [termino, setTermino] = useState<Termino>(
+    regraInicial?.fim != null ? 'data' : regraInicial?.ocorrenciasMax != null ? 'vezes' : 'nenhum',
+  )
+  const [dataFinal, setDataFinal] = useState(regraInicial?.fim ?? '')
+  const [vezes, setVezes] = useState(regraInicial?.ocorrenciasMax == null ? '' : String(regraInicial.ocorrenciasMax))
+  const [dividir, setDividir] = useState(inicial?.divisao != null)
+  const [modoDivisao, setModoDivisao] = useState<ModoDivisao>(inicial?.divisao?.modo ?? 'percentual')
+  const [linhas, setLinhas] = useState<LinhaComChave[]>(() => linhasDaDivisao(inicial?.divisao ?? null))
+  const proximaChave = useRef(Math.max(3, (inicial?.divisao?.parcelas.length ?? 0) + 1))
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
@@ -212,24 +245,26 @@ function FormularioDeRecorrencia({
       ...(termino === 'data' ? { fim: dataFinal } : {}),
       ...(termino === 'vezes' && vezesLido !== null ? { ocorrenciasMax: vezesLido } : {}),
     }
+    const dados = {
+      tipo,
+      titulo: titulo.trim(),
+      ...(descricao.trim() === '' ? {} : { descricao: descricao.trim() }),
+      valorCentavos,
+      categoriaId,
+      contaId,
+      regra,
+      ...(divisaoLida?.tipo === 'ok' ? { divisao: divisaoLida.divisao } : {}),
+    }
     try {
-      await postRecorrencia({
-        tipo,
-        titulo: titulo.trim(),
-        ...(descricao.trim() === '' ? {} : { descricao: descricao.trim() }),
-        valorCentavos,
-        categoriaId,
-        contaId,
-        regra,
-        ...(divisaoLida?.tipo === 'ok' ? { divisao: divisaoLida.divisao } : {}),
-      })
+      if (inicial === null) await postRecorrencia(dados)
+      else await putRecorrencia(inicial.id, dados)
       aoSalvar()
     } catch (erro) {
       if (erro instanceof SessaoExpiradaError) {
         aoSessaoExpirar()
         return
       }
-      setMensagem(mensagemDeCriacao(erro))
+      setMensagem(erro instanceof RecorrenciaNaoEncontradaError ? MENSAGEM_NAO_EXISTE : mensagemDeCriacao(erro))
     } finally {
       emVoo.current = false
       setEnviando(false)
@@ -245,12 +280,22 @@ function FormularioDeRecorrencia({
   const descricaoDoErro = mensagem === null ? undefined : 'erro-recorrencia'
 
   return (
-    <form onSubmit={(evento) => void enviar(evento)} aria-label="Nova recorrência">
+    <form
+      onSubmit={(evento) => void enviar(evento)}
+      aria-label={inicial === null ? 'Nova recorrência' : `Editar ${inicial.titulo}`}
+    >
+      {inicial !== null && (
+        <p role="status">
+          As previstas de hoje em diante que você não editou à mão são refeitas com os dados novos. Realizadas,
+          canceladas e as que você já ajustou ficam como estão.
+        </p>
+      )}
       <div className="campo">
         <label htmlFor="recorrencia-tipo">Tipo</label>
         <select
           id="recorrencia-tipo"
           value={tipo}
+          disabled={inicial !== null}
           onChange={(evento) => {
             const escolhido = TIPOS.find((opcao) => opcao === evento.target.value)
             if (escolhido !== undefined) setTipo(escolhido)
@@ -563,7 +608,7 @@ function FormularioDeRecorrencia({
         </p>
       )}
       <button type="submit" disabled={enviando}>
-        {enviando ? 'Salvando...' : 'Adicionar recorrência'}
+        {enviando ? 'Salvando...' : inicial === null ? 'Adicionar recorrência' : 'Salvar alterações'}
       </button>
     </form>
   )
@@ -593,8 +638,9 @@ export default function Recorrencias({
   const [apoio, setApoio] = useState<EstadoCategorias>({ tipo: 'carregando' })
   const [tentativa, setTentativa] = useState(0)
   const [tentativaDoApoio, setTentativaDoApoio] = useState(0)
-  const [confirmando, setConfirmando] = useState<string | null>(null)
-  const [desativando, setDesativando] = useState<string | null>(null)
+  const [confirmando, setConfirmando] = useState<{ id: string; acao: 'desativar' | 'apagar' } | null>(null)
+  const [ocupada, setOcupada] = useState<string | null>(null)
+  const [editando, setEditando] = useState<Recorrencia | null>(null)
   const [falhaDeAcao, setFalhaDeAcao] = useState<string | null>(null)
   // Muda a key do formulário para limpar os campos depois de salvar.
   const [versaoDoFormulario, setVersaoDoFormulario] = useState(0)
@@ -654,13 +700,15 @@ export default function Recorrencias({
     setTentativa((n) => n + 1)
   }
 
-  async function desativar(recorrencia: Recorrencia): Promise<void> {
+  async function agir(recorrencia: Recorrencia, acao: Acao): Promise<void> {
     if (acaoEmVoo.current) return
     acaoEmVoo.current = true
-    setDesativando(recorrencia.id)
+    setOcupada(recorrencia.id)
     setFalhaDeAcao(null)
     try {
-      await desativarRecorrencia(recorrencia.id)
+      if (acao === 'desativar') await desativarRecorrencia(recorrencia.id)
+      else if (acao === 'reativar') await reativarRecorrencia(recorrencia.id)
+      else await deleteRecorrencia(recorrencia.id)
       setConfirmando(null)
       recarregar()
       aoMudarOcorrencias()
@@ -669,13 +717,13 @@ export default function Recorrencias({
         aoSessaoExpirar()
         return
       }
-      setFalhaDeAcao(mensagemDeDesativacao(erro))
+      setFalhaDeAcao(mensagemDeAcao(erro, acao))
       setConfirmando(null)
       // A lista na tela está velha: busca de novo o que o servidor tem.
       if (erro instanceof RecorrenciaNaoEncontradaError) recarregar()
     } finally {
       acaoEmVoo.current = false
-      setDesativando(null)
+      setOcupada(null)
     }
   }
 
@@ -787,45 +835,81 @@ export default function Recorrencias({
                   <Selo tom="cancelado">Desativada</Selo>
                 )}
               </div>
-              {recorrencia.ativo && (
-                <div className="item-acoes">
-                  {confirmando === recorrencia.id ? (
-                    <>
-                      <span className="aviso-acao">As previstas de hoje em diante somem.</span>
+              <div className="item-acoes">
+                {confirmando?.id === recorrencia.id ? (
+                  <>
+                    <span className="aviso-acao">{AVISO_DA_ACAO[confirmando.acao]}</span>
+                    <button
+                      type="button"
+                      className="pequeno perigo forte"
+                      disabled={ocupada !== null}
+                      aria-label={`Confirmar ${confirmando.acao} ${recorrencia.titulo}`}
+                      onClick={() => void agir(recorrencia, confirmando.acao)}
+                    >
+                      Confirmar {confirmando.acao}
+                    </button>
+                    <button
+                      type="button"
+                      className="pequeno"
+                      disabled={ocupada !== null}
+                      onClick={() => setConfirmando(null)}
+                    >
+                      Manter
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="pequeno"
+                      disabled={ocupada !== null}
+                      aria-label={`Editar ${recorrencia.titulo}`}
+                      onClick={() => {
+                        setFalhaDeAcao(null)
+                        setEditando(recorrencia)
+                      }}
+                    >
+                      Editar
+                    </button>
+                    {recorrencia.ativo ? (
                       <button
                         type="button"
-                        className="pequeno perigo forte"
-                        disabled={desativando !== null}
-                        aria-label={`Confirmar desativar ${recorrencia.titulo}`}
-                        onClick={() => void desativar(recorrencia)}
+                        className="pequeno discreto"
+                        disabled={ocupada !== null}
+                        aria-label={`Desativar ${recorrencia.titulo}`}
+                        onClick={() => {
+                          setFalhaDeAcao(null)
+                          setConfirmando({ id: recorrencia.id, acao: 'desativar' })
+                        }}
                       >
-                        Confirmar desativar
+                        Desativar
                       </button>
+                    ) : (
                       <button
                         type="button"
-                        className="pequeno"
-                        disabled={desativando !== null}
-                        onClick={() => setConfirmando(null)}
+                        className="pequeno discreto"
+                        disabled={ocupada !== null}
+                        aria-label={`Reativar ${recorrencia.titulo}`}
+                        onClick={() => void agir(recorrencia, 'reativar')}
                       >
-                        Manter
+                        Reativar
                       </button>
-                    </>
-                  ) : (
+                    )}
                     <button
                       type="button"
                       className="pequeno perigo"
-                      disabled={desativando !== null}
-                      aria-label={`Desativar ${recorrencia.titulo}`}
+                      disabled={ocupada !== null}
+                      aria-label={`Apagar ${recorrencia.titulo}`}
                       onClick={() => {
                         setFalhaDeAcao(null)
-                        setConfirmando(recorrencia.id)
+                        setConfirmando({ id: recorrencia.id, acao: 'apagar' })
                       }}
                     >
-                      Desativar
+                      Apagar
                     </button>
-                  )}
-                </div>
-              )}
+                  </>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -837,9 +921,29 @@ export default function Recorrencias({
               key={versaoDoFormulario}
               contas={contas}
               categorias={apoio.categorias}
+              inicial={null}
               aoSalvar={() => {
                 setVersaoDoFormulario((n) => n + 1)
                 setPainelAberto(false)
+                recarregar()
+                aoMudarOcorrencias()
+              }}
+              aoSessaoExpirar={aoSessaoExpirar}
+            />
+          ) : (
+            <Carregando texto="Preparando o formulário..." linhas={4} />
+          )}
+        </Painel>
+      )}
+      {editando !== null && contas !== null && (
+        <Painel titulo={`Editar ${editando.titulo}`} aoFechar={() => setEditando(null)}>
+          {apoio.tipo === 'ok' ? (
+            <FormularioDeRecorrencia
+              contas={contas}
+              categorias={apoio.categorias}
+              inicial={editando}
+              aoSalvar={() => {
+                setEditando(null)
                 recarregar()
                 aoMudarOcorrencias()
               }}

@@ -759,4 +759,120 @@ describe('Conta de benefício', () => {
     fireEvent.submit(form)
     expect(await screen.findByRole('form', { name: 'Entrar' })).toBeVisible()
   })
+
+  it('edita nome e saldo inicial e mostra a conta nova na lista', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([conta()]),
+      'PATCH /contas/c1': responde(conta({ nome: 'Nubank PJ', saldoInicialCentavos: 50000, saldoCentavos: 50000 })),
+    })
+    render(<App />)
+    await contasNubank()
+    fireEvent.click(within(secaoContas()).getByRole('button', { name: 'Editar Nubank' }))
+    const form = await screen.findByRole('form', { name: 'Editar Nubank' })
+    expect(within(form).getByLabelText('Saldo inicial em reais')).toHaveValue('1.234,56')
+    fireEvent.change(within(form).getByLabelText('Nome'), { target: { value: 'Nubank PJ' } })
+    fireEvent.change(within(form).getByLabelText('Saldo inicial em reais'), { target: { value: '500,00' } })
+    fireEvent.submit(form)
+
+    expect(await within(secaoContas()).findByText('Nubank PJ')).toBeVisible()
+    expect(JSON.parse(String(chamadasA('PATCH /contas/c1')[0][1]?.body))).toEqual({
+      nome: 'Nubank PJ',
+      saldoInicialCentavos: 50000,
+    })
+  })
+
+  it('edita limite e conta de pagamento do cartão, com a fatura inicial como positivo', async () => {
+    const corrente = conta()
+    const poupanca = conta({ id: 'c2', nome: 'Poupança', tipo: 'poupanca' })
+    const cartao = conta({
+      id: 'k1',
+      nome: 'Cartão',
+      tipo: 'cartao_credito',
+      saldoInicialCentavos: -20000,
+      saldoCentavos: -20000,
+      cartao: { limiteCentavos: 100000, diaFechamento: 10, diaVencimento: 20, contaPagamentoId: 'c1', disponivelCentavos: 80000 },
+    })
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([cartao, corrente, poupanca]),
+      'PATCH /contas/k1': responde(cartao),
+    })
+    render(<App />)
+    await contasNubank()
+    fireEvent.click(within(secaoContas()).getByRole('button', { name: 'Editar Cartão' }))
+    const form = await screen.findByRole('form', { name: 'Editar Cartão' })
+    expect(within(form).getByLabelText('Fatura em aberto quando o cartão entrou no app')).toHaveValue('200,00')
+    fireEvent.change(within(form).getByLabelText('Limite em reais'), { target: { value: '2.500,00' } })
+    fireEvent.change(within(form).getByLabelText('Conta de pagamento'), { target: { value: 'c2' } })
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(chamadasA('PATCH /contas/k1')).toHaveLength(1))
+    expect(JSON.parse(String(chamadasA('PATCH /contas/k1')[0][1]?.body))).toEqual({
+      nome: 'Cartão',
+      saldoInicialCentavos: -20000,
+      cartao: { limiteCentavos: 250000, contaPagamentoId: 'c2' },
+    })
+  })
+
+  it('mostra o 409 do nome repetido na edição', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([conta()]),
+      'PATCH /contas/c1': responde({ erro: 'nome repetido' }, 409),
+    })
+    render(<App />)
+    await contasNubank()
+    fireEvent.click(within(secaoContas()).getByRole('button', { name: 'Editar Nubank' }))
+    const form = await screen.findByRole('form', { name: 'Editar Nubank' })
+    fireEvent.submit(form)
+    expect(await within(form).findByRole('alert')).toHaveTextContent('Já existe uma conta com esse nome.')
+  })
+
+  it('apaga a conta só depois de mostrar o resumo e digitar o nome', async () => {
+    let apagada = false
+    mockFetch({
+      ...sessaoViva,
+      // Depois do DELETE a tela busca as contas de novo, e o servidor já não tem a conta.
+      'GET /contas': () => Promise.resolve(jsonResponse(apagada ? [] : [conta()], 200)),
+      'GET /contas/c1/resumo-exclusao': responde({ lancamentos: 12, transferencias: 2, recorrencias: 1, movimentosCripto: 0 }),
+      'DELETE /contas/c1': () => {
+        apagada = true
+        return Promise.resolve(new Response(null, { status: 204 }))
+      },
+    })
+    render(<App />)
+    await contasNubank()
+    fireEvent.click(within(secaoContas()).getByRole('button', { name: 'Apagar Nubank' }))
+    const form = await screen.findByRole('form', { name: 'Apagar Nubank' })
+    expect(await within(form).findByText('12 lançamentos')).toBeVisible()
+    expect(within(form).getByText('1 recorrência')).toBeVisible()
+    expect(within(form).getByText(/2 transferências com outras contas viram lançamento comum lá/)).toBeVisible()
+    const botao = within(form).getByRole('button', { name: 'Apagar de vez' })
+    expect(botao).toBeDisabled()
+    fireEvent.change(within(form).getByLabelText('Digite o nome da conta para confirmar'), { target: { value: 'Nuban' } })
+    expect(botao).toBeDisabled()
+    fireEvent.change(within(form).getByLabelText('Digite o nome da conta para confirmar'), { target: { value: 'Nubank' } })
+    fireEvent.click(botao)
+
+    await waitFor(() => expect(chamadasA('DELETE /contas/c1')).toHaveLength(1))
+    expect(await screen.findByText('Nenhuma conta ainda.')).toBeVisible()
+  })
+
+  it('mostra a recusa de apagar a conta que paga um cartão', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([conta()]),
+      'GET /contas/c1/resumo-exclusao': responde({ lancamentos: 0, transferencias: 0, recorrencias: 0, movimentosCripto: 0 }),
+      'DELETE /contas/c1': responde({ erro: 'esta conta paga um cartão; troque a conta de pagamento antes' }, 400),
+    })
+    render(<App />)
+    await contasNubank()
+    fireEvent.click(within(secaoContas()).getByRole('button', { name: 'Apagar Nubank' }))
+    const form = await screen.findByRole('form', { name: 'Apagar Nubank' })
+    await within(form).findByText('0 lançamentos')
+    fireEvent.change(within(form).getByLabelText('Digite o nome da conta para confirmar'), { target: { value: 'Nubank' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Apagar de vez' }))
+    expect(await within(form).findByRole('alert')).toHaveTextContent('esta conta paga um cartão')
+  })
 })

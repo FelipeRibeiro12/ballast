@@ -840,4 +840,97 @@ describe('Recorrencias', () => {
       expect(await within(form).findByRole('alert')).toHaveTextContent('categoria não permitida nesta conta')
     })
   })
+
+  it('edita a recorrência com o formulário preenchido e manda PUT com o mesmo tipo', async () => {
+    let corpoEnviado: unknown
+    mockFetch({
+      ...base,
+      'GET /recorrencias': responde([recorrencia()]),
+      'PUT /recorrencias/r1': (corpo) => {
+        corpoEnviado = corpo
+        return Promise.resolve(jsonResponse({ recorrencia: recorrencia({ valorCentavos: 180000 }), ocorrenciasMaterializadas: 12 }, 200))
+      },
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Aluguel' }))
+    const form = await screen.findByRole('form', { name: 'Editar Aluguel' })
+    expect(within(form).getByLabelText('Título')).toHaveValue('Aluguel')
+    expect(within(form).getByLabelText(/valor em reais/i)).toHaveValue('1.500,00')
+    expect(within(form).getByLabelText('Tipo')).toBeDisabled()
+    expect(within(form).getByText(/que você não editou à mão são refeitas/)).toBeVisible()
+    mudar(form, 'Valor em reais', '1.800,00')
+    fireEvent.click(within(form).getByRole('button', { name: 'Salvar alterações' }))
+
+    await waitFor(() => expect(chamadasA('PUT /recorrencias/r1')).toHaveLength(1))
+    expect(JSON.parse(String(corpoEnviado))).toMatchObject({
+      tipo: 'despesa',
+      titulo: 'Aluguel',
+      valorCentavos: 180000,
+      categoriaId: 'cd1',
+      contaId: 'c1',
+      regra: { frequencia: 'mensal', intervalo: 1, diaDoMes: 5, inicio: '2026-11-05' },
+    })
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Editar Aluguel' })).toBeNull())
+    await waitFor(() => expect(chamadasA('GET /recorrencias')).toHaveLength(2))
+  })
+
+  it('preenche a divisão em percentual ao editar', async () => {
+    const dividida = recorrencia({
+      regra: { frequencia: 'mensal', intervalo: 1, diaDoMes: null, diaDaSemana: null, inicio: '2026-11-01', fim: null, ocorrenciasMax: null },
+      divisao: {
+        modo: 'percentual',
+        parcelas: [
+          { diaDoMes: 5, ordem: 1, percentualCentesimos: 4000, valorParcelaCentavos: 60000 },
+          { diaDoMes: 20, ordem: 2, percentualCentesimos: 6000, valorParcelaCentavos: 90000 },
+        ],
+      },
+    })
+    mockFetch({ ...base, 'GET /recorrencias': responde([dividida]) })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Aluguel' }))
+    const form = await screen.findByRole('form', { name: 'Editar Aluguel' })
+    expect(within(form).getByDisplayValue('40')).toBeVisible()
+    expect(within(form).getByDisplayValue('60')).toBeVisible()
+    expect(within(form).getByDisplayValue('20')).toBeVisible()
+  })
+
+  it('reativa uma recorrência desativada sem pedir confirmação', async () => {
+    mockFetch({
+      ...base,
+      'GET /recorrencias': responde([recorrencia({ ativo: false, proximaOcorrencia: null })]),
+      'PATCH /recorrencias/r1': responde(recorrencia()),
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Reativar Aluguel' }))
+    await waitFor(() => expect(chamadasA('PATCH /recorrencias/r1')).toHaveLength(1))
+    expect(JSON.parse(String(chamadasA('PATCH /recorrencias/r1')[0][1]?.body))).toEqual({ ativo: true })
+  })
+
+  it('apagar pede confirmação e manda DELETE', async () => {
+    mockFetch({
+      ...base,
+      'GET /recorrencias': responde([recorrencia()]),
+      'DELETE /recorrencias/r1': () => Promise.resolve(new Response(null, { status: 204 })),
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Apagar Aluguel' }))
+    expect(screen.getByText(/Realizadas ficam como lançamentos avulsos/)).toBeVisible()
+    expect(chamadasA('DELETE /recorrencias/r1')).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar apagar Aluguel' }))
+    await waitFor(() => expect(chamadasA('DELETE /recorrencias/r1')).toHaveLength(1))
+    await waitFor(() => expect(chamadasA('GET /recorrencias')).toHaveLength(2))
+  })
+
+  it('mostra a recusa da edição vinda do servidor', async () => {
+    mockFetch({
+      ...base,
+      'GET /recorrencias': responde([recorrencia()]),
+      'PUT /recorrencias/r1': responde({ erro: 'conta arquivada' }, 400),
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Aluguel' }))
+    const form = await screen.findByRole('form', { name: 'Editar Aluguel' })
+    fireEvent.click(within(form).getByRole('button', { name: 'Salvar alterações' }))
+    expect(await within(form).findByRole('alert')).toHaveTextContent('conta arquivada')
+  })
 })

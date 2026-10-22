@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import {
   ContaInvalidaError,
   ContaNaoEncontradaError,
+  atualizarConta,
+  deleteConta,
+  fetchResumoExclusao,
   NomeDeContaRepetidoError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
@@ -12,9 +15,9 @@ import {
   postConta,
   putCategoriasPermitidas,
 } from './api'
-import type { Categoria, Conta, CriarContaRequest } from './api'
+import type { AtualizarContaRequest, Categoria, Conta, CriarContaRequest, ResumoExclusaoConta } from './api'
 import Faturas from './Faturas'
-import { formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
+import { centavosParaCampo, formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
 import { IconeBanco, IconeBeneficio, IconeCartao, IconeCripto, IconeDinheiro, IconeMais } from './icones'
 import Painel from './Painel'
 import { hashDaSecao } from './rota'
@@ -235,6 +238,290 @@ function EditarCategorias({
       )}
       <button type="submit" disabled={enviando}>
         {enviando ? 'Salvando...' : 'Salvar categorias'}
+      </button>
+    </form>
+  )
+}
+
+function mensagemDeEdicao(erro: unknown): string {
+  if (erro instanceof NomeDeContaRepetidoError) return 'Já existe uma conta com esse nome.'
+  if (erro instanceof ContaInvalidaError && erro.mensagemServidor !== null) return erro.mensagemServidor
+  if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
+  return 'Não foi possível salvar a conta. Tente de novo.'
+}
+
+// O saldo inicial do cartão é dívida (negativo no servidor), digitado como positivo, como na criação.
+function saldoInicialNaTela(conta: Conta): string {
+  if (conta.saldoInicialCentavos === 0) return ''
+  return centavosParaCampo(conta.tipo === 'cartao_credito' ? -conta.saldoInicialCentavos : conta.saldoInicialCentavos)
+}
+
+function EditarConta({
+  conta,
+  contasDePagamento,
+  aoSalvar,
+  aoNaoExistir,
+  aoSessaoExpirar,
+}: {
+  conta: Conta
+  contasDePagamento: Conta[]
+  aoSalvar: (conta: Conta) => void
+  aoNaoExistir: () => void
+  aoSessaoExpirar: () => void
+}) {
+  const eCartao = conta.cartao !== null
+  const eCripto = conta.tipo === 'cripto'
+  const [nome, setNome] = useState(conta.nome)
+  const [saldo, setSaldo] = useState(saldoInicialNaTela(conta))
+  const [limite, setLimite] = useState(conta.cartao === null ? '' : centavosParaCampo(conta.cartao.limiteCentavos))
+  const [pagamento, setPagamento] = useState(conta.cartao?.contaPagamentoId ?? '')
+  const [enviando, setEnviando] = useState(false)
+  const [mensagem, setMensagem] = useState<string | null>(null)
+  // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
+  const emVoo = useRef(false)
+
+  async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
+    evento.preventDefault()
+    if (emVoo.current) return
+    const dados: AtualizarContaRequest = { nome }
+    if (!eCripto) {
+      const lido = saldo.trim() === '' ? 0 : lerCentavos(saldo)
+      if (lido === null) {
+        setMensagem('Saldo inválido. Use o formato 1.234,56, até 90.071.992.547.409,91.')
+        return
+      }
+      if (eCartao && lido < 0) {
+        setMensagem('Digite a fatura em aberto como valor positivo.')
+        return
+      }
+      dados.saldoInicialCentavos = eCartao && lido !== 0 ? -lido : lido
+    }
+    if (eCartao) {
+      const limiteCentavos = lerValorPositivo(limite)
+      if (limiteCentavos === null) {
+        setMensagem('Limite inválido. Use o formato 1.234,56, maior que zero.')
+        return
+      }
+      dados.cartao = { limiteCentavos, ...(pagamento === '' ? {} : { contaPagamentoId: pagamento }) }
+    }
+    emVoo.current = true
+    setEnviando(true)
+    setMensagem(null)
+    try {
+      aoSalvar(await atualizarConta(conta.id, dados))
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return
+      }
+      if (erro instanceof ContaNaoEncontradaError) {
+        aoNaoExistir()
+        return
+      }
+      setMensagem(mensagemDeEdicao(erro))
+    } finally {
+      emVoo.current = false
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <form onSubmit={(evento) => void enviar(evento)} aria-label={`Editar ${conta.nome}`}>
+      <div className="campo">
+        <label htmlFor="editar-conta-nome">Nome</label>
+        <input
+          id="editar-conta-nome"
+          type="text"
+          maxLength={100}
+          required
+          value={nome}
+          onChange={(evento) => setNome(evento.target.value)}
+        />
+      </div>
+      {!eCripto && (
+        <div className="campo">
+          <label htmlFor="editar-conta-saldo">
+            {eCartao ? 'Fatura em aberto quando o cartão entrou no app' : 'Saldo inicial em reais'}
+          </label>
+          <input
+            id="editar-conta-saldo"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0,00"
+            value={saldo}
+            onChange={(evento) => setSaldo(evento.target.value)}
+          />
+          <small>Muda o saldo de hoje pela diferença; os lançamentos ficam como estão.</small>
+        </div>
+      )}
+      {eCartao && (
+        <>
+          <div className="campo">
+            <label htmlFor="editar-conta-limite">Limite em reais</label>
+            <input
+              id="editar-conta-limite"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              required
+              value={limite}
+              onChange={(evento) => setLimite(evento.target.value)}
+            />
+          </div>
+          <div className="campo">
+            <label htmlFor="editar-conta-pagamento">Conta de pagamento</label>
+            <select id="editar-conta-pagamento" value={pagamento} onChange={(evento) => setPagamento(evento.target.value)}>
+              {contasDePagamento.every((c) => c.id !== pagamento) && pagamento !== '' && (
+                <option value={pagamento}>Conta atual (arquivada)</option>
+              )}
+              {contasDePagamento.map((opcao) => (
+                <option key={opcao.id} value={opcao.id}>
+                  {opcao.nome}
+                </option>
+              ))}
+            </select>
+            <small>Fechamento e vencimento não mudam: as compras já lançadas dependem deles.</small>
+          </div>
+        </>
+      )}
+      {mensagem !== null && (
+        <p role="alert" className="erro">
+          {mensagem}
+        </p>
+      )}
+      <button type="submit" className="primario" disabled={enviando}>
+        {enviando ? 'Salvando...' : 'Salvar'}
+      </button>
+    </form>
+  )
+}
+
+function plural(quantidade: number, singular: string, varios: string): string {
+  return `${quantidade} ${quantidade === 1 ? singular : varios}`
+}
+
+type EstadoResumo = { tipo: 'carregando' } | { tipo: 'erro'; mensagem: string } | { tipo: 'ok'; resumo: ResumoExclusaoConta }
+
+// Apagar não tem volta: o resumo diz o que sai junto e o nome digitado confirma (ADR-036).
+function ApagarConta({
+  conta,
+  aoApagar,
+  aoNaoExistir,
+  aoSessaoExpirar,
+}: {
+  conta: Conta
+  aoApagar: () => void
+  aoNaoExistir: () => void
+  aoSessaoExpirar: () => void
+}) {
+  const [resumo, setResumo] = useState<EstadoResumo>({ tipo: 'carregando' })
+  const [confirmacao, setConfirmacao] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [mensagem, setMensagem] = useState<string | null>(null)
+  const emVoo = useRef(false)
+
+  useEffect(() => {
+    let ativo = true
+    fetchResumoExclusao(conta.id).then(
+      (lido) => {
+        if (ativo) setResumo({ tipo: 'ok', resumo: lido })
+      },
+      (erro: unknown) => {
+        if (!ativo) return
+        if (erro instanceof SessaoExpiradaError) {
+          aoSessaoExpirar()
+          return
+        }
+        if (erro instanceof ContaNaoEncontradaError) {
+          aoNaoExistir()
+          return
+        }
+        setResumo({ tipo: 'erro', mensagem: mensagemDeLeitura(erro) })
+      },
+    )
+    return () => {
+      ativo = false
+    }
+  }, [conta.id, aoNaoExistir, aoSessaoExpirar])
+
+  const confirmado = confirmacao.trim() === conta.nome
+
+  async function apagar(evento: FormEvent<HTMLFormElement>): Promise<void> {
+    evento.preventDefault()
+    if (emVoo.current || !confirmado) return
+    emVoo.current = true
+    setEnviando(true)
+    setMensagem(null)
+    try {
+      await deleteConta(conta.id)
+      aoApagar()
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return
+      }
+      if (erro instanceof ContaNaoEncontradaError) {
+        aoNaoExistir()
+        return
+      }
+      if (erro instanceof ContaInvalidaError && erro.mensagemServidor !== null) {
+        setMensagem(erro.mensagemServidor)
+      } else if (erro instanceof ServicoIndisponivelError) {
+        setMensagem(MENSAGEM_INDISPONIVEL)
+      } else {
+        setMensagem('Não foi possível apagar a conta. Tente de novo.')
+      }
+    } finally {
+      emVoo.current = false
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <form onSubmit={(evento) => void apagar(evento)} aria-label={`Apagar ${conta.nome}`}>
+      {resumo.tipo === 'carregando' && <Carregando texto="Contando o que sai junto..." linhas={2} />}
+      {resumo.tipo === 'erro' && (
+        <p role="alert" className="erro">
+          {resumo.mensagem}
+        </p>
+      )}
+      {resumo.tipo === 'ok' && (
+        <div className="aviso-exclusao">
+          <p>Isto não tem volta. Sai junto com a conta:</p>
+          <ul>
+            <li>{plural(resumo.resumo.lancamentos, 'lançamento', 'lançamentos')}</li>
+            <li>{plural(resumo.resumo.recorrencias, 'recorrência', 'recorrências')}</li>
+            {resumo.resumo.movimentosCripto > 0 && (
+              <li>{plural(resumo.resumo.movimentosCripto, 'movimento de cripto', 'movimentos de cripto')}</li>
+            )}
+          </ul>
+          {resumo.resumo.transferencias > 0 && (
+            <p>
+              {plural(resumo.resumo.transferencias, 'transferência com outra conta vira', 'transferências com outras contas viram')}{' '}
+              lançamento comum lá, e o saldo da outra conta não muda.
+            </p>
+          )}
+          <p>Para só esconder a conta e manter o histórico, use Arquivar.</p>
+        </div>
+      )}
+      <div className="campo">
+        <label htmlFor="apagar-conta-nome">Digite o nome da conta para confirmar</label>
+        <input
+          id="apagar-conta-nome"
+          type="text"
+          autoComplete="off"
+          value={confirmacao}
+          onChange={(evento) => setConfirmacao(evento.target.value)}
+        />
+      </div>
+      {mensagem !== null && (
+        <p role="alert" className="erro">
+          {mensagem}
+        </p>
+      )}
+      <button type="submit" className="perigo forte" disabled={!confirmado || enviando || resumo.tipo !== 'ok'}>
+        {enviando ? 'Apagando...' : 'Apagar de vez'}
       </button>
     </form>
   )
@@ -504,6 +791,8 @@ export default function Contas({
   const [falhaDeAcao, setFalhaDeAcao] = useState<string | null>(null)
   const [painelAberto, setPainelAberto] = useState(false)
   const [categoriasDe, setCategoriasDe] = useState<Conta | null>(null)
+  const [editando, setEditando] = useState<Conta | null>(null)
+  const [apagando, setApagando] = useState<Conta | null>(null)
   const [categorias, setCategorias] = useState<EstadoCategorias>({ tipo: 'carregando' })
   const [tentativaDeCategorias, setTentativaDeCategorias] = useState(0)
   const acaoEmVoo = useRef(false)
@@ -557,6 +846,14 @@ export default function Contas({
     setEstado({ tipo: 'carregando' })
     setTentativa((n) => n + 1)
   }
+
+  // Estável: o efeito do resumo de exclusão depende dela.
+  const fecharApagarSumida = useCallback((): void => {
+    setApagando(null)
+    setFalhaDeAcao('Essa conta não existe mais.')
+    setEstado({ tipo: 'carregando' })
+    setTentativa((n) => n + 1)
+  }, [])
 
   function recarregarCategorias(): void {
     setCategorias({ tipo: 'carregando' })
@@ -743,6 +1040,19 @@ export default function Contas({
                         Faturas
                       </button>
                     )}
+                    {!arquivadas && (
+                      <button
+                        type="button"
+                        className="pequeno"
+                        aria-label={`Editar ${conta.nome}`}
+                        onClick={() => {
+                          setFalhaDeAcao(null)
+                          setEditando(conta)
+                        }}
+                      >
+                        Editar
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="pequeno discreto"
@@ -751,6 +1061,17 @@ export default function Contas({
                       onClick={() => void mudarArquivamento(conta, !arquivadas)}
                     >
                       {arquivadas ? 'Desarquivar' : 'Arquivar'}
+                    </button>
+                    <button
+                      type="button"
+                      className="pequeno perigo"
+                      aria-label={`Apagar ${conta.nome}`}
+                      onClick={() => {
+                        setFalhaDeAcao(null)
+                        setApagando(conta)
+                      }}
+                    >
+                      Apagar
                     </button>
                   </div>
                   {expandida && (
@@ -780,6 +1101,47 @@ export default function Contas({
               )
               setPainelAberto(false)
             }}
+            aoSessaoExpirar={aoSessaoExpirar}
+          />
+        </Painel>
+      )}
+      {editando !== null && (
+        <Painel titulo={`Editar ${editando.nome}`} aoFechar={() => setEditando(null)}>
+          <EditarConta
+            conta={editando}
+            contasDePagamento={contasDePagamento}
+            aoSalvar={(salva) => {
+              setEstado((atual) =>
+                atual.tipo === 'ok'
+                  ? { tipo: 'ok', contas: atual.contas.map((outra) => (outra.id === salva.id ? salva : outra)).sort(compararContas) }
+                  : atual,
+              )
+              setEditando(null)
+              // Saldo inicial novo muda o saldo, a projeção e o Início.
+              aoMudarSaldo()
+            }}
+            aoNaoExistir={() => {
+              setEditando(null)
+              setFalhaDeAcao('Essa conta não existe mais.')
+              recarregar()
+            }}
+            aoSessaoExpirar={aoSessaoExpirar}
+          />
+        </Painel>
+      )}
+      {apagando !== null && (
+        <Painel titulo={`Apagar ${apagando.nome}`} aoFechar={() => setApagando(null)}>
+          <ApagarConta
+            conta={apagando}
+            aoApagar={() => {
+              setEstado((atual) =>
+                atual.tipo === 'ok' ? { tipo: 'ok', contas: atual.contas.filter((outra) => outra.id !== apagando.id) } : atual,
+              )
+              if (faturasDe === apagando.id) setFaturasDe(null)
+              setApagando(null)
+              aoMudarSaldo()
+            }}
+            aoNaoExistir={fecharApagarSumida}
             aoSessaoExpirar={aoSessaoExpirar}
           />
         </Painel>
