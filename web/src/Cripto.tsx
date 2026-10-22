@@ -622,7 +622,7 @@ export default function Cripto({ contas, aoSessaoExpirar }: { contas: Conta[]; a
                   <span className="item-meta">
                     {rotuloDoAtivo(ativo)} · {nomesDeConta.get(posicao.contaId) ?? 'Conta'}
                   </span>
-                  <small>Custo {formatarCentavos(posicao.custoCentavos)}</small>
+                  <small>Compras menos vendas {formatarCentavos(posicao.custoCentavos)}</small>
                   {posicao.cotacao === null ? (
                     <div className="item-selos">
                       <Selo tom="neutro">Sem cotação</Selo>

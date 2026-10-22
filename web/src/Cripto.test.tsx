@@ -163,6 +163,7 @@ describe('Cripto', () => {
     const [btc, semCotacao] = within(lista).getAllByRole('listitem')
     expect(within(btc).getByText('0,123456789012345678 BTC')).toBeVisible()
     expect(within(btc).getByText('BTC · Bitcoin · Exchange')).toBeVisible()
+    expect(within(btc).getByText(texto('Compras menos vendas R$ 40.000,00'))).toBeVisible()
     expect(within(btc).getByText(texto('Cotação R$ 350.000,5 em 21/10'))).toBeVisible()
     expect(within(btc).getByText(texto('R$ 43.200,00'))).toBeVisible()
     expect(within(semCotacao).getByText('Sem cotação')).toBeVisible()

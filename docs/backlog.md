@@ -19,6 +19,8 @@ Teste obrigatório: API fora do ar não pode travar lançamento.
 ### F15 — Aporte × valorização
 Quanto do crescimento foi aporte e quanto foi preço. Sem isso, cripto subindo
 parece economia.
+Inclui o custo médio da posição de cripto: hoje `custoCentavos` é compras menos
+vendas e a tela o chama assim (QA da F13, D2).
 Depende de `preco_unitario` nas movimentações — e ele é nullable, então a tela
 precisa pedir o custo quando faltar.
 
@@ -141,6 +143,8 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — As rotas de cripto não têm teste de banco congelado (503) próprio; o caminho é o mesmo `WriteTransaction` e `ApiExceptionHandler` já testados nas outras rotas (F13). Dono: backend, na F14.
 - **DÍVIDA** — Arquivar uma conta cripto tira a posição dela do patrimônio sem aviso na tela (revisão do PR #20). É o contrato ("só contas ativas"), mas a queda no total confunde. Avisar na aba Cripto quando houver conta cripto arquivada com posição. Dono: frontend.
 - **DÍVIDA** — `isCryptoAccount` repetida em `EntryQueries` e `RecurrenceQueries` (revisão do PR #20), como a `isCategoryPermitted`. Juntar no mesmo refator dos helpers. Dono: backend.
+- **DÍVIDA** — Um movimento de cripto aceito pela escrita pode deixar `/patrimonio` e `/posicoes-cripto` em 400 `patrimônio fora do limite` até ser apagado: quantidade perto de 10²⁰ vezes qualquer cotação passa do inteiro seguro (QA da F13, D1). Só com valor absurdo. Conferir na escrita o valor com a última cotação, ou devolver a posição sem valor em vez do 400. Dono: backend, na F14.
+- **DÍVIDA** — O saldo projetado sem `contaId` ainda conta a conta cripto no escopo, e `?contaId=<cripto>` responde zeros (QA da F13, S1). Sem efeito no número: a conta cripto não tem saldo nem lançamento. Tirar do `ALL_ACTIVE` junto com a próxima mudança da projeção. Dono: backend.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
