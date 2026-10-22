@@ -50,6 +50,9 @@ class AssetController {
   private static final ErrorResponse INVALID_MOMENT =
       new ErrorResponse("momento deve ser data e hora ISO-8601 com fuso, ano entre 1900 e 2199");
 
+  private static final ErrorResponse FUTURE_MOMENT =
+      new ErrorResponse("momento não pode ser no futuro");
+
   private static final int MIN_YEAR = 1900;
   private static final int MAX_YEAR = 2199;
 
@@ -202,6 +205,10 @@ class AssetController {
         request.moment() == null ? Optional.of(clock.instant()) : parseMoment(request.moment());
     if (moment.isEmpty()) {
       return ResponseEntity.badRequest().body(INVALID_MOMENT);
+    }
+    // Cotação manual registra um preço que já se viu; no futuro ela só apareceria numa data futura.
+    if (moment.get().isAfter(clock.instant())) {
+      return ResponseEntity.badRequest().body(FUTURE_MOMENT);
     }
     // O timestamptz guarda microssegundos: truncar aqui faz a resposta bater com o que ficou
     // gravado e o 409 valer para o mesmo instante que o banco enxerga.

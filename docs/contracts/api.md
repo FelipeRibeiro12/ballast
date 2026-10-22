@@ -525,7 +525,8 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   `momento` é opcional, ISO-8601 com fuso (`2026-10-21T15:00:00-03:00`), ano de
   1900 a 2199; ausente vale o instante da requisição. Fora disso, 400 `momento
   deve ser data e hora ISO-8601 com fuso, ano entre 1900 e 2199`. Fração abaixo
-  do microssegundo é descartada.
+  do microssegundo é descartada. Momento depois do instante da requisição dá
+  400 `momento não pode ser no futuro`.
 - 201 `{ativoId, momento, preco, fonte}`, `fonte` `manual`, `momento` em UTC.
   Já existe cotação do ativo naquele instante: 409 `já existe cotação nesse
   momento`.

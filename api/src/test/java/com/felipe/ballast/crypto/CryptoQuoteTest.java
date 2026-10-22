@@ -156,6 +156,22 @@ class CryptoQuoteTest {
   }
 
   @Test
+  void refusesAMomentInTheFuture() throws Exception {
+    clock.freeze(Instant.parse("2026-10-21T18:00:00Z"));
+
+    MockHttpServletResponse future =
+        api.quote(
+            actor.session(), bitcoin, Map.of("preco", "1", "momento", "2026-10-21T18:00:01Z"));
+    MockHttpServletResponse now =
+        api.quote(
+            actor.session(), bitcoin, Map.of("preco", "1", "momento", "2026-10-21T18:00:00Z"));
+
+    assertThat(future.getStatus()).isEqualTo(400);
+    assertThat(CryptoApi.text(future)).isEqualTo("{\"erro\":\"momento não pode ser no futuro\"}");
+    assertThat(now.getStatus()).isEqualTo(201);
+  }
+
+  @Test
   void theSameMomentTwiceIs409() throws Exception {
     api.quoteOk(actor.session(), bitcoin, "1", "2026-10-21T15:00:00Z");
 

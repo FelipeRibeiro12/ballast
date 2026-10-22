@@ -17,7 +17,7 @@ import {
 } from './api'
 import type { AtivoCripto, AtivoCriptoRequest, Conta, MovimentoCripto, Patrimonio, PosicoesCripto } from './api'
 import { formatarDecimal, lerPreco, lerQuantidade } from './decimais'
-import { formatarDataCompleta, formatarDiaMes, hojeLocal } from './datas'
+import { diaEmSaoPaulo, formatarDataCompleta, formatarDiaMes, hojeLocal } from './datas'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
 import { IconeMais } from './icones'
 import Painel from './Painel'
@@ -630,7 +630,7 @@ export default function Cripto({ contas, aoSessaoExpirar }: { contas: Conta[]; a
                   ) : (
                     <small>
                       Cotação R$ {formatarDecimal(posicao.cotacao.preco)} em{' '}
-                      {formatarDiaMes(posicao.cotacao.momento.slice(0, 10))}
+                      {formatarDiaMes(diaEmSaoPaulo(posicao.cotacao.momento))}
                     </small>
                   )}
                 </div>

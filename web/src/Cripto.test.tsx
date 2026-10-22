@@ -65,7 +65,8 @@ const posicoes = {
       ativoId: 'a1',
       quantidade: '0.123456789012345678',
       custoCentavos: 4_000_000,
-      cotacao: { preco: '350000.5', momento: '2026-10-21T18:00:00Z' },
+      // 22:30 do dia 21 em São Paulo, já dia 22 em UTC.
+      cotacao: { preco: '350000.5', momento: '2026-10-22T01:30:00Z' },
       valorCentavos: 4_320_000,
     },
     {

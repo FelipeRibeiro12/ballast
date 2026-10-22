@@ -113,6 +113,8 @@ class MovementService {
     if (movement.isEmpty()) {
       return DeleteResult.NOT_FOUND;
     }
+    // O retorno não importa aqui: a conta do movimento é do dono, e se o movimento sumiu no meio o
+    // DELETE abaixo apaga zero linhas.
     queries.lockAccount(userId, movement.get().accountId());
     if (queries.deleteMovement(userId, id) == 0) {
       return DeleteResult.NOT_FOUND;

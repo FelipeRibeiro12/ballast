@@ -139,6 +139,8 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Ativo e cotação de cripto não se editam nem se apagam (F13): ativo cadastrado errado fica na lista, e cotação digitada errada só se corrige com outra mais nova. Rota de correção quando houver pedido, ou na F14 junto com a fonte automática. Dono: backend e frontend.
 - **DÍVIDA** — `GET /movimentos-cripto` sem paginação e sem teto de movimentos por usuário (F13), como `GET /lancamentos`. Paginar junto com a importação. Dono: backend.
 - **DÍVIDA** — As rotas de cripto não têm teste de banco congelado (503) próprio; o caminho é o mesmo `WriteTransaction` e `ApiExceptionHandler` já testados nas outras rotas (F13). Dono: backend, na F14.
+- **DÍVIDA** — Arquivar uma conta cripto tira a posição dela do patrimônio sem aviso na tela (revisão do PR #20). É o contrato ("só contas ativas"), mas a queda no total confunde. Avisar na aba Cripto quando houver conta cripto arquivada com posição. Dono: frontend.
+- **DÍVIDA** — `isCryptoAccount` repetida em `EntryQueries` e `RecurrenceQueries` (revisão do PR #20), como a `isCategoryPermitted`. Juntar no mesmo refator dos helpers. Dono: backend.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
