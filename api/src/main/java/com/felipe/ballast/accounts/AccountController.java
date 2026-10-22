@@ -70,6 +70,12 @@ class AccountController {
   private static final ErrorResponse CRYPTO_WITH_BALANCE =
       new ErrorResponse("conta cripto não tem saldo em reais");
 
+  private static final ErrorResponse NOTHING_TO_UPDATE =
+      new ErrorResponse("informe ao menos um campo para alterar");
+
+  private static final ErrorResponse BALANCE_OUT_OF_RANGE =
+      new ErrorResponse("saldo da conta fora do limite");
+
   private static final ErrorResponse INVALID_ARCHIVED_FILTER =
       new ErrorResponse("arquivadas deve ser true ou false");
 
@@ -272,8 +278,10 @@ class AccountController {
 
   @Operation(
       operationId = "patchContasById",
-      summary = "Arquiva ou desarquiva uma conta",
-      description = "Idempotente: repetir o mesmo valor devolve 200 e a mesma conta.",
+      summary = "Altera uma conta",
+      description =
+          "Campo ausente ou nulo não muda: arquivada, nome, saldoInicialCentavos e, em cartão,"
+              + " limite e conta de pagamento. Repetir o mesmo valor devolve 200 e a mesma conta.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",
@@ -281,11 +289,18 @@ class AccountController {
       content = @Content(schema = @Schema(implementation = AccountResponse.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "Entrada inválida, inclusive campo não declarado",
+      description =
+          "Entrada inválida, inclusive campo não declarado e corpo sem nenhum campo, cartao fora"
+              + " de cartão, conta de pagamento inválida, saldo inicial em conta cripto ou saldo"
+              + " fora do limite",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
       description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "Já existe outra conta do usuário com esse nome, sem diferenciar caixa",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "404",
@@ -312,18 +327,48 @@ class AccountController {
       @AuthenticationPrincipal AuthenticatedUser user,
       @PathVariable("id") String id,
       @Valid @RequestBody UpdateAccountRequest request) {
-    Optional<AccountSummary> updated =
-        CanonicalUuid.parse(id)
-            .flatMap(accountId -> accounts.setArchived(user.id(), accountId, request.archived()));
-    if (updated.isEmpty()) {
+    if (request.isEmpty()) {
+      return ResponseEntity.badRequest().body(NOTHING_TO_UPDATE);
+    }
+    Optional<UUID> accountId = CanonicalUuid.parse(id);
+    if (accountId.isEmpty()) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
     }
-    log.info(
-        "conta atualizada usuario_id={} conta_id={} arquivada={}",
-        user.id(),
-        updated.get().id(),
-        updated.get().archived());
-    return ResponseEntity.ok(AccountResponse.from(updated.get()));
+    UpdateAccountRequest.UpdateCardRequest card = request.card();
+    boolean paymentGiven = card != null && card.paymentAccountId() != null;
+    AccountService.UpdateInput input =
+        new AccountService.UpdateInput(
+            request.name(),
+            request.initialBalance(),
+            request.archived(),
+            card != null,
+            card == null ? null : card.limit(),
+            paymentGiven,
+            paymentGiven ? CanonicalUuid.parse(card.paymentAccountId()).orElse(null) : null);
+    return switch (accounts.update(user.id(), accountId.get(), input)) {
+      case AccountService.UpdateResult.Updated updated -> {
+        log.info(
+            "conta atualizada usuario_id={} conta_id={} arquivada={}",
+            user.id(),
+            updated.account().id(),
+            updated.account().archived());
+        yield ResponseEntity.ok(AccountResponse.from(updated.account()));
+      }
+      case AccountService.UpdateResult.Rejected rejected -> {
+        log.warn("conta não atualizada: motivo={} usuario_id={}", rejected, user.id());
+        yield switch (rejected) {
+          case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+          case NAME_TAKEN -> ResponseEntity.status(HttpStatus.CONFLICT).body(NAME_TAKEN);
+          case CRYPTO_WITH_BALANCE -> ResponseEntity.badRequest().body(CRYPTO_WITH_BALANCE);
+          case CARD_NOT_ALLOWED -> ResponseEntity.badRequest().body(CARD_NOT_ALLOWED);
+          case PAYMENT_ACCOUNT_NOT_FOUND ->
+              ResponseEntity.badRequest().body(PAYMENT_ACCOUNT_NOT_FOUND);
+          case PAYMENT_ACCOUNT_NOT_ELIGIBLE ->
+              ResponseEntity.badRequest().body(PAYMENT_ACCOUNT_NOT_ELIGIBLE);
+          case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
+        };
+      }
+    };
   }
 
   @Operation(

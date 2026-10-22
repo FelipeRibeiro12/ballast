@@ -774,7 +774,9 @@ paths:
       tags:
       - contas
     patch:
-      description: "Idempotente: repetir o mesmo valor devolve 200 e a mesma conta."
+      description: "Campo ausente ou nulo não muda: arquivada, nome, saldoInicialCentavos\
+        \ e, em cartão, limite e conta de pagamento. Repetir o mesmo valor devolve\
+        \ 200 e a mesma conta."
       operationId: patchContasById
       parameters:
       - in: path
@@ -800,7 +802,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Entrada inválida, inclusive campo não declarado"
+          description: "Entrada inválida, inclusive campo não declarado e corpo sem\
+            \ nenhum campo, cartao fora de cartão, conta de pagamento inválida, saldo\
+            \ inicial em conta cripto ou saldo fora do limite"
         "401":
           content:
             application/json:
@@ -814,6 +818,13 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "Conta de outro usuário, inexistente ou id que não é UUID;\
             \ todos com o mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Já existe outra conta do usuário com esse nome, sem diferenciar\
+            \ caixa"
         "413":
           content:
             application/json:
@@ -834,7 +845,7 @@ paths:
           description: Banco indisponível ou conta travada por mais de 2 s
       security:
       - cookieAuth: []
-      summary: Arquiva ou desarquiva uma conta
+      summary: Altera uma conta
       tags:
       - contas
   /contas/{id}/categorias-permitidas:
@@ -2120,13 +2131,35 @@ components:
       - decimais
       - rede
       - simbolo
+    AtualizarCartaoRequest:
+      type: object
+      properties:
+        contaPagamentoId:
+          type: string
+          format: uuid
+        limiteCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 1
     AtualizarContaRequest:
       type: object
       properties:
         arquivada:
           type: boolean
-      required:
-      - arquivada
+        cartao:
+          $ref: "#/components/schemas/AtualizarCartaoRequest"
+          description: Só em conta de cartão. Fechamento e vencimento não se editam
+            (ADR-031)
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+        saldoInicialCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
     CadastroRequest:
       type: object
       properties:

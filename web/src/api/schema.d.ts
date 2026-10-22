@@ -229,8 +229,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Arquiva ou desarquiva uma conta
-         * @description Idempotente: repetir o mesmo valor devolve 200 e a mesma conta.
+         * Altera uma conta
+         * @description Campo ausente ou nulo não muda: arquivada, nome, saldoInicialCentavos e, em cartão, limite e conta de pagamento. Repetir o mesmo valor devolve 200 e a mesma conta.
          */
         patch: operations["patchContasById"];
         trace?: never;
@@ -577,8 +577,19 @@ export interface components {
             rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "solana";
             simbolo: string;
         };
+        AtualizarCartaoRequest: {
+            /** Format: uuid */
+            contaPagamentoId?: string;
+            /** Format: int64 */
+            limiteCentavos?: number;
+        };
         AtualizarContaRequest: {
-            arquivada: boolean;
+            arquivada?: boolean;
+            /** @description Só em conta de cartão. Fechamento e vencimento não se editam (ADR-031) */
+            cartao?: components["schemas"]["AtualizarCartaoRequest"];
+            nome?: string;
+            /** Format: int64 */
+            saldoInicialCentavos?: number;
         };
         CadastroRequest: {
             email: string;
@@ -2269,7 +2280,7 @@ export interface operations {
                     "application/json": components["schemas"]["Conta"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado */
+            /** @description Entrada inválida, inclusive campo não declarado e corpo sem nenhum campo, cartao fora de cartão, conta de pagamento inválida, saldo inicial em conta cripto ou saldo fora do limite */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2289,6 +2300,15 @@ export interface operations {
             };
             /** @description Conta de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Já existe outra conta do usuário com esse nome, sem diferenciar caixa */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
