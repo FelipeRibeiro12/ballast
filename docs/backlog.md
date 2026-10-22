@@ -11,13 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F13.1 — Editar e apagar contas e recorrências
-Editar nome, saldo inicial, limite e conta de pagamento do cartão; apagar a conta
-com tudo que é dela, mantendo o arquivar. Editar, reativar e apagar recorrência,
-regerando só as previstas futuras não editadas (ADR-036).
-Teste obrigatório: apagar conta com transferência não muda o saldo da outra conta;
-editar recorrência não mexe em realizada, cancelada nem editada à mão.
-
 ### F13.2 — Renda fixa (LCI, LCA, CDB)
 Título com valor aplicado, data, vencimento e indexador (prefixado, % do CDI,
 IPCA + taxa). Valor calculado com CDI e IPCA do Banco Central (SGS) e corrigível
@@ -157,7 +150,7 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — PUT numa parcela muda título e categoria só dela, e a tela da compra mostra o título da primeira; a categoria divergente entra no gráfico por competência (QA da F11, S1; revisão do PR #17). Decidir: recusar título e categoria no PUT de parcela com `edite a compra inteira`, ou a compra mostrar a divergência. Dono: tech-lead e backend, na fatia de gráfico por categoria.
 - **DÍVIDA** — Os `isConstraint` antigos de `EntryService` e `InstallmentService` repetem o que `web/Constraints.isViolated` faz (F12). Trocar todos pelo helper num refator próprio. Dono: backend, na próxima fatia que mexer em `entries`.
 - **DÍVIDA** — As descrições de 400 em `/lancamentos`, `/recorrencias` e `/transferencias` no OpenAPI não listam as mensagens novas da F12; elas estão só em `api.md` (F12). Dono: backend, junto do refator acima.
-- **DÍVIDA** — Recorrência cuja categoria saiu da lista de um benefício é pulada pelo job em toda rodada, com warn, até a lista voltar; não há como editar o template (F12). Avisar o usuário na tela de recorrências ou permitir trocar a categoria do template. Dono: frontend e backend, na fatia que trouxer edição de template.
+- **DÍVIDA** — Recorrência cuja categoria saiu da lista de um benefício é pulada pelo job em toda rodada, com warn, até a lista voltar (F12). Desde a F13.1 o usuário troca a categoria pelo editar; falta avisar na tela que a recorrência parou. Dono: frontend.
 - **DÍVIDA** — `isCategoryPermitted` repetida em `EntryQueries` e `RecurrenceQueries` (revisão do PR #19). Juntar num lugar só no refator dos helpers de constraint. Dono: backend.
 - **DÍVIDA** — `PUT /contas/{id}/categorias-permitidas` aceita conta arquivada (QA da F12, S2). Inofensivo, porque lançar em conta arquivada já é recusado; decidir se recusa para o contrato ficar coerente com o resto das escritas. Dono: backend.
 - **DÍVIDA** — Ativo e cotação de cripto não se editam nem se apagam (F13): ativo cadastrado errado fica na lista, e cotação digitada errada só se corrige com outra mais nova. Rota de correção quando houver pedido, ou na F14 junto com a fonte automática. Dono: backend e frontend.
