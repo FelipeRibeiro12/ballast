@@ -15,8 +15,9 @@ import {
 import type { Categoria, Conta, CriarContaRequest } from './api'
 import Faturas from './Faturas'
 import { formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
-import { IconeBanco, IconeBeneficio, IconeCartao, IconeDinheiro, IconeMais } from './icones'
+import { IconeBanco, IconeBeneficio, IconeCartao, IconeCripto, IconeDinheiro, IconeMais } from './icones'
 import Painel from './Painel'
+import { hashDaSecao } from './rota'
 import { Carregando, EstadoVazio, Selo } from './ui'
 
 type EstadoLista =
@@ -37,9 +38,10 @@ const ROTULO_DO_TIPO: Record<TipoDeConta, string> = {
   dinheiro: 'Dinheiro',
   cartao_credito: 'Cartão de crédito',
   beneficio: 'Vale-benefício',
+  cripto: 'Cripto',
 }
 
-const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito', 'beneficio']
+const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito', 'beneficio', 'cripto']
 
 const ICONE_DO_TIPO: Record<TipoDeConta, ReactNode> = {
   corrente: <IconeBanco />,
@@ -47,6 +49,7 @@ const ICONE_DO_TIPO: Record<TipoDeConta, ReactNode> = {
   dinheiro: <IconeDinheiro />,
   cartao_credito: <IconeCartao />,
   beneficio: <IconeBeneficio />,
+  cripto: <IconeCripto />,
 }
 
 // Só para a largura da barra: percentual inteiro do limite já usado, calculado em BigInt.
@@ -266,6 +269,8 @@ function NovaConta({
 
   const eCartao = tipo === 'cartao_credito'
   const eBeneficio = tipo === 'beneficio'
+  // Conta cripto não tem saldo em reais: o valor vem das posições (ADR-035).
+  const eCripto = tipo === 'cripto'
   const contaPagamentoId = contasDePagamento.some((c) => c.id === pagamentoEscolhido)
     ? pagamentoEscolhido
     : (contasDePagamento[0]?.id ?? '')
@@ -275,7 +280,7 @@ function NovaConta({
     evento.preventDefault()
     if (emVoo.current) return
     // Campo vazio vale zero; texto fora do formato não chega à API.
-    const saldoInicialCentavos = saldo.trim() === '' ? 0 : lerCentavos(saldo)
+    const saldoInicialCentavos = eCripto || saldo.trim() === '' ? 0 : lerCentavos(saldo)
     if (saldoInicialCentavos === null) {
       setMensagem('Saldo inválido. Use o formato 1.234,56, até 90.071.992.547.409,91.')
       return
@@ -375,21 +380,25 @@ function NovaConta({
           ))}
         </select>
       </div>
-      <div className="campo">
-        <label htmlFor="conta-saldo">
-          {eCartao ? 'Fatura em aberto hoje (opcional)' : 'Saldo inicial em reais (opcional)'}
-        </label>
-        <input
-          id="conta-saldo"
-          type="text"
-          inputMode="decimal"
-          autoComplete="off"
-          placeholder="0,00"
-          value={saldo}
-          aria-describedby={descricao}
-          onChange={(evento) => setSaldo(evento.target.value)}
-        />
-      </div>
+      {eCripto ? (
+        <p role="status">Compras, vendas e cotações da conta ficam na aba Cripto.</p>
+      ) : (
+        <div className="campo">
+          <label htmlFor="conta-saldo">
+            {eCartao ? 'Fatura em aberto hoje (opcional)' : 'Saldo inicial em reais (opcional)'}
+          </label>
+          <input
+            id="conta-saldo"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0,00"
+            value={saldo}
+            aria-describedby={descricao}
+            onChange={(evento) => setSaldo(evento.target.value)}
+          />
+        </div>
+      )}
       {eCartao && (
         <>
           <div className="campo">
@@ -673,9 +682,15 @@ export default function Contas({
                       <strong>{conta.nome}</strong>
                       <span>{ROTULO_DO_TIPO[conta.tipo]}</span>
                     </div>
-                    <span className={conta.saldoCentavos < 0 ? 'conta-saldo negativo' : 'conta-saldo'}>
-                      {formatarCentavos(conta.saldoCentavos)}
-                    </span>
+                    {conta.tipo === 'cripto' ? (
+                      <a className="conta-saldo" href={hashDaSecao('cripto')}>
+                        Ver posições
+                      </a>
+                    ) : (
+                      <span className={conta.saldoCentavos < 0 ? 'conta-saldo negativo' : 'conta-saldo'}>
+                        {formatarCentavos(conta.saldoCentavos)}
+                      </span>
+                    )}
                   </div>
                   {conta.cartao !== null && (
                     <div className="limite">

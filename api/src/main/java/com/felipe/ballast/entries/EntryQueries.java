@@ -93,6 +93,18 @@ class EntryQueries {
         .single();
   }
 
+  // Conta cripto não recebe lançamento (ADR-035). O tipo da conta não muda, então ler sem travar
+  // basta; a FK lancamento_conta_aceita_lancamento da V13 segura o resto.
+  boolean isCryptoAccount(UUID userId, UUID accountId) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM conta WHERE usuario_id = :userId AND id = :id"
+                + " AND tipo = 'cripto')")
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(Boolean.class)
+        .single();
+  }
+
   // Fechamento e vencimento do cartão da conta; vazio quando a conta não é de cartão. Os dois dias
   // não mudam depois que o cartão nasce (ADR-031), então não precisa travar nada para ler.
   Optional<CardBilling> findCardBilling(UUID userId, UUID accountId) {

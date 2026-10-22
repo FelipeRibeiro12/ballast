@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   CredenciaisInvalidasError,
@@ -18,6 +18,7 @@ import Inicio from './Inicio'
 import Lancamentos from './Lancamentos'
 import Recorrencias from './Recorrencias'
 import { useRota } from './rota'
+import Cripto from './Cripto'
 import Topo from './Topo'
 import { Carregando } from './ui'
 
@@ -301,6 +302,13 @@ function App() {
   // Onde o Início abre espaço para as vencidas que a tela de Lançamentos desenha.
   const [slotDeVencidas, setSlotDeVencidas] = useState<HTMLElement | null>(null)
   const [rota, irPara] = useRota()
+  // Conta cripto não recebe lançamento (ADR-035): fica fora dos selects e aparece só na aba Cripto.
+  // Memo porque as telas buscam de novo quando a lista de contas muda de identidade.
+  const contasEmReais = useMemo(
+    () => contasAtivas?.filter((conta) => conta.tipo !== 'cripto') ?? null,
+    [contasAtivas],
+  )
+  const contasCripto = useMemo(() => contasAtivas?.filter((conta) => conta.tipo === 'cripto') ?? [], [contasAtivas])
 
   useEffect(() => {
     let ativo = true
@@ -410,7 +418,7 @@ function App() {
         {rota === 'inicio' && (
           <Inicio
             usuario={sessao.usuario}
-            contas={contasAtivas}
+            contas={contasEmReais}
             versaoDeSaldo={versaoDeSaldo}
             versaoDaLista={versaoDaLista}
             aoSessaoExpirar={aoSessaoExpirar}
@@ -420,7 +428,7 @@ function App() {
         <div className="secao" hidden={rota !== 'lancamentos'}>
           <Lancamentos
             aoSessaoExpirar={aoSessaoExpirar}
-            contas={contasAtivas}
+            contas={contasEmReais}
             aoMudarSaldo={() => setVersaoDeSaldo((n) => n + 1)}
             recorrenciasAtivas={recorrenciasAtivas}
             parcelasPorRecorrencia={parcelasPorRecorrencia}
@@ -445,7 +453,7 @@ function App() {
         <div className="secao" hidden={rota !== 'recorrencias'}>
           <Recorrencias
             aoSessaoExpirar={aoSessaoExpirar}
-            contas={contasAtivas}
+            contas={contasEmReais}
             versao={versaoDeRecorrencias}
             aoCarregarAtivas={setRecorrenciasAtivas}
             aoCarregarParcelas={setParcelasPorRecorrencia}
@@ -455,6 +463,7 @@ function App() {
             }}
           />
         </div>
+        {rota === 'cripto' && <Cripto contas={contasCripto} aoSessaoExpirar={aoSessaoExpirar} />}
         <Rodape />
       </main>
     </div>

@@ -24,7 +24,7 @@ function reais(texto: string): RegExp {
   return new RegExp(`R\\$\\s${texto.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}`)
 }
 
-type Secao = 'Início' | 'Lançamentos' | 'Contas' | 'Recorrências'
+type Secao = 'Início' | 'Lançamentos' | 'Contas' | 'Recorrências' | 'Cripto'
 
 // A navegação é um só <nav>: barra embaixo no celular, links no topo no desktop.
 async function irPara(page: Page, secao: Secao): Promise<void> {
@@ -214,6 +214,46 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await expect(page.getByRole('heading', { name: 'Faturas de Cartão E2E' })).toBeVisible()
     await expect(page.getByText('Carregando faturas...')).toHaveCount(0)
     await capturar(page, projeto, '11-faturas')
+  })
+
+  await test.step('cripto manual', async () => {
+    await irPara(page, 'Contas')
+    const novaConta = await abrirNovaConta()
+    await novaConta.getByLabel('Nome').fill('Exchange E2E')
+    await novaConta.getByLabel('Tipo').selectOption('cripto')
+    await expect(novaConta.getByLabel('Saldo inicial em reais (opcional)')).toHaveCount(0)
+    await novaConta.getByRole('button', { name: 'Criar conta' }).click()
+    await expect(painel).toHaveCount(0)
+    await expect(conta('Exchange E2E').getByRole('link', { name: 'Ver posições' })).toBeVisible()
+
+    await irPara(page, 'Cripto')
+    await expect(page.getByText(/nunca pede frase de recuperação/)).toBeVisible()
+    await page.getByRole('button', { name: 'Novo ativo' }).click()
+    const ativo = page.getByRole('form', { name: 'Novo ativo' })
+    await ativo.getByLabel('Símbolo').fill('BTC')
+    await ativo.getByLabel('Nome (opcional)').fill('Bitcoin')
+    await capturar(page, projeto, '11a-novo-ativo')
+    await ativo.getByRole('button', { name: 'Cadastrar ativo' }).click()
+    await expect(painel).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Novo movimento' }).click()
+    const movimento = page.getByRole('form', { name: 'Novo movimento' })
+    await movimento.getByLabel('Quantidade').fill('0,5')
+    await movimento.getByLabel('Data').fill('2026-01-10')
+    await movimento.getByLabel('Quanto pagou, em reais').fill('150.000,00')
+    await movimento.getByRole('button', { name: 'Registrar compra' }).click()
+    await expect(painel).toHaveCount(0)
+    const posicoes = page.getByRole('list', { name: 'Posições' })
+    await expect(posicoes).toContainText('0,5 BTC')
+    await expect(posicoes).toContainText('Sem cotação')
+
+    await posicoes.getByRole('button', { name: 'Informar cotação de BTC' }).click()
+    await page.getByLabel('Preço de 1 BTC em reais').fill('400.000,00')
+    await page.getByRole('button', { name: 'Salvar cotação' }).click()
+    await expect(painel).toHaveCount(0)
+    await expect(posicoes).toContainText(reais('200.000,00'))
+    await expect(page.getByRole('region', { name: 'Patrimônio' })).toContainText(reais('200.000,00'))
+    await capturar(page, projeto, '11b-cripto')
   })
 
   await test.step('seletor de tema', async () => {

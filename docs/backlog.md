@@ -11,11 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F13 — Cripto manual
-Ativo identificado por `rede` + `contrato`, posição em quantidade,
-movimentação com custo de aquisição informado por você.
-Patrimônio total passa a receber data de referência.
-
 ### F14 — Cotação automática
 Worker com ticker, série histórica, cache da última cotação conhecida, data da
 cotação visível na interface.
@@ -24,6 +19,8 @@ Teste obrigatório: API fora do ar não pode travar lançamento.
 ### F15 — Aporte × valorização
 Quanto do crescimento foi aporte e quanto foi preço. Sem isso, cripto subindo
 parece economia.
+Inclui o custo médio da posição de cripto: hoje `custoCentavos` é compras menos
+vendas e a tela o chama assim (QA da F13, D2).
 Depende de `preco_unitario` nas movimentações — e ele é nullable, então a tela
 precisa pedir o custo quando faltar.
 
@@ -141,6 +138,13 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Recorrência cuja categoria saiu da lista de um benefício é pulada pelo job em toda rodada, com warn, até a lista voltar; não há como editar o template (F12). Avisar o usuário na tela de recorrências ou permitir trocar a categoria do template. Dono: frontend e backend, na fatia que trouxer edição de template.
 - **DÍVIDA** — `isCategoryPermitted` repetida em `EntryQueries` e `RecurrenceQueries` (revisão do PR #19). Juntar num lugar só no refator dos helpers de constraint. Dono: backend.
 - **DÍVIDA** — `PUT /contas/{id}/categorias-permitidas` aceita conta arquivada (QA da F12, S2). Inofensivo, porque lançar em conta arquivada já é recusado; decidir se recusa para o contrato ficar coerente com o resto das escritas. Dono: backend.
+- **DÍVIDA** — Ativo e cotação de cripto não se editam nem se apagam (F13): ativo cadastrado errado fica na lista, e cotação digitada errada só se corrige com outra mais nova. Rota de correção quando houver pedido, ou na F14 junto com a fonte automática. Dono: backend e frontend.
+- **DÍVIDA** — `GET /movimentos-cripto` sem paginação e sem teto de movimentos por usuário (F13), como `GET /lancamentos`. Paginar junto com a importação. Dono: backend.
+- **DÍVIDA** — As rotas de cripto não têm teste de banco congelado (503) próprio; o caminho é o mesmo `WriteTransaction` e `ApiExceptionHandler` já testados nas outras rotas (F13). Dono: backend, na F14.
+- **DÍVIDA** — Arquivar uma conta cripto tira a posição dela do patrimônio sem aviso na tela (revisão do PR #20). É o contrato ("só contas ativas"), mas a queda no total confunde. Avisar na aba Cripto quando houver conta cripto arquivada com posição. Dono: frontend.
+- **DÍVIDA** — `isCryptoAccount` repetida em `EntryQueries` e `RecurrenceQueries` (revisão do PR #20), como a `isCategoryPermitted`. Juntar no mesmo refator dos helpers. Dono: backend.
+- **DÍVIDA** — Um movimento de cripto aceito pela escrita pode deixar `/patrimonio` e `/posicoes-cripto` em 400 `patrimônio fora do limite` até ser apagado: quantidade perto de 10²⁰ vezes qualquer cotação passa do inteiro seguro (QA da F13, D1). Só com valor absurdo. Conferir na escrita o valor com a última cotação, ou devolver a posição sem valor em vez do 400. Dono: backend, na F14.
+- **DÍVIDA** — O saldo projetado sem `contaId` ainda conta a conta cripto no escopo, e `?contaId=<cripto>` responde zeros (QA da F13, S1). Sem efeito no número: a conta cripto não tem saldo nem lançamento. Tirar do `ALL_ACTIVE` junto com a próxima mudança da projeção. Dono: backend.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

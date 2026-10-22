@@ -42,6 +42,18 @@ export function somarMeses({ ano, mes }: Mes, delta: number): Mes {
 }
 
 // "2026-09-05" vira "05/09". Trabalha na string: Date interpretaria como UTC.
+// O dia de um instante em São Paulo, como "2026-10-21". O en-CA formata a data em AAAA-MM-DD.
+const formatadorDiaSaoPaulo = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+export function diaEmSaoPaulo(instante: string): string {
+  return formatadorDiaSaoPaulo.format(new Date(instante))
+}
+
 export function formatarDiaMes(data: string): string {
   return `${data.slice(8, 10)}/${data.slice(5, 7)}`
 }

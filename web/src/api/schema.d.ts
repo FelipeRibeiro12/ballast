@@ -4,6 +4,50 @@
  */
 
 export interface paths {
+    "/ativos-cripto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista os ativos de cripto do usuário
+         * @description Por símbolo sem diferenciar caixa, depois rede.
+         */
+        get: operations["getAtivosCripto"];
+        put?: never;
+        /**
+         * Cadastra um ativo de cripto do usuário
+         * @description Identidade é rede mais contrato; contrato nulo é o nativo da rede. Nasce confiável.
+         */
+        post: operations["postAtivosCripto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ativos-cripto/{id}/cotacoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grava uma cotação manual do ativo
+         * @description Preço em reais por unidade, em texto. Sem momento, vale o instante da requisição.
+         */
+        post: operations["postAtivosCriptoByIdCotacoes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/cadastro": {
         parameters: {
             query?: never;
@@ -321,6 +365,87 @@ export interface paths {
         patch: operations["patchLancamentosById"];
         trace?: never;
     };
+    "/movimentos-cripto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista os movimentos de cripto do usuário
+         * @description Por data decrescente, o mais novo primeiro. contaId e ativoId de outro usuário dão lista vazia.
+         */
+        get: operations["getMovimentosCripto"];
+        put?: never;
+        /**
+         * Registra uma compra ou venda de cripto numa conta cripto
+         * @description A posição do ativo na conta, dia a dia, nunca fica negativa. A conta fica travada até o commit.
+         */
+        post: operations["postMovimentosCripto"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/movimentos-cripto/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Apaga um movimento de cripto */
+        delete: operations["deleteMovimentosCriptoById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/patrimonio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Patrimônio em reais numa data
+         * @description Saldo até a data das contas ativas que não são cripto mais o valor das posições com cotação. Posições sem cotação ficam em semCotacao, fora do total. Sem data, vale hoje em America/Sao_Paulo.
+         */
+        get: operations["getPatrimonio"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/posicoes-cripto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as posições de cripto até uma data
+         * @description Soma dos movimentos até a data nas contas ativas, com a última cotação até o fim do dia em America/Sao_Paulo. Posição zerada não aparece. Sem data, vale hoje.
+         */
+        get: operations["getPosicoesCripto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recorrencias": {
         parameters: {
             query?: never;
@@ -428,6 +553,30 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AtivoCripto: {
+            /** @description Sempre true no ativo digitado pelo usuário */
+            confiavel: boolean;
+            /** @description Nulo no ativo nativo; em minúsculas nas redes EVM */
+            contrato: string | null;
+            /** Format: int32 */
+            decimais: number;
+            /** Format: uuid */
+            id: string;
+            nome: string | null;
+            /** @enum {string} */
+            rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "solana";
+            simbolo: string;
+        };
+        AtivoCriptoRequest: {
+            /** @description Ausente ou nulo é o ativo nativo da rede. EVM: 0x mais 40 hexadecimais, gravado em minúsculas. Solana: base58 de 32 a 44. Bitcoin: sempre nulo */
+            contrato?: string | null;
+            /** Format: int32 */
+            decimais: number;
+            nome?: string | null;
+            /** @enum {string} */
+            rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "solana";
+            simbolo: string;
+        };
         AtualizarContaRequest: {
             arquivada: boolean;
         };
@@ -588,7 +737,39 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto";
+        };
+        Cotacao: {
+            /** Format: uuid */
+            ativoId: string;
+            /** @enum {string} */
+            fonte: "manual";
+            /** Format: date-time */
+            momento: string;
+            /**
+             * @description Reais por unidade, em texto, sem zero à direita
+             * @example 350000.5
+             */
+            preco: string;
+        };
+        CotacaoDaPosicao: {
+            /** Format: date-time */
+            momento: string;
+            /** @description Reais por unidade */
+            preco: string;
+        };
+        CotacaoRequest: {
+            /**
+             * Format: date-time
+             * @description ISO-8601 com fuso. Ausente vale o instante da requisição
+             * @example 2026-10-21T15:00:00-03:00
+             */
+            momento?: string;
+            /**
+             * @description Reais por unidade, em texto: até 12 dígitos inteiros e 8 casas
+             * @example 350000.5
+             */
+            preco: string;
         };
         CriarContaRequest: {
             /** @description Obrigatório quando tipo é cartao_credito e proibido nos outros tipos */
@@ -602,7 +783,7 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto";
         };
         DiaProjetado: {
             /** Format: date */
@@ -801,6 +982,48 @@ export interface components {
             /** Format: int64 */
             saldoCentavos: number;
         };
+        MovimentoCripto: {
+            /** Format: uuid */
+            ativoId: string;
+            /** Format: uuid */
+            contaId: string;
+            /** Format: int64 */
+            custoCentavos: number;
+            /** Format: date */
+            data: string;
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Em texto, sem zero à direita
+             * @example 0.12345678
+             */
+            quantidade: string;
+            /** @enum {string} */
+            tipo: "compra" | "venda";
+        };
+        MovimentoCriptoRequest: {
+            /** Format: uuid */
+            ativoId: string;
+            /** Format: uuid */
+            contaId: string;
+            /**
+             * Format: int64
+             * @description O que pagou na compra ou recebeu na venda, em centavos de real
+             */
+            custoCentavos: number;
+            /**
+             * Format: date
+             * @example 2026-03-10
+             */
+            data: string;
+            /**
+             * @description Em texto: até 20 dígitos inteiros e 18 casas, e no máximo as casas do ativo
+             * @example 0.12345678
+             */
+            quantidade: string;
+            /** @enum {string} */
+            tipo: "compra" | "venda";
+        };
         ParcelaDivisao: {
             /** Format: int32 */
             diaDoMes: number;
@@ -838,6 +1061,57 @@ export interface components {
              * @description Só no modo valor. Centavos de real
              */
             valorCentavos?: number | null;
+        };
+        Patrimonio: {
+            /**
+             * Format: int64
+             * @description Saldo até a data das contas ativas que não são cripto
+             */
+            contasCentavos: number;
+            /**
+             * Format: int64
+             * @description Soma do valor das posições com cotação
+             */
+            criptoCentavos: number;
+            /** Format: date */
+            data: string;
+            /** @description Posições sem cotação até a data, fora do total */
+            semCotacao: components["schemas"]["PosicaoSemCotacao"][];
+            /** Format: int64 */
+            totalCentavos: number;
+        };
+        PosicaoCripto: {
+            /** Format: uuid */
+            ativoId: string;
+            /** Format: uuid */
+            contaId: string;
+            /** @description Última cotação até o fim do dia em America/Sao_Paulo; nula sem cotação */
+            cotacao: components["schemas"]["CotacaoDaPosicao"];
+            /**
+             * Format: int64
+             * @description Custo das compras menos o das vendas, em centavos; negativo quando a venda rendeu mais que o custo
+             */
+            custoCentavos: number;
+            /** @description Compras menos vendas até a data, em texto, sem zero à direita */
+            quantidade: string;
+            /**
+             * Format: int64
+             * @description Quantidade vezes preço, em centavos com HALF_EVEN; nulo sem cotação
+             */
+            valorCentavos: number | null;
+        };
+        PosicaoSemCotacao: {
+            /** Format: uuid */
+            ativoId: string;
+            /** Format: uuid */
+            contaId: string;
+            /** @description Em texto */
+            quantidade: string;
+        };
+        PosicoesCripto: {
+            /** Format: date */
+            data: string;
+            posicoes: components["schemas"]["PosicaoCripto"][];
         };
         Recorrencia: {
             ativo: boolean;
@@ -1049,6 +1323,211 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getAtivosCripto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ativos do usuário */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtivoCripto"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postAtivosCripto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AtivoCriptoRequest"];
+            };
+        };
+        responses: {
+            /** @description Ativo criado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtivoCripto"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado e "contrato inválido para a rede" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description O usuário já tem um ativo com essa rede e esse contrato */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postAtivosCriptoByIdCotacoes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CotacaoRequest"];
+            };
+        };
+        responses: {
+            /** @description Cotação gravada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cotacao"];
+                };
+            };
+            /** @description Preço ou momento fora do formato, campo não declarado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Ativo de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Já existe cotação do ativo nesse instante */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     postAuthCadastro: {
         parameters: {
             query?: never;
@@ -2431,6 +2910,281 @@ export interface operations {
                 };
             };
             /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getMovimentosCripto: {
+        parameters: {
+            query?: {
+                contaId?: string;
+                ativoId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Movimentos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovimentoCripto"][];
+                };
+            };
+            /** @description contaId ou ativoId que não é UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postMovimentosCripto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MovimentoCriptoRequest"];
+            };
+        };
+        responses: {
+            /** @description Movimento gravado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovimentoCripto"];
+                };
+            };
+            /** @description Entrada inválida, conta inexistente, alheia, de outro tipo ou arquivada, ativo inexistente ou alheio, quantidade com mais casas que o ativo ou venda maior que a posição */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteMovimentosCriptoById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Apagado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description "apagar deixaria a posição negativa": a compra cobre uma venda, e nada é apagado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Movimento de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getPatrimonio: {
+        parameters: {
+            query?: {
+                data?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Patrimônio */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Patrimonio"];
+                };
+            };
+            /** @description data fora do formato ou "patrimônio fora do limite" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getPosicoesCripto: {
+        parameters: {
+            query?: {
+                data?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Posições */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PosicoesCripto"];
+                };
+            };
+            /** @description data fora do formato ou "patrimônio fora do limite" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
             503: {
                 headers: {
                     [name: string]: unknown;

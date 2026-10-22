@@ -574,7 +574,7 @@ p[role='status'] {
   left: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid var(--borda);
   background: var(--superficie);
@@ -599,7 +599,7 @@ p[role='status'] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 3px 18px;
+  padding: 3px 14px;
   border-radius: 999px;
   transition: background-color 0.15s ease;
 }
@@ -2110,4 +2110,26 @@ p[role='status'] {
     display: flex;
     grid-template-columns: none;
   }
+}
+
+/* Cripto (ADR-035) */
+.aviso-cripto {
+  margin-bottom: var(--esp-4);
+  padding: var(--esp-3) var(--esp-4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-md);
+  background: var(--superficie-2);
+  color: var(--texto-fraco);
+  font-size: 0.875rem;
+}
+
+.campo-data {
+  max-width: 220px;
+}
+
+/* Contrato tem 42 a 44 caracteres sem espaço: quebra em qualquer ponto para caber em 360px. */
+.contrato {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
 }

@@ -67,6 +67,9 @@ class AccountController {
   private static final ErrorResponse NOT_BENEFIT =
       new ErrorResponse("só conta de benefício tem categorias permitidas");
 
+  private static final ErrorResponse CRYPTO_WITH_BALANCE =
+      new ErrorResponse("conta cripto não tem saldo em reais");
+
   private static final ErrorResponse INVALID_ARCHIVED_FILTER =
       new ErrorResponse("arquivadas deve ser true ou false");
 
@@ -128,6 +131,10 @@ class AccountController {
     boolean isBenefit = request.type() == AccountType.BENEFIT;
     if (!isBenefit && request.permittedCategories() != null) {
       return ResponseEntity.badRequest().body(PERMITTED_NOT_ALLOWED);
+    }
+    // O valor da conta cripto vem das posições (ADR-035); o CHECK da V13 recusaria com 500.
+    if (request.type() == AccountType.CRYPTO && request.initialBalanceCents() != 0) {
+      return ResponseEntity.badRequest().body(CRYPTO_WITH_BALANCE);
     }
     // Conta de benefício sem o campo grava lista vazia: aceita qualquer categoria.
     List<UUID> permitted = null;

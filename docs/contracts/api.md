@@ -480,3 +480,108 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
 - `GET /saldo-projetado` sem `contaId` não soma contas de benefício (ver Saldo
   projetado). O saldo do Início ("Saldo nas contas") é conta do cliente: soma de
   `saldoCentavos` filtrando `tipo`.
+
+## Cripto manual (ADR-035)
+
+### Conta cripto
+
+- `tipo` ganha `cripto`. `POST /contas` com `tipo` `cripto` aceita
+  `saldoInicialCentavos` ausente ou 0; outro valor dá 400 `conta cripto não tem
+  saldo em reais`. `cartao` e `categoriasPermitidas` seguem recusados como em
+  qualquer tipo que não é o deles. O `saldoCentavos` da conta cripto é sempre 0:
+  o que ela guarda está em `GET /posicoes-cripto`.
+- Conta cripto não recebe lançamento: `POST` e `PUT /lancamentos` e
+  `POST /recorrencias` com ela dão 400 `conta cripto não recebe lançamento`;
+  `POST /transferencias` com ela na origem ou no destino dá 400 `conta cripto
+  não participa de transferência`; `POST /compras-parceladas` já dá a recusa de
+  conta que não é cartão. Conta alheia continua dando `conta não encontrada`
+  antes de qualquer uma dessas.
+
+### Ativo (`/ativos-cripto`)
+
+- `POST /ativos-cripto` com `{"rede", "contrato", "simbolo", "nome",
+  "decimais"}` responde 201 com o `AtivoCripto`: `{id, rede, contrato,
+  simbolo, nome, decimais, confiavel}`. `confiavel` é sempre `true` no ativo
+  digitado.
+- `rede`: `bitcoin`, `ethereum`, `base`, `arbitrum`, `polygon` ou `solana`.
+  `contrato` ausente ou `null` é o ativo nativo da rede; nas redes EVM é `0x`
+  mais 40 hexadecimais e é gravado e devolvido em minúsculas; em `solana` é
+  base58 de 32 a 44 caracteres; em `bitcoin` precisa ser nulo. Fora disso, 400
+  `contrato inválido para a rede`.
+- `simbolo` de 1 a 20 caracteres sem as pontas em branco, `nome` opcional até
+  100, os dois sem caracteres de controle. `decimais` inteiro de 0 a 18.
+- O mesmo `rede` + `contrato` do mesmo usuário dá 409 `ativo já cadastrado`
+  (dois nativos da mesma rede também). Outro usuário pode cadastrar o mesmo.
+- `GET /ativos-cripto` lista os ativos do usuário por `simbolo` (sem diferenciar
+  caixa), depois `rede`.
+
+### Cotação manual (`POST /ativos-cripto/{id}/cotacoes`)
+
+- Corpo `{"preco", "momento"}`. `preco` é **string** decimal maior que zero, com
+  até 12 dígitos inteiros e até 8 casas, em reais por unidade (`"350000.5"`).
+  Sinal, expoente, zero ou casa a mais dão 400 `preco deve ser um decimal maior
+  que zero, em texto, com até 12 dígitos inteiros e 8 casas`; número no JSON dá
+  400 `requisição inválida`.
+  `momento` é opcional, ISO-8601 com fuso (`2026-10-21T15:00:00-03:00`), ano de
+  1900 a 2199; ausente vale o instante da requisição. Fora disso, 400 `momento
+  deve ser data e hora ISO-8601 com fuso, ano entre 1900 e 2199`. Fração abaixo
+  do microssegundo é descartada. Momento depois do instante da requisição dá
+  400 `momento não pode ser no futuro`.
+- 201 `{ativoId, momento, preco, fonte}`, `fonte` `manual`, `momento` em UTC.
+  Já existe cotação do ativo naquele instante: 409 `já existe cotação nesse
+  momento`.
+- Ativo de outro usuário, inexistente ou id que não é UUID: 404 `não
+  encontrado`.
+
+### Movimento (`/movimentos-cripto`)
+
+- `POST /movimentos-cripto` com `{"contaId", "ativoId", "tipo", "quantidade",
+  "data", "custoCentavos"}` responde 201 com o `MovimentoCripto`: `{id,
+  contaId, ativoId, tipo, quantidade, data, custoCentavos}`.
+- `tipo` `compra` ou `venda`. `quantidade` é **string** decimal maior que zero,
+  com até 20 dígitos inteiros e até 18 casas (fora disso, 400 `quantidade deve
+  ser um decimal maior que zero, em texto, com até 20 dígitos inteiros e 18
+  casas`; número no JSON dá `requisição inválida`); com mais casas que os `decimais`
+  do ativo dá 400 `quantidade tem mais casas que o ativo permite`. `data`
+  AAAA-MM-DD, ano de 1900 a 2199. `custoCentavos` de 1 a 9007199254740991: o
+  que pagou na compra ou recebeu na venda.
+- Recusas, todas 400 sem gravar: `conta não encontrada` (inexistente, de outro
+  usuário ou id malformado), `conta deve ser cripto` (conta do usuário de outro
+  tipo), `conta arquivada`, `ativo não encontrado` (inexistente, de outro
+  usuário ou id malformado) e `venda maior que a posição`.
+- **A posição nunca fica negativa em data nenhuma.** A soma das compras menos as
+  vendas do ativo na conta, dia a dia, tem de ficar maior ou igual a zero do
+  primeiro movimento em diante. Uma venda com data anterior a uma compra conta
+  como sem a compra. Escrita e remoção travam a conta até o commit.
+- `GET /movimentos-cripto?contaId=&ativoId=` lista por `data` decrescente,
+  depois o mais novo primeiro. Os dois filtros são opcionais: UUID malformado dá
+  400 `contaId deve ser um UUID` ou `ativoId deve ser um UUID`, UUID de outro
+  usuário dá lista vazia.
+- `DELETE /movimentos-cripto/{id}` responde 204. Apagar uma compra que deixaria
+  a posição negativa em alguma data dá 400 `apagar deixaria a posição negativa`.
+  Movimento de outro usuário, inexistente ou id que não é UUID: 404 `não
+  encontrado`. Apagar em conta arquivada é permitido.
+
+### Posições e patrimônio
+
+- `data` é opcional nas duas rotas, AAAA-MM-DD com ano de 1900 a 2199, padrão
+  hoje em `America/Sao_Paulo`. Formato errado dá 400 `data deve ser uma data
+  AAAA-MM-DD com ano entre 1900 e 2199`. Movimentos com `data` até ela,
+  inclusive. Cotação é a última com `momento` até o fim do dia `data` em
+  `America/Sao_Paulo`. Só contas ativas entram.
+- `GET /posicoes-cripto?data=` responde `{data, posicoes: [{contaId, ativoId,
+  quantidade, custoCentavos, cotacao, valorCentavos}]}`, ordenada pelo nome da
+  conta e pelo símbolo do ativo. Posição com quantidade zero não aparece.
+  `custoCentavos` é compras menos vendas e pode ser negativo (vendeu com
+  lucro). `cotacao` é `{preco, momento}` ou `null`; sem cotação,
+  `valorCentavos` é `null`.
+- `valorCentavos` é quantidade vezes preço, arredondado uma vez para centavos
+  com `HALF_EVEN`.
+- `GET /patrimonio?data=` responde `{data, contasCentavos, criptoCentavos,
+  totalCentavos, semCotacao: [{contaId, ativoId, quantidade}]}`.
+  `contasCentavos` é a soma do saldo até a data de toda conta ativa que não é
+  cripto (`saldo_inicial` mais os realizados com `dataCaixa` até a data,
+  inclusive cartão e benefício). `criptoCentavos` soma o valor das posições com
+  cotação; as sem cotação ficam em `semCotacao` e fora do total. Nunca falha por
+  falta de cotação.
+- Qualquer valor fora de ±9007199254740991 dá 400 `patrimônio fora do limite`.

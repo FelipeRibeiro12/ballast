@@ -143,6 +143,7 @@ describe('App: sessão', () => {
       'Lançamentos',
       'Contas',
       'Recorrências',
+      'Cripto',
     ])
     expect(within(navegacao).getByRole('link', { name: 'Início' })).toHaveAttribute('aria-current', 'page')
     expect(chamadasA('GET /saldo-projetado?dias=90').length).toBeGreaterThan(0)
@@ -168,6 +169,38 @@ describe('App: sessão', () => {
 
     fireEvent.click(within(navegacao).getByRole('link', { name: 'Lançamentos' }))
     expect(await screen.findByRole('region', { name: 'Lançamentos' })).toBeVisible()
+  })
+
+  it('a conta cripto fica fora dos selects de lançamento e aparece só na aba Cripto', async () => {
+    const base = {
+      moeda: 'BRL',
+      saldoInicialCentavos: 0,
+      saldoCentavos: 0,
+      arquivada: false,
+      criadaEm: '2026-10-19T12:00:00Z',
+      cartao: null,
+      categoriasPermitidas: null,
+    }
+    const corrente = { ...base, id: '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed', nome: 'Nubank', tipo: 'corrente' }
+    const exchange = { ...base, id: '2c9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bee', nome: 'Exchange', tipo: 'cripto' }
+    window.location.hash = '#/lancamentos'
+    mockFetch({
+      'GET /auth/eu': () => Promise.resolve(jsonResponse(usuario, 200)),
+      'GET /contas': () => Promise.resolve(jsonResponse([exchange, corrente], 200)),
+      'GET /ativos-cripto': () => Promise.resolve(jsonResponse([], 200)),
+      'GET /movimentos-cripto': () => Promise.resolve(jsonResponse([], 200)),
+    })
+    render(<App />)
+    const abrir = await screen.findByRole('button', { name: 'Novo' })
+    await waitFor(() => expect(abrir).toBeEnabled())
+    fireEvent.click(abrir)
+    const formulario = await screen.findByRole('form', { name: 'Novo lançamento' })
+    const opcoes = within(within(formulario).getByLabelText('Conta')).getAllByRole('option')
+    expect(opcoes.map((opcao) => opcao.textContent)).toEqual(['Nubank'])
+
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Seções' })).getByRole('link', { name: 'Cripto' }))
+    expect(await screen.findByRole('region', { name: 'Cripto' })).toBeVisible()
+    expect(await screen.findByText('Nenhum ativo cadastrado.')).toBeVisible()
   })
 
   it('um hash desconhecido abre o Início', async () => {

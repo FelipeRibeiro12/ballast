@@ -85,6 +85,9 @@ class AppRolePrivilegesTest {
     assertDenied("TRUNCATE template_divisao");
     assertDenied("TRUNCATE cartao");
     assertDenied("TRUNCATE conta_categoria_permitida");
+    assertDenied("TRUNCATE ativo_cripto");
+    assertDenied("TRUNCATE movimento_cripto");
+    assertDenied("TRUNCATE cotacao");
   }
 
   @Test
@@ -385,6 +388,62 @@ class AppRolePrivilegesTest {
 
     assertThat(limite).isEqualTo("7000.00");
     assertThat(deleted).isEqualTo(1);
+  }
+
+  @Test
+  void allowsDmlOnCriptoTables() {
+    UUID usuarioId = UUID.randomUUID();
+    UUID contaId = UUID.randomUUID();
+    UUID ativoId = UUID.randomUUID();
+    UUID movimentoId = UUID.randomUUID();
+    jdbc.sql("INSERT INTO usuario (id, email, senha_hash) VALUES (:id, :email, 'hash')")
+        .param("id", usuarioId)
+        .param("email", "cripto-dml-" + usuarioId + "@example.com")
+        .update();
+    jdbc.sql(
+            "INSERT INTO conta (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'Carteira',"
+                + " 'cripto')")
+        .param("id", contaId)
+        .param("usuarioId", usuarioId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO ativo_cripto (id, usuario_id, rede, simbolo, decimais)"
+                + " VALUES (:id, :usuarioId, 'bitcoin', 'BTC', 8)")
+        .param("id", ativoId)
+        .param("usuarioId", usuarioId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO movimento_cripto (id, usuario_id, conta_id, ativo_id, tipo, quantidade,"
+                + " data, custo) VALUES (:id, :usuarioId, :contaId, :ativoId, 'compra', 0.5,"
+                + " DATE '2026-10-19', 100.00)")
+        .param("id", movimentoId)
+        .param("usuarioId", usuarioId)
+        .param("contaId", contaId)
+        .param("ativoId", ativoId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO cotacao (usuario_id, ativo_id, momento, preco, fonte) VALUES"
+                + " (:usuarioId, :ativoId, now(), 350000.00, 'manual')")
+        .param("usuarioId", usuarioId)
+        .param("ativoId", ativoId)
+        .update();
+    jdbc.sql("UPDATE movimento_cripto SET custo = 120.00 WHERE id = :id")
+        .param("id", movimentoId)
+        .update();
+    jdbc.sql("UPDATE ativo_cripto SET confiavel = true WHERE id = :id")
+        .param("id", ativoId)
+        .update();
+    jdbc.sql("UPDATE cotacao SET preco = 1 WHERE ativo_id = :id").param("id", ativoId).update();
+
+    int cotacoes =
+        jdbc.sql("DELETE FROM cotacao WHERE ativo_id = :id").param("id", ativoId).update();
+    int movimentos =
+        jdbc.sql("DELETE FROM movimento_cripto WHERE id = :id").param("id", movimentoId).update();
+    int ativos = jdbc.sql("DELETE FROM ativo_cripto WHERE id = :id").param("id", ativoId).update();
+
+    assertThat(cotacoes).isEqualTo(1);
+    assertThat(movimentos).isEqualTo(1);
+    assertThat(ativos).isEqualTo(1);
   }
 
   private void insertPerna(UUID usuarioId, UUID id, UUID contaId) {

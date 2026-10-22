@@ -5,6 +5,167 @@ info:
 servers:
 - url: /
 paths:
+  /ativos-cripto:
+    get:
+      description: "Por símbolo sem diferenciar caixa, depois rede."
+      operationId: getAtivosCripto
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AtivoCripto"
+          description: Ativos do usuário
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Lista os ativos de cripto do usuário
+      tags:
+      - cripto
+    post:
+      description: Identidade é rede mais contrato; contrato nulo é o nativo da rede.
+        Nasce confiável.
+      operationId: postAtivosCripto
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AtivoCriptoRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AtivoCripto"
+          description: Ativo criado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado e \"contrato\
+            \ inválido para a rede\""
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: O usuário já tem um ativo com essa rede e esse contrato
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Cadastra um ativo de cripto do usuário
+      tags:
+      - cripto
+  /ativos-cripto/{id}/cotacoes:
+    post:
+      description: "Preço em reais por unidade, em texto. Sem momento, vale o instante\
+        \ da requisição."
+      operationId: postAtivosCriptoByIdCotacoes
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CotacaoRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cotacao"
+          description: Cotação gravada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Preço ou momento fora do formato, campo não declarado"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Ativo de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Já existe cotação do ativo nesse instante
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Grava uma cotação manual do ativo
+      tags:
+      - cripto
   /auth/cadastro:
     post:
       description: "A rota só existe quando REGISTRO_ABERTO=true. Fechado, ela responde\
@@ -1229,6 +1390,243 @@ paths:
       summary: Substitui um lançamento
       tags:
       - lancamentos
+  /movimentos-cripto:
+    get:
+      description: "Por data decrescente, o mais novo primeiro. contaId e ativoId\
+        \ de outro usuário dão lista vazia."
+      operationId: getMovimentosCripto
+      parameters:
+      - in: query
+        name: contaId
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: ativoId
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MovimentoCripto"
+          description: Movimentos
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: contaId ou ativoId que não é UUID
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Lista os movimentos de cripto do usuário
+      tags:
+      - cripto
+    post:
+      description: "A posição do ativo na conta, dia a dia, nunca fica negativa. A\
+        \ conta fica travada até o commit."
+      operationId: postMovimentosCripto
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MovimentoCriptoRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovimentoCripto"
+          description: Movimento gravado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, conta inexistente, alheia, de outro tipo\
+            \ ou arquivada, ativo inexistente ou alheio, quantidade com mais casas\
+            \ que o ativo ou venda maior que a posição"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Registra uma compra ou venda de cripto numa conta cripto
+      tags:
+      - cripto
+  /movimentos-cripto/{id}:
+    delete:
+      operationId: deleteMovimentosCriptoById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Apagado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "\"apagar deixaria a posição negativa\": a compra cobre uma\
+            \ venda, e nada é apagado"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Movimento de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Apaga um movimento de cripto
+      tags:
+      - cripto
+  /patrimonio:
+    get:
+      description: "Saldo até a data das contas ativas que não são cripto mais o valor\
+        \ das posições com cotação. Posições sem cotação ficam em semCotacao, fora\
+        \ do total. Sem data, vale hoje em America/Sao_Paulo."
+      operationId: getPatrimonio
+      parameters:
+      - in: query
+        name: data
+        required: false
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patrimonio"
+          description: Patrimônio
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: data fora do formato ou "patrimônio fora do limite"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Patrimônio em reais numa data
+      tags:
+      - cripto
+  /posicoes-cripto:
+    get:
+      description: "Soma dos movimentos até a data nas contas ativas, com a última\
+        \ cotação até o fim do dia em America/Sao_Paulo. Posição zerada não aparece.\
+        \ Sem data, vale hoje."
+      operationId: getPosicoesCripto
+      parameters:
+      - in: query
+        name: data
+        required: false
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PosicoesCripto"
+          description: Posições
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: data fora do formato ou "patrimônio fora do limite"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Lista as posições de cripto até uma data
+      tags:
+      - cripto
   /recorrencias:
     get:
       description: "Ordem por título sem diferenciar maiúscula de minúscula, depois\
@@ -1640,6 +2038,88 @@ paths:
       - transferencias
 components:
   schemas:
+    AtivoCripto:
+      type: object
+      properties:
+        confiavel:
+          type: boolean
+          description: Sempre true no ativo digitado pelo usuário
+        contrato:
+          type:
+          - string
+          - "null"
+          description: Nulo no ativo nativo; em minúsculas nas redes EVM
+        decimais:
+          type: integer
+          format: int32
+          maximum: 18
+          minimum: 0
+        id:
+          type: string
+          format: uuid
+        nome:
+          type:
+          - string
+          - "null"
+          maxLength: 100
+        rede:
+          type: string
+          enum:
+          - bitcoin
+          - ethereum
+          - base
+          - arbitrum
+          - polygon
+          - solana
+        simbolo:
+          type: string
+          maxLength: 20
+          minLength: 1
+      required:
+      - confiavel
+      - contrato
+      - decimais
+      - id
+      - nome
+      - rede
+      - simbolo
+    AtivoCriptoRequest:
+      type: object
+      properties:
+        contrato:
+          type:
+          - string
+          - "null"
+          description: "Ausente ou nulo é o ativo nativo da rede. EVM: 0x mais 40\
+            \ hexadecimais, gravado em minúsculas. Solana: base58 de 32 a 44. Bitcoin:\
+            \ sempre nulo"
+        decimais:
+          type: integer
+          format: int32
+          maximum: 18
+          minimum: 0
+        nome:
+          type:
+          - string
+          - "null"
+          maxLength: 100
+        rede:
+          type: string
+          enum:
+          - bitcoin
+          - ethereum
+          - base
+          - arbitrum
+          - polygon
+          - solana
+        simbolo:
+          type: string
+          maxLength: 20
+          minLength: 1
+      required:
+      - decimais
+      - rede
+      - simbolo
     AtualizarContaRequest:
       type: object
       properties:
@@ -1973,6 +2453,7 @@ components:
           - dinheiro
           - cartao_credito
           - beneficio
+          - cripto
       required:
       - arquivada
       - cartao
@@ -1984,6 +2465,55 @@ components:
       - saldoCentavos
       - saldoInicialCentavos
       - tipo
+    Cotacao:
+      type: object
+      properties:
+        ativoId:
+          type: string
+          format: uuid
+        fonte:
+          type: string
+          enum:
+          - manual
+        momento:
+          type: string
+          format: date-time
+        preco:
+          type: string
+          description: "Reais por unidade, em texto, sem zero à direita"
+          example: "350000.5"
+      required:
+      - ativoId
+      - fonte
+      - momento
+      - preco
+    CotacaoDaPosicao:
+      type: object
+      properties:
+        momento:
+          type: string
+          format: date-time
+        preco:
+          type: string
+          description: Reais por unidade
+      required:
+      - momento
+      - preco
+    CotacaoRequest:
+      type: object
+      properties:
+        momento:
+          type: string
+          format: date-time
+          description: ISO-8601 com fuso. Ausente vale o instante da requisição
+          example: 2026-10-21T15:00:00-03:00
+        preco:
+          type: string
+          description: "Reais por unidade, em texto: até 12 dígitos inteiros e 8 casas"
+          example: "350000.5"
+          pattern: "(?=.*[1-9])[0-9]{1,12}(\\.[0-9]{1,8})?"
+      required:
+      - preco
     CriarContaRequest:
       type: object
       properties:
@@ -2018,6 +2548,7 @@ components:
           - dinheiro
           - cartao_credito
           - beneficio
+          - cripto
       required:
       - nome
       - tipo
@@ -2397,6 +2928,81 @@ components:
       required:
       - data
       - saldoCentavos
+    MovimentoCripto:
+      type: object
+      properties:
+        ativoId:
+          type: string
+          format: uuid
+        contaId:
+          type: string
+          format: uuid
+        custoCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 1
+        data:
+          type: string
+          format: date
+        id:
+          type: string
+          format: uuid
+        quantidade:
+          type: string
+          description: "Em texto, sem zero à direita"
+          example: "0.12345678"
+        tipo:
+          type: string
+          enum:
+          - compra
+          - venda
+      required:
+      - ativoId
+      - contaId
+      - custoCentavos
+      - data
+      - id
+      - quantidade
+      - tipo
+    MovimentoCriptoRequest:
+      type: object
+      properties:
+        ativoId:
+          type: string
+          format: uuid
+        contaId:
+          type: string
+          format: uuid
+        custoCentavos:
+          type: integer
+          format: int64
+          description: "O que pagou na compra ou recebeu na venda, em centavos de\
+            \ real"
+          maximum: 9007199254740991
+          minimum: 1
+        data:
+          type: string
+          format: date
+          example: 2026-03-10
+        quantidade:
+          type: string
+          description: "Em texto: até 20 dígitos inteiros e 18 casas, e no máximo\
+            \ as casas do ativo"
+          example: "0.12345678"
+          pattern: "(?=.*[1-9])[0-9]{1,20}(\\.[0-9]{1,18})?"
+        tipo:
+          type: string
+          enum:
+          - compra
+          - venda
+      required:
+      - ativoId
+      - contaId
+      - custoCentavos
+      - data
+      - quantidade
+      - tipo
     ParcelaDivisao:
       type: object
       properties:
@@ -2460,6 +3066,109 @@ components:
           minimum: 1
       required:
       - diaDoMes
+    Patrimonio:
+      type: object
+      properties:
+        contasCentavos:
+          type: integer
+          format: int64
+          description: Saldo até a data das contas ativas que não são cripto
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        criptoCentavos:
+          type: integer
+          format: int64
+          description: Soma do valor das posições com cotação
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        data:
+          type: string
+          format: date
+        semCotacao:
+          type: array
+          description: "Posições sem cotação até a data, fora do total"
+          items:
+            $ref: "#/components/schemas/PosicaoSemCotacao"
+        totalCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - contasCentavos
+      - criptoCentavos
+      - data
+      - semCotacao
+      - totalCentavos
+    PosicaoCripto:
+      type: object
+      properties:
+        ativoId:
+          type: string
+          format: uuid
+        contaId:
+          type: string
+          format: uuid
+        cotacao:
+          type: "null"
+          $ref: "#/components/schemas/CotacaoDaPosicao"
+          description: Última cotação até o fim do dia em America/Sao_Paulo; nula
+            sem cotação
+        custoCentavos:
+          type: integer
+          format: int64
+          description: "Custo das compras menos o das vendas, em centavos; negativo\
+            \ quando a venda rendeu mais que o custo"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        quantidade:
+          type: string
+          description: "Compras menos vendas até a data, em texto, sem zero à direita"
+        valorCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Quantidade vezes preço, em centavos com HALF_EVEN; nulo sem\
+            \ cotação"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - ativoId
+      - contaId
+      - cotacao
+      - custoCentavos
+      - quantidade
+      - valorCentavos
+    PosicaoSemCotacao:
+      type: object
+      properties:
+        ativoId:
+          type: string
+          format: uuid
+        contaId:
+          type: string
+          format: uuid
+        quantidade:
+          type: string
+          description: Em texto
+      required:
+      - ativoId
+      - contaId
+      - quantidade
+    PosicoesCripto:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+        posicoes:
+          type: array
+          items:
+            $ref: "#/components/schemas/PosicaoCripto"
+      required:
+      - data
+      - posicoes
     Recorrencia:
       type: object
       properties:

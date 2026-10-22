@@ -45,6 +45,7 @@ class EntryService {
       ENTRY_NOT_FOUND,
       ACCOUNT_NOT_FOUND,
       ACCOUNT_ARCHIVED,
+      CRYPTO_ACCOUNT,
       CATEGORY_NOT_FOUND,
       CATEGORY_NOT_PERMITTED,
       BALANCE_OUT_OF_RANGE,
@@ -314,6 +315,9 @@ class EntryService {
       UUID userId, EntryInput input, Optional<Boolean> accountArchived, boolean sameAccount) {
     if (accountArchived.isEmpty()) {
       return Optional.of(SaveResult.Rejected.ACCOUNT_NOT_FOUND);
+    }
+    if (queries.isCryptoAccount(userId, input.accountId())) {
+      return Optional.of(SaveResult.Rejected.CRYPTO_ACCOUNT);
     }
     if (accountArchived.get() && !sameAccount) {
       return Optional.of(SaveResult.Rejected.ACCOUNT_ARCHIVED);

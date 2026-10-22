@@ -1,11 +1,15 @@
 // Primeiro segmento de cada rota da API. O teste rotasDaApi.test.ts compara esta lista com o openapi.yaml.
 export const prefixosDaApi: readonly string[] = [
+  'ativos-cripto',
   'auth',
   'categorias',
   'compras-parceladas',
   'contas',
   'healthz',
   'lancamentos',
+  'movimentos-cripto',
+  'patrimonio',
+  'posicoes-cripto',
   'recorrencias',
   'saldo-projetado',
   'transferencias',

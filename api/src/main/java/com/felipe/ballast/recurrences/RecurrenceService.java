@@ -54,6 +54,7 @@ class RecurrenceService {
     enum Rejected implements CreateResult {
       ACCOUNT_NOT_FOUND,
       ACCOUNT_ARCHIVED,
+      CRYPTO_ACCOUNT,
       CATEGORY_NOT_FOUND,
       CATEGORY_NOT_PERMITTED
     }
@@ -107,6 +108,9 @@ class RecurrenceService {
     Optional<Boolean> archived = queries.lockAccount(userId, input.accountId());
     if (archived.isEmpty()) {
       return CreateResult.Rejected.ACCOUNT_NOT_FOUND;
+    }
+    if (queries.isCryptoAccount(userId, input.accountId())) {
+      return CreateResult.Rejected.CRYPTO_ACCOUNT;
     }
     if (archived.get()) {
       return CreateResult.Rejected.ACCOUNT_ARCHIVED;

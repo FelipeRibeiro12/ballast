@@ -174,7 +174,14 @@ export class ContaInvalidaError extends ApiError {
   }
 }
 
-const TIPOS_DE_CONTA: readonly string[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito', 'beneficio']
+const TIPOS_DE_CONTA: readonly string[] = [
+  'corrente',
+  'poupanca',
+  'dinheiro',
+  'cartao_credito',
+  'beneficio',
+  'cripto',
+]
 
 function isDiaDoMes(valor: unknown): boolean {
   return Number.isSafeInteger(valor) && (valor as number) >= 1 && (valor as number) <= 31
@@ -1063,5 +1070,256 @@ export async function fetchSaldoProjetado(dias: number, contaId?: string): Promi
   if (!resposta.ok) return recusarRespostaDeProjecao(resposta, '/saldo-projetado')
   const corpo: unknown = await resposta.json()
   if (!isSaldoProjetado(corpo)) throw new ApiError('/saldo-projetado com formato inesperado')
+  return corpo
+}
+
+export type AtivoCripto = components['schemas']['AtivoCripto']
+export type AtivoCriptoRequest = components['schemas']['AtivoCriptoRequest']
+export type CotacaoRequest = components['schemas']['CotacaoRequest']
+export type MovimentoCripto = components['schemas']['MovimentoCripto']
+export type MovimentoCriptoRequest = components['schemas']['MovimentoCriptoRequest']
+export type PosicaoCripto = components['schemas']['PosicaoCripto']
+export type PosicoesCripto = components['schemas']['PosicoesCripto']
+export type Patrimonio = components['schemas']['Patrimonio']
+
+export class CriptoNaoEncontradoError extends ApiError {}
+
+export class CriptoRepetidoError extends ApiError {
+  // null quando o corpo do 409 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('cripto recusado por repetição')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+export class CriptoInvalidoError extends ApiError {
+  // null quando o corpo do 400 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('cripto recusado por entrada inválida')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+const REDES_CRIPTO: readonly string[] = ['bitcoin', 'ethereum', 'base', 'arbitrum', 'polygon', 'solana']
+
+// Quantidade e preço chegam em texto e continuam texto: Number não guarda 18 casas (ADR-005).
+function eDecimalEmTexto(valor: unknown): boolean {
+  return typeof valor === 'string' && /^-?\d+(\.\d+)?$/.test(valor)
+}
+
+function isAtivoCripto(valor: unknown): valor is AtivoCripto {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'rede' in valor &&
+    typeof valor.rede === 'string' &&
+    REDES_CRIPTO.includes(valor.rede) &&
+    'contrato' in valor &&
+    (valor.contrato === null || typeof valor.contrato === 'string') &&
+    'simbolo' in valor &&
+    typeof valor.simbolo === 'string' &&
+    'nome' in valor &&
+    (valor.nome === null || typeof valor.nome === 'string') &&
+    'decimais' in valor &&
+    Number.isInteger(valor.decimais) &&
+    'confiavel' in valor &&
+    typeof valor.confiavel === 'boolean'
+  )
+}
+
+function isMovimentoCripto(valor: unknown): valor is MovimentoCripto {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'ativoId' in valor &&
+    typeof valor.ativoId === 'string' &&
+    'tipo' in valor &&
+    (valor.tipo === 'compra' || valor.tipo === 'venda') &&
+    'quantidade' in valor &&
+    eDecimalEmTexto(valor.quantidade) &&
+    'data' in valor &&
+    eDataIso(valor.data) &&
+    // Fora do inteiro seguro o JSON já perdeu o centavo no parse.
+    'custoCentavos' in valor &&
+    Number.isSafeInteger(valor.custoCentavos)
+  )
+}
+
+function isCotacaoDaPosicao(valor: unknown): boolean {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'preco' in valor &&
+    eDecimalEmTexto(valor.preco) &&
+    'momento' in valor &&
+    typeof valor.momento === 'string'
+  )
+}
+
+// Cotação e valor andam juntos: os dois nulos sem cotação, os dois presentes com ela.
+function isPosicaoCripto(valor: unknown): valor is PosicaoCripto {
+  if (
+    typeof valor !== 'object' ||
+    valor === null ||
+    !('contaId' in valor) ||
+    typeof valor.contaId !== 'string' ||
+    !('ativoId' in valor) ||
+    typeof valor.ativoId !== 'string' ||
+    !('quantidade' in valor) ||
+    !eDecimalEmTexto(valor.quantidade) ||
+    !('custoCentavos' in valor) ||
+    !Number.isSafeInteger(valor.custoCentavos) ||
+    !('cotacao' in valor) ||
+    !('valorCentavos' in valor)
+  ) {
+    return false
+  }
+  if (valor.cotacao === null) return valor.valorCentavos === null
+  return isCotacaoDaPosicao(valor.cotacao) && Number.isSafeInteger(valor.valorCentavos)
+}
+
+function isPosicoesCripto(valor: unknown): valor is PosicoesCripto {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'data' in valor &&
+    eDataIso(valor.data) &&
+    'posicoes' in valor &&
+    Array.isArray(valor.posicoes) &&
+    valor.posicoes.every(isPosicaoCripto)
+  )
+}
+
+function isPosicaoSemCotacao(valor: unknown): boolean {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'ativoId' in valor &&
+    typeof valor.ativoId === 'string' &&
+    'quantidade' in valor &&
+    eDecimalEmTexto(valor.quantidade)
+  )
+}
+
+function isPatrimonio(valor: unknown): valor is Patrimonio {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'data' in valor &&
+    eDataIso(valor.data) &&
+    'contasCentavos' in valor &&
+    Number.isSafeInteger(valor.contasCentavos) &&
+    'criptoCentavos' in valor &&
+    Number.isSafeInteger(valor.criptoCentavos) &&
+    'totalCentavos' in valor &&
+    Number.isSafeInteger(valor.totalCentavos) &&
+    'semCotacao' in valor &&
+    Array.isArray(valor.semCotacao) &&
+    valor.semCotacao.every(isPosicaoSemCotacao)
+  )
+}
+
+async function recusarRespostaDeCripto(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 404) throw new CriptoNaoEncontradoError('não encontrado')
+  if (resposta.status === 409) throw new CriptoRepetidoError(await lerMensagemDeErro(resposta))
+  if (resposta.status === 400) throw new CriptoInvalidoError(await lerMensagemDeErro(resposta))
+  throw new ApiError(`${origem} respondeu ${resposta.status}`)
+}
+
+async function enviarJson(caminho: string, dados: unknown): Promise<Response> {
+  return fetch(`${baseUrl}${caminho}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+}
+
+export async function fetchAtivosCripto(): Promise<AtivoCripto[]> {
+  const resposta = await fetch(`${baseUrl}/ativos-cripto`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeCripto(resposta, '/ativos-cripto')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isAtivoCripto)) {
+    throw new ApiError('/ativos-cripto com formato inesperado')
+  }
+  return corpo
+}
+
+export async function postAtivoCripto(dados: AtivoCriptoRequest): Promise<AtivoCripto> {
+  const resposta = await enviarJson('/ativos-cripto', dados)
+  if (!resposta.ok) return recusarRespostaDeCripto(resposta, 'POST /ativos-cripto')
+  const corpo: unknown = await resposta.json()
+  if (!isAtivoCripto(corpo)) throw new ApiError('POST /ativos-cripto com formato inesperado')
+  return corpo
+}
+
+export async function postCotacao(ativoId: string, dados: CotacaoRequest): Promise<void> {
+  const resposta = await enviarJson(`/ativos-cripto/${encodeURIComponent(ativoId)}/cotacoes`, dados)
+  if (resposta.status !== 201) {
+    return recusarRespostaDeCripto(resposta, 'POST /ativos-cripto/{id}/cotacoes')
+  }
+}
+
+export async function fetchMovimentosCripto(): Promise<MovimentoCripto[]> {
+  const resposta = await fetch(`${baseUrl}/movimentos-cripto`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeCripto(resposta, '/movimentos-cripto')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isMovimentoCripto)) {
+    throw new ApiError('/movimentos-cripto com formato inesperado')
+  }
+  return corpo
+}
+
+export async function postMovimentoCripto(dados: MovimentoCriptoRequest): Promise<MovimentoCripto> {
+  const resposta = await enviarJson('/movimentos-cripto', dados)
+  if (!resposta.ok) return recusarRespostaDeCripto(resposta, 'POST /movimentos-cripto')
+  const corpo: unknown = await resposta.json()
+  if (!isMovimentoCripto(corpo)) throw new ApiError('POST /movimentos-cripto com formato inesperado')
+  return corpo
+}
+
+export async function deleteMovimentoCripto(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/movimentos-cripto/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) {
+    return recusarRespostaDeCripto(resposta, 'DELETE /movimentos-cripto/{id}')
+  }
+}
+
+export async function fetchPosicoesCripto(data: string): Promise<PosicoesCripto> {
+  const parametros = new URLSearchParams({ data })
+  const resposta = await fetch(`${baseUrl}/posicoes-cripto?${parametros.toString()}`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarRespostaDeCripto(resposta, '/posicoes-cripto')
+  const corpo: unknown = await resposta.json()
+  if (!isPosicoesCripto(corpo)) throw new ApiError('/posicoes-cripto com formato inesperado')
+  return corpo
+}
+
+export async function fetchPatrimonio(data: string): Promise<Patrimonio> {
+  const parametros = new URLSearchParams({ data })
+  const resposta = await fetch(`${baseUrl}/patrimonio?${parametros.toString()}`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarRespostaDeCripto(resposta, '/patrimonio')
+  const corpo: unknown = await resposta.json()
+  if (!isPatrimonio(corpo)) throw new ApiError('/patrimonio com formato inesperado')
   return corpo
 }

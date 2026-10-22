@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-22 — F13: cripto manual (PR #20)
+
+O que entrou: migration V13 com o tipo `cripto` (sem saldo em reais e recusado em lançamento por FK com coluna gerada), `ativo_cripto` por usuário, `movimento_cripto` e `cotacao`; rotas de ativo, cotação manual, movimento, posições e patrimônio com data; recusa da conta cripto em lançamento, transferência e recorrência; no web, a aba Cripto (patrimônio, posições, movimentos, ativos, aviso de que o app não pede seed), o tipo Cripto em Contas e a conta cripto fora dos selects; passo de cripto no e2e.
+Decisões: ADR-035. Fora de ADR: quantidade com mais casas que o ativo é recusada, não arredondada; quantidade aceita vírgula ou ponto sem milhar e o preço usa o formato brasileiro; conta cripto arquivada não recebe movimento e deixa apagar; cotação com momento no futuro é recusada.
+Dívida registrada: editar e apagar ativo e cotação, paginação de movimentos, teste de 503 nas rotas novas, patrimônio fora do limite com valor absurdo, conta cripto no escopo da projeção, aviso de conta cripto arquivada, `isCryptoAccount` repetida; custo médio da posição foi para a F15.
+Achados do QA: 0 bloquearam, 2 dívidas (patrimônio em 400 com valor absurdo, registrada; "Custo" que é compras menos vendas, rótulo corrigido e custo médio na F15), 3 sugestões (projeção, parâmetro desconhecido e 503, registradas ou já no backlog).
+Achados do revisor: 0 bloquearam, 1 corrigir antes (data da cotação em UTC na tela, corrigida), 3 sugestões (duas registradas, um comentário acrescentado). Security: 0 críticos, 0 altos, 0 médios, 2 baixos (teto e paginação, já no backlog; cotação no futuro, recusada na fatia).
+Pipeline: verde em todos os checks na primeira rodada, o e2e incluído.
+Em aberto: nada.
+
 ## 2026-10-21 — F12: benefícios com restrição (PR #19)
 
 O que entrou: migration V12 com o tipo `beneficio`, `conta_categoria_permitida` (FK composta com colunas geradas: só conta de benefício e só categoria de despesa do mesmo usuário) e um gatilho que recusa despesa fora da lista; a regra também na aplicação em lançamento, PUT, recorrência e job; benefício fora de transferência; saldo projetado sem conta escolhida sem benefício; no web, o tipo Vale-benefício com as categorias em checkboxes, o select de categoria filtrado na despesa e o cartão "Benefícios" no Início.
@@ -9,7 +19,7 @@ Decisões: ADR-034, com emenda do ADR-029. A regra vale só para despesa e só n
 Dívida registrada: helpers de constraint repetidos, mensagens novas fora das descrições do OpenAPI, recorrência pulada para sempre quando a categoria sai da lista.
 Achados do QA: 0 bloquearam, 0 dívidas, 2 sugestões (texto do invariante 4 corrigido para "no momento da escrita"; lista editável em conta arquivada, inofensivo). 150 checagens, inclusive 180 operações cruzadas de corrida.
 Achados do revisor: 0 bloquearam, 2 dívidas (criar benefício sem as categorias carregadas gravava lista vazia, corrigido na fatia; consulta repetida, registrada), 3 sugestões (texto do ADR-034 sobre confirmar e PUT, corrigido; as duas do QA, registradas). Security: 0 críticos, 0 altos, 0 médios, 2 baixos sem ação.
-Pipeline: PENDENTE
+Pipeline: verde nos 9 checks em duas rodadas (o e2e incluído); nenhum alerta do CodeQL.
 Em aberto: o backend parou uma vez pelo limite de uso antes de mexer em arquivo; dois laços de espera do PR #18 que nunca terminariam foram encerrados.
 
 ## 2026-10-20 — Redesenho visual e e2e em navegador (PR #18)

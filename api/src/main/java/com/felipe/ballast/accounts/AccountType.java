@@ -9,7 +9,8 @@ public enum AccountType {
   SAVINGS("poupanca"),
   CASH("dinheiro"),
   CREDIT_CARD("cartao_credito"),
-  BENEFIT("beneficio");
+  BENEFIT("beneficio"),
+  CRYPTO("cripto");
 
   private final String value;
 

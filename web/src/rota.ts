@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 
-export type Secao = 'inicio' | 'lancamentos' | 'contas' | 'recorrencias'
+export type Secao = 'inicio' | 'lancamentos' | 'contas' | 'recorrencias' | 'cripto'
 
-export const SECOES: readonly Secao[] = ['inicio', 'lancamentos', 'contas', 'recorrencias']
+export const SECOES: readonly Secao[] = ['inicio', 'lancamentos', 'contas', 'recorrencias', 'cripto']
 
 export const ROTULO_DA_SECAO: Record<Secao, string> = {
   inicio: 'Início',
   lancamentos: 'Lançamentos',
   contas: 'Contas',
   recorrencias: 'Recorrências',
+  cripto: 'Cripto',
 }
 
 // Hash desconhecido ou vazio cai no Início: um link velho nunca deixa a tela em branco.
