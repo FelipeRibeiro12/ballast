@@ -242,6 +242,7 @@ class RecurrenceController {
       return switch (recurrences.reactivate(user.id(), templateId.get())) {
         case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
         case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
+        case CATEGORY_NOT_PERMITTED -> ResponseEntity.badRequest().body(CATEGORY_NOT_PERMITTED);
         case REACTIVATED -> {
           log.info(
               "recorrência reativada usuario_id={} template_id={}", user.id(), templateId.get());

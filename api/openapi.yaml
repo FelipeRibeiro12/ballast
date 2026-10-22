@@ -758,7 +758,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: A conta é conta de pagamento de um cartão; nada é apagado
+          description: "A conta é conta de pagamento de um cartão, ou pagou fatura\
+            \ de cartão por transferência; nada é apagado"
         "401":
           content:
             application/json:

@@ -42,7 +42,10 @@ public record UpdateAccountRequest(
   }
 
   boolean isEmpty() {
-    return archived == null && name == null && initialBalanceCents == null && card == null;
+    return archived == null
+        && name == null
+        && initialBalanceCents == null
+        && (card == null || card.isEmpty());
   }
 
   BigDecimal initialBalance() {
@@ -65,6 +68,10 @@ public record UpdateAccountRequest(
 
     BigDecimal limit() {
       return limitCents == null ? null : BigDecimal.valueOf(limitCents, 2);
+    }
+
+    boolean isEmpty() {
+      return limitCents == null && paymentAccountId == null;
     }
   }
 }

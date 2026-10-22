@@ -80,7 +80,8 @@ class RecurrenceService {
   enum ReactivateResult {
     REACTIVATED,
     NOT_FOUND,
-    ACCOUNT_ARCHIVED
+    ACCOUNT_ARCHIVED,
+    CATEGORY_NOT_PERMITTED
   }
 
   private final RecurrenceQueries queries;
@@ -280,6 +281,18 @@ class RecurrenceService {
   // Como o job: trava só o template e lê "arquivada" sem travar a conta. Repetível, porque a
   // geração pula a data que já existe.
   ReactivateResult reactivate(UUID userId, UUID id) {
+    try {
+      return reactivateLocked(userId, id);
+    } catch (DataIntegrityViolationException e) {
+      // A lista do benefício mudou depois que o template nasceu: a ocorrência nova é recusada.
+      if (Constraints.isViolated(e, PERMITTED_TRIGGER)) {
+        return ReactivateResult.CATEGORY_NOT_PERMITTED;
+      }
+      throw e;
+    }
+  }
+
+  private ReactivateResult reactivateLocked(UUID userId, UUID id) {
     return transaction.execute(
         status -> {
           Optional<RecurrenceQueries.LockedTemplate> template = queries.lockTemplate(userId, id);

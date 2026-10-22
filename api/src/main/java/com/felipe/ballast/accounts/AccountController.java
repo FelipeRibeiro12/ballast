@@ -74,6 +74,10 @@ class AccountController {
   private static final ErrorResponse PAYS_A_CARD =
       new ErrorResponse("esta conta paga um cartão; troque a conta de pagamento antes");
 
+  private static final ErrorResponse PAID_A_CARD_INVOICE =
+      new ErrorResponse(
+          "esta conta pagou fatura de cartão; apagar desmontaria a fatura. Arquive a conta");
+
   private static final ErrorResponse NOTHING_TO_UPDATE =
       new ErrorResponse("informe ao menos um campo para alterar");
 
@@ -386,7 +390,9 @@ class AccountController {
   @ApiResponse(responseCode = "204", description = "Apagada")
   @ApiResponse(
       responseCode = "400",
-      description = "A conta é conta de pagamento de um cartão; nada é apagado",
+      description =
+          "A conta é conta de pagamento de um cartão, ou pagou fatura de cartão por transferência;"
+              + " nada é apagado",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -411,6 +417,7 @@ class AccountController {
     return switch (accounts.delete(user.id(), accountId.get())) {
       case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case PAYS_A_CARD -> ResponseEntity.badRequest().body(PAYS_A_CARD);
+      case PAID_A_CARD_INVOICE -> ResponseEntity.badRequest().body(PAID_A_CARD_INVOICE);
       case DELETED -> {
         log.info("conta apagada usuario_id={} conta_id={}", user.id(), accountId.get());
         yield ResponseEntity.noContent().build();

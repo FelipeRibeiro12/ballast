@@ -9,6 +9,7 @@ import org.springframework.dao.CannotAcquireLockException;
 public final class LockTimeouts {
 
   private static final String LOCK_NOT_AVAILABLE = "55P03";
+  private static final String DEADLOCK_DETECTED = "40P01";
   private static final int MAX_DEPTH = 16;
 
   private LockTimeouts() {}
@@ -18,6 +19,19 @@ public final class LockTimeouts {
     for (int depth = 0; cause != null && depth < MAX_DEPTH; depth++) {
       if (cause instanceof CannotAcquireLockException
           || (cause instanceof SQLException sql && LOCK_NOT_AVAILABLE.equals(sql.getSQLState()))) {
+        return true;
+      }
+      cause = cause.getCause();
+    }
+    return false;
+  }
+
+  // O Postgres desfaz uma das transações do ciclo; a outra segue. Para quem perdeu, tentar de novo
+  // resolve, como no lock_timeout. Pelo JPA chega como PessimisticLockingFailureException.
+  public static boolean isDeadlock(Throwable error) {
+    Throwable cause = error;
+    for (int depth = 0; cause != null && depth < MAX_DEPTH; depth++) {
+      if (cause instanceof SQLException sql && DEADLOCK_DETECTED.equals(sql.getSQLState())) {
         return true;
       }
       cause = cause.getCause();

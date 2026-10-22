@@ -12,9 +12,6 @@ class AccountDeletionQueries {
 
   record Summary(long entries, long transfers, long recurrences, long cryptoMovements) {}
 
-  // otherLeg é a perna da outra conta; becomes é o tipo que ela vira quando a ligação some.
-  record ForeignLeg(UUID transferId, UUID otherLeg, String becomes) {}
-
   private final JdbcClient jdbc;
 
   AccountDeletionQueries(JdbcClient jdbc) {
@@ -46,14 +43,20 @@ class AccountDeletionQueries {
         .single();
   }
 
-  // Contas do outro lado das transferências, para travar todas em ordem de id junto com a conta.
-  List<UUID> counterparts(UUID userId, UUID accountId) {
+  // A conta e as do outro lado das transferências, em ordem de id, como a transferência trava
+  // (EntryService.lockOrder). Sem lista vinda do Java: o driver aceita no máximo 32767
+  // parâmetros. Devolve os ids travados.
+  List<UUID> lockAccountAndCounterparts(UUID userId, UUID accountId) {
     return jdbc.sql(
             """
-            SELECT DISTINCT CASE WHEN conta_saida_id = :id THEN conta_entrada_id
-                                 ELSE conta_saida_id END
-            FROM transferencia
-            WHERE usuario_id = :userId AND (conta_saida_id = :id OR conta_entrada_id = :id)
+            SELECT id FROM conta
+            WHERE usuario_id = :userId
+              AND (id = :id OR id IN (
+                SELECT CASE WHEN conta_saida_id = :id THEN conta_entrada_id ELSE conta_saida_id END
+                FROM transferencia
+                WHERE usuario_id = :userId AND (conta_saida_id = :id OR conta_entrada_id = :id)))
+            ORDER BY id
+            FOR UPDATE
             """)
         .param("userId", userId)
         .param("id", accountId)
@@ -61,15 +64,45 @@ class AccountDeletionQueries {
         .list();
   }
 
-  // Mesma ordem da transferência (EntryService.lockOrder): duas escritas nunca se cruzam.
-  List<UUID> lockInOrder(UUID userId, List<UUID> accountIds) {
-    return jdbc.sql(
-            "SELECT id FROM conta WHERE usuario_id = :userId AND id IN (:ids) ORDER BY id"
-                + " FOR UPDATE")
+  // Templates antes das contas: é a ordem do job e do reativar (template, depois a conta no
+  // INSERT da ocorrência), então apagar a conta não fecha ciclo com eles.
+  void lockTemplates(UUID userId, UUID accountId) {
+    jdbc.sql(
+            "SELECT id FROM template_lancamento WHERE usuario_id = :userId AND conta_id = :id"
+                + " ORDER BY id FOR UPDATE")
         .param("userId", userId)
-        .param("ids", accountIds)
+        .param("id", accountId)
         .query(UUID.class)
         .list();
+  }
+
+  // Lançamentos da conta antes das contas: editar e confirmar lançamento travam o lançamento e
+  // depois a conta, e apagar a conta na ordem inversa fecharia ciclo com eles.
+  void lockEntries(UUID userId, UUID accountId) {
+    jdbc.sql(
+            "SELECT count(*) FROM (SELECT id FROM lancamento"
+                + " WHERE usuario_id = :userId AND conta_id = :id ORDER BY id FOR UPDATE) s")
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(Long.class)
+        .single();
+  }
+
+  // A fatura só conta como pagamento a perna de transferência que entra no cartão. Convertida em
+  // receita, ela sairia da fatura paga e cairia como estorno em outra (revisão do PR #21).
+  boolean paidACardInvoice(UUID userId, UUID accountId) {
+    return jdbc.sql(
+            """
+            SELECT EXISTS (
+              SELECT 1 FROM transferencia t
+              JOIN conta c ON c.id = t.conta_entrada_id AND c.usuario_id = t.usuario_id
+              WHERE t.usuario_id = :userId AND t.conta_saida_id = :id
+                AND c.tipo = 'cartao_credito')
+            """)
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(Boolean.class)
+        .single();
   }
 
   // O cartão aponta para a conta de pagamento por FK; apagar a conta deixaria o cartão sem ela.
@@ -83,49 +116,31 @@ class AccountDeletionQueries {
         .single();
   }
 
-  // Saída da outra conta vira despesa; entrada vira receita (ADR-036).
-  List<ForeignLeg> foreignLegs(UUID userId, UUID accountId) {
-    return jdbc.sql(
+  // Desfaz as transferências com outra conta e transforma a perna de lá em lançamento comum, num
+  // comando só: a FK da perna (que inclui o tipo) é conferida no fim dele, quando a transferência
+  // já saiu. Saída da outra conta vira despesa em "Outros", entrada vira receita em "Outras
+  // receitas" (ADR-036). A categoria vem da semente que todo usuário tem; ainda não há CRUD de
+  // categoria que a apague, e o CHECK da V7 exige categoria fora de transferência.
+  void turnForeignLegsIntoPlainEntries(UUID userId, UUID accountId) {
+    jdbc.sql(
             """
-            SELECT id,
-                   CASE WHEN conta_saida_id = :id THEN entrada_id ELSE saida_id END AS outra,
-                   CASE WHEN conta_saida_id = :id THEN 'receita' ELSE 'despesa' END AS vira
-            FROM transferencia
-            WHERE usuario_id = :userId AND (conta_saida_id = :id OR conta_entrada_id = :id)
+            WITH desfeita AS (
+              DELETE FROM transferencia
+              WHERE usuario_id = :userId AND (conta_saida_id = :id OR conta_entrada_id = :id)
+              RETURNING CASE WHEN conta_saida_id = :id THEN entrada_id ELSE saida_id END AS perna,
+                        CASE WHEN conta_saida_id = :id THEN 'receita' ELSE 'despesa' END AS vira
+            )
+            UPDATE lancamento l
+            SET tipo = d.vira,
+                categoria_id = (SELECT c.id FROM categoria c
+                                WHERE c.usuario_id = :userId AND c.tipo = d.vira
+                                  AND c.nome = CASE d.vira WHEN 'receita' THEN 'Outras receitas'
+                                                           ELSE 'Outros' END)
+            FROM desfeita d
+            WHERE l.usuario_id = :userId AND l.id = d.perna
             """)
         .param("userId", userId)
         .param("id", accountId)
-        .query(
-            (rs, row) ->
-                new ForeignLeg(
-                    rs.getObject("id", UUID.class),
-                    rs.getObject("outra", UUID.class),
-                    rs.getString("vira")))
-        .list();
-  }
-
-  void deleteTransfers(UUID userId, List<UUID> transferIds) {
-    jdbc.sql("DELETE FROM transferencia WHERE usuario_id = :userId AND id IN (:ids)")
-        .param("userId", userId)
-        .param("ids", transferIds)
-        .update();
-  }
-
-  // A categoria vem da semente que todo usuário tem ("Outros" e "Outras receitas"); ainda não há
-  // CRUD de categoria que a apague. O CHECK da V7 exige categoria fora de transferência.
-  void turnIntoPlainEntries(UUID userId, List<UUID> legIds, String type) {
-    jdbc.sql(
-            """
-            UPDATE lancamento SET tipo = :type,
-                   categoria_id = (SELECT id FROM categoria
-                                   WHERE usuario_id = :userId AND tipo = :type
-                                     AND nome = CASE :type WHEN 'receita' THEN 'Outras receitas'
-                                                           ELSE 'Outros' END)
-            WHERE usuario_id = :userId AND id IN (:ids)
-            """)
-        .param("userId", userId)
-        .param("type", type)
-        .param("ids", legIds)
         .update();
   }
 
@@ -152,16 +167,9 @@ class AccountDeletionQueries {
         .update();
   }
 
-  // Divisão, template e regra, nessa ordem por causa das FKs.
+  // Divisão, template e regra, nessa ordem por causa das FKs. Template e regra saem no mesmo
+  // comando, para não levar a lista de regras pelo Java.
   void deleteTemplates(UUID userId, UUID accountId) {
-    List<UUID> rules =
-        jdbc.sql(
-                "SELECT regra_id FROM template_lancamento"
-                    + " WHERE usuario_id = :userId AND conta_id = :id")
-            .param("userId", userId)
-            .param("id", accountId)
-            .query(UUID.class)
-            .list();
     jdbc.sql(
             """
             DELETE FROM template_divisao
@@ -172,16 +180,18 @@ class AccountDeletionQueries {
         .param("userId", userId)
         .param("id", accountId)
         .update();
-    jdbc.sql("DELETE FROM template_lancamento WHERE usuario_id = :userId AND conta_id = :id")
+    jdbc.sql(
+            """
+            WITH apagado AS (
+              DELETE FROM template_lancamento WHERE usuario_id = :userId AND conta_id = :id
+              RETURNING regra_id
+            )
+            DELETE FROM regra_recorrencia
+            WHERE usuario_id = :userId AND id IN (SELECT regra_id FROM apagado)
+            """)
         .param("userId", userId)
         .param("id", accountId)
         .update();
-    if (!rules.isEmpty()) {
-      jdbc.sql("DELETE FROM regra_recorrencia WHERE usuario_id = :userId AND id IN (:ids)")
-          .param("userId", userId)
-          .param("ids", rules)
-          .update();
-    }
   }
 
   // A lista de categorias permitidas sai junto pelo ON DELETE CASCADE da V12.

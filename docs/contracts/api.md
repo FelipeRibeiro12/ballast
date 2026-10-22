@@ -616,7 +616,9 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   `despesa` em "Outros", a de entrada vira `receita` em "Outras receitas". O
   saldo da outra conta não muda.
 - Conta que é conta de pagamento de um cartão dá 400 `esta conta paga um
-  cartão; troque a conta de pagamento antes` e nada é apagado.
+  cartão; troque a conta de pagamento antes` e nada é apagado. Conta que já
+  pagou fatura de cartão por transferência dá 400 `esta conta pagou fatura de
+  cartão; apagar desmontaria a fatura. Arquive a conta`.
 - Conta de outro usuário, inexistente ou id que não é UUID: 404 `não
   encontrado`. Funciona com a conta arquivada.
 - `GET /contas/{id}/resumo-exclusao` responde `{lancamentos, transferencias,
@@ -637,7 +639,10 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
 ### Reativar e apagar recorrência
 
 - `PATCH /recorrencias/{id}` com `{"ativo": true}` reativa e gera de hoje até o
-  horizonte; repetível. Conta arquivada dá 400 `conta arquivada`.
+  horizonte; repetível. Conta arquivada dá 400 `conta arquivada`; categoria que
+  saiu da lista do benefício dá 400 `categoria não permitida nesta conta`.
+- Deadlock entre escritas (SQLState 40P01) responde 503 `serviço indisponível`,
+  como a espera de trava: tentar de novo resolve.
 - `DELETE /recorrencias/{id}` responde 204: apaga a recorrência, a regra, a
   divisão e todas as previstas dela, inclusive as vencidas. Realizadas e
   canceladas ficam como lançamentos avulsos, sem `templateId`. 404 igual ao

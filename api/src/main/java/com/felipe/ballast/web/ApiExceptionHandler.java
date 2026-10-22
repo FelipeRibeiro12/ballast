@@ -88,6 +88,10 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
       log.warn("espera por trava estourou", ex);
       return body(HttpStatus.SERVICE_UNAVAILABLE, new HttpHeaders(), "serviço indisponível");
     }
+    if (LockTimeouts.isDeadlock(ex)) {
+      log.warn("transação desfeita por deadlock", ex);
+      return body(HttpStatus.SERVICE_UNAVAILABLE, new HttpHeaders(), "serviço indisponível");
+    }
     UnexpectedErrorLog.error(log, "erro não tratado", ex);
     return body(HttpStatus.INTERNAL_SERVER_ERROR, new HttpHeaders(), "erro interno");
   }

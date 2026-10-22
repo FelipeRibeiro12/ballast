@@ -3,7 +3,6 @@ package com.felipe.ballast.accounts;
 import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,7 +42,8 @@ class AccountService {
   enum DeleteResult {
     DELETED,
     NOT_FOUND,
-    PAYS_A_CARD
+    PAYS_A_CARD,
+    PAID_A_CARD_INVOICE
   }
 
   Optional<AccountDeletionQueries.Summary> deletionSummary(UUID userId, UUID id) {
@@ -63,38 +63,23 @@ class AccountService {
     if (!deletion.exists(userId, id)) {
       return DeleteResult.NOT_FOUND;
     }
-    List<UUID> toLock = new ArrayList<>(deletion.counterparts(userId, id));
-    toLock.add(id);
-    if (!deletion.lockInOrder(userId, toLock).contains(id)) {
+    // Ordem: templates, lançamentos da conta, contas. É a ordem do job e do reativar (template e
+    // depois conta) e de editar lançamento (lançamento e depois conta).
+    deletion.lockTemplates(userId, id);
+    deletion.lockEntries(userId, id);
+    if (!deletion.lockAccountAndCounterparts(userId, id).contains(id)) {
       return DeleteResult.NOT_FOUND;
     }
     // Uma transferência criada antes da trava desta conta pode ter trazido outra conta. Depois da
-    // trava não entra nenhuma; a que faltou é travada agora, fora da ordem, o que é raro.
-    List<UUID> missing =
-        deletion.counterparts(userId, id).stream()
-            .filter(other -> !toLock.contains(other))
-            .toList();
-    if (!missing.isEmpty()) {
-      deletion.lockInOrder(userId, missing);
-    }
+    // trava não entra nenhuma; repetir trava a que faltou, fora da ordem, o que é raro.
+    deletion.lockAccountAndCounterparts(userId, id);
     if (deletion.paysACard(userId, id)) {
       return DeleteResult.PAYS_A_CARD;
     }
-    List<AccountDeletionQueries.ForeignLeg> legs = deletion.foreignLegs(userId, id);
-    if (!legs.isEmpty()) {
-      deletion.deleteTransfers(
-          userId, legs.stream().map(AccountDeletionQueries.ForeignLeg::transferId).toList());
-      for (String type : List.of("receita", "despesa")) {
-        List<UUID> ids =
-            legs.stream()
-                .filter(leg -> leg.becomes().equals(type))
-                .map(AccountDeletionQueries.ForeignLeg::otherLeg)
-                .toList();
-        if (!ids.isEmpty()) {
-          deletion.turnIntoPlainEntries(userId, ids, type);
-        }
-      }
+    if (deletion.paidACardInvoice(userId, id)) {
+      return DeleteResult.PAID_A_CARD_INVOICE;
     }
+    deletion.turnForeignLegsIntoPlainEntries(userId, id);
     deletion.deleteEntries(userId, id);
     deletion.detachOccurrencesOfAccountTemplates(userId, id);
     deletion.deleteTemplates(userId, id);

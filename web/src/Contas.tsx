@@ -302,7 +302,9 @@ function EditarConta({
         setMensagem('Limite inválido. Use o formato 1.234,56, maior que zero.')
         return
       }
-      dados.cartao = { limiteCentavos, ...(pagamento === '' ? {} : { contaPagamentoId: pagamento }) }
+      // Só manda a conta de pagamento se mudou: a atual pode estar arquivada, e reenviar seria recusado.
+      const pagamentoMudou = pagamento !== '' && pagamento !== conta.cartao?.contaPagamentoId
+      dados.cartao = { limiteCentavos, ...(pagamentoMudou ? { contaPagamentoId: pagamento } : {}) }
     }
     emVoo.current = true
     setEnviando(true)

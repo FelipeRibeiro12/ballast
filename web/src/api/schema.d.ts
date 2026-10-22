@@ -2321,7 +2321,7 @@ export interface operations {
                     "application/json": Record<string, never>;
                 };
             };
-            /** @description A conta é conta de pagamento de um cartão; nada é apagado */
+            /** @description A conta é conta de pagamento de um cartão, ou pagou fatura de cartão por transferência; nada é apagado */
             400: {
                 headers: {
                     [name: string]: unknown;

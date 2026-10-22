@@ -36,8 +36,15 @@ mantendo o arquivar ao lado do apagar: arquivar esconde, apagar leva junto.
   de volta os pagamentos de fatura.
 - Conta que paga um cartão ativo ou arquivado dá 400 `esta conta paga um
   cartão; troque a conta de pagamento antes`. O cartão aponta para ela por FK.
-- As contas envolvidas são travadas em ordem de id antes de qualquer escrita,
-  como na transferência.
+- Conta que já pagou fatura de cartão por transferência dá 400 `esta conta
+  pagou fatura de cartão; apagar desmontaria a fatura. Arquive a conta`. A
+  fatura só reconhece como pagamento a perna de transferência que entra no
+  cartão; convertida em receita, ela sairia da fatura paga e entraria como
+  estorno em outra (revisão do PR #21). Arquivar resolve sem mentir na fatura.
+- Ordem de travas: templates da conta, lançamentos da conta, e então a conta e
+  as do outro lado das transferências em ordem de id. É a ordem do job e do
+  reativar (template, conta) e de editar lançamento (lançamento, conta). Um
+  deadlock que ainda escape (40P01) responde 503, como o `lock_timeout`.
 - O web pede confirmação digitando o nome da conta e diz quantos lançamentos e
   transferências vão junto, lidos de `GET /contas/{id}/resumo-exclusao`.
 

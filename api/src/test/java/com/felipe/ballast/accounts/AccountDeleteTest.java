@@ -262,6 +262,27 @@ class AccountDeleteTest {
   }
 
   @Test
+  void anAccountThatPaidACardInvoiceIsRefusedAndTheInvoiceStaysPaid() throws Exception {
+    String savings = api.createAccountOk(session, "Poupança", "poupanca");
+    entry(savings, "receita", 100_000);
+    String cardId = card("Cartão", checking);
+    entry(cardId, "despesa", 20_000);
+    transfer(savings, cardId, 20_000);
+    String invoicesPath = "/contas/" + cardId + "/faturas?de=2026-03-01&ate=2026-04-30";
+    JsonNode before = CryptoApi.body(api.send(session, get(invoicesPath), null));
+
+    MockHttpServletResponse refused = remove(session, savings);
+
+    assertThat(refused.getStatus()).isEqualTo(400);
+    assertThat(CryptoApi.text(refused))
+        .isEqualTo(
+            "{\"erro\":\"esta conta pagou fatura de cartão; apagar desmontaria a fatura."
+                + " Arquive a conta\"}");
+    assertThat(CryptoApi.body(api.send(session, get(invoicesPath), null))).isEqualTo(before);
+    assertThat(balance(savings)).isEqualTo(80_000);
+  }
+
+  @Test
   void anOccurrenceMovedToAnotherAccountStaysAsAPlainEntry() throws Exception {
     String savings = api.createAccountOk(session, "Poupança", "poupanca");
     Map<String, Object> recurrence = new LinkedHashMap<>();
