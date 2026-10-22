@@ -20,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,6 +70,19 @@ class AccountController {
 
   private static final ErrorResponse CRYPTO_WITH_BALANCE =
       new ErrorResponse("conta cripto não tem saldo em reais");
+
+  private static final ErrorResponse PAYS_A_CARD =
+      new ErrorResponse("esta conta paga um cartão; troque a conta de pagamento antes");
+
+  private static final ErrorResponse PAID_A_CARD_INVOICE =
+      new ErrorResponse(
+          "esta conta pagou fatura de cartão; apagar desmontaria a fatura. Arquive a conta");
+
+  private static final ErrorResponse NOTHING_TO_UPDATE =
+      new ErrorResponse("informe ao menos um campo para alterar");
+
+  private static final ErrorResponse BALANCE_OUT_OF_RANGE =
+      new ErrorResponse("saldo da conta fora do limite");
 
   private static final ErrorResponse INVALID_ARCHIVED_FILTER =
       new ErrorResponse("arquivadas deve ser true ou false");
@@ -272,8 +286,10 @@ class AccountController {
 
   @Operation(
       operationId = "patchContasById",
-      summary = "Arquiva ou desarquiva uma conta",
-      description = "Idempotente: repetir o mesmo valor devolve 200 e a mesma conta.",
+      summary = "Altera uma conta",
+      description =
+          "Campo ausente ou nulo não muda: arquivada, nome, saldoInicialCentavos e, em cartão,"
+              + " limite e conta de pagamento. Repetir o mesmo valor devolve 200 e a mesma conta.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",
@@ -281,11 +297,18 @@ class AccountController {
       content = @Content(schema = @Schema(implementation = AccountResponse.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "Entrada inválida, inclusive campo não declarado",
+      description =
+          "Entrada inválida, inclusive campo não declarado e corpo sem nenhum campo, cartao fora"
+              + " de cartão, conta de pagamento inválida, saldo inicial em conta cripto ou saldo"
+              + " fora do limite",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
       description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "Já existe outra conta do usuário com esse nome, sem diferenciar caixa",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "404",
@@ -312,18 +335,124 @@ class AccountController {
       @AuthenticationPrincipal AuthenticatedUser user,
       @PathVariable("id") String id,
       @Valid @RequestBody UpdateAccountRequest request) {
-    Optional<AccountSummary> updated =
-        CanonicalUuid.parse(id)
-            .flatMap(accountId -> accounts.setArchived(user.id(), accountId, request.archived()));
-    if (updated.isEmpty()) {
+    if (request.isEmpty()) {
+      return ResponseEntity.badRequest().body(NOTHING_TO_UPDATE);
+    }
+    Optional<UUID> accountId = CanonicalUuid.parse(id);
+    if (accountId.isEmpty()) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
     }
-    log.info(
-        "conta atualizada usuario_id={} conta_id={} arquivada={}",
-        user.id(),
-        updated.get().id(),
-        updated.get().archived());
-    return ResponseEntity.ok(AccountResponse.from(updated.get()));
+    UpdateAccountRequest.UpdateCardRequest card = request.card();
+    boolean paymentGiven = card != null && card.paymentAccountId() != null;
+    AccountService.UpdateInput input =
+        new AccountService.UpdateInput(
+            request.name(),
+            request.initialBalance(),
+            request.archived(),
+            card != null,
+            card == null ? null : card.limit(),
+            paymentGiven,
+            paymentGiven ? CanonicalUuid.parse(card.paymentAccountId()).orElse(null) : null);
+    return switch (accounts.update(user.id(), accountId.get(), input)) {
+      case AccountService.UpdateResult.Updated updated -> {
+        log.info(
+            "conta atualizada usuario_id={} conta_id={} arquivada={}",
+            user.id(),
+            updated.account().id(),
+            updated.account().archived());
+        yield ResponseEntity.ok(AccountResponse.from(updated.account()));
+      }
+      case AccountService.UpdateResult.Rejected rejected -> {
+        log.warn("conta não atualizada: motivo={} usuario_id={}", rejected, user.id());
+        yield switch (rejected) {
+          case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+          case NAME_TAKEN -> ResponseEntity.status(HttpStatus.CONFLICT).body(NAME_TAKEN);
+          case CRYPTO_WITH_BALANCE -> ResponseEntity.badRequest().body(CRYPTO_WITH_BALANCE);
+          case CARD_NOT_ALLOWED -> ResponseEntity.badRequest().body(CARD_NOT_ALLOWED);
+          case PAYMENT_ACCOUNT_NOT_FOUND ->
+              ResponseEntity.badRequest().body(PAYMENT_ACCOUNT_NOT_FOUND);
+          case PAYMENT_ACCOUNT_NOT_ELIGIBLE ->
+              ResponseEntity.badRequest().body(PAYMENT_ACCOUNT_NOT_ELIGIBLE);
+          case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
+        };
+      }
+    };
+  }
+
+  @Operation(
+      operationId = "deleteContasById",
+      summary = "Apaga uma conta e tudo que é dela",
+      description =
+          "Lançamentos, recorrências, cartão, categorias permitidas e movimentos de cripto da conta"
+              + " saem juntos. Numa transferência com outra conta, a perna de lá vira despesa em"
+              + " Outros (saída) ou receita em Outras receitas (entrada), e o saldo dela não muda.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(responseCode = "204", description = "Apagada")
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          "A conta é conta de pagamento de um cartão, ou pagou fatura de cartão por transferência;"
+              + " nada é apagado",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description =
+          "Conta de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível ou conta travada por mais de 2 s",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @DeleteMapping(path = "/contas/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> delete(
+      @AuthenticationPrincipal AuthenticatedUser user, @PathVariable("id") String id) {
+    Optional<UUID> accountId = CanonicalUuid.parse(id);
+    if (accountId.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    return switch (accounts.delete(user.id(), accountId.get())) {
+      case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+      case PAYS_A_CARD -> ResponseEntity.badRequest().body(PAYS_A_CARD);
+      case PAID_A_CARD_INVOICE -> ResponseEntity.badRequest().body(PAID_A_CARD_INVOICE);
+      case DELETED -> {
+        log.info("conta apagada usuario_id={} conta_id={}", user.id(), accountId.get());
+        yield ResponseEntity.noContent().build();
+      }
+    };
+  }
+
+  @Operation(
+      operationId = "getContasByIdResumoExclusao",
+      summary = "Conta o que sai junto ao apagar a conta",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Contagens",
+      content = @Content(schema = @Schema(implementation = DeletionSummaryResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description =
+          "Conta de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @GetMapping(path = "/contas/{id}/resumo-exclusao", produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> deletionSummary(
+      @AuthenticationPrincipal AuthenticatedUser user, @PathVariable("id") String id) {
+    return CanonicalUuid.parse(id)
+        .flatMap(accountId -> accounts.deletionSummary(user.id(), accountId))
+        .<ResponseEntity<?>>map(found -> ResponseEntity.ok(DeletionSummaryResponse.from(found)))
+        .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND));
   }
 
   @Operation(

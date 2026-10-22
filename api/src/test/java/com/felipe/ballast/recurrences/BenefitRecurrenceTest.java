@@ -83,6 +83,21 @@ class BenefitRecurrenceTest {
   }
 
   @Test
+  void reactivatingWhenTheCategoryLeftTheListIs400AndKeepsItInactive() throws Exception {
+    String id = createId(onBenefit(food));
+    api.deactivate(actor.session(), id);
+    benefits.putIds(actor.session(), benefit, List.of(market));
+
+    MockHttpServletResponse refused = api.setActive(actor.session(), id, "{\"ativo\":true}");
+
+    assertThat(refused.getStatus()).isEqualTo(400);
+    assertThat(RecurrencesApi.text(refused)).isEqualTo(NOT_PERMITTED);
+    assertThat(RecurrencesApi.body(api.find(actor.session(), id)).get("ativo").asBoolean())
+        .isFalse();
+    assertThat(db.countOccurrences(id)).isZero();
+  }
+
+  @Test
   void anExpenseTemplateWithACategoryInsideTheListIs201WithItsOccurrences() throws Exception {
     String id = createId(onBenefit(food));
 

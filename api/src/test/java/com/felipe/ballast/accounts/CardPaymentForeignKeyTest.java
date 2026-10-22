@@ -31,7 +31,8 @@ class CardPaymentForeignKeyTest {
             return Optional.of(new PaymentAccount(true));
           }
         };
-    return new AccountService(repository, alwaysEligible, transaction);
+    return new AccountService(
+        repository, alwaysEligible, new AccountDeletionQueries(jdbc), transaction);
   }
 
   private long countAccounts(UUID userId) {

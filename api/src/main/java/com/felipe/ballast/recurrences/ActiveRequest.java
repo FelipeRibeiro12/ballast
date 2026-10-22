@@ -9,6 +9,7 @@ public record ActiveRequest(
     @JsonProperty("ativo")
         @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
-            description = "Só false é aceito: a recorrência não é reativada")
+            description =
+                "false desativa e apaga as previstas futuras; true reativa e gera de novo")
         @NotNull(message = "ativo é obrigatório")
         Boolean active) {}

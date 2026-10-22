@@ -153,6 +153,38 @@ class AccountQueries {
         .update();
   }
 
+  // Nulo não muda: COALESCE deixa o valor que já está.
+  int updateAccount(
+      UUID userId, UUID id, String name, BigDecimal initialBalance, Boolean archived) {
+    return jdbc.sql(
+            """
+            UPDATE conta SET nome = COALESCE(:name, nome),
+                             saldo_inicial = COALESCE(:initialBalance, saldo_inicial),
+                             arquivada = COALESCE(:archived, arquivada)
+            WHERE usuario_id = :userId AND id = :id
+            """)
+        .param("userId", userId)
+        .param("id", id)
+        .param("name", name)
+        .param("initialBalance", initialBalance)
+        .param("archived", archived)
+        .update();
+  }
+
+  void updateCard(UUID userId, UUID accountId, BigDecimal limit, UUID paymentAccountId) {
+    jdbc.sql(
+            """
+            UPDATE cartao SET limite = COALESCE(:limit, limite),
+                              conta_pagamento_id = COALESCE(:paymentAccountId, conta_pagamento_id)
+            WHERE usuario_id = :userId AND conta_id = :accountId
+            """)
+        .param("userId", userId)
+        .param("accountId", accountId)
+        .param("limit", limit)
+        .param("paymentAccountId", paymentAccountId)
+        .update();
+  }
+
   // tipo_conta e pagamento_aceito são colunas geradas: o INSERT não as cita.
   void insertCard(UUID userId, UUID accountId, CardInput card) {
     jdbc.sql(

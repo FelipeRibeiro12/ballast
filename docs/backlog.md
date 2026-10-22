@@ -11,6 +11,21 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
+### F13.2 — Renda fixa (LCI, LCA, CDB)
+Título com valor aplicado, data, vencimento e indexador (prefixado, % do CDI,
+IPCA + taxa). Valor calculado com CDI e IPCA do Banco Central (SGS) e corrigível
+pelo valor que o banco mostra. LCI e LCA isentas; CDB com bruto e líquido
+estimado (IR regressivo e IOF). Entra no patrimônio.
+Teste obrigatório: Banco Central fora do ar não trava nada e mostra a data do
+último índice; título prefixado fecha centavo com a conta de dias úteis.
+
+### F13.3 — Cripto em dólar
+Cotação e custo de compra e venda em USD, como a exchange mostra, com o valor em
+reais pela PTAX do Banco Central da data. Quantidade de tokens, preço em USD e
+em BRL na tela. Emenda o ADR-035.
+Teste obrigatório: Banco Central fora do ar mostra o último dólar conhecido com
+a data, não erro nem zero.
+
 ### F14 — Cotação automática
 Worker com ticker, série histórica, cache da última cotação conhecida, data da
 cotação visível na interface.
@@ -121,7 +136,6 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Categoria filha pode ter tipo diferente do pai: a V6 garante um nível só, mas não o mesmo tipo (F3). Um `CHECK` junto com a FK do pai fecha isso. Dono: dba, na fatia que trouxer o CRUD de categoria.
 - **DÍVIDA** — Sem idempotência na escrita de dinheiro: dois `POST /transferencias` (ou `/lancamentos`) idênticos gravam duas vezes (QA da F4, S2). O web barra o submit duplo, mas rede instável com retentativa não. Chave de idempotência por requisição. Dono: backend, antes do PWA offline ou da importação.
 - **DÍVIDA** — `POST /lancamentos` com `tipo: transferencia` é recusado com "categoriaId é obrigatório" ou "requisição inválida", não com uma mensagem que aponte para `/transferencias` (QA da F4, S1). Dono: backend, na próxima fatia que mexer em `EntryController`.
-- **DÍVIDA** — Deadlock (SQLState 40P01) responde 500, não 503 com "tente de novo" (F5). A ordem das travas do ADR-026 não forma ciclo hoje, então só apareceria com caminho novo fora da ordem. Tratar 40P01 junto com o 55P03 do `lock_timeout`. Dono: backend, na próxima fatia que mexer em `ApiExceptionHandler`.
 - **DÍVIDA** — Cancelar uma ocorrência de template e depois apagá-la faz a data voltar como prevista se for de hoje em diante (QA da F5, S2). É o contrato do ADR-026, mas surpreende. Decidir se apagar cancelada some de vez (manter a linha oculta) quando houver pedido. Dono: tech-lead, com o dono do produto.
 - **DÍVIDA** — O job de recorrência só loga pulo e falha; não loga quantas previstas inseriu por template, e uma falha de banco aborta a rodada sem resumo (QA da F5, S4). Dono: backend, junto com a observabilidade da F20.5.
 - **DÍVIDA** — O job de recorrência não trava a conta (ADR-026): numa corrida com arquivar, pode sobrar prevista em conta arquivada. Não entra no saldo e não confirma, mas aparece na lista. Rever se arquivar passar a apagar as previstas da conta. Dono: backend, na fatia que mexer em arquivar conta.
@@ -135,7 +149,7 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — PUT numa parcela muda título e categoria só dela, e a tela da compra mostra o título da primeira; a categoria divergente entra no gráfico por competência (QA da F11, S1; revisão do PR #17). Decidir: recusar título e categoria no PUT de parcela com `edite a compra inteira`, ou a compra mostrar a divergência. Dono: tech-lead e backend, na fatia de gráfico por categoria.
 - **DÍVIDA** — Os `isConstraint` antigos de `EntryService` e `InstallmentService` repetem o que `web/Constraints.isViolated` faz (F12). Trocar todos pelo helper num refator próprio. Dono: backend, na próxima fatia que mexer em `entries`.
 - **DÍVIDA** — As descrições de 400 em `/lancamentos`, `/recorrencias` e `/transferencias` no OpenAPI não listam as mensagens novas da F12; elas estão só em `api.md` (F12). Dono: backend, junto do refator acima.
-- **DÍVIDA** — Recorrência cuja categoria saiu da lista de um benefício é pulada pelo job em toda rodada, com warn, até a lista voltar; não há como editar o template (F12). Avisar o usuário na tela de recorrências ou permitir trocar a categoria do template. Dono: frontend e backend, na fatia que trouxer edição de template.
+- **DÍVIDA** — Recorrência cuja categoria saiu da lista de um benefício é pulada pelo job em toda rodada, com warn, até a lista voltar (F12). Desde a F13.1 o usuário troca a categoria pelo editar; falta avisar na tela que a recorrência parou. Dono: frontend.
 - **DÍVIDA** — `isCategoryPermitted` repetida em `EntryQueries` e `RecurrenceQueries` (revisão do PR #19). Juntar num lugar só no refator dos helpers de constraint. Dono: backend.
 - **DÍVIDA** — `PUT /contas/{id}/categorias-permitidas` aceita conta arquivada (QA da F12, S2). Inofensivo, porque lançar em conta arquivada já é recusado; decidir se recusa para o contrato ficar coerente com o resto das escritas. Dono: backend.
 - **DÍVIDA** — Ativo e cotação de cripto não se editam nem se apagam (F13): ativo cadastrado errado fica na lista, e cotação digitada errada só se corrige com outra mais nova. Rota de correção quando houver pedido, ou na F14 junto com a fonte automática. Dono: backend e frontend.
@@ -145,6 +159,12 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — `isCryptoAccount` repetida em `EntryQueries` e `RecurrenceQueries` (revisão do PR #20), como a `isCategoryPermitted`. Juntar no mesmo refator dos helpers. Dono: backend.
 - **DÍVIDA** — Um movimento de cripto aceito pela escrita pode deixar `/patrimonio` e `/posicoes-cripto` em 400 `patrimônio fora do limite` até ser apagado: quantidade perto de 10²⁰ vezes qualquer cotação passa do inteiro seguro (QA da F13, D1). Só com valor absurdo. Conferir na escrita o valor com a última cotação, ou devolver a posição sem valor em vez do 400. Dono: backend, na F14.
 - **DÍVIDA** — O saldo projetado sem `contaId` ainda conta a conta cripto no escopo, e `?contaId=<cripto>` responde zeros (QA da F13, S1). Sem efeito no número: a conta cripto não tem saldo nem lançamento. Tirar do `ALL_ACTIVE` junto com a próxima mudança da projeção. Dono: backend.
+- **DÍVIDA** — Apagar conta com muito lançamento segura as travas da conta e das contrapartes sem teto de tempo de execução; só a espera por trava tem prazo (auditoria do PR #21, B1). `SET LOCAL statement_timeout` nessa transação ou limite de volume, medido quando houver hospedagem. Dono: backend e dba.
+- **DÍVIDA** — `DELETE /contas/{id}` e `DELETE /recorrencias/{id}` não têm corpo, então a defesa de CSRF do ADR-020 se apoia só no `SameSite=Lax` (auditoria do PR #21, B3). Se PWA e API ficarem em subdomínios do mesmo site, exigir `Origin` conferido ou cabeçalho próprio nas rotas que mudam estado. Dono: devops e backend, na escolha da hospedagem.
+- **DÍVIDA** — Editar uma recorrência inativa de conta arquivada é recusado com `conta arquivada`, como o POST, mesmo para corrigir só o título (revisão do PR #21). Decidir se a edição de template inativo deixa passar conta arquivada. Dono: backend.
+- **DÍVIDA** — A conversão da perna de transferência ao apagar conta busca a categoria "Outros"/"Outras receitas" pelo nome; sem a semente, o DELETE dá 500 (revisão do PR #21). Hoje toda conta recebe a semente e não há CRUD de categoria. Resolver na fatia do CRUD de categoria, marcando as sementes como fixas. Dono: backend.
+- **DÍVIDA** — Editar recorrência, ou apagar conta, ao mesmo tempo que se edita uma ocorrência dela dá 503 por deadlock em 5 de 5 rodadas (QA da F13.1, D1). Sem 500 e sem dado gravado pela metade; repetir resolve. Suspeita: o DELETE das previstas sem ordem contra o UPDATE que marca `desgarrado`, ou a FK de `lancamento.template_id` pedindo KEY SHARE no template travado FOR UPDATE. Reproduzir com `pg_locks`, corrigir a ordem e travar com teste de concorrência. Dono: backend e dba.
+- **DÍVIDA** — Trocar a divisão de salário de uma recorrência depois de uma parcela realizada no mês deixa a soma do mês diferente do total (R$ 1.000 em 2 partes com a 1ª realizada, trocado para 3 partes: o mês soma R$ 1.166,70) (QA da F13.1, D2). Coerente com "realizada fica", mas nada avisa. Avisar no formulário de edição ou regerar o mês corrente inteiro quando a divisão muda. Dono: tech-lead com o dono do produto.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

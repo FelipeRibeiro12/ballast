@@ -297,6 +297,54 @@ export async function patchConta(id: string, arquivada: boolean): Promise<Conta>
   return lerConta(resposta, 'PATCH /contas/{id}')
 }
 
+export type AtualizarContaRequest = components['schemas']['AtualizarContaRequest']
+export type ResumoExclusaoConta = components['schemas']['ResumoExclusaoConta']
+
+// Campo ausente não muda (ADR-036).
+export async function atualizarConta(id: string, dados: AtualizarContaRequest): Promise<Conta> {
+  const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarResposta(resposta, 'PATCH /contas/{id}')
+  return lerConta(resposta, 'PATCH /contas/{id}')
+}
+
+function isResumoExclusao(valor: unknown): valor is ResumoExclusaoConta {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'lancamentos' in valor &&
+    Number.isSafeInteger(valor.lancamentos) &&
+    'transferencias' in valor &&
+    Number.isSafeInteger(valor.transferencias) &&
+    'recorrencias' in valor &&
+    Number.isSafeInteger(valor.recorrencias) &&
+    'movimentosCripto' in valor &&
+    Number.isSafeInteger(valor.movimentosCripto)
+  )
+}
+
+export async function fetchResumoExclusao(id: string): Promise<ResumoExclusaoConta> {
+  const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(id)}/resumo-exclusao`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarResposta(resposta, 'GET /contas/{id}/resumo-exclusao')
+  const corpo: unknown = await resposta.json()
+  if (!isResumoExclusao(corpo)) throw new ApiError('/contas/{id}/resumo-exclusao com formato inesperado')
+  return corpo
+}
+
+export async function deleteConta(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarResposta(resposta, 'DELETE /contas/{id}')
+}
+
 // Troca a lista inteira; vazia libera qualquer categoria de despesa.
 export async function putCategoriasPermitidas(contaId: string, categoriaIds: string[]): Promise<Conta> {
   const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(contaId)}/categorias-permitidas`, {
@@ -982,6 +1030,39 @@ export async function desativarRecorrencia(id: string): Promise<Recorrencia> {
   })
   if (!resposta.ok) return recusarRespostaDeRecorrencia(resposta, 'PATCH /recorrencias/{id}')
   return lerRecorrencia(resposta, 'PATCH /recorrencias/{id}')
+}
+
+export async function reativarRecorrencia(id: string): Promise<Recorrencia> {
+  const resposta = await fetch(`${baseUrl}/recorrencias/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ativo: true }),
+  })
+  if (!resposta.ok) return recusarRespostaDeRecorrencia(resposta, 'PATCH /recorrencias/{id}')
+  return lerRecorrencia(resposta, 'PATCH /recorrencias/{id}')
+}
+
+// O corpo é o do POST, com o mesmo tipo; regera as previstas futuras não editadas (ADR-036).
+export async function putRecorrencia(id: string, dados: RecorrenciaRequest): Promise<RecorrenciaCriada> {
+  const resposta = await fetch(`${baseUrl}/recorrencias/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeRecorrencia(resposta, 'PUT /recorrencias/{id}')
+  const corpo: unknown = await resposta.json()
+  if (!isRecorrenciaCriada(corpo)) throw new ApiError('PUT /recorrencias/{id} com formato inesperado')
+  return corpo
+}
+
+export async function deleteRecorrencia(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/recorrencias/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeRecorrencia(resposta, 'DELETE /recorrencias/{id}')
 }
 
 export type SaldoProjetado = components['schemas']['SaldoProjetado']

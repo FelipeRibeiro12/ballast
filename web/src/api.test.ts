@@ -27,12 +27,18 @@ import {
   postLancamento,
   putLancamento,
   patchConta,
+  atualizarConta,
+  deleteConta,
+  fetchResumoExclusao,
   putCategoriasPermitidas,
   postCadastro,
   postConta,
   RecorrenciaInvalidaError,
   RecorrenciaNaoEncontradaError,
   desativarRecorrencia,
+  deleteRecorrencia,
+  putRecorrencia,
+  reativarRecorrencia,
   fetchRecorrencias,
   fetchVencidos,
   fetchSaldoProjetado,
@@ -271,6 +277,36 @@ describe('rotas de contas', () => {
       headers: { 'Content-Type': 'application/json' },
       body: '{"arquivada":true}',
     })
+  })
+
+  it('atualizarConta manda só os campos informados', async () => {
+    responder({ ...conta, nome: 'Itaú' }, 200)
+    expect((await atualizarConta('a/b', { nome: 'Itaú', cartao: { limiteCentavos: 100 } })).nome).toBe('Itaú')
+    expect(fetch).toHaveBeenCalledWith('/contas/a%2Fb', {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"nome":"Itaú","cartao":{"limiteCentavos":100}}',
+    })
+  })
+
+  it('deleteConta aceita só 204 e traduz o 400 com a mensagem do servidor', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(null, { status: 204 }))))
+    await expect(deleteConta('a/b')).resolves.toBeUndefined()
+    expect(fetch).toHaveBeenCalledWith('/contas/a%2Fb', { method: 'DELETE', credentials: 'same-origin' })
+    responder({ erro: 'esta conta paga um cartão; troque a conta de pagamento antes' }, 400)
+    await expect(deleteConta('1')).rejects.toMatchObject({
+      mensagemServidor: 'esta conta paga um cartão; troque a conta de pagamento antes',
+    })
+  })
+
+  it('fetchResumoExclusao lê as contagens e recusa formato errado', async () => {
+    const resumo = { lancamentos: 3, transferencias: 1, recorrencias: 0, movimentosCripto: 0 }
+    responder(resumo, 200)
+    expect(await fetchResumoExclusao('a/b')).toEqual(resumo)
+    expect(fetch).toHaveBeenCalledWith('/contas/a%2Fb/resumo-exclusao', { credentials: 'same-origin' })
+    responder({ ...resumo, lancamentos: '3' }, 200)
+    await expect(fetchResumoExclusao('1')).rejects.toBeInstanceOf(ApiError)
   })
 
   it('postConta manda categoriasPermitidas do benefício', async () => {
@@ -750,6 +786,44 @@ describe('recorrências e ocorrências', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ativo: false }),
     })
+  })
+
+  it('reativarRecorrencia manda PATCH ativo true', async () => {
+    responder(recorrencia, 200)
+    await reativarRecorrencia('a/b')
+    expect(fetch).toHaveBeenCalledWith('/recorrencias/a%2Fb', {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ativo: true }),
+    })
+  })
+
+  it('putRecorrencia manda PUT e lê a recorrência editada', async () => {
+    responder({ recorrencia, ocorrenciasMaterializadas: 3 }, 200)
+    const dados = {
+      tipo: 'despesa',
+      titulo: 'Aluguel',
+      valorCentavos: 1000,
+      categoriaId: 'c',
+      contaId: 'k',
+      regra: { frequencia: 'mensal', intervalo: 1, diaDoMes: 5, inicio: '2026-11-05' },
+    } as const
+    expect((await putRecorrencia('a/b', dados)).ocorrenciasMaterializadas).toBe(3)
+    expect(fetch).toHaveBeenCalledWith('/recorrencias/a%2Fb', {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+  })
+
+  it('deleteRecorrencia aceita só 204', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(null, { status: 204 }))))
+    await expect(deleteRecorrencia('a/b')).resolves.toBeUndefined()
+    expect(fetch).toHaveBeenCalledWith('/recorrencias/a%2Fb', { method: 'DELETE', credentials: 'same-origin' })
+    responder({ erro: 'não encontrado' }, 404)
+    await expect(deleteRecorrencia('1')).rejects.toBeInstanceOf(ApiError)
   })
 
   it('patchStatusLancamento manda PATCH status e lê o lançamento', async () => {

@@ -2133,3 +2133,18 @@ p[role='status'] {
   font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
+
+/* Apagar conta (ADR-036) */
+.aviso-exclusao {
+  margin-bottom: var(--esp-4);
+  padding: var(--esp-3) var(--esp-4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-md);
+  background: var(--superficie-2);
+  font-size: 0.875rem;
+}
+
+.aviso-exclusao ul {
+  margin: var(--esp-2) 0;
+  padding-left: var(--esp-4);
+}

@@ -179,15 +179,20 @@ class RecurrenceJobTest {
 
     assertThat(db.countOccurrences(mine)).isEqualTo(369);
     assertThat(db.countOccurrences(theirs)).isEqualTo(369);
+    // Só os templates deste teste: desde o ADR-036 editar a recorrência para outra conta deixa a
+    // realizada na conta antiga, e o banco é compartilhado entre as classes de teste.
     long crossed =
         jdbc.sql(
                 """
                 SELECT count(*) FROM lancamento l
                 JOIN template_lancamento t ON t.id = l.template_id
                 JOIN conta c ON c.id = l.conta_id
-                WHERE l.usuario_id <> t.usuario_id OR c.usuario_id <> l.usuario_id
-                   OR l.conta_id <> t.conta_id
+                WHERE t.id IN (:mine, :theirs)
+                  AND (l.usuario_id <> t.usuario_id OR c.usuario_id <> l.usuario_id
+                       OR l.conta_id <> t.conta_id)
                 """)
+            .param("mine", UUID.fromString(mine))
+            .param("theirs", UUID.fromString(theirs))
             .query(Long.class)
             .single();
     assertThat(crossed).isZero();

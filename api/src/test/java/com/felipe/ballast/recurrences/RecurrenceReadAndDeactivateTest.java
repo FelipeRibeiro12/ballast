@@ -184,19 +184,6 @@ class RecurrenceReadAndDeactivateTest {
   }
 
   @Test
-  void reactivatingIsRefused() throws Exception {
-    String id = createId(actor, monthlyBody(actor));
-    api.deactivate(actor.session(), id);
-
-    MockHttpServletResponse response = api.setActive(actor.session(), id, "{\"ativo\":true}");
-
-    assertThat(response.getStatus()).isEqualTo(400);
-    assertThat(RecurrencesApi.text(response)).isEqualTo("{\"erro\":\"reativar não é suportado\"}");
-    assertThat(RecurrencesApi.body(api.find(actor.session(), id)).get("ativo").asBoolean())
-        .isFalse();
-  }
-
-  @Test
   void invalidPatchBodiesAreRefused() throws Exception {
     String id = createId(actor, monthlyBody(actor));
 

@@ -734,6 +734,56 @@ paths:
       tags:
       - contas
   /contas/{id}:
+    delete:
+      description: "Lançamentos, recorrências, cartão, categorias permitidas e movimentos\
+        \ de cripto da conta saem juntos. Numa transferência com outra conta, a perna\
+        \ de lá vira despesa em Outros (saída) ou receita em Outras receitas (entrada),\
+        \ e o saldo dela não muda."
+      operationId: deleteContasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Apagada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "A conta é conta de pagamento de um cartão, ou pagou fatura\
+            \ de cartão por transferência; nada é apagado"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Apaga uma conta e tudo que é dela
+      tags:
+      - contas
     get:
       operationId: getContasById
       parameters:
@@ -774,7 +824,9 @@ paths:
       tags:
       - contas
     patch:
-      description: "Idempotente: repetir o mesmo valor devolve 200 e a mesma conta."
+      description: "Campo ausente ou nulo não muda: arquivada, nome, saldoInicialCentavos\
+        \ e, em cartão, limite e conta de pagamento. Repetir o mesmo valor devolve\
+        \ 200 e a mesma conta."
       operationId: patchContasById
       parameters:
       - in: path
@@ -800,7 +852,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Entrada inválida, inclusive campo não declarado"
+          description: "Entrada inválida, inclusive campo não declarado e corpo sem\
+            \ nenhum campo, cartao fora de cartão, conta de pagamento inválida, saldo\
+            \ inicial em conta cripto ou saldo fora do limite"
         "401":
           content:
             application/json:
@@ -814,6 +868,13 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "Conta de outro usuário, inexistente ou id que não é UUID;\
             \ todos com o mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Já existe outra conta do usuário com esse nome, sem diferenciar\
+            \ caixa"
         "413":
           content:
             application/json:
@@ -834,7 +895,7 @@ paths:
           description: Banco indisponível ou conta travada por mais de 2 s
       security:
       - cookieAuth: []
-      summary: Arquiva ou desarquiva uma conta
+      summary: Altera uma conta
       tags:
       - contas
   /contas/{id}/categorias-permitidas:
@@ -972,6 +1033,46 @@ paths:
       summary: Lista as faturas de um cartão por vencimento
       tags:
       - cartao
+  /contas/{id}/resumo-exclusao:
+    get:
+      operationId: getContasByIdResumoExclusao
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumoExclusaoConta"
+          description: Contagens
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Conta o que sai junto ao apagar a conta
+      tags:
+      - contas
   /healthz:
     get:
       operationId: getHealth
@@ -1717,6 +1818,47 @@ paths:
       tags:
       - recorrencias
   /recorrencias/{id}:
+    delete:
+      description: "Apaga a recorrência e todas as previstas dela, inclusive as vencidas.\
+        \ Realizadas e canceladas ficam como lançamentos avulsos."
+      operationId: deleteRecorrenciasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Apagada
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Recorrência de outro usuário, inexistente ou id que não é\
+            \ UUID; todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Apaga uma recorrência
+      tags:
+      - recorrencias
     get:
       operationId: getRecorrenciasById
       parameters:
@@ -1786,8 +1928,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Corpo inválido, inclusive campo não declarado; \"reativar\
-            \ não é suportado\""
+          description: "Corpo inválido, inclusive campo não declarado; \"conta arquivada\"\
+            \ ao reativar"
         "401":
           content:
             application/json:
@@ -1822,6 +1964,73 @@ paths:
       security:
       - cookieAuth: []
       summary: Desativa uma recorrência
+      tags:
+      - recorrencias
+    put:
+      description: "Corpo do POST, com o mesmo tipo. As previstas de hoje em diante\
+        \ não editadas à mão são geradas de novo com os dados novos se a recorrência\
+        \ estiver ativa; realizadas, canceladas, editadas e vencidas ficam."
+      operationId: putRecorrenciasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecorrenciaRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecorrenciaCriada"
+          description: Recorrência editada e quantas ocorrências foram geradas
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida como no POST, tipo diferente do atual, conta\
+            \ ou categoria que não serve"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Recorrência de outro usuário, inexistente ou id que não é\
+            \ UUID; todos com o mesmo corpo"
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Edita uma recorrência
       tags:
       - recorrencias
   /saldo-projetado:
@@ -2120,13 +2329,35 @@ components:
       - decimais
       - rede
       - simbolo
+    AtualizarCartaoRequest:
+      type: object
+      properties:
+        contaPagamentoId:
+          type: string
+          format: uuid
+        limiteCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 1
     AtualizarContaRequest:
       type: object
       properties:
         arquivada:
           type: boolean
-      required:
-      - arquivada
+        cartao:
+          $ref: "#/components/schemas/AtualizarCartaoRequest"
+          description: Só em conta de cartão. Fechamento e vencimento não se editam
+            (ADR-031)
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+        saldoInicialCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
     CadastroRequest:
       type: object
       properties:
@@ -3239,7 +3470,8 @@ components:
       properties:
         ativo:
           type: boolean
-          description: "Só false é aceito: a recorrência não é reativada"
+          description: false desativa e apaga as previstas futuras; true reativa e
+            gera de novo
       required:
       - ativo
     RecorrenciaCriada:
@@ -3402,6 +3634,29 @@ components:
       required:
       - frequencia
       - inicio
+    ResumoExclusaoConta:
+      type: object
+      properties:
+        lancamentos:
+          type: integer
+          format: int64
+          description: Lançamentos da conta que não são perna de transferência
+        movimentosCripto:
+          type: integer
+          format: int64
+        recorrencias:
+          type: integer
+          format: int64
+        transferencias:
+          type: integer
+          format: int64
+          description: Transferências com outra conta; a perna de lá vira lançamento
+            comum
+      required:
+      - lancamentos
+      - movimentosCripto
+      - recorrencias
+      - transferencias
     SaldoProjetado:
       type: object
       properties:

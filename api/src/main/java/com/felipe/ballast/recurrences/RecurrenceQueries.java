@@ -358,6 +358,101 @@ class RecurrenceQueries {
     return inserted;
   }
 
+  Optional<EntryType> templateType(UUID userId, UUID templateId) {
+    return jdbc.sql("SELECT tipo FROM template_lancamento WHERE usuario_id = :userId AND id = :id")
+        .param("userId", userId)
+        .param("id", templateId)
+        .query((rs, row) -> entryType(rs.getString("tipo")))
+        .optional();
+  }
+
+  // O tipo não muda (ADR-036): categoria e sinal dependem dele.
+  void updateTemplate(UUID userId, UUID templateId, RecurrenceInput input) {
+    jdbc.sql(
+            """
+            UPDATE template_lancamento SET titulo = :title, descricao = :description,
+                   categoria_id = :categoryId, conta_id = :accountId, valor_total = :amount
+            WHERE usuario_id = :userId AND id = :id
+            """)
+        .param("userId", userId)
+        .param("id", templateId)
+        .param("title", input.title())
+        .param("description", input.description(), java.sql.Types.VARCHAR)
+        .param("categoryId", input.categoryId())
+        .param("accountId", input.accountId())
+        .param("amount", input.amount())
+        .update();
+  }
+
+  void updateRule(UUID userId, UUID templateId, RecurrenceRule rule) {
+    jdbc.sql(
+            """
+            UPDATE regra_recorrencia SET frequencia = :frequency, intervalo = :interval,
+                   dia_do_mes = :dayOfMonth, dia_da_semana = :dayOfWeek, inicio = :start,
+                   fim = :end, ocorrencias_max = :maxOccurrences
+            WHERE usuario_id = :userId
+              AND id = (SELECT regra_id FROM template_lancamento
+                        WHERE usuario_id = :userId AND id = :id)
+            """)
+        .param("userId", userId)
+        .param("id", templateId)
+        .param("frequency", rule.frequency().value())
+        .param("interval", rule.interval())
+        .param("dayOfMonth", rule.dayOfMonth(), java.sql.Types.SMALLINT)
+        .param("dayOfWeek", rule.dayOfWeek(), java.sql.Types.SMALLINT)
+        .param("start", rule.start())
+        .param("end", rule.end(), java.sql.Types.DATE)
+        .param("maxOccurrences", rule.maxOccurrences(), java.sql.Types.INTEGER)
+        .update();
+  }
+
+  void deleteDivision(UUID userId, UUID templateId) {
+    jdbc.sql("DELETE FROM template_divisao WHERE usuario_id = :userId AND template_id = :id")
+        .param("userId", userId)
+        .param("id", templateId)
+        .update();
+  }
+
+  void activate(UUID userId, UUID templateId) {
+    jdbc.sql("UPDATE template_lancamento SET ativo = true WHERE usuario_id = :userId AND id = :id")
+        .param("userId", userId)
+        .param("id", templateId)
+        .update();
+  }
+
+  // Todas as previstas, inclusive vencidas e editadas: sem o template elas não teriam dono.
+  // Realizada e cancelada ficam como lançamento avulso; parcela_ordem só existe com template (V9).
+  void deleteTemplateKeepingHistory(UUID userId, UUID templateId) {
+    jdbc.sql(
+            "DELETE FROM lancamento WHERE usuario_id = :userId AND template_id = :id"
+                + " AND status = 'previsto'")
+        .param("userId", userId)
+        .param("id", templateId)
+        .update();
+    jdbc.sql(
+            """
+            UPDATE lancamento SET template_id = NULL, ocorrencia_data = NULL,
+                                  parcela_ordem = NULL, desgarrado = false
+            WHERE usuario_id = :userId AND template_id = :id
+            """)
+        .param("userId", userId)
+        .param("id", templateId)
+        .update();
+    deleteDivision(userId, templateId);
+    UUID ruleId =
+        jdbc.sql(
+                "DELETE FROM template_lancamento WHERE usuario_id = :userId AND id = :id"
+                    + " RETURNING regra_id")
+            .param("userId", userId)
+            .param("id", templateId)
+            .query(UUID.class)
+            .single();
+    jdbc.sql("DELETE FROM regra_recorrencia WHERE usuario_id = :userId AND id = :id")
+        .param("userId", userId)
+        .param("id", ruleId)
+        .update();
+  }
+
   void deactivate(UUID userId, UUID templateId) {
     jdbc.sql("UPDATE template_lancamento SET ativo = false WHERE usuario_id = :userId AND id = :id")
         .param("userId", userId)

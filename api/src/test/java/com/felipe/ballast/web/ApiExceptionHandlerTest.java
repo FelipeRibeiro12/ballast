@@ -21,6 +21,14 @@ class ApiExceptionHandlerTest {
     String boom() {
       throw new IllegalStateException("segredo interno: jdbc:postgresql://host/banco");
     }
+
+    // Como o JdbcClient entrega o deadlock: SQLException com o SQLState no fim da cadeia.
+    @GetMapping("/deadlock-embrulhado")
+    String wrappedDeadlock() {
+      throw new IllegalStateException(
+          new org.springframework.jdbc.UncategorizedSQLException(
+              "x", "DELETE", new java.sql.SQLException("deadlock detected", "40P01")));
+    }
   }
 
   private final MockMvc mvc =
@@ -33,6 +41,13 @@ class ApiExceptionHandlerTest {
     mvc.perform(get("/boom"))
         .andExpect(status().isInternalServerError())
         .andExpect(content().json("{\"erro\":\"erro interno\"}", true));
+  }
+
+  @Test
+  void aDeadlockBecomesA503TheClientCanRetry() throws Exception {
+    mvc.perform(get("/deadlock-embrulhado"))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(content().json("{\"erro\":\"serviço indisponível\"}", true));
   }
 
   @Test

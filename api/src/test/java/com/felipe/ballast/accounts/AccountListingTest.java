@@ -148,8 +148,8 @@ class AccountListingTest {
           "{\"arquivada\":null}",
           "{\"arquivada\":\"true\"}",
           "{\"arquivada\":1}",
-          "{\"arquivada\":true,\"nome\":\"Outro\"}",
-          "{\"nome\":\"Outro\"}"
+          "{\"arquivada\":true,\"tipo\":\"poupanca\"}",
+          "{\"moeda\":\"USD\"}"
         }) {
       assertThat(api.archive(session, id, body).getStatus()).as(body).isEqualTo(400);
     }

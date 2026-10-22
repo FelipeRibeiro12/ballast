@@ -37,3 +37,12 @@ export function lerValorPositivo(texto: string): number | null {
   const centavos = lerCentavos(texto)
   return centavos !== null && centavos > 0 ? centavos : null
 }
+
+// Centavos no formato que lerCentavos aceita de volta ("1.234,56"), para preencher um campo.
+export function centavosParaCampo(centavos: number): string {
+  const valor = BigInt(centavos)
+  const negativo = valor < 0n
+  const digitos = (negativo ? -valor : valor).toString().padStart(3, '0')
+  const inteiro = digitos.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${negativo ? '-' : ''}${inteiro},${digitos.slice(-2)}`
+}

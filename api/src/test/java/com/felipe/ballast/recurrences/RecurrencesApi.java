@@ -187,6 +187,28 @@ final class RecurrencesApi {
     return mvc.perform(request).andReturn().getResponse();
   }
 
+  MockHttpServletResponse update(Cookie session, String id, Object body) throws Exception {
+    var request =
+        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                "/recorrencias/" + id)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json(body));
+    if (session != null) {
+      request.cookie(session);
+    }
+    return mvc.perform(request).andReturn().getResponse();
+  }
+
+  MockHttpServletResponse remove(Cookie session, String id) throws Exception {
+    var request =
+        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+            "/recorrencias/" + id);
+    if (session != null) {
+      request.cookie(session);
+    }
+    return mvc.perform(request).andReturn().getResponse();
+  }
+
   MockHttpServletResponse deactivate(Cookie session, String id) throws Exception {
     return setActive(session, id, "{\"ativo\":false}");
   }
