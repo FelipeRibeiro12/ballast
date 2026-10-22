@@ -472,8 +472,8 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   valendo.
 - O job de recorrência pula o template cuja categoria saiu da lista da conta e
   segue com os outros. O template continua ativo e sem ocorrência nova até o
-  usuário trocar a categoria dele ou a lista da conta. Hoje não há `PUT` de
-  template, então o caminho do usuário é pôr a categoria de volta na lista.
+  usuário trocar a categoria dele ou a lista da conta. Desde a F13.1 o
+  usuário troca a categoria pelo `PUT /recorrencias/{id}` (ADR-036).
 - Transferência com origem ou destino de benefício dá 400 `conta de benefício
   não participa de transferência`, sem gravar. Conta alheia continua dando
   `conta não encontrada`.
