@@ -61,7 +61,7 @@ function FormularioDePagamento({
 }) {
   const pagadoras = contasAtivas.filter(eContaDePagamento)
   // Benefício não recebe transferência (ADR-034); a origem já exclui porque só vale corrente e poupança.
-  const destinos = contasAtivas.filter((c) => c.tipo !== 'beneficio')
+  const destinos = contasAtivas.filter((c) => c.tipo !== 'beneficio' && c.tipo !== 'cripto')
   const contaPagamentoId = cartao.cartao?.contaPagamentoId ?? ''
   // Conta de pagamento arquivada não aparece nas ativas: o usuário escolhe outra.
   const pagamentoArquivada = !pagadoras.some((c) => c.id === contaPagamentoId)

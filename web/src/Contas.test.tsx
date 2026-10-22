@@ -206,7 +206,38 @@ describe('Contas', () => {
     expect(nome).toBeRequired()
     expect(screen.getByLabelText(/saldo inicial/i)).toHaveAttribute('inputmode', 'decimal')
     const opcoes = within(screen.getByLabelText('Tipo')).getAllByRole('option')
-    expect(opcoes.map((opcao) => opcao.textContent)).toEqual(['Corrente', 'Poupança', 'Dinheiro', 'Cartão de crédito', 'Vale-benefício'])
+    expect(opcoes.map((opcao) => opcao.textContent)).toEqual([
+      'Corrente',
+      'Poupança',
+      'Dinheiro',
+      'Cartão de crédito',
+      'Vale-benefício',
+      'Cripto',
+    ])
+  })
+
+  it('cria conta cripto sem campo de saldo e mostra o atalho para as posições', async () => {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([]),
+      'POST /contas': responde(conta({ nome: 'Exchange', tipo: 'cripto', saldoInicialCentavos: 0, saldoCentavos: 0 }), 201),
+    })
+    render(<App />)
+    await screen.findByText('Nenhuma conta ainda.')
+    await abrirNovaConta()
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Exchange' } })
+    fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'cripto' } })
+    expect(screen.queryByLabelText(/saldo inicial/i)).toBeNull()
+    expect(screen.getByText('Compras, vendas e cotações da conta ficam na aba Cripto.')).toBeVisible()
+    enviarNovaConta()
+
+    const link = await within(secaoContas()).findByRole('link', { name: 'Ver posições' })
+    expect(link).toHaveAttribute('href', '#/cripto')
+    expect(JSON.parse(String(chamadasA('POST /contas')[0][1]?.body))).toEqual({
+      nome: 'Exchange',
+      tipo: 'cripto',
+      saldoInicialCentavos: 0,
+    })
   })
 
   it('cria a conta, mostra na lista sem recarregar e limpa o formulário', async () => {

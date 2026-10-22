@@ -165,6 +165,16 @@ export function IconeDinheiro({ tamanho }: Props) {
   )
 }
 
+export function IconeCripto({ tamanho }: Props) {
+  return (
+    <Base tamanho={tamanho}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M9.5 8h3.75a2 2 0 0 1 0 4H9.5h4.25a2 2 0 0 1 0 4H9.5V8Z" />
+      <path d="M11 6.5V8M11 16v1.5M13 6.5V8M13 16v1.5" />
+    </Base>
+  )
+}
+
 export function IconeSetaCima({ tamanho }: Props) {
   return (
     <Base tamanho={tamanho}>
