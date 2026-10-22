@@ -11,11 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F13 — Cripto manual
-Ativo identificado por `rede` + `contrato`, posição em quantidade,
-movimentação com custo de aquisição informado por você.
-Patrimônio total passa a receber data de referência.
-
 ### F14 — Cotação automática
 Worker com ticker, série histórica, cache da última cotação conhecida, data da
 cotação visível na interface.
@@ -141,6 +136,9 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Recorrência cuja categoria saiu da lista de um benefício é pulada pelo job em toda rodada, com warn, até a lista voltar; não há como editar o template (F12). Avisar o usuário na tela de recorrências ou permitir trocar a categoria do template. Dono: frontend e backend, na fatia que trouxer edição de template.
 - **DÍVIDA** — `isCategoryPermitted` repetida em `EntryQueries` e `RecurrenceQueries` (revisão do PR #19). Juntar num lugar só no refator dos helpers de constraint. Dono: backend.
 - **DÍVIDA** — `PUT /contas/{id}/categorias-permitidas` aceita conta arquivada (QA da F12, S2). Inofensivo, porque lançar em conta arquivada já é recusado; decidir se recusa para o contrato ficar coerente com o resto das escritas. Dono: backend.
+- **DÍVIDA** — Ativo e cotação de cripto não se editam nem se apagam (F13): ativo cadastrado errado fica na lista, e cotação digitada errada só se corrige com outra mais nova. Rota de correção quando houver pedido, ou na F14 junto com a fonte automática. Dono: backend e frontend.
+- **DÍVIDA** — `GET /movimentos-cripto` sem paginação e sem teto de movimentos por usuário (F13), como `GET /lancamentos`. Paginar junto com a importação. Dono: backend.
+- **DÍVIDA** — As rotas de cripto não têm teste de banco congelado (503) próprio; o caminho é o mesmo `WriteTransaction` e `ApiExceptionHandler` já testados nas outras rotas (F13). Dono: backend, na F14.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
