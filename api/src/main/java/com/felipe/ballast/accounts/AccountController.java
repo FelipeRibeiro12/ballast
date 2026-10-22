@@ -20,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,6 +70,9 @@ class AccountController {
 
   private static final ErrorResponse CRYPTO_WITH_BALANCE =
       new ErrorResponse("conta cripto não tem saldo em reais");
+
+  private static final ErrorResponse PAYS_A_CARD =
+      new ErrorResponse("esta conta paga um cartão; troque a conta de pagamento antes");
 
   private static final ErrorResponse NOTHING_TO_UPDATE =
       new ErrorResponse("informe ao menos um campo para alterar");
@@ -369,6 +373,79 @@ class AccountController {
         };
       }
     };
+  }
+
+  @Operation(
+      operationId = "deleteContasById",
+      summary = "Apaga uma conta e tudo que é dela",
+      description =
+          "Lançamentos, recorrências, cartão, categorias permitidas e movimentos de cripto da conta"
+              + " saem juntos. Numa transferência com outra conta, a perna de lá vira despesa em"
+              + " Outros (saída) ou receita em Outras receitas (entrada), e o saldo dela não muda.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(responseCode = "204", description = "Apagada")
+  @ApiResponse(
+      responseCode = "400",
+      description = "A conta é conta de pagamento de um cartão; nada é apagado",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description =
+          "Conta de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível ou conta travada por mais de 2 s",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @DeleteMapping(path = "/contas/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> delete(
+      @AuthenticationPrincipal AuthenticatedUser user, @PathVariable("id") String id) {
+    Optional<UUID> accountId = CanonicalUuid.parse(id);
+    if (accountId.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    return switch (accounts.delete(user.id(), accountId.get())) {
+      case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+      case PAYS_A_CARD -> ResponseEntity.badRequest().body(PAYS_A_CARD);
+      case DELETED -> {
+        log.info("conta apagada usuario_id={} conta_id={}", user.id(), accountId.get());
+        yield ResponseEntity.noContent().build();
+      }
+    };
+  }
+
+  @Operation(
+      operationId = "getContasByIdResumoExclusao",
+      summary = "Conta o que sai junto ao apagar a conta",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Contagens",
+      content = @Content(schema = @Schema(implementation = DeletionSummaryResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description =
+          "Conta de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @GetMapping(path = "/contas/{id}/resumo-exclusao", produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> deletionSummary(
+      @AuthenticationPrincipal AuthenticatedUser user, @PathVariable("id") String id) {
+    return CanonicalUuid.parse(id)
+        .flatMap(accountId -> accounts.deletionSummary(user.id(), accountId))
+        .<ResponseEntity<?>>map(found -> ResponseEntity.ok(DeletionSummaryResponse.from(found)))
+        .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND));
   }
 
   @Operation(

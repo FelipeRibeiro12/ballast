@@ -734,6 +734,55 @@ paths:
       tags:
       - contas
   /contas/{id}:
+    delete:
+      description: "Lançamentos, recorrências, cartão, categorias permitidas e movimentos\
+        \ de cripto da conta saem juntos. Numa transferência com outra conta, a perna\
+        \ de lá vira despesa em Outros (saída) ou receita em Outras receitas (entrada),\
+        \ e o saldo dela não muda."
+      operationId: deleteContasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Apagada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: A conta é conta de pagamento de um cartão; nada é apagado
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Apaga uma conta e tudo que é dela
+      tags:
+      - contas
     get:
       operationId: getContasById
       parameters:
@@ -983,6 +1032,46 @@ paths:
       summary: Lista as faturas de um cartão por vencimento
       tags:
       - cartao
+  /contas/{id}/resumo-exclusao:
+    get:
+      operationId: getContasByIdResumoExclusao
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumoExclusaoConta"
+          description: Contagens
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente ou id que não é UUID;\
+            \ todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Conta o que sai junto ao apagar a conta
+      tags:
+      - contas
   /healthz:
     get:
       operationId: getHealth
@@ -3435,6 +3524,29 @@ components:
       required:
       - frequencia
       - inicio
+    ResumoExclusaoConta:
+      type: object
+      properties:
+        lancamentos:
+          type: integer
+          format: int64
+          description: Lançamentos da conta que não são perna de transferência
+        movimentosCripto:
+          type: integer
+          format: int64
+        recorrencias:
+          type: integer
+          format: int64
+        transferencias:
+          type: integer
+          format: int64
+          description: Transferências com outra conta; a perna de lá vira lançamento
+            comum
+      required:
+      - lancamentos
+      - movimentosCripto
+      - recorrencias
+      - transferencias
     SaldoProjetado:
       type: object
       properties:

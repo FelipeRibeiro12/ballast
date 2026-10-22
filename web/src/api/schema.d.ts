@@ -225,7 +225,11 @@ export interface paths {
         get: operations["getContasById"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Apaga uma conta e tudo que é dela
+         * @description Lançamentos, recorrências, cartão, categorias permitidas e movimentos de cripto da conta saem juntos. Numa transferência com outra conta, a perna de lá vira despesa em Outros (saída) ou receita em Outras receitas (entrada), e o saldo dela não muda.
+         */
+        delete: operations["deleteContasById"];
         options?: never;
         head?: never;
         /**
@@ -267,6 +271,23 @@ export interface paths {
          * @description Todas as faturas com vencimento entre de e ate (pontas incluídas, no máximo 366 dias), em ordem de vencimento, inclusive as sem compra. pago soma as transferências realizadas para o cartão depois do fechamento da fatura e até o fechamento da seguinte, inclusive; pagamento feito antes do fechamento conta na fatura anterior. situacao é aberta até o dia do fechamento (inclusive, em America/Sao_Paulo), só pela data; depois dele, fechada com restante maior que zero e paga com restante menor ou igual a zero.
          */
         get: operations["getContasByIdFaturas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contas/{id}/resumo-exclusao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Conta o que sai junto ao apagar a conta */
+        get: operations["getContasByIdResumoExclusao"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1237,6 +1258,22 @@ export interface components {
              * @description Conta as ocorrências desde o início; não vale junto com fim
              */
             ocorrenciasMax?: number | null;
+        };
+        ResumoExclusaoConta: {
+            /**
+             * Format: int64
+             * @description Lançamentos da conta que não são perna de transferência
+             */
+            lancamentos: number;
+            /** Format: int64 */
+            movimentosCripto: number;
+            /** Format: int64 */
+            recorrencias: number;
+            /**
+             * Format: int64
+             * @description Transferências com outra conta; a perna de lá vira lançamento comum
+             */
+            transferencias: number;
         };
         SaldoProjetado: {
             /**
@@ -2256,6 +2293,64 @@ export interface operations {
             };
         };
     };
+    deleteContasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Apagada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description A conta é conta de pagamento de um cartão; nada é apagado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     patchContasById: {
         parameters: {
             query?: never;
@@ -2476,6 +2571,55 @@ export interface operations {
                 };
             };
             /** @description Banco indisponível; pode tentar de novo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getContasByIdResumoExclusao: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contagens */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumoExclusaoConta"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
             503: {
                 headers: {
                     [name: string]: unknown;
