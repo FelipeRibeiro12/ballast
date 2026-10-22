@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-22 — F13.1: editar e apagar contas e recorrências (PR #21)
+
+O que entrou: `PATCH /contas/{id}` com nome, saldo inicial, limite e conta de pagamento; `DELETE /contas/{id}` que leva tudo da conta e converte a perna de transferência da outra conta em lançamento comum; `GET /contas/{id}/resumo-exclusao`; `PUT`, reativar e `DELETE /recorrencias/{id}`; deadlock (40P01) respondendo 503; no web, editar e apagar conta com confirmação pelo nome, editar, reativar e apagar recorrência com o formulário de criação em modo edição; passo no e2e.
+Decisões: ADR-036 (pedido do dono: apagar leva tudo e o arquivar continua). Fora de ADR: o PUT de recorrência recebe o corpo do POST com o mesmo tipo; a conta de pagamento só vai no PATCH quando muda.
+Dívida registrada: deadlock entre editar recorrência ou apagar conta e editar ocorrência (responde 503), divisão trocada com parcela realizada no mês, `statement_timeout` no apagar conta, CSRF dos DELETE sem corpo na hospedagem, recorrência inativa em conta arquivada, categoria semente buscada pelo nome.
+Achados do QA: 1 bloqueou (contrato da ADR-026 ainda dizia que reativar não existe, corrigido), 2 dívidas (deadlock e divisão, registradas), 5 sugestões (duas registradas, as outras sem ação).
+Achados do revisor: 1 bloqueou (apagar conta que pagou fatura desmontava a fatura do cartão; passou a ser recusado), 3 corrigir antes (ordem de travas, reativar com categoria fora da lista dando 500, semente ausente: duas corrigidas, uma registrada), 4 sugestões (duas corrigidas). Security: 0 críticos, 0 altos, 1 médio (lista de ids estourava o limite de parâmetros do driver, trocada por subconsulta e CTE), 3 baixos registrados.
+Pipeline: verde em todos os checks, o e2e incluído.
+Em aberto: nada.
+
 ## 2026-10-22 — F13: cripto manual (PR #20)
 
 O que entrou: migration V13 com o tipo `cripto` (sem saldo em reais e recusado em lançamento por FK com coluna gerada), `ativo_cripto` por usuário, `movimento_cripto` e `cotacao`; rotas de ativo, cotação manual, movimento, posições e patrimônio com data; recusa da conta cripto em lançamento, transferência e recorrência; no web, a aba Cripto (patrimônio, posições, movimentos, ativos, aviso de que o app não pede seed), o tipo Cripto em Contas e a conta cripto fora dos selects; passo de cripto no e2e.
