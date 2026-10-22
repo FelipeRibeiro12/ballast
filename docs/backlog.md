@@ -11,6 +11,28 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
+### F13.1 — Editar e apagar contas e recorrências
+Editar nome, saldo inicial, limite e conta de pagamento do cartão; apagar a conta
+com tudo que é dela, mantendo o arquivar. Editar, reativar e apagar recorrência,
+regerando só as previstas futuras não editadas (ADR-036).
+Teste obrigatório: apagar conta com transferência não muda o saldo da outra conta;
+editar recorrência não mexe em realizada, cancelada nem editada à mão.
+
+### F13.2 — Renda fixa (LCI, LCA, CDB)
+Título com valor aplicado, data, vencimento e indexador (prefixado, % do CDI,
+IPCA + taxa). Valor calculado com CDI e IPCA do Banco Central (SGS) e corrigível
+pelo valor que o banco mostra. LCI e LCA isentas; CDB com bruto e líquido
+estimado (IR regressivo e IOF). Entra no patrimônio.
+Teste obrigatório: Banco Central fora do ar não trava nada e mostra a data do
+último índice; título prefixado fecha centavo com a conta de dias úteis.
+
+### F13.3 — Cripto em dólar
+Cotação e custo de compra e venda em USD, como a exchange mostra, com o valor em
+reais pela PTAX do Banco Central da data. Quantidade de tokens, preço em USD e
+em BRL na tela. Emenda o ADR-035.
+Teste obrigatório: Banco Central fora do ar mostra o último dólar conhecido com
+a data, não erro nem zero.
+
 ### F14 — Cotação automática
 Worker com ticker, série histórica, cache da última cotação conhecida, data da
 cotação visível na interface.

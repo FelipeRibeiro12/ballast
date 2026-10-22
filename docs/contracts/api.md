@@ -585,3 +585,61 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   cotação; as sem cotação ficam em `semCotacao` e fora do total. Nunca falha por
   falta de cotação.
 - Qualquer valor fora de ±9007199254740991 dá 400 `patrimônio fora do limite`.
+
+## Editar e apagar contas e recorrências (ADR-036)
+
+### Editar conta (`PATCH /contas/{id}`)
+
+- Todo campo é opcional e campo ausente (ou `null`) não muda: `arquivada`,
+  `nome`, `saldoInicialCentavos` e, só em cartão, `cartao: {limiteCentavos,
+  contaPagamentoId}`. Corpo sem nenhum deles dá 400 `informe ao menos um campo
+  para alterar`. Campo fora da lista (inclusive `tipo`, `cartao.diaFechamento`
+  e `cartao.diaVencimento`) dá 400.
+- `nome` e `saldoInicialCentavos` têm as regras e mensagens do `POST`. Nome de
+  outra conta do usuário dá 409. Conta cripto com saldo inicial diferente de 0
+  dá 400 `conta cripto não tem saldo em reais`. Saldo inicial que tiraria o
+  saldo da faixa dá 400 `saldo da conta fora do limite`.
+- `cartao` em conta que não é cartão dá 400 `cartao só vale para conta de
+  cartão de crédito`. A conta de pagamento nova segue as regras do `POST`
+  (`conta de pagamento não encontrada`, `conta de pagamento deve ser uma conta
+  corrente ou poupança ativa`).
+- Responde 200 com a `Conta`. A conta fica travada até o commit, como nas
+  outras escritas dela.
+
+### Apagar conta (`DELETE /contas/{id}`)
+
+- Responde 204 e apaga a conta com seus lançamentos (parcelas e ocorrências
+  inclusive), recorrências, cartão, categorias permitidas e movimentos de
+  cripto. Ativos e cotações de cripto ficam.
+- Transferência com outra conta: a perna da outra conta vira lançamento comum
+  com o mesmo título, descrição, valor, datas e status. A de saída vira
+  `despesa` em "Outros", a de entrada vira `receita` em "Outras receitas". O
+  saldo da outra conta não muda.
+- Conta que é conta de pagamento de um cartão dá 400 `esta conta paga um
+  cartão; troque a conta de pagamento antes` e nada é apagado.
+- Conta de outro usuário, inexistente ou id que não é UUID: 404 `não
+  encontrado`. Funciona com a conta arquivada.
+- `GET /contas/{id}/resumo-exclusao` responde `{lancamentos, transferencias,
+  recorrencias, movimentosCripto}` com as contagens que o `DELETE` levaria, para
+  o web pedir a confirmação. Mesmo 404.
+
+### Editar recorrência (`PUT /recorrencias/{id}`)
+
+- Corpo do `POST /recorrencias` sem `tipo`: `titulo`, `descricao`,
+  `valorCentavos`, `categoriaId`, `contaId`, `regra` e `divisao`, com as mesmas
+  validações e mensagens. A categoria tem de ser do tipo da recorrência.
+- As ocorrências previstas com `ocorrencia_data` de hoje (`America/Sao_Paulo`)
+  em diante e não editadas à mão são apagadas e geradas de novo com os dados
+  novos, se a recorrência estiver ativa. Realizadas, canceladas, editadas à mão e
+  previstas de antes de hoje ficam.
+- Responde 200 com `{recorrencia, ocorrenciasGeradas}`, como o `POST`. 404 igual
+  ao `GET`.
+
+### Reativar e apagar recorrência
+
+- `PATCH /recorrencias/{id}` com `{"ativo": true}` reativa e gera de hoje até o
+  horizonte; repetível. Conta arquivada dá 400 `conta arquivada`.
+- `DELETE /recorrencias/{id}` responde 204: apaga a recorrência, a regra, a
+  divisão e todas as previstas dela, inclusive as vencidas. Realizadas e
+  canceladas ficam como lançamentos avulsos, sem `templateId`. 404 igual ao
+  `GET`.
