@@ -195,7 +195,7 @@ describe('rotas de contas', () => {
     expect(fetch).toHaveBeenLastCalledWith('/contas?arquivadas=true', { credentials: 'same-origin' })
   })
 
-  it.each([[{ ...conta, saldoCentavos: '10' }], [{ ...conta, tipo: 'cripto' }], [{ ...conta, saldoCentavos: 1.5 }]])(
+  it.each([[{ ...conta, saldoCentavos: '10' }], [{ ...conta, tipo: 'investimento' }], [{ ...conta, saldoCentavos: 1.5 }]])(
     'fetchContas recusa conta fora do formato %j',
     async (invalida) => {
       responder([invalida], 200)

@@ -54,7 +54,7 @@ public record CreateAccountRequest(
   static final String NAME_MESSAGE =
       "nome deve ter entre 1 e 100 caracteres e não pode ter caracteres de controle";
   static final String TYPE_MESSAGE =
-      "tipo deve ser corrente, poupanca, dinheiro, cartao_credito ou beneficio";
+      "tipo deve ser corrente, poupanca, dinheiro, cartao_credito, beneficio ou cripto";
   static final String BALANCE_MESSAGE =
       "saldoInicialCentavos deve ser um inteiro entre -9007199254740991 e 9007199254740991";
 

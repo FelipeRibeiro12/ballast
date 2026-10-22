@@ -37,6 +37,7 @@ const ROTULO_DO_TIPO: Record<TipoDeConta, string> = {
   dinheiro: 'Dinheiro',
   cartao_credito: 'Cartão de crédito',
   beneficio: 'Vale-benefício',
+  cripto: 'Cripto',
 }
 
 const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito', 'beneficio']
@@ -47,6 +48,7 @@ const ICONE_DO_TIPO: Record<TipoDeConta, ReactNode> = {
   dinheiro: <IconeDinheiro />,
   cartao_credito: <IconeCartao />,
   beneficio: <IconeBeneficio />,
+  cripto: <IconeDinheiro />,
 }
 
 // Só para a largura da barra: percentual inteiro do limite já usado, calculado em BigInt.

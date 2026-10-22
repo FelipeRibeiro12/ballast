@@ -174,7 +174,14 @@ export class ContaInvalidaError extends ApiError {
   }
 }
 
-const TIPOS_DE_CONTA: readonly string[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito', 'beneficio']
+const TIPOS_DE_CONTA: readonly string[] = [
+  'corrente',
+  'poupanca',
+  'dinheiro',
+  'cartao_credito',
+  'beneficio',
+  'cripto',
+]
 
 function isDiaDoMes(valor: unknown): boolean {
   return Number.isSafeInteger(valor) && (valor as number) >= 1 && (valor as number) <= 31

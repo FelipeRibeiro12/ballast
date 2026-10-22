@@ -1973,6 +1973,7 @@ components:
           - dinheiro
           - cartao_credito
           - beneficio
+          - cripto
       required:
       - arquivada
       - cartao
@@ -2018,6 +2019,7 @@ components:
           - dinheiro
           - cartao_credito
           - beneficio
+          - cripto
       required:
       - nome
       - tipo

@@ -588,7 +588,7 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto";
         };
         CriarContaRequest: {
             /** @description Obrigatório quando tipo é cartao_credito e proibido nos outros tipos */
@@ -602,7 +602,7 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto";
         };
         DiaProjetado: {
             /** Format: date */
