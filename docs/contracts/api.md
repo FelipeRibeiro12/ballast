@@ -120,9 +120,8 @@ apagar uma ocorrência (seção no fim).
 - `PATCH /recorrencias/{id}` com `{"ativo": false}` desativa: marca o template
   inativo e apaga as ocorrências `previsto`, não desgarradas, com data de hoje em
   diante. As de antes de hoje, as realizadas e as editadas ficam. Repetir a
-  chamada devolve o mesmo estado. `{"ativo": true}` dá 400 `reativar não é
-  suportado`: corrigir é desativar e criar outra. Não existe `PUT` nem edição da
-  regra.
+  chamada devolve o mesmo estado. `{"ativo": true}` reativa, e `PUT` e `DELETE`
+  editam e apagam (ver "Editar e apagar contas e recorrências").
 - Em `/recorrencias/{id}`, outro usuário, inexistente e id que não é UUID dão 404
   com o mesmo corpo.
 - Banco fora responde 503 `serviço indisponível`; corpo acima de 4 KiB, 413.
@@ -244,11 +243,13 @@ apagar uma ocorrência (seção no fim).
 
 Toda escrita de lançamento, transferência e recorrência (`POST`, `PUT`,
 `PATCH`, `DELETE` de `/lancamentos`; `POST` e `DELETE` de `/transferencias`;
-`POST` e `PATCH` de `/recorrencias`; `PATCH` de `/contas/{id}`, que arquiva e
-desarquiva) espera cerca de 2 s por trava de conta (o prazo do `lock_timeout`,
+`POST`, `PUT`, `PATCH` e `DELETE` de `/recorrencias`; `PATCH` e `DELETE` de
+`/contas/{id}`) espera cerca de 2 s por trava de conta (o prazo do `lock_timeout`,
 mais o tempo da resposta),
 lançamento ou template. Estourar dá 503 `serviço indisponível` sem gravar nada,
-o mesmo corpo de banco fora, e o cliente pode tentar de novo. O job pula o
+o mesmo corpo de banco fora, e o cliente pode tentar de novo. Deadlock (40P01)
+responde o mesmo 503: editar recorrência ou apagar conta ao mesmo tempo que se
+edita uma ocorrência dela pode cair nele (QA da F13.1). O job pula o
 template travado e o pega na rodada seguinte. O job não trava a conta: numa
 corrida com arquivar, pode sobrar uma prevista numa conta arquivada. Ela não
 entra no saldo, confirmar dá 400 `conta arquivada` e cancelar funciona.

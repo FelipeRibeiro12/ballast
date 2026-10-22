@@ -43,8 +43,9 @@ mantendo o arquivar ao lado do apagar: arquivar esconde, apagar leva junto.
   estorno em outra (revisão do PR #21). Arquivar resolve sem mentir na fatura.
 - Ordem de travas: templates da conta, lançamentos da conta, e então a conta e
   as do outro lado das transferências em ordem de id. É a ordem do job e do
-  reativar (template, conta) e de editar lançamento (lançamento, conta). Um
-  deadlock que ainda escape (40P01) responde 503, como o `lock_timeout`.
+  reativar (template, conta) e de editar lançamento (lançamento, conta). O QA
+  ainda reproduziu deadlock contra editar ocorrência da conta; ele responde
+  503, como o `lock_timeout`, e nada é gravado.
 - O web pede confirmação digitando o nome da conta e diz quantos lançamentos e
   transferências vão junto, lidos de `GET /contas/{id}/resumo-exclusao`.
 
@@ -60,8 +61,10 @@ mantendo o arquivar ao lado do apagar: arquivar esconde, apagar leva junto.
   nova gere em cima de uma data que ficou.
 - Template inativo também se edita; nada é gerado até reativar.
 - Ordem de travas: template, as previstas (o `DELETE`), e só então a conta.
-  Editar ocorrência trava o lançamento e depois a conta; travar a conta antes
-  do `DELETE` fecharia ciclo com ela.
+  Isso tira o ciclo mais óbvio com editar ocorrência (lançamento, depois conta),
+  mas não todos: o QA da F13.1 reproduziu deadlock entre editar recorrência e
+  editar ocorrência dela. O Postgres desfaz uma das duas e a resposta é 503,
+  sem gravar nada; a causa exata fica como dívida.
 
 ### Reativar e apagar recorrência
 
