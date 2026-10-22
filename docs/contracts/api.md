@@ -519,10 +519,13 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
 
 - Corpo `{"preco", "momento"}`. `preco` é **string** decimal maior que zero, com
   até 12 dígitos inteiros e até 8 casas, em reais por unidade (`"350000.5"`).
-  Número no JSON, sinal, expoente ou casa a mais dão 400 `preco deve ser um
-  decimal maior que zero, em texto, com até 12 dígitos inteiros e 8 casas`.
+  Sinal, expoente, zero ou casa a mais dão 400 `preco deve ser um decimal maior
+  que zero, em texto, com até 12 dígitos inteiros e 8 casas`; número no JSON dá
+  400 `requisição inválida`.
   `momento` é opcional, ISO-8601 com fuso (`2026-10-21T15:00:00-03:00`), ano de
-  1900 a 2199; ausente vale o instante da requisição.
+  1900 a 2199; ausente vale o instante da requisição. Fora disso, 400 `momento
+  deve ser data e hora ISO-8601 com fuso, ano entre 1900 e 2199`. Fração abaixo
+  do microssegundo é descartada.
 - 201 `{ativoId, momento, preco, fonte}`, `fonte` `manual`, `momento` em UTC.
   Já existe cotação do ativo naquele instante: 409 `já existe cotação nesse
   momento`.
@@ -535,7 +538,9 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   "data", "custoCentavos"}` responde 201 com o `MovimentoCripto`: `{id,
   contaId, ativoId, tipo, quantidade, data, custoCentavos}`.
 - `tipo` `compra` ou `venda`. `quantidade` é **string** decimal maior que zero,
-  com até 20 dígitos inteiros e até 18 casas; com mais casas que os `decimais`
+  com até 20 dígitos inteiros e até 18 casas (fora disso, 400 `quantidade deve
+  ser um decimal maior que zero, em texto, com até 20 dígitos inteiros e 18
+  casas`; número no JSON dá `requisição inválida`); com mais casas que os `decimais`
   do ativo dá 400 `quantidade tem mais casas que o ativo permite`. `data`
   AAAA-MM-DD, ano de 1900 a 2199. `custoCentavos` de 1 a 9007199254740991: o
   que pagou na compra ou recebeu na venda.
