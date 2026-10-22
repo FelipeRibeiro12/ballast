@@ -1817,6 +1817,47 @@ paths:
       tags:
       - recorrencias
   /recorrencias/{id}:
+    delete:
+      description: "Apaga a recorrência e todas as previstas dela, inclusive as vencidas.\
+        \ Realizadas e canceladas ficam como lançamentos avulsos."
+      operationId: deleteRecorrenciasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Apagada
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Recorrência de outro usuário, inexistente ou id que não é\
+            \ UUID; todos com o mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Apaga uma recorrência
+      tags:
+      - recorrencias
     get:
       operationId: getRecorrenciasById
       parameters:
@@ -1886,8 +1927,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Corpo inválido, inclusive campo não declarado; \"reativar\
-            \ não é suportado\""
+          description: "Corpo inválido, inclusive campo não declarado; \"conta arquivada\"\
+            \ ao reativar"
         "401":
           content:
             application/json:
@@ -1922,6 +1963,73 @@ paths:
       security:
       - cookieAuth: []
       summary: Desativa uma recorrência
+      tags:
+      - recorrencias
+    put:
+      description: "Corpo do POST, com o mesmo tipo. As previstas de hoje em diante\
+        \ não editadas à mão são geradas de novo com os dados novos se a recorrência\
+        \ estiver ativa; realizadas, canceladas, editadas e vencidas ficam."
+      operationId: putRecorrenciasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecorrenciaRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecorrenciaCriada"
+          description: Recorrência editada e quantas ocorrências foram geradas
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida como no POST, tipo diferente do atual, conta\
+            \ ou categoria que não serve"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Recorrência de outro usuário, inexistente ou id que não é\
+            \ UUID; todos com o mesmo corpo"
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Corpo maior que 4 KiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/json
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Edita uma recorrência
       tags:
       - recorrencias
   /saldo-projetado:
@@ -3361,7 +3469,8 @@ components:
       properties:
         ativo:
           type: boolean
-          description: "Só false é aceito: a recorrência não é reativada"
+          description: false desativa e apaga as previstas futuras; true reativa e
+            gera de novo
       required:
       - ativo
     RecorrenciaCriada:

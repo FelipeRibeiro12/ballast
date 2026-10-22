@@ -500,9 +500,17 @@ export interface paths {
         };
         /** Devolve uma recorrência do usuário */
         get: operations["getRecorrenciasById"];
-        put?: never;
+        /**
+         * Edita uma recorrência
+         * @description Corpo do POST, com o mesmo tipo. As previstas de hoje em diante não editadas à mão são geradas de novo com os dados novos se a recorrência estiver ativa; realizadas, canceladas, editadas e vencidas ficam.
+         */
+        put: operations["putRecorrenciasById"];
         post?: never;
-        delete?: never;
+        /**
+         * Apaga uma recorrência
+         * @description Apaga a recorrência e todas as previstas dela, inclusive as vencidas. Realizadas e canceladas ficam como lançamentos avulsos.
+         */
+        delete: operations["deleteRecorrenciasById"];
         options?: never;
         head?: never;
         /**
@@ -1174,7 +1182,7 @@ export interface components {
             valorCentavos: number;
         };
         RecorrenciaAtivoRequest: {
-            /** @description Só false é aceito: a recorrência não é reativada */
+            /** @description false desativa e apaga as previstas futuras; true reativa e gera de novo */
             ativo: boolean;
         };
         RecorrenciaCriada: {
@@ -3515,6 +3523,135 @@ export interface operations {
             };
         };
     };
+    putRecorrenciasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecorrenciaRequest"];
+            };
+        };
+        responses: {
+            /** @description Recorrência editada e quantas ocorrências foram geradas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecorrenciaCriada"];
+                };
+            };
+            /** @description Entrada inválida como no POST, tipo diferente do atual, conta ou categoria que não serve */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Recorrência de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Corpo maior que 4 KiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteRecorrenciasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Apagada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Recorrência de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     patchRecorrenciasById: {
         parameters: {
             query?: never;
@@ -3539,7 +3676,7 @@ export interface operations {
                     "application/json": components["schemas"]["Recorrencia"];
                 };
             };
-            /** @description Corpo inválido, inclusive campo não declarado; "reativar não é suportado" */
+            /** @description Corpo inválido, inclusive campo não declarado; "conta arquivada" ao reativar */
             400: {
                 headers: {
                     [name: string]: unknown;

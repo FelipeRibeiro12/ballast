@@ -15,6 +15,7 @@ import java.util.UUID;
 import org.postgresql.util.PSQLException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionStatus;
 
 // Assume entrada já validada e normalizada na borda. Todo método recebe o dono vindo da sessão,
 // menos os do job, que recebem o dono lido do próprio template.
@@ -26,7 +27,9 @@ import org.springframework.stereotype.Service;
 // conta arquivada, que fica fora do saldo, não confirma e pode ser cancelada (ADR-026). Criar trava
 // só a conta, porque o template ainda não existe e o INSERT não colide com linha de ninguém.
 // Confirmar, cancelar, editar e apagar ocorrência (EntryService) travam o lançamento e depois a
-// conta, nunca o template, então não fecham ciclo com este serviço.
+// conta, nunca o template, então não fecham ciclo com este serviço. Editar template trava o
+// template, depois as previstas e só então a conta (ADR-036); reativar e apagar travam só o
+// template.
 @Service
 class RecurrenceService {
 
@@ -58,6 +61,26 @@ class RecurrenceService {
       CATEGORY_NOT_FOUND,
       CATEGORY_NOT_PERMITTED
     }
+  }
+
+  sealed interface UpdateResult {
+    record Updated(RecurrenceSummary recurrence, int materialized) implements UpdateResult {}
+
+    enum Rejected implements UpdateResult {
+      NOT_FOUND,
+      TYPE_CHANGED,
+      ACCOUNT_NOT_FOUND,
+      ACCOUNT_ARCHIVED,
+      CRYPTO_ACCOUNT,
+      CATEGORY_NOT_FOUND,
+      CATEGORY_NOT_PERMITTED
+    }
+  }
+
+  enum ReactivateResult {
+    REACTIVATED,
+    NOT_FOUND,
+    ACCOUNT_ARCHIVED
   }
 
   private final RecurrenceQueries queries;
@@ -168,6 +191,130 @@ class RecurrenceService {
                   return true;
                 }));
     return found ? queries.find(userId, id, today) : Optional.empty();
+  }
+
+  // Ordem de travas: template, previstas (o DELETE), conta. Apagar as previstas antes de travar a
+  // conta evita o ciclo com editar ocorrência, que trava o lançamento e depois a conta. Recusa que
+  // aparece depois do DELETE desfaz tudo com setRollbackOnly.
+  UpdateResult update(UUID userId, UUID id, RecurrenceInput input) {
+    if (input.accountId() == null) {
+      return queries.templateType(userId, id).isEmpty()
+          ? UpdateResult.Rejected.NOT_FOUND
+          : UpdateResult.Rejected.ACCOUNT_NOT_FOUND;
+    }
+    try {
+      return transaction.execute(status -> updateLocked(status, userId, id, input));
+    } catch (DataIntegrityViolationException e) {
+      if (Constraints.isViolated(e, PERMITTED_TRIGGER)) {
+        return UpdateResult.Rejected.CATEGORY_NOT_PERMITTED;
+      }
+      if (Constraints.isViolated(e, ACCOUNT_FK)) {
+        return UpdateResult.Rejected.ACCOUNT_NOT_FOUND;
+      }
+      if (Constraints.isViolated(e, CATEGORY_FK)) {
+        return UpdateResult.Rejected.CATEGORY_NOT_FOUND;
+      }
+      throw e;
+    }
+  }
+
+  private UpdateResult updateLocked(
+      TransactionStatus status, UUID userId, UUID id, RecurrenceInput input) {
+    Optional<RecurrenceQueries.LockedTemplate> template = queries.lockTemplate(userId, id);
+    if (template.isEmpty()) {
+      return UpdateResult.Rejected.NOT_FOUND;
+    }
+    if (queries.templateType(userId, id).orElseThrow() != input.type()) {
+      return UpdateResult.Rejected.TYPE_CHANGED;
+    }
+    LocalDate today = today();
+    queries.deleteFuturePlanned(userId, id, today);
+    Optional<UpdateResult.Rejected> refused = checkReferences(userId, input);
+    if (refused.isPresent()) {
+      status.setRollbackOnly();
+      return refused.get();
+    }
+    queries.updateTemplate(userId, id, input);
+    queries.updateRule(userId, id, input.rule());
+    queries.deleteDivision(userId, id);
+    if (input.division() != null) {
+      queries.insertDivision(userId, id, input.division());
+    }
+    int materialized =
+        template.get().active()
+            ? materializeAhead(
+                userId,
+                id,
+                input.accountId(),
+                input.rule(),
+                input.amount(),
+                input.division(),
+                today)
+            : 0;
+    return new UpdateResult.Updated(queries.find(userId, id, today).orElseThrow(), materialized);
+  }
+
+  // As mesmas conferências da criação, com a conta travada.
+  private Optional<UpdateResult.Rejected> checkReferences(UUID userId, RecurrenceInput input) {
+    Optional<Boolean> archived = queries.lockAccount(userId, input.accountId());
+    if (archived.isEmpty()) {
+      return Optional.of(UpdateResult.Rejected.ACCOUNT_NOT_FOUND);
+    }
+    if (queries.isCryptoAccount(userId, input.accountId())) {
+      return Optional.of(UpdateResult.Rejected.CRYPTO_ACCOUNT);
+    }
+    if (archived.get()) {
+      return Optional.of(UpdateResult.Rejected.ACCOUNT_ARCHIVED);
+    }
+    if (input.categoryId() == null
+        || !queries.categoryExists(userId, input.categoryId(), input.type())) {
+      return Optional.of(UpdateResult.Rejected.CATEGORY_NOT_FOUND);
+    }
+    if (input.type() == EntryType.EXPENSE
+        && !queries.isCategoryPermitted(userId, input.accountId(), input.categoryId())) {
+      return Optional.of(UpdateResult.Rejected.CATEGORY_NOT_PERMITTED);
+    }
+    return Optional.empty();
+  }
+
+  // Como o job: trava só o template e lê "arquivada" sem travar a conta. Repetível, porque a
+  // geração pula a data que já existe.
+  ReactivateResult reactivate(UUID userId, UUID id) {
+    return transaction.execute(
+        status -> {
+          Optional<RecurrenceQueries.LockedTemplate> template = queries.lockTemplate(userId, id);
+          if (template.isEmpty()) {
+            return ReactivateResult.NOT_FOUND;
+          }
+          Optional<Boolean> archived =
+              queries.isAccountArchived(userId, template.get().accountId());
+          if (archived.isEmpty() || archived.get()) {
+            return ReactivateResult.ACCOUNT_ARCHIVED;
+          }
+          queries.activate(userId, id);
+          materializeAhead(
+              userId,
+              id,
+              template.get().accountId(),
+              template.get().rule(),
+              template.get().amount(),
+              template.get().division(),
+              today());
+          return ReactivateResult.REACTIVATED;
+        });
+  }
+
+  // Trava só o template, como desativar. Falso para template alheio ou inexistente.
+  boolean delete(UUID userId, UUID id) {
+    return Boolean.TRUE.equals(
+        transaction.execute(
+            status -> {
+              if (queries.lockTemplate(userId, id).isEmpty()) {
+                return false;
+              }
+              queries.deleteTemplateKeepingHistory(userId, id);
+              return true;
+            }));
   }
 
   // Lote de templates ativos para o job, depois de afterId.

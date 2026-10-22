@@ -625,14 +625,13 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
 
 ### Editar recorrência (`PUT /recorrencias/{id}`)
 
-- Corpo do `POST /recorrencias` sem `tipo`: `titulo`, `descricao`,
-  `valorCentavos`, `categoriaId`, `contaId`, `regra` e `divisao`, com as mesmas
-  validações e mensagens. A categoria tem de ser do tipo da recorrência.
+- Corpo do `POST /recorrencias`, com as mesmas validações e mensagens. O `tipo`
+  tem de ser o atual; outro dá 400 `o tipo da recorrência não muda`.
 - As ocorrências previstas com `ocorrencia_data` de hoje (`America/Sao_Paulo`)
   em diante e não editadas à mão são apagadas e geradas de novo com os dados
   novos, se a recorrência estiver ativa. Realizadas, canceladas, editadas à mão e
   previstas de antes de hoje ficam.
-- Responde 200 com `{recorrencia, ocorrenciasGeradas}`, como o `POST`. 404 igual
+- Responde 200 com `{recorrencia, ocorrenciasMaterializadas}`, como o `POST`. 404 igual
   ao `GET`.
 
 ### Reativar e apagar recorrência

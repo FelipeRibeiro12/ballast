@@ -43,15 +43,18 @@ mantendo o arquivar ao lado do apagar: arquivar esconde, apagar leva junto.
 
 ### Editar recorrência
 
-- `PUT /recorrencias/{id}` com o corpo do `POST` sem `tipo` (título, descrição,
-  valor, categoria, conta, regra e divisão). O tipo não muda: a categoria e o
-  sinal dependem dele.
+- `PUT /recorrencias/{id}` com o corpo do `POST`, para o web reaproveitar o
+  formulário. O tipo não muda (400 se vier outro): a categoria e o sinal
+  dependem dele.
 - O template muda e as ocorrências **previstas de hoje em diante que não foram
   editadas à mão** (`desgarrado = false`) são apagadas e geradas de novo com os
   dados novos. Realizadas, canceladas, editadas à mão e as vencidas antes de hoje
   ficam como estão. A chave `(template_id, ocorrencia_data)` impede que a regra
   nova gere em cima de uma data que ficou.
 - Template inativo também se edita; nada é gerado até reativar.
+- Ordem de travas: template, as previstas (o `DELETE`), e só então a conta.
+  Editar ocorrência trava o lançamento e depois a conta; travar a conta antes
+  do `DELETE` fecharia ciclo com ela.
 
 ### Reativar e apagar recorrência
 
