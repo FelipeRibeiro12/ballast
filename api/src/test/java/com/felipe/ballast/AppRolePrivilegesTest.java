@@ -88,6 +88,9 @@ class AppRolePrivilegesTest {
     assertDenied("TRUNCATE ativo_cripto");
     assertDenied("TRUNCATE movimento_cripto");
     assertDenied("TRUNCATE cotacao");
+    assertDenied("TRUNCATE titulo_renda_fixa");
+    assertDenied("TRUNCATE marcacao_renda_fixa");
+    assertDenied("TRUNCATE indice");
   }
 
   @Test
@@ -469,5 +472,48 @@ class AppRolePrivilegesTest {
         .isInstanceOf(DataAccessException.class)
         .rootCause()
         .hasMessageMatching("(?s).*(permission denied|must be owner).*");
+  }
+
+  @Test
+  void allowsDmlOnRendaFixaTables() {
+    UUID usuarioId = UUID.randomUUID();
+    UUID contaId = UUID.randomUUID();
+    UUID tituloId = UUID.randomUUID();
+    jdbc.sql("INSERT INTO usuario (id, email, senha_hash) VALUES (:id, :email, 'hash')")
+        .param("id", usuarioId)
+        .param("email", "renda-dml-" + usuarioId + "@example.com")
+        .update();
+    jdbc.sql(
+            "INSERT INTO conta (id, usuario_id, nome, tipo) VALUES (:id, :usuarioId, 'Corretora',"
+                + " 'investimento')")
+        .param("id", contaId)
+        .param("usuarioId", usuarioId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO titulo_renda_fixa (id, usuario_id, conta_id, tipo, nome, valor_aplicado,"
+                + " data_aplicacao, indexador, taxa) VALUES (:id, :usuarioId, :contaId, 'lci',"
+                + " 'LCI', 1000.00, DATE '2026-01-10', 'cdi', 95)")
+        .param("id", tituloId)
+        .param("usuarioId", usuarioId)
+        .param("contaId", contaId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO marcacao_renda_fixa (usuario_id, titulo_id, data, valor) VALUES"
+                + " (:usuarioId, :tituloId, DATE '2026-03-01', 1010.00)")
+        .param("usuarioId", usuarioId)
+        .param("tituloId", tituloId)
+        .update();
+    jdbc.sql(
+            "INSERT INTO indice (serie, data, valor) VALUES ('cdi', DATE '1951-01-02', 0.05)"
+                + " ON CONFLICT DO NOTHING")
+        .update();
+    jdbc.sql("UPDATE titulo_renda_fixa SET nome = 'LCI 95' WHERE id = :id")
+        .param("id", tituloId)
+        .update();
+
+    int deleted =
+        jdbc.sql("DELETE FROM titulo_renda_fixa WHERE id = :id").param("id", tituloId).update();
+
+    assertThat(deleted).isEqualTo(1);
   }
 }
