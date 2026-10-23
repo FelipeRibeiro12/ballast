@@ -60,6 +60,11 @@ falha mais comum em app multiusuário.
 - Chamada de saída para a API de cotação — **entrada de dado não confiável**:
   resposta inesperada ou gigante não pode derrubar o worker
 - Postgres: **não exposto**, acesso só de dentro da rede
+  - **Desvio em produção (ADR-044):** o endpoint do Neon Free é público na
+    internet, protegido por senha e TLS verificado. A lista de IPs permitidos
+    é recurso de plano pago. Compensação: senha longa e aleatória nos dois
+    papéis, a do dono só nos segredos do GitHub e nunca na VM, e o papel da
+    aplicação criado por SQL, fora do `neon_superuser`.
 
 ## O que para o negócio se cair
 

@@ -2,6 +2,30 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-23 — Produção em tier gratuito, preparada sem deploy
+
+O que entrou:
+- Perfis `migracao` (Flyway como dono, sem web, sai) e `producao` (sem Flyway, pool para o Neon, IP pelo `X-Forwarded-For` do Caddy).
+- `api/Dockerfile` sem RUN para o buildx montar arm64 sem QEMU.
+- `web/vercel.json` com `/api` e o segredo de origem. O build de produção chama `/api` e recusa outra origem.
+- `deploy/` com compose, Caddyfile e `deploy.sh` (volta para a tag anterior se o `/healthz` não responder).
+- Workflows `deploy`, `backup` e `saude`, e o runbook.
+
+Decisões: ADR-044. Rotas com segredo no lugar do rewrite simples. Migração pelo próprio jar. Backup no Actions, para a credencial de dono não ir à VM. `/healthz` de hora em hora, por causa da cota do Neon.
+
+Conferido:
+- `DeployProfilesTest` passa.
+- Caddy em contêiner: 403 sem segredo, e o `X-Forwarded-For` vem do `x-real-ip`.
+- Imagem arm64 montada e a JVM roda.
+- actionlint e shellcheck sem achado.
+- e2e passando pelo `/api` do preview.
+
+Em aberto, com o dono:
+- recuperação de VM ociosa pela Oracle (o cron não evita);
+- RPO de 7 dias com backup semanal contra as 24 h do `ameacas.md`;
+- workflows agendados param após 60 dias sem commit;
+- Node 24 no Vercel.
+
 ## 2026-10-23 — F16: orçamento por categoria
 
 O que entrou: migration V18 com `orcamento` por vigência (teto nulo encerra) e o índice de competência em `lancamento`; `GET`, `PUT` e `DELETE /orcamentos` com gasto por competência até hoje, previsto e restante, somando as categorias filhas; no web, a tela Orçamento com navegação por mês, novo teto, editar e encerrar a partir do mês, e um cartão no Início com os três tetos mais consumidos.
