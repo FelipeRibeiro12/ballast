@@ -1512,6 +1512,278 @@ paths:
       summary: Substitui um lançamento
       tags:
       - lancamentos
+  /metas:
+    get:
+      description: Pelo título sem diferenciar caixa (ADR-045).
+      operationId: getMetas
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Meta"
+          description: Metas do usuário
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+      security:
+      - cookieAuth: []
+      summary: Lista as metas com o acumulado e a projeção
+      tags:
+      - metas
+    post:
+      operationId: postMetas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetaRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Meta"
+          description: Meta criada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+      security:
+      - cookieAuth: []
+      summary: Cria uma meta
+      tags:
+      - metas
+  /metas/{id}:
+    delete:
+      operationId: deleteMetasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Meta apagada
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Meta de outro usuário, inexistente ou id que não é UUID; mesmo\
+            \ corpo"
+      security:
+      - cookieAuth: []
+      summary: Apaga a meta e os aportes dela
+      tags:
+      - metas
+    put:
+      description: Os aportes ficam. dataAlvo e aporteMensalCentavos ausentes ficam
+        sem valor.
+      operationId: putMetasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetaRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Meta"
+          description: Meta atualizada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Meta de outro usuário, inexistente ou id que não é UUID; mesmo\
+            \ corpo"
+      security:
+      - cookieAuth: []
+      summary: "Troca título, alvo, data e aporte mensal da meta"
+      tags:
+      - metas
+  /metas/{id}/aportes:
+    get:
+      operationId: getMetasByIdAportes
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AporteMeta"
+          description: Aportes
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Meta de outro usuário, inexistente ou id que não é UUID; mesmo\
+            \ corpo"
+      security:
+      - cookieAuth: []
+      summary: "Aportes e retiradas da meta, do mais novo ao mais antigo"
+      tags:
+      - metas
+    post:
+      description: Data até hoje em America/Sao_Paulo. A retirada não pode passar
+        do acumulado. Responde a meta já com o aporte.
+      operationId: postMetasByIdAportes
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AporteMetaRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Meta"
+          description: Meta com o aporte
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, data no futuro ou retirada maior que o acumulado"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Meta de outro usuário, inexistente ou id que não é UUID; mesmo\
+            \ corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Escrita concorrente esperou a trava além do prazo
+      security:
+      - cookieAuth: []
+      summary: Registra um aporte (positivo) ou uma retirada (negativo)
+      tags:
+      - metas
+  /metas/{id}/aportes/{aporteId}:
+    delete:
+      description: Recusado quando deixaria o acumulado negativo.
+      operationId: deleteMetasByIdAportesByAporteId
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: aporteId
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Aporte apagado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: O acumulado ficaria negativo
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Meta ou aporte de outro usuário, inexistente ou id que nã\
+            o é UUID"
+      security:
+      - cookieAuth: []
+      summary: Apaga um aporte ou uma retirada
+      tags:
+      - metas
   /movimentos-cripto:
     get:
       description: "Por data decrescente, o mais novo primeiro. contaId e ativoId\
@@ -2657,6 +2929,40 @@ paths:
       - transferencias
 components:
   schemas:
+    AporteMeta:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+        id:
+          type: string
+          format: uuid
+        valorCentavos:
+          type: integer
+          format: int64
+          description: "Positivo guardou, negativo retirou"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - data
+      - id
+      - valorCentavos
+    AporteMetaRequest:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+        valorCentavos:
+          type: integer
+          format: int64
+          description: "Positivo guarda, negativo retira. Zero não vale"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - data
+      - valorCentavos
     AtivoCripto:
       type: object
       properties:
@@ -3612,6 +3918,116 @@ components:
       required:
       - data
       - saldoCentavos
+    Meta:
+      type: object
+      properties:
+        acumuladoCentavos:
+          type: integer
+          format: int64
+          description: Soma dos aportes menos as retiradas
+          maximum: 9007199254740991
+          minimum: 0
+        aporteMensalCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          maximum: 9007199254740991
+        atingida:
+          type: boolean
+        chegadaPeloPlano:
+          type:
+          - string
+          - "null"
+          description: "Mês em que chega aportando o aporte mensal, contando o atual"
+          pattern: "[0-9]{4}-[0-9]{2}"
+        chegadaPeloRitmo:
+          type:
+          - string
+          - "null"
+          description: Mês em que chega no ritmo atual; nulo sem ritmo positivo
+          pattern: "[0-9]{4}-[0-9]{2}"
+        dataAlvo:
+          type:
+          - string
+          - "null"
+          format: date
+        faltaCentavos:
+          type: integer
+          format: int64
+          description: "Alvo menos o acumulado, nunca abaixo de zero"
+          maximum: 9007199254740991
+          minimum: 0
+        id:
+          type: string
+          format: uuid
+        necessarioPorMesCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Quanto aportar por mês, contando o atual, para chegar na data\
+            \ alvo; arredondado para cima. Nulo sem data, com o prazo vencido ou já\
+            \ atingida"
+          maximum: 9007199254740991
+        prazoVencido:
+          type: boolean
+          description: A data alvo passou sem atingir
+        ritmoMensalCentavos:
+          type: integer
+          format: int64
+          description: Média mensal dos aportes dos três meses fechados antes do atual
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        titulo:
+          type: string
+        valorAlvoCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - acumuladoCentavos
+      - aporteMensalCentavos
+      - atingida
+      - chegadaPeloPlano
+      - chegadaPeloRitmo
+      - dataAlvo
+      - faltaCentavos
+      - id
+      - necessarioPorMesCentavos
+      - prazoVencido
+      - ritmoMensalCentavos
+      - titulo
+      - valorAlvoCentavos
+    MetaRequest:
+      type: object
+      properties:
+        aporteMensalCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Quanto pretende guardar por mês. É plano: nada se lança sozinho"
+          maximum: 9007199254740991
+          minimum: 1
+        dataAlvo:
+          type:
+          - string
+          - "null"
+          format: date
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+        valorAlvoCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - titulo
+      - valorAlvoCentavos
     MovimentoCripto:
       type: object
       properties:
