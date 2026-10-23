@@ -146,4 +146,51 @@ class DollarConversionTest {
 
     assertThat(created.get("custoCentavos").asLong()).isEqualTo(500_000);
   }
+
+  @Test
+  void anOldQuoteInReaisKeepsTheReaisValueWithoutPtaxAndLosesOnlyTheDollarOne() throws Exception {
+    api.moveOk(
+        actor.session(), movement(actor.cryptoId(), bitcoin, "compra", "1", "2036-03-01", 100_000));
+    jdbc.sql(
+            "INSERT INTO cotacao (usuario_id, ativo_id, momento, preco, fonte, moeda) VALUES"
+                + " (:u, CAST(:a AS uuid), TIMESTAMPTZ '2036-03-01 12:00:00Z', 2500, 'manual',"
+                + " 'BRL')")
+        .param("u", actor.user().id())
+        .param("a", bitcoin)
+        .update();
+
+    JsonNode position =
+        CryptoApi.expect(api.positions(actor.session(), "?data=2036-03-01"), 200)
+            .get("posicoes")
+            .get(0);
+    JsonNode netWorth = CryptoApi.expect(api.netWorth(actor.session(), "?data=2036-03-01"), 200);
+
+    assertThat(position.get("valorCentavos").asLong()).isEqualTo(250_000);
+    assertThat(position.get("valorUsdCentavos").isNull()).isTrue();
+    assertThat(position.get("cotacao").get("precoUsd").isNull()).isTrue();
+    assertThat(netWorth.get("criptoCentavos").asLong()).isEqualTo(250_000);
+    assertThat(netWorth.get("semCotacao")).isEmpty();
+  }
+
+  @Test
+  void theDollarPriceOfAnOldQuoteInReaisHasAtMostEightPlaces() throws Exception {
+    api.moveOk(
+        actor.session(), movement(actor.cryptoId(), bitcoin, "compra", "1", "2036-03-03", 100_000));
+    jdbc.sql(
+            "INSERT INTO cotacao (usuario_id, ativo_id, momento, preco, fonte, moeda) VALUES"
+                + " (:u, CAST(:a AS uuid), TIMESTAMPTZ '2036-03-03 12:00:00Z', 1000, 'manual',"
+                + " 'BRL')")
+        .param("u", actor.user().id())
+        .param("a", bitcoin)
+        .update();
+
+    JsonNode quote =
+        CryptoApi.expect(api.positions(actor.session(), "?data=2036-03-03"), 200)
+            .get("posicoes")
+            .get(0)
+            .get("cotacao");
+
+    // 1000 / 5,0383 = 198,47964591...
+    assertThat(quote.get("precoUsd").asString()).isEqualTo("198.47964591");
+  }
 }

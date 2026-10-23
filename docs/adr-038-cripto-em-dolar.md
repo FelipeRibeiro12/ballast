@@ -34,9 +34,13 @@ publicada no próprio dia. Antes de julho de 1994 a série está em cruzeiros.
 - Arredondamento uma vez, na saída, para centavos com `HALF_EVEN`, cada moeda
   calculada a partir do valor cheio, nunca uma moeda a partir da outra já
   arredondada.
-- **Sem dólar guardado não há valor em reais.** A posição continua com o valor
-  em USD e entra em `semCotacao` do patrimônio, como a posição sem cotação: o
-  patrimônio nunca falha por falta de dólar.
+- **Sem dólar guardado, só a moeda que precisaria de conversão some.** Com a
+  cotação em USD não há valor em reais: a posição fica com o valor em dólar e
+  entra em `semCotacao` do patrimônio. Com cotação antiga em reais o valor em
+  reais vale e entra no total, e o em dólar fica nulo. O patrimônio nunca falha
+  por falta de dólar (QA do PR #23).
+- Enquanto a PTAX do dia não sai, um movimento de hoje usa a PTAX anterior, e o
+  custo em reais muda quando a do dia chega.
 
 ### JSON
 

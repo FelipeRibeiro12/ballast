@@ -2,7 +2,7 @@ package com.felipe.ballast.crypto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
-import java.math.MathContext;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -58,7 +58,8 @@ public record PositionResponse(
       BigDecimal usd =
           "USD".equals(position.priceCurrency())
               ? position.price()
-              : dollar == null ? null : position.price().divide(dollar, MathContext.DECIMAL128);
+              // 8 casas, o formato que a rota de cotação aceita (QA do PR #23).
+              : dollar == null ? null : position.price().divide(dollar, 8, RoundingMode.HALF_EVEN);
       quote = new QuoteValue(usd == null ? null : Decimals.format(usd), position.quotedAt());
     }
     return new PositionResponse(

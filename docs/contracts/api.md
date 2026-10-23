@@ -730,9 +730,13 @@ em reais vem da PTAX do Banco Central.
   `custoCentavos`, `cotacao: {precoUsd, momento}`, `valorUsdCentavos` e
   `valorCentavos`. O valor em reais é o valor em dólar vezes a PTAX da data;
   cada moeda é arredondada uma vez, a partir do valor cheio, com `HALF_EVEN`.
-- Sem PTAX até a data, `valorCentavos` é `null` e a posição entra em
-  `semCotacao` do patrimônio, fora do total; o patrimônio nunca falha por falta
-  de dólar.
+- Sem PTAX até a data, a moeda que precisaria de conversão fica `null`: com a
+  cotação em dólar, `valorCentavos` é `null` e a posição entra em `semCotacao`
+  do patrimônio, fora do total; com uma cotação antiga em reais (F13), o valor
+  em reais vale e entra no total, e quem fica `null` é `valorUsdCentavos` (e
+  `cotacao.precoUsd`). O patrimônio nunca falha por falta de dólar.
+- `cotacao.precoUsd` vindo de cotação em reais sai com no máximo 8 casas
+  (`HALF_EVEN`), o mesmo formato que a rota de cotação aceita.
 - A PTAX (série 1 do SGS, desde 01/07/1994, entre R$ 0,50 e R$ 50,00 também por
   CHECK no banco) é baixada junto com CDI e IPCA, ao subir, às 8h e ao gravar um
   movimento com data anterior à primeira PTAX guardada; nesse caso a resposta do

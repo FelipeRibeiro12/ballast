@@ -166,6 +166,8 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Sem IPCA guardado, o título IPCA + taxa rende só a taxa; com CDI incompleto (Banco Central fora na primeira aplicação), o valor sai menor; a tela só avisa quando não há CDI nenhum (QA da F13.2, D4 e D5). Avisar por título quando o índice não cobre o período. Dono: backend e frontend.
 - **DÍVIDA** — Editar a aplicação para depois de uma marcação tira a marcação do cálculo, mas ela continua como último valor do banco na tela (QA da F13.2, D6). Recusar ou esconder. Dono: backend.
 - **DÍVIDA** — `IndexQueries.earliestInvestment` também olha movimentos de cripto e o nome mente; e faltam testes de venda com PTAX, de posição misturando movimento em reais e em dólar e de meio centavo na conversão (revisão do PR #23). Dono: backend.
+- **DÍVIDA** — Gravar movimento de cripto quando ainda não há PTAX nenhuma, ou com data anterior à primeira, espera até 15 s com o Banco Central mudo, porque a busca roda na requisição (QA do PR #23, D1; mesma origem do D3 da F13.2). Contraria "cotação fora do ar não trava lançamento" nesses dois casos. Levar a busca para fora da requisição. Dono: backend.
+- **DÍVIDA** — `GET /posicoes-cripto` com valor fora da faixa responde "patrimônio fora do limite"; o texto deveria falar da posição (QA do PR #23, S3). Dono: backend.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
