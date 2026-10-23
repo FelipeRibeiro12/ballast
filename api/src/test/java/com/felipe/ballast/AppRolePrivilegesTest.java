@@ -417,16 +417,16 @@ class AppRolePrivilegesTest {
         .update();
     jdbc.sql(
             "INSERT INTO movimento_cripto (id, usuario_id, conta_id, ativo_id, tipo, quantidade,"
-                + " data, custo) VALUES (:id, :usuarioId, :contaId, :ativoId, 'compra', 0.5,"
-                + " DATE '2026-10-19', 100.00)")
+                + " data, custo, moeda) VALUES (:id, :usuarioId, :contaId, :ativoId, 'compra', 0.5,"
+                + " DATE '2026-10-19', 100.00, 'USD')")
         .param("id", movimentoId)
         .param("usuarioId", usuarioId)
         .param("contaId", contaId)
         .param("ativoId", ativoId)
         .update();
     jdbc.sql(
-            "INSERT INTO cotacao (usuario_id, ativo_id, momento, preco, fonte) VALUES"
-                + " (:usuarioId, :ativoId, now(), 350000.00, 'manual')")
+            "INSERT INTO cotacao (usuario_id, ativo_id, momento, preco, fonte, moeda) VALUES"
+                + " (:usuarioId, :ativoId, now(), 70000.00, 'manual', 'USD')")
         .param("usuarioId", usuarioId)
         .param("ativoId", ativoId)
         .update();

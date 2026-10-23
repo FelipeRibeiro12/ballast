@@ -708,3 +708,36 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   série (`null` se o Banco Central nunca respondeu).
 - `GET /patrimonio` ganha `rendaFixaCentavos`, a soma do líquido estimado dos
   títulos na data, e o `totalCentavos` passa a incluí-la.
+
+## Cripto em dólar (ADR-038)
+
+Emenda a seção "Cripto manual": cotação e custo passam a ser em dólar, e o valor
+em reais vem da PTAX do Banco Central.
+
+- `POST /ativos-cripto/{id}/cotacoes` recebe `precoUsd` no lugar de `preco`
+  (mesmas regras de formato; a mensagem de erro cita `precoUsd`) e responde
+  `{ativoId, momento, precoUsd, fonte}`.
+- `POST /movimentos-cripto` recebe `custoUsdCentavos` no lugar de
+  `custoCentavos` (de 1 a 180143985094819: vezes a PTAX máxima aceita, R$ 50,
+  ainda cabe no inteiro seguro do JavaScript). O `MovimentoCripto` traz
+  `custoUsdCentavos` e `custoCentavos`, este em reais pela PTAX da data do
+  movimento. Movimento gravado na F13 é em reais: `custoCentavos` é o que foi
+  digitado e `custoUsdCentavos` sai pela PTAX. Sem PTAX até a data, o campo
+  convertido é `null`.
+- `GET /posicoes-cripto` responde `{data, dolar, posicoes}`. `dolar` é `{valor,
+  data}`, a última PTAX até a data (`valor` em texto, reais por dólar), ou
+  `null`. Cada posição traz `quantidade` (tokens), `custoUsdCentavos`,
+  `custoCentavos`, `cotacao: {precoUsd, momento}`, `valorUsdCentavos` e
+  `valorCentavos`. O valor em reais é o valor em dólar vezes a PTAX da data;
+  cada moeda é arredondada uma vez, a partir do valor cheio, com `HALF_EVEN`.
+- Sem PTAX até a data, a moeda que precisaria de conversão fica `null`: com a
+  cotação em dólar, `valorCentavos` é `null` e a posição entra em `semCotacao`
+  do patrimônio, fora do total; com uma cotação antiga em reais (F13), o valor
+  em reais vale e entra no total, e quem fica `null` é `valorUsdCentavos` (e
+  `cotacao.precoUsd`). O patrimônio nunca falha por falta de dólar.
+- `cotacao.precoUsd` vindo de cotação em reais sai com no máximo 8 casas
+  (`HALF_EVEN`), o mesmo formato que a rota de cotação aceita.
+- A PTAX (série 1 do SGS, desde 01/07/1994, entre R$ 0,50 e R$ 50,00 também por
+  CHECK no banco) é baixada junto com CDI e IPCA, ao subir, às 8h e ao gravar um
+  movimento com data anterior à primeira PTAX guardada; nesse caso a resposta do
+  `POST` já vem com o custo em reais.

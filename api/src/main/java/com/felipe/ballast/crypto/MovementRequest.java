@@ -44,25 +44,30 @@ public record MovementRequest(
         @NotNull(message = DATE_MESSAGE)
         @ValidIsoDate(message = DATE_MESSAGE)
         String date,
-    @JsonProperty("custoCentavos")
+    @JsonProperty("custoUsdCentavos")
         @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
-            description = "O que pagou na compra ou recebeu na venda, em centavos de real",
+            description = "O que pagou na compra ou recebeu na venda, em centavos de dólar",
             minimum = "1",
-            maximum = "9007199254740991")
+            maximum = "180143985094819")
         @NotNull(message = COST_MESSAGE)
         @Min(value = 1, message = COST_MESSAGE)
-        @Max(value = MAX_CENTS, message = COST_MESSAGE)
+        @Max(value = MAX_COST_USD_CENTS, message = COST_MESSAGE)
         Long costCents) {
 
   // Number.MAX_SAFE_INTEGER: acima disso o JavaScript perde o centavo (ADR-023).
   static final long MAX_CENTS = 9_007_199_254_740_991L;
 
+  // O custo em reais é custo x PTAX, e a PTAX aceita vai até 50 (ADR-038): com este teto o valor
+  // convertido ainda cabe no inteiro seguro do JavaScript (revisão do PR #23).
+  static final long MAX_COST_USD_CENTS = MAX_CENTS / 50;
+
   static final String QUANTITY_MESSAGE =
       "quantidade deve ser um decimal maior que zero, em texto, com até 20 dígitos inteiros e 18"
           + " casas";
   static final String DATE_MESSAGE = "data deve ser uma data AAAA-MM-DD com ano entre 1900 e 2199";
-  static final String COST_MESSAGE = "custoCentavos deve ser um inteiro entre 1 e 9007199254740991";
+  static final String COST_MESSAGE =
+      "custoUsdCentavos deve ser um inteiro entre 1 e 180143985094819";
 
   BigDecimal parsedQuantity() {
     return new BigDecimal(quantity);
@@ -72,8 +77,8 @@ public record MovementRequest(
     return IsoDates.parse(date).orElseThrow();
   }
 
-  // Centavos inteiros entram como numeric(18,2) exato, sem passar por double.
-  BigDecimal cost() {
+  // Centavos de dólar entram como numeric(18,2) exato, sem passar por double.
+  BigDecimal costUsd() {
     return BigDecimal.valueOf(costCents, 2);
   }
 }

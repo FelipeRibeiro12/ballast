@@ -52,6 +52,7 @@ class IndexUpdaterTest {
     source.publish(IndexSeries.CDI, point("2041-03-01", "0.05"));
     source.publish(IndexSeries.CDI, point("2041-03-02", "0.04"));
     source.publish(IndexSeries.IPCA, point("2041-03-01", "0.45"));
+    source.publish(IndexSeries.DOLLAR, point("2041-03-01", "5.1"));
 
     updater.updateFrom(LocalDate.of(2041, 3, 1));
 
@@ -60,7 +61,10 @@ class IndexUpdaterTest {
     source.reset();
     updater.updateFrom(LocalDate.of(2041, 3, 1));
     assertThat(source.requests())
-        .containsExactly("cdi 2041-03-03 2041-03-10", "ipca 2041-03-02 2041-03-10");
+        .containsExactly(
+            "cdi 2041-03-03 2041-03-10",
+            "ipca 2041-03-02 2041-03-10",
+            "dolar 2041-03-02 2041-03-10");
   }
 
   @Test

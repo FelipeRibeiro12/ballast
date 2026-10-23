@@ -1233,9 +1233,11 @@ function isMovimentoCripto(valor: unknown): valor is MovimentoCripto {
     eDecimalEmTexto(valor.quantidade) &&
     'data' in valor &&
     eDataIso(valor.data) &&
-    // Fora do inteiro seguro o JSON já perdeu o centavo no parse.
+    // Custo em dólar e em reais pela PTAX; o convertido é nulo sem PTAX (ADR-038).
+    'custoUsdCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.custoUsdCentavos) &&
     'custoCentavos' in valor &&
-    Number.isSafeInteger(valor.custoCentavos)
+    inteiroSeguroOuNulo(valor.custoCentavos)
   )
 }
 
@@ -1243,14 +1245,14 @@ function isCotacaoDaPosicao(valor: unknown): boolean {
   return (
     typeof valor === 'object' &&
     valor !== null &&
-    'preco' in valor &&
-    eDecimalEmTexto(valor.preco) &&
+    'precoUsd' in valor &&
+    (valor.precoUsd === null || eDecimalEmTexto(valor.precoUsd)) &&
     'momento' in valor &&
     typeof valor.momento === 'string'
   )
 }
 
-// Cotação e valor andam juntos: os dois nulos sem cotação, os dois presentes com ela.
+// Sem cotação, os dois valores são nulos. Com ela há valor em dólar, e o em reais depende da PTAX.
 function isPosicaoCripto(valor: unknown): valor is PosicaoCripto {
   if (
     typeof valor !== 'object' ||
@@ -1261,15 +1263,31 @@ function isPosicaoCripto(valor: unknown): valor is PosicaoCripto {
     typeof valor.ativoId !== 'string' ||
     !('quantidade' in valor) ||
     !eDecimalEmTexto(valor.quantidade) ||
+    !('custoUsdCentavos' in valor) ||
+    !inteiroSeguroOuNulo(valor.custoUsdCentavos) ||
     !('custoCentavos' in valor) ||
-    !Number.isSafeInteger(valor.custoCentavos) ||
+    !inteiroSeguroOuNulo(valor.custoCentavos) ||
     !('cotacao' in valor) ||
-    !('valorCentavos' in valor)
+    !('valorUsdCentavos' in valor) ||
+    !inteiroSeguroOuNulo(valor.valorUsdCentavos) ||
+    !('valorCentavos' in valor) ||
+    !inteiroSeguroOuNulo(valor.valorCentavos)
   ) {
     return false
   }
-  if (valor.cotacao === null) return valor.valorCentavos === null
-  return isCotacaoDaPosicao(valor.cotacao) && Number.isSafeInteger(valor.valorCentavos)
+  if (valor.cotacao === null) return valor.valorCentavos === null && valor.valorUsdCentavos === null
+  return isCotacaoDaPosicao(valor.cotacao)
+}
+
+function isDolar(valor: unknown): boolean {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'valor' in valor &&
+    eDecimalEmTexto(valor.valor) &&
+    'data' in valor &&
+    eDataIso(valor.data)
+  )
 }
 
 function isPosicoesCripto(valor: unknown): valor is PosicoesCripto {
@@ -1278,6 +1296,8 @@ function isPosicoesCripto(valor: unknown): valor is PosicoesCripto {
     valor !== null &&
     'data' in valor &&
     eDataIso(valor.data) &&
+    'dolar' in valor &&
+    (valor.dolar === null || isDolar(valor.dolar)) &&
     'posicoes' in valor &&
     Array.isArray(valor.posicoes) &&
     valor.posicoes.every(isPosicaoCripto)

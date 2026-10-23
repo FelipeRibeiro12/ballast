@@ -46,27 +46,33 @@ const compra = {
   tipo: 'compra',
   quantidade: '0.123456789012345678',
   data: '2026-10-01',
+  custoUsdCentavos: 800_000,
   custoCentavos: 4_000_000,
 }
 
 const posicoes = {
   data: '2026-10-22',
+  dolar: { valor: '5', data: '2026-10-21' },
   posicoes: [
     {
       contaId: 'c1',
       ativoId: 'a1',
       quantidade: '0.123456789012345678',
+      custoUsdCentavos: 800_000,
       custoCentavos: 4_000_000,
       // 22:30 do dia 21 em São Paulo, já dia 22 em UTC.
-      cotacao: { preco: '350000.5', momento: '2026-10-22T01:30:00Z' },
+      cotacao: { precoUsd: '70000.1', momento: '2026-10-22T01:30:00Z' },
+      valorUsdCentavos: 864_000,
       valorCentavos: 4_320_000,
     },
     {
       contaId: 'c1',
       ativoId: 'a2',
       quantidade: '10',
+      custoUsdCentavos: 1_000,
       custoCentavos: 5_000,
       cotacao: null,
+      valorUsdCentavos: null,
       valorCentavos: null,
     },
   ],
@@ -144,8 +150,10 @@ describe('Cripto', () => {
     const [btc, semCotacao] = within(lista).getAllByRole('listitem')
     expect(within(btc).getByText('0,123456789012345678 BTC')).toBeVisible()
     expect(within(btc).getByText('BTC · Bitcoin · Exchange')).toBeVisible()
-    expect(within(btc).getByText(texto('Compras menos vendas R$ 40.000,00'))).toBeVisible()
-    expect(within(btc).getByText(texto('Cotação R$ 350.000,5 em 21/10'))).toBeVisible()
+    expect(within(btc).getByText(texto('Cotação US$ 70.000,1 em 21/10'))).toBeVisible()
+    expect(within(btc).getByText(texto('Vale US$ 8.640,00'))).toBeVisible()
+    expect(within(btc).getByText(texto('Compras menos vendas US$ 8.000,00 (R$ 40.000,00)'))).toBeVisible()
+    expect(screen.getByText(texto('Dólar (PTAX) R$ 5 em 21/10/2026.'))).toBeVisible()
     expect(within(btc).getByText(texto('R$ 43.200,00'))).toBeVisible()
     expect(within(semCotacao).getByText('Sem cotação')).toBeVisible()
     expect(within(semCotacao).getByText('—')).toBeVisible()
@@ -164,7 +172,7 @@ describe('Cripto', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Novo movimento' }))
     const formulario = screen.getByRole('form', { name: 'Novo movimento' })
     fireEvent.change(within(formulario).getByLabelText('Quantidade'), { target: { value: '0,123456789012345678' } })
-    fireEvent.change(within(formulario).getByLabelText('Quanto pagou, em reais'), { target: { value: '40.000,00' } })
+    fireEvent.change(within(formulario).getByLabelText('Quanto pagou, em dólares'), { target: { value: '8.000,00' } })
     fireEvent.click(within(formulario).getByRole('button', { name: 'Registrar compra' }))
 
     await waitFor(() => expect(chamadas('POST /movimentos-cripto')).toHaveLength(1))
@@ -174,7 +182,7 @@ describe('Cripto', () => {
       tipo: 'compra',
       quantidade: '0.123456789012345678',
       data: '2026-10-22',
-      custoCentavos: 4_000_000,
+      custoUsdCentavos: 800_000,
     })
     await waitFor(() => expect(screen.queryByRole('form', { name: 'Novo movimento' })).toBeNull())
     expect(chamadas('GET /movimentos-cripto').length).toBeGreaterThan(1)
@@ -188,7 +196,7 @@ describe('Cripto', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Novo movimento' }))
     const formulario = screen.getByRole('form', { name: 'Novo movimento' })
     fireEvent.change(within(formulario).getByLabelText('Quantidade'), { target: { value: '1.234,5' } })
-    fireEvent.change(within(formulario).getByLabelText('Quanto pagou, em reais'), { target: { value: '10,00' } })
+    fireEvent.change(within(formulario).getByLabelText('Quanto pagou, em dólares'), { target: { value: '10,00' } })
     fireEvent.click(within(formulario).getByRole('button', { name: 'Registrar compra' }))
 
     expect(await within(formulario).findByRole('alert')).toHaveTextContent('Quantidade inválida')
@@ -202,7 +210,7 @@ describe('Cripto', () => {
     const formulario = screen.getByRole('form', { name: 'Novo movimento' })
     fireEvent.click(within(formulario).getByRole('button', { name: 'Venda' }))
     fireEvent.change(within(formulario).getByLabelText('Quantidade'), { target: { value: '5' } })
-    fireEvent.change(within(formulario).getByLabelText('Quanto recebeu, em reais'), { target: { value: '10,00' } })
+    fireEvent.change(within(formulario).getByLabelText('Quanto recebeu, em dólares'), { target: { value: '10,00' } })
     fireEvent.click(within(formulario).getByRole('button', { name: 'Registrar venda' }))
 
     expect(await within(formulario).findByRole('alert')).toHaveTextContent('venda maior que a posição')
@@ -257,9 +265,9 @@ describe('Cripto', () => {
     const lista = await screen.findByRole('list', { name: 'Posições' })
     fireEvent.click(within(lista).getByRole('button', { name: 'Informar cotação de BTC' }))
     const formulario = screen.getByRole('form', { name: 'Cotação de BTC' })
-    fireEvent.change(within(formulario).getByLabelText('Preço de 1 BTC em reais'), { target: { value: '350.000,50' } })
+    fireEvent.change(within(formulario).getByLabelText('Preço de 1 BTC em dólares'), { target: { value: '70.000,50' } })
     fireEvent.click(within(formulario).getByRole('button', { name: 'Salvar cotação' }))
-    await waitFor(() => expect(chamadas('POST /ativos-cripto/a1/cotacoes')).toEqual([{ preco: '350000.50' }]))
+    await waitFor(() => expect(chamadas('POST /ativos-cripto/a1/cotacoes')).toEqual([{ precoUsd: '70000.50' }]))
   })
 
   it('apaga um movimento em dois cliques e mostra a recusa da posição negativa', async () => {

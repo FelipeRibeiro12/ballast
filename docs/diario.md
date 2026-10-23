@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-22 — F13.3: cripto em dólar (PR #23)
+
+O que entrou: migration V15 com `moeda` em `movimento_cripto` e `cotacao` (o que a F13 gravou fica em reais) e a série `dolar` (PTAX) no índice, com faixa por CHECK; custo e cotação digitados em US$; posição com tokens, US$ e R$ pela PTAX da data; custo em reais pela PTAX da data do movimento; no web, valores em dólar e em reais e o aviso da PTAX usada.
+Decisões: ADR-038 (custo em USD e PTAX automática, escolhas do dono). Fora de ADR: teto do custo em dólar em 1/50 do inteiro seguro; o POST relê o movimento depois de buscar a PTAX que faltava.
+Dívida registrada: busca de PTAX dentro da requisição quando não há nenhuma, mensagem de limite das posições, nome de `earliestInvestment` e testes extras de conversão.
+Achados do QA: 1 bloqueou (cotação antiga em reais sem PTAX mantinha o valor em reais, ao contrário do contrato; o código estava certo e o contrato e o ADR foram corrigidos, com teste), 2 dívidas (latência sem PTAX, registrada; valor no limite, já no backlog), 3 sugestões (preço em dólar com 34 dígitos, arredondado para 8; PTAX do dia no ADR; mensagem, registrada). 140 de 143 checagens bateram antes da correção.
+Achados do revisor: 0 bloquearam, 3 corrigir antes (custo em reais passando do inteiro seguro, resposta sem o custo em reais depois de buscar a PTAX, busca em todo POST: os três corrigidos), 4 sugestões (custo em reais quando falta o em dólar, aplicada; as outras registradas). Security: 0 críticos, 0 altos, 2 médios (busca em todo POST e faixa da PTAX só na aplicação, corrigidos), 2 baixos (o teto do custo resolveu).
+Pipeline: verde em todos os checks, o e2e incluído.
+Em aberto: nada.
+
 ## 2026-10-22 — F13.2: renda fixa (PR #22)
 
 O que entrou: migration V14 com o tipo `investimento`, `titulo_renda_fixa`, `marcacao_renda_fixa` e `indice` (público, sem `usuario_id`); download de CDI e IPCA do Banco Central ao subir e às 8h; cálculo em `BigDecimal` de prefixado, % do CDI e IPCA + taxa, com a raiz 252 por Newton e os dias úteis tirados da série do CDI; IR e IOF estimados no CDB; rotas de título, marcação, resgate e índices; renda fixa no patrimônio e na exclusão de conta; no web, a aba Investimentos com renda fixa e cripto e o patrimônio no topo.

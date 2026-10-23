@@ -46,7 +46,7 @@ public class IndexUpdater {
   // Preenche antes do primeiro valor guardado (aplicação antiga) e depois do último (dias novos).
   // Uma atualização por vez: quem chega com outra rodando volta na hora, e a que roda já baixa o
   // que falta. Sem isso, cadastros em paralelo multiplicavam os pedidos ao Banco Central.
-  void updateFrom(LocalDate requested) {
+  public void updateFrom(LocalDate requested) {
     if (!running.tryLock()) {
       return;
     }

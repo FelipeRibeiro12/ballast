@@ -1,6 +1,9 @@
 package com.felipe.ballast.crypto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -19,12 +22,29 @@ public record MovementResponse(
         LocalDate data,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
-            minimum = "1",
-            maximum = "9007199254740991")
-        long custoCentavos) {
+            nullable = true,
+            description = "Em centavos de dólar; nulo no movimento antigo em reais sem PTAX")
+        Long custoUsdCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description = "Em centavos de real pela PTAX da data; nulo sem PTAX")
+        Long custoCentavos) {
 
-  // Única conversão para centavos, na borda de saída; o CHECK da V13 já garante a faixa.
+  // Movimento novo é em dólar; o da F13 é em reais (ADR-038). A outra moeda vem pela PTAX da
+  // data do movimento, arredondada uma vez com HALF_EVEN.
   static MovementResponse from(CryptoQueries.Movement movement) {
+    boolean inUsd = "USD".equals(movement.currency());
+    BigDecimal usd =
+        inUsd
+            ? movement.cost()
+            : movement.dollar() == null
+                ? null
+                : movement.cost().divide(movement.dollar(), MathContext.DECIMAL128);
+    BigDecimal brl =
+        inUsd
+            ? movement.dollar() == null ? null : movement.cost().multiply(movement.dollar())
+            : movement.cost();
     return new MovementResponse(
         movement.id(),
         movement.accountId(),
@@ -32,6 +52,13 @@ public record MovementResponse(
         movement.type(),
         Decimals.format(movement.quantity()),
         movement.date(),
-        movement.cost().movePointRight(2).longValueExact());
+        cents(usd),
+        cents(brl));
+  }
+
+  private static Long cents(BigDecimal amount) {
+    return amount == null
+        ? null
+        : amount.setScale(2, RoundingMode.HALF_EVEN).movePointRight(2).longValueExact();
   }
 }

@@ -22,8 +22,17 @@ class CryptoQueries {
   private static final String ASSET_COLUMNS =
       "SELECT id, rede, contrato, simbolo, nome, decimais, confiavel FROM ativo_cripto";
 
+  // O dólar de uma data é a última PTAX guardada até ela (ADR-038).
+  private static final String DOLLAR_AT =
+      "(SELECT valor FROM indice WHERE serie = 'dolar' AND data <= %s ORDER BY data DESC LIMIT 1)";
+
+  // O custo nas duas moedas, exato: quem lê arredonda uma vez. Nulo quando falta o dólar da data.
   private static final String MOVEMENT_COLUMNS =
-      "SELECT id, conta_id, ativo_id, tipo, quantidade, data, custo FROM movimento_cripto";
+      "SELECT m.id, m.conta_id, m.ativo_id, m.tipo, m.quantidade, m.data, m.custo, m.moeda,"
+          + " d.dolar FROM movimento_cripto m"
+          + " LEFT JOIN LATERAL (SELECT "
+          + String.format(DOLLAR_AT, "m.data")
+          + " AS dolar) d ON true";
 
   private static final String SIGNED_QUANTITY =
       "CASE tipo WHEN 'compra' THEN quantidade ELSE -quantidade END";
@@ -37,6 +46,7 @@ class CryptoQueries {
       int decimals,
       boolean trusted) {}
 
+  // cost está em currency; dollar é a PTAX da data, nula se ainda não há.
   record Movement(
       UUID id,
       UUID accountId,
@@ -44,18 +54,25 @@ class CryptoQueries {
       MovementType type,
       BigDecimal quantity,
       LocalDate date,
-      BigDecimal cost) {}
+      BigDecimal cost,
+      String currency,
+      BigDecimal dollar) {}
 
-  // price e quotedAt são nulos quando não há cotação até a data.
+  // Custos exatos nas duas moedas (nulo quando falta o dólar de algum movimento). price e quotedAt
+  // são nulos sem cotação até a data; priceCurrency diz a moeda do preço.
   record Position(
       UUID accountId,
       UUID assetId,
       BigDecimal quantity,
-      BigDecimal cost,
+      BigDecimal costBrl,
+      BigDecimal costUsd,
       BigDecimal price,
+      String priceCurrency,
       Instant quotedAt) {}
 
   record LockedAccount(boolean crypto, boolean archived) {}
+
+  record Dollar(LocalDate date, BigDecimal value) {}
 
   private final JdbcClient jdbc;
 
@@ -105,11 +122,12 @@ class CryptoQueries {
         .optional();
   }
 
+  // A cotação digitada é em dólar (ADR-038).
   void insertQuote(UUID userId, UUID assetId, Instant moment, BigDecimal price) {
     jdbc.sql(
             """
-            INSERT INTO cotacao (usuario_id, ativo_id, momento, preco, fonte)
-            VALUES (:userId, :assetId, :moment, :price, 'manual')
+            INSERT INTO cotacao (usuario_id, ativo_id, momento, preco, fonte, moeda)
+            VALUES (:userId, :assetId, :moment, :price, 'manual', 'USD')
             """)
         .param("userId", userId)
         .param("assetId", assetId)
@@ -131,6 +149,8 @@ class CryptoQueries {
         .optional();
   }
 
+  // O custo digitado é em dólar (ADR-038). Devolve o movimento lido de volta, já com o dólar da
+  // data.
   Movement insertMovement(
       UUID userId,
       UUID accountId,
@@ -138,24 +158,24 @@ class CryptoQueries {
       MovementType type,
       BigDecimal quantity,
       LocalDate date,
-      BigDecimal cost) {
-    return jdbc.sql(
+      BigDecimal costUsd) {
+    UUID id = newId();
+    jdbc.sql(
             """
             INSERT INTO movimento_cripto
-              (id, usuario_id, conta_id, ativo_id, tipo, quantidade, data, custo)
-            VALUES (:id, :userId, :accountId, :assetId, :type, :quantity, :date, :cost)
-            RETURNING id, conta_id, ativo_id, tipo, quantidade, data, custo
+              (id, usuario_id, conta_id, ativo_id, tipo, quantidade, data, custo, moeda)
+            VALUES (:id, :userId, :accountId, :assetId, :type, :quantity, :date, :cost, 'USD')
             """)
-        .param("id", newId())
+        .param("id", id)
         .param("userId", userId)
         .param("accountId", accountId)
         .param("assetId", assetId)
         .param("type", type.value())
         .param("quantity", quantity)
         .param("date", date)
-        .param("cost", cost)
-        .query(CryptoQueries::mapMovement)
-        .single();
+        .param("cost", costUsd)
+        .update();
+    return findMovement(userId, id).orElseThrow();
   }
 
   // A soma acumulada dia a dia nunca abaixo de zero. Com ORDER BY e sem frame, a janela vai do
@@ -177,7 +197,7 @@ class CryptoQueries {
   }
 
   Optional<Movement> findMovement(UUID userId, UUID id) {
-    return jdbc.sql(MOVEMENT_COLUMNS + " WHERE usuario_id = :userId AND id = :id")
+    return jdbc.sql(MOVEMENT_COLUMNS + " WHERE m.usuario_id = :userId AND m.id = :id")
         .param("userId", userId)
         .param("id", id)
         .query(CryptoQueries::mapMovement)
@@ -195,10 +215,10 @@ class CryptoQueries {
   List<Movement> listMovements(UUID userId, UUID accountId, UUID assetId) {
     return jdbc.sql(
             MOVEMENT_COLUMNS
-                + " WHERE usuario_id = :userId"
-                + " AND (CAST(:accountId AS uuid) IS NULL OR conta_id = :accountId)"
-                + " AND (CAST(:assetId AS uuid) IS NULL OR ativo_id = :assetId)"
-                + " ORDER BY data DESC, criado_em DESC, id DESC")
+                + " WHERE m.usuario_id = :userId"
+                + " AND (CAST(:accountId AS uuid) IS NULL OR m.conta_id = :accountId)"
+                + " AND (CAST(:assetId AS uuid) IS NULL OR m.ativo_id = :assetId)"
+                + " ORDER BY m.data DESC, m.criado_em DESC, m.id DESC")
         .param("userId", userId)
         .param("accountId", accountId)
         .param("assetId", assetId)
@@ -211,22 +231,31 @@ class CryptoQueries {
   // para frente. Posição zerada fica de fora.
   List<Position> positions(UUID userId, LocalDate date, Instant quoteLimit) {
     return jdbc.sql(
-            "WITH posicao AS ("
+            "WITH movimento AS ("
+                + " SELECT m.conta_id, m.ativo_id, m.moeda,"
+                + " CASE m.tipo WHEN 'compra' THEN 1 ELSE -1 END AS sinal, m.quantidade, m.custo,"
+                + String.format(DOLLAR_AT, "m.data")
+                + " AS dolar"
+                + " FROM movimento_cripto m"
+                + " WHERE m.usuario_id = :userId AND m.data <= :date"
+                + "), posicao AS ("
                 + " SELECT conta_id, ativo_id,"
-                + " SUM("
-                + SIGNED_QUANTITY
-                + ") AS quantidade,"
-                + " SUM(CASE tipo WHEN 'compra' THEN custo ELSE -custo END) AS custo"
-                + " FROM movimento_cripto"
-                + " WHERE usuario_id = :userId AND data <= :date"
-                + " GROUP BY conta_id, ativo_id"
+                + " SUM(sinal * quantidade) AS quantidade,"
+                + " CASE WHEN bool_or(moeda = 'USD' AND dolar IS NULL) THEN NULL ELSE"
+                + "   SUM(sinal * CASE moeda WHEN 'BRL' THEN custo ELSE custo * dolar END) END"
+                + "   AS custo_brl,"
+                + " CASE WHEN bool_or(moeda = 'BRL' AND dolar IS NULL) THEN NULL ELSE"
+                + "   SUM(sinal * CASE moeda WHEN 'USD' THEN custo ELSE custo / dolar END) END"
+                + "   AS custo_usd"
+                + " FROM movimento GROUP BY conta_id, ativo_id"
                 + ")"
-                + " SELECT p.conta_id, p.ativo_id, p.quantidade, p.custo, q.preco, q.momento"
+                + " SELECT p.conta_id, p.ativo_id, p.quantidade, p.custo_brl, p.custo_usd,"
+                + " q.preco, q.moeda, q.momento"
                 + " FROM posicao p"
                 + " JOIN conta c ON c.id = p.conta_id AND c.usuario_id = :userId"
                 + " JOIN ativo_cripto a ON a.id = p.ativo_id AND a.usuario_id = :userId"
                 + " LEFT JOIN LATERAL ("
-                + "   SELECT preco, momento FROM cotacao"
+                + "   SELECT preco, moeda, momento FROM cotacao"
                 + "   WHERE ativo_id = p.ativo_id AND usuario_id = :userId AND momento < :limit"
                 + "   ORDER BY momento DESC LIMIT 1"
                 + " ) q ON true"
@@ -241,10 +270,30 @@ class CryptoQueries {
                     rs.getObject("conta_id", UUID.class),
                     rs.getObject("ativo_id", UUID.class),
                     rs.getBigDecimal("quantidade"),
-                    rs.getBigDecimal("custo"),
+                    rs.getBigDecimal("custo_brl"),
+                    rs.getBigDecimal("custo_usd"),
                     rs.getBigDecimal("preco"),
+                    rs.getString("moeda"),
                     instantOrNull(rs, "momento")))
         .list();
+  }
+
+  Optional<LocalDate> firstDollarDate() {
+    return jdbc.sql("SELECT min(data) FROM indice WHERE serie = 'dolar'")
+        .query(LocalDate.class)
+        .optional();
+  }
+
+  // A PTAX da data, ou vazio se ainda não há nenhuma até ela.
+  Optional<Dollar> dollarAt(LocalDate date) {
+    return jdbc.sql(
+            "SELECT data, valor FROM indice WHERE serie = 'dolar' AND data <= :date"
+                + " ORDER BY data DESC LIMIT 1")
+        .param("date", date)
+        .query(
+            (rs, row) ->
+                new Dollar(rs.getObject("data", LocalDate.class), rs.getBigDecimal("valor")))
+        .optional();
   }
 
   // Reais de todas as contas ativas que não são cripto até date: saldo inicial mais realizados com
@@ -303,6 +352,8 @@ class CryptoQueries {
         MovementType.fromValue(rs.getString("tipo")),
         rs.getBigDecimal("quantidade"),
         rs.getObject("data", LocalDate.class),
-        rs.getBigDecimal("custo"));
+        rs.getBigDecimal("custo"),
+        rs.getString("moeda"),
+        rs.getBigDecimal("dolar"));
   }
 }

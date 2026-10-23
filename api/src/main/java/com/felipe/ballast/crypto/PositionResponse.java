@@ -2,6 +2,7 @@ package com.felipe.ballast.crypto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -11,52 +12,69 @@ public record PositionResponse(
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID ativoId,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
-            description = "Compras menos vendas até a data, em texto, sem zero à direita")
+            description = "Tokens: compras menos vendas até a data, em texto, sem zero à direita")
         String quantidade,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
             description =
-                "Custo das compras menos o das vendas, em centavos; negativo quando a"
-                    + " venda rendeu mais que o custo",
-            minimum = "-9007199254740991",
-            maximum = "9007199254740991")
-        long custoCentavos,
+                "Compras menos vendas em centavos de dólar; nulo sem a PTAX de algum"
+                    + " movimento em reais")
+        Long custoUsdCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Compras menos vendas em centavos de real, pela PTAX da data de cada"
+                    + " movimento; nulo sem a PTAX de algum movimento em dólar")
+        Long custoCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description = "Última cotação até o fim do dia em America/Sao_Paulo; nula sem cotação")
         QuoteValue cotacao,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) Long valorUsdCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
-            description = "Quantidade vezes preço, em centavos com HALF_EVEN; nulo sem cotação",
-            minimum = "-9007199254740991",
-            maximum = "9007199254740991")
+            description = "Valor em reais pela PTAX da data; nulo sem cotação ou sem PTAX")
         Long valorCentavos) {
 
   @Schema(name = "CotacaoDaPosicao")
   public record QuoteValue(
-      @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Reais por unidade")
-          String preco,
+      @Schema(
+              requiredMode = Schema.RequiredMode.REQUIRED,
+              nullable = true,
+              description =
+                  "Dólares por unidade, em texto; nulo na cotação antiga em reais sem PTAX")
+          String precoUsd,
       @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant momento) {}
 
-  static PositionResponse from(NetWorthService.ValuedPosition valued) {
+  // dollar é a PTAX da data da posição, para mostrar em dólar a cotação antiga gravada em reais.
+  static PositionResponse from(NetWorthService.ValuedPosition valued, BigDecimal dollar) {
     CryptoQueries.Position position = valued.position();
-    QuoteValue quote =
-        position.price() == null
-            ? null
-            : new QuoteValue(Decimals.format(position.price()), position.quotedAt());
+    QuoteValue quote = null;
+    if (position.price() != null) {
+      BigDecimal usd =
+          "USD".equals(position.priceCurrency())
+              ? position.price()
+              // 8 casas, o formato que a rota de cotação aceita (QA do PR #23).
+              : dollar == null ? null : position.price().divide(dollar, 8, RoundingMode.HALF_EVEN);
+      quote = new QuoteValue(usd == null ? null : Decimals.format(usd), position.quotedAt());
+    }
     return new PositionResponse(
         position.accountId(),
         position.assetId(),
         Decimals.format(position.quantity()),
-        cents(position.cost()),
+        cents(valued.costUsd()),
+        cents(valued.costBrl()),
         quote,
-        valued.value() == null ? null : cents(valued.value()));
+        cents(valued.valueUsd()),
+        cents(valued.valueBrl()));
   }
 
-  // A faixa já foi conferida no serviço; longValueExact falha alto se algum valor escapar.
-  static long cents(BigDecimal amount) {
-    return amount.movePointRight(2).longValueExact();
+  // O serviço já arredondou e conferiu a faixa; longValueExact falha alto se algum valor escapar.
+  static Long cents(BigDecimal amount) {
+    return amount == null ? null : amount.movePointRight(2).longValueExact();
   }
 }

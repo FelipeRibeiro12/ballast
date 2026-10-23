@@ -1,6 +1,7 @@
 package com.felipe.ballast.crypto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -51,10 +52,15 @@ public record NetWorthResponse(
             .toList();
     return new NetWorthResponse(
         date,
-        PositionResponse.cents(netWorth.accounts()),
-        PositionResponse.cents(netWorth.crypto()),
-        PositionResponse.cents(netWorth.fixedIncome()),
-        PositionResponse.cents(netWorth.total()),
+        cents(netWorth.accounts()),
+        cents(netWorth.crypto()),
+        cents(netWorth.fixedIncome()),
+        cents(netWorth.total()),
         unquoted);
+  }
+
+  // O serviço já conferiu a faixa; longValueExact falha alto se algum valor escapar.
+  private static long cents(BigDecimal amount) {
+    return amount.movePointRight(2).longValueExact();
   }
 }

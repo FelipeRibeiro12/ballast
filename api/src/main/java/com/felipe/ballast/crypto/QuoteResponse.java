@@ -10,8 +10,8 @@ public record QuoteResponse(
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant momento,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
-            description = "Reais por unidade, em texto, sem zero à direita",
-            example = "350000.5")
-        String preco,
+            description = "Dólares por unidade, em texto, sem zero à direita",
+            example = "70000.5")
+        String precoUsd,
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED, allowableValues = "manual")
         String fonte) {}

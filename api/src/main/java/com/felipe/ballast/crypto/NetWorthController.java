@@ -9,9 +9,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Optional;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -69,14 +69,21 @@ class NetWorthController {
     if (day.isEmpty()) {
       return ResponseEntity.badRequest().body(INVALID_DATE);
     }
-    Optional<List<NetWorthService.ValuedPosition>> positions =
-        netWorth.positions(user.id(), day.get());
+    Optional<NetWorthService.Positions> positions = netWorth.positions(user.id(), day.get());
     if (positions.isEmpty()) {
       return ResponseEntity.badRequest().body(OUT_OF_RANGE);
     }
+    CryptoQueries.Dollar dollar = positions.get().dollar();
+    BigDecimal rate = dollar == null ? null : dollar.value();
     return ResponseEntity.ok(
         new PositionListResponse(
-            day.get(), positions.get().stream().map(PositionResponse::from).toList()));
+            day.get(),
+            dollar == null
+                ? null
+                : new PositionListResponse.Dollar(Decimals.format(dollar.value()), dollar.date()),
+            positions.get().positions().stream()
+                .map(position -> PositionResponse.from(position, rate))
+                .toList()));
   }
 
   @Operation(

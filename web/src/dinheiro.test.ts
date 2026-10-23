@@ -1,4 +1,4 @@
-import { centavosParaCampo, formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
+import { centavosParaCampo, formatarCentavos, formatarCentavosEmDolar, lerCentavos, lerValorPositivo } from './dinheiro'
 
 // O Intl separa o símbolo do número com espaço sem quebra (U+00A0).
 const normalizar = (texto: string): string => texto.replace(/ /g, ' ')
@@ -87,5 +87,12 @@ describe('centavosParaCampo', () => {
   ])('%d vira %s e volta igual pelo lerCentavos', (centavos, texto) => {
     expect(centavosParaCampo(centavos)).toBe(texto)
     expect(lerCentavos(texto)).toBe(centavos)
+  })
+})
+
+describe('formatarCentavosEmDolar', () => {
+  it('mostra dólar no formato brasileiro sem passar por float', () => {
+    expect(formatarCentavosEmDolar(3_500_025).replace(/\s/g, ' ')).toBe('US$ 35.000,25')
+    expect(formatarCentavosEmDolar(-5).replace(/\s/g, ' ')).toBe('-US$ 0,05')
   })
 })

@@ -8,10 +8,10 @@ import java.math.BigDecimal;
 
 @Schema(name = "CotacaoRequest")
 public record QuoteRequest(
-    @JsonProperty("preco")
+    @JsonProperty("precoUsd")
         @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
-            description = "Reais por unidade, em texto: até 12 dígitos inteiros e 8 casas",
+            description = "Dólares por unidade, em texto: até 12 dígitos inteiros e 8 casas",
             example = "350000.5",
             pattern = Decimals.PRICE_PATTERN)
         @NotNull(message = PRICE_MESSAGE)
@@ -27,7 +27,8 @@ public record QuoteRequest(
         String moment) {
 
   static final String PRICE_MESSAGE =
-      "preco deve ser um decimal maior que zero, em texto, com até 12 dígitos inteiros e 8 casas";
+      "precoUsd deve ser um decimal maior que zero, em texto, com até 12 dígitos inteiros e 8"
+          + " casas";
 
   // O formato já foi conferido pela anotação; o texto vira BigDecimal sem passar por double.
   BigDecimal parsedPrice() {
