@@ -23,8 +23,14 @@ CREATE TABLE orcamento (
 -- A PK serve a busca da linha vigente (usuario_id, categoria_id, desde <= mês). A FK composta da
 -- categoria não tem índice próprio: o CASCADE só roda quando categoria for apagada, e a PK começa
 -- por usuario_id, que já recorta a busca.
+-- O consumo soma lançamento por competência e categoria: é o índice que o dados.md reservou para
+-- o orçamento. O de data_caixa da V6 não serve, porque compra no cartão tem caixa no mês seguinte.
+CREATE INDEX lancamento_usuario_competencia_categoria
+    ON lancamento (usuario_id, data_competencia, categoria_id);
+
 -- Sem GRANT: o ALTER DEFAULT PRIVILEGES da V3 cobre a tabela nova.
 
 -- Para desfazer (rode à mão):
+-- DROP INDEX lancamento_usuario_competencia_categoria;
 -- DROP TABLE orcamento;
 -- e apague a linha de flyway_schema_history da versão 18.

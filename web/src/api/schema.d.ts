@@ -444,6 +444,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/orcamentos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Orçamento do mês por categoria
+         * @description Cada categoria com teto no mês, com o gasto por competência, o previsto e o que falta (ADR-043). Sem mes, vale o mês corrente em America/Sao_Paulo.
+         */
+        get: operations["getOrcamentos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orcamentos/{categoriaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Define o teto da categoria a partir de um mês
+         * @description Vale do mês aPartirDe até a próxima mudança da mesma categoria. Definir de novo no mesmo mês troca o teto.
+         */
+        put: operations["putOrcamentosByCategoriaId"];
+        post?: never;
+        /**
+         * Encerra o orçamento da categoria a partir de um mês
+         * @description Os meses antes de aPartirDe continuam com o teto que tinham. Uma mudança posterior da mesma categoria volta a valer no mês dela.
+         */
+        delete: operations["deleteOrcamentosByCategoriaId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/patrimonio": {
         parameters: {
             query?: never;
@@ -1190,6 +1234,40 @@ export interface components {
             quantidade: string;
             /** @enum {string} */
             tipo: "compra" | "venda";
+        };
+        Orcamento: {
+            /** Format: uuid */
+            categoriaId: string;
+            /** @description Mês em que este teto começou a valer */
+            desde: string;
+            /**
+             * Format: int64
+             * @description Despesas realizadas da categoria e das filhas com competência no mês até hoje
+             */
+            gastoCentavos: number;
+            /**
+             * Format: int64
+             * @description Despesas do mês que ainda não aconteceram: previstas e com data depois de hoje
+             */
+            previstoCentavos: number;
+            /**
+             * Format: int64
+             * @description tetoCentavos menos gastoCentavos; negativo quando o gasto passou
+             */
+            restanteCentavos: number;
+            /** Format: int64 */
+            tetoCentavos: number;
+        };
+        OrcamentoRequest: {
+            /** @description Mês em que o teto começa a valer, AAAA-MM. Vale até a próxima mudança. */
+            aPartirDe: string;
+            /** Format: int64 */
+            tetoCentavos: number;
+        };
+        OrcamentosDoMes: {
+            mes: string;
+            /** @description Categorias com teto no mês, pelo nome */
+            orcamentos: components["schemas"]["Orcamento"][];
         };
         ParcelaDivisao: {
             /** Format: int32 */
@@ -3556,6 +3634,159 @@ export interface operations {
             };
             /** @description Banco indisponível ou conta travada por mais de 2 s */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getOrcamentos: {
+        parameters: {
+            query?: {
+                mes?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Orçamentos do mês */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrcamentosDoMes"];
+                };
+            };
+            /** @description mes fora do formato ou "orçamento fora do limite" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putOrcamentosByCategoriaId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                categoriaId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrcamentoRequest"];
+            };
+        };
+        responses: {
+            /** @description Teto gravado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Entrada inválida ou categoria de receita */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Categoria de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteOrcamentosByCategoriaId: {
+        parameters: {
+            query?: {
+                aPartirDe?: string;
+            };
+            header?: never;
+            path: {
+                categoriaId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Orçamento encerrado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description aPartirDe fora do formato ou categoria de receita */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Categoria de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1663,6 +1663,143 @@ paths:
       summary: Apaga um movimento de cripto
       tags:
       - cripto
+  /orcamentos:
+    get:
+      description: "Cada categoria com teto no mês, com o gasto por competência, o\
+        \ previsto e o que falta (ADR-043). Sem mes, vale o mês corrente em America/Sao_Paulo."
+      operationId: getOrcamentos
+      parameters:
+      - in: query
+        name: mes
+        required: false
+        schema:
+          type: string
+          pattern: "(19[0-9]{2}|2[01][0-9]{2})-(0[1-9]|1[0-2])"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrcamentosDoMes"
+          description: Orçamentos do mês
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: mes fora do formato ou "orçamento fora do limite"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Orçamento do mês por categoria
+      tags:
+      - orcamentos
+  /orcamentos/{categoriaId}:
+    delete:
+      description: Os meses antes de aPartirDe continuam com o teto que tinham. Uma
+        mudança posterior da mesma categoria volta a valer no mês dela.
+      operationId: deleteOrcamentosByCategoriaId
+      parameters:
+      - in: path
+        name: categoriaId
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: aPartirDe
+        required: false
+        schema:
+          type: string
+          pattern: "(19[0-9]{2}|2[01][0-9]{2})-(0[1-9]|1[0-2])"
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Orçamento encerrado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: aPartirDe fora do formato ou categoria de receita
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Categoria de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Encerra o orçamento da categoria a partir de um mês
+      tags:
+      - orcamentos
+    put:
+      description: Vale do mês aPartirDe até a próxima mudança da mesma categoria.
+        Definir de novo no mesmo mês troca o teto.
+      operationId: putOrcamentosByCategoriaId
+      parameters:
+      - in: path
+        name: categoriaId
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrcamentoRequest"
+        required: true
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Teto gravado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida ou categoria de receita
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Categoria de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Define o teto da categoria a partir de um mês
+      tags:
+      - orcamentos
   /patrimonio:
     get:
       description: "Saldo até a data das contas ativas que não são cripto mais o valor\
@@ -3559,6 +3696,78 @@ components:
       - data
       - quantidade
       - tipo
+    Orcamento:
+      type: object
+      properties:
+        categoriaId:
+          type: string
+          format: uuid
+        desde:
+          type: string
+          description: Mês em que este teto começou a valer
+          pattern: "(19[0-9]{2}|2[01][0-9]{2})-(0[1-9]|1[0-2])"
+        gastoCentavos:
+          type: integer
+          format: int64
+          description: Despesas realizadas da categoria e das filhas com competência
+            no mês até hoje
+          maximum: 9007199254740991
+          minimum: 0
+        previstoCentavos:
+          type: integer
+          format: int64
+          description: "Despesas do mês que ainda não aconteceram: previstas e com\
+            \ data depois de hoje"
+          maximum: 9007199254740991
+          minimum: 0
+        restanteCentavos:
+          type: integer
+          format: int64
+          description: tetoCentavos menos gastoCentavos; negativo quando o gasto passou
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        tetoCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - categoriaId
+      - desde
+      - gastoCentavos
+      - previstoCentavos
+      - restanteCentavos
+      - tetoCentavos
+    OrcamentoRequest:
+      type: object
+      properties:
+        aPartirDe:
+          type: string
+          description: "Mês em que o teto começa a valer, AAAA-MM. Vale até a pró\
+            xima mudança."
+          pattern: "(19[0-9]{2}|2[01][0-9]{2})-(0[1-9]|1[0-2])"
+        tetoCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - aPartirDe
+      - tetoCentavos
+    OrcamentosDoMes:
+      type: object
+      properties:
+        mes:
+          type: string
+          pattern: "(19[0-9]{2}|2[01][0-9]{2})-(0[1-9]|1[0-2])"
+        orcamentos:
+          type: array
+          description: "Categorias com teto no mês, pelo nome"
+          items:
+            $ref: "#/components/schemas/Orcamento"
+      required:
+      - mes
+      - orcamentos
     ParcelaDivisao:
       type: object
       properties:
