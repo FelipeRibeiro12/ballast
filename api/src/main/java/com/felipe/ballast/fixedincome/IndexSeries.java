@@ -10,7 +10,10 @@ public enum IndexSeries {
   // ao dia; 10% é folga, acima disso o dado veio errado.
   CDI("cdi", 12, LocalDate.of(1986, 3, 4), BigDecimal.ZERO, new BigDecimal("10")),
   // % ao mês, datado do primeiro dia do mês, desde 1980. Março de 1990 passou de 80%.
-  IPCA("ipca", 433, LocalDate.of(1980, 1, 1), new BigDecimal("-5"), new BigDecimal("100"));
+  IPCA("ipca", 433, LocalDate.of(1980, 1, 1), new BigDecimal("-5"), new BigDecimal("100")),
+  // PTAX de venda, reais por dólar, um valor por dia útil (ADR-038). Antes do Plano Real a série
+  // está em cruzeiros.
+  DOLLAR("dolar", 1, LocalDate.of(1994, 7, 1), new BigDecimal("0.5"), new BigDecimal("50"));
 
   private final String value;
   private final int sgsCode;

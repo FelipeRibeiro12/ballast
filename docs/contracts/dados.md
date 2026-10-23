@@ -389,7 +389,7 @@ marcacao_renda_fixa                 -- o valor que o banco mostrou
   primary key (titulo_id, data)
 
 indice                              -- dado público do Banco Central (SGS)
-  serie  text not null              -- cdi (série 12, % ao dia) | ipca (433, % ao mês)
+  serie  text not null              -- cdi (série 12, % ao dia) | ipca (433, % ao mês) | dolar (1, R$/US$, V15)
   data   date not null
   valor  numeric(12,8) not null     -- o percentual publicado
   primary key (serie, data)
@@ -402,6 +402,12 @@ nela a partir do cliente. Só o job grava.
 **Valor não é coluna.** O valor de um título numa data é calculado da última
 marcação até a data (ou da aplicação) com o fator do indexador, como o saldo é a
 soma dos lançamentos. Os dias úteis são os dias com CDI publicado.
+
+**Moeda (F13.3, ADR-038, migration `V15`).** `movimento_cripto` e `cotacao`
+ganham `moeda text not null` (`BRL` | `USD`, sem default): as linhas da F13 são
+`BRL`, e a API grava `USD` daqui em diante. `custo` e `preco` estão na moeda da
+linha. `indice.serie` ganha `dolar` (PTAX de venda, série 1 do SGS, reais por
+dólar); a conversão usa a última PTAX até a data.
 
 ### Carteira observada
 

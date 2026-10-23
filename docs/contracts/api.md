@@ -708,3 +708,30 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   série (`null` se o Banco Central nunca respondeu).
 - `GET /patrimonio` ganha `rendaFixaCentavos`, a soma do líquido estimado dos
   títulos na data, e o `totalCentavos` passa a incluí-la.
+
+## Cripto em dólar (ADR-038)
+
+Emenda a seção "Cripto manual": cotação e custo passam a ser em dólar, e o valor
+em reais vem da PTAX do Banco Central.
+
+- `POST /ativos-cripto/{id}/cotacoes` recebe `precoUsd` no lugar de `preco`
+  (mesmas regras de formato; a mensagem de erro cita `precoUsd`) e responde
+  `{ativoId, momento, precoUsd, fonte}`.
+- `POST /movimentos-cripto` recebe `custoUsdCentavos` no lugar de
+  `custoCentavos` (de 1 a 9007199254740991). O `MovimentoCripto` traz
+  `custoUsdCentavos` e `custoCentavos`, este em reais pela PTAX da data do
+  movimento. Movimento gravado na F13 é em reais: `custoCentavos` é o que foi
+  digitado e `custoUsdCentavos` sai pela PTAX. Sem PTAX até a data, o campo
+  convertido é `null`.
+- `GET /posicoes-cripto` responde `{data, dolar, posicoes}`. `dolar` é `{valor,
+  data}`, a última PTAX até a data (`valor` em texto, reais por dólar), ou
+  `null`. Cada posição traz `quantidade` (tokens), `custoUsdCentavos`,
+  `custoCentavos`, `cotacao: {precoUsd, momento}`, `valorUsdCentavos` e
+  `valorCentavos`. O valor em reais é o valor em dólar vezes a PTAX da data;
+  cada moeda é arredondada uma vez, a partir do valor cheio, com `HALF_EVEN`.
+- Sem PTAX até a data, `valorCentavos` é `null` e a posição entra em
+  `semCotacao` do patrimônio, fora do total; o patrimônio nunca falha por falta
+  de dólar.
+- A PTAX (série 1 do SGS, desde 01/07/1994) é baixada junto com CDI e IPCA, ao
+  subir, às 8h e ao gravar um movimento com data anterior à primeira PTAX
+  guardada.

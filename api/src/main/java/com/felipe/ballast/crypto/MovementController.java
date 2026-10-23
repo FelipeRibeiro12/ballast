@@ -104,7 +104,7 @@ class MovementController {
             request.type(),
             request.parsedQuantity(),
             request.parsedDate(),
-            request.cost());
+            request.costUsd());
     MovementService.CreateResult result = movements.create(user.id(), input);
     return switch (result) {
       case MovementService.CreateResult.Created created -> {

@@ -72,7 +72,7 @@ class CryptoMovementTest {
     assertThat(body.get("quantidade").isString()).isTrue();
     assertThat(body.get("quantidade").asString()).isEqualTo("0.12345678");
     assertThat(body.get("data").asString()).isEqualTo("2026-03-10");
-    assertThat(body.get("custoCentavos").asLong()).isEqualTo(4_000_000);
+    assertThat(body.get("custoUsdCentavos").asLong()).isEqualTo(4_000_000);
     BigDecimal stored =
         jdbc.sql("SELECT quantidade FROM movimento_cripto WHERE id = :id::uuid")
             .param("id", body.get("id").asString())
@@ -218,10 +218,10 @@ class CryptoMovementTest {
             with(ok, "data", "2026-02-30"),
             with(ok, "data", "1899-12-31"),
             with(ok, "data", "10/03/2026"),
-            with(ok, "custoCentavos", 0),
-            with(ok, "custoCentavos", -1),
-            with(ok, "custoCentavos", 9_007_199_254_740_992L),
-            with(ok, "custoCentavos", 10.5),
+            with(ok, "custoUsdCentavos", 0),
+            with(ok, "custoUsdCentavos", -1),
+            with(ok, "custoUsdCentavos", 9_007_199_254_740_992L),
+            with(ok, "custoUsdCentavos", 10.5),
             with(ok, "usuarioId", actor.user().id().toString()));
     for (Map<String, Object> body : bad) {
       assertThat(api.move(actor.session(), body).getStatus()).as(body.toString()).isEqualTo(400);

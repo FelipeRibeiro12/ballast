@@ -14,7 +14,7 @@ import {
 import type { AtivoCripto, AtivoCriptoRequest, Conta, MovimentoCripto, PosicoesCripto } from './api'
 import { formatarDecimal, lerPreco, lerQuantidade } from './decimais'
 import { diaEmSaoPaulo, formatarDataCompleta, formatarDiaMes, hojeLocal } from './datas'
-import { formatarCentavos, lerValorPositivo } from './dinheiro'
+import { formatarCentavos, formatarCentavosEmDolar, lerValorPositivo } from './dinheiro'
 import { IconeMais } from './icones'
 import { carregar, mensagemDeEscrita } from './leitura'
 import type { Estado } from './leitura'
@@ -211,8 +211,8 @@ function NovoMovimento({
       setMensagem('Quantidade inválida. Use até 18 casas, com vírgula ou ponto, maior que zero.')
       return
     }
-    const custoCentavos = lerValorPositivo(valor)
-    if (custoCentavos === null) {
+    const custoUsdCentavos = lerValorPositivo(valor)
+    if (custoUsdCentavos === null) {
       setMensagem('Valor inválido. Use o formato 1.234,56, maior que zero.')
       return
     }
@@ -220,7 +220,7 @@ function NovoMovimento({
     setEnviando(true)
     setMensagem(null)
     try {
-      await postMovimentoCripto({ contaId, ativoId, tipo, quantidade: quantidadeLida, data, custoCentavos })
+      await postMovimentoCripto({ contaId, ativoId, tipo, quantidade: quantidadeLida, data, custoUsdCentavos })
       aoCriar()
     } catch (erro) {
       if (erro instanceof SessaoExpiradaError) {
@@ -290,7 +290,9 @@ function NovoMovimento({
         />
       </div>
       <div className="campo">
-        <label htmlFor="movimento-valor">{tipo === 'compra' ? 'Quanto pagou, em reais' : 'Quanto recebeu, em reais'}</label>
+        <label htmlFor="movimento-valor">
+          {tipo === 'compra' ? 'Quanto pagou, em dólares' : 'Quanto recebeu, em dólares'}
+        </label>
         <input
           id="movimento-valor"
           type="text"
@@ -301,7 +303,10 @@ function NovoMovimento({
           value={valor}
           onChange={(evento) => setValor(evento.target.value)}
         />
-        <small>O dinheiro na sua conta corrente não muda: lance a saída ou a entrada lá, se quiser.</small>
+        <small>
+          Como a exchange mostra, em US$. O valor em reais sai pelo dólar do dia. O dinheiro na sua conta corrente
+          não muda: lance a saída ou a entrada lá, se quiser.
+        </small>
       </div>
       {mensagem !== null && (
         <p role="alert" className="erro">
@@ -343,7 +348,7 @@ function NovaCotacao({
     setMensagem(null)
     try {
       // Sem momento: a API grava o instante da requisição.
-      await postCotacao(ativo.id, { preco: precoLido })
+      await postCotacao(ativo.id, { precoUsd: precoLido })
       aoSalvar()
     } catch (erro) {
       if (erro instanceof SessaoExpiradaError) {
@@ -364,7 +369,7 @@ function NovaCotacao({
   return (
     <form onSubmit={(evento) => void enviar(evento)} aria-label={`Cotação de ${ativo.simbolo}`}>
       <div className="campo">
-        <label htmlFor="cotacao-preco">Preço de 1 {ativo.simbolo} em reais</label>
+        <label htmlFor="cotacao-preco">Preço de 1 {ativo.simbolo} em dólares</label>
         <input
           id="cotacao-preco"
           type="text"
@@ -522,6 +527,13 @@ export default function Cripto({
         <EstadoVazio titulo="Nenhuma posição nesta data." dica="Registre uma compra para começar." />
       )}
       {posicoes.tipo === 'ok' && posicoes.dados.posicoes.length > 0 && (
+        <p className="aviso-cripto">
+          {posicoes.dados.dolar === null
+            ? 'Ainda sem dólar do Banco Central: os valores ficam só em US$ e fora do patrimônio.'
+            : `Dólar (PTAX) R$ ${formatarDecimal(posicoes.dados.dolar.valor)} em ${formatarDataCompleta(posicoes.dados.dolar.data)}.`}
+        </p>
+      )}
+      {posicoes.tipo === 'ok' && posicoes.dados.posicoes.length > 0 && (
         <ul className="lancamentos lista-cartao" aria-label="Posições">
           {posicoes.dados.posicoes.map((posicao) => {
             const ativo = ativosPorId.get(posicao.ativoId)
@@ -535,16 +547,25 @@ export default function Cripto({
                   <span className="item-meta">
                     {rotuloDoAtivo(ativo)} · {nomesDeConta.get(posicao.contaId) ?? 'Conta'}
                   </span>
-                  <small>Compras menos vendas {formatarCentavos(posicao.custoCentavos)}</small>
+                  {posicao.custoUsdCentavos !== null && (
+                    <small>
+                      Compras menos vendas {formatarCentavosEmDolar(posicao.custoUsdCentavos)}
+                      {posicao.custoCentavos !== null && ` (${formatarCentavos(posicao.custoCentavos)})`}
+                    </small>
+                  )}
                   {posicao.cotacao === null ? (
                     <div className="item-selos">
                       <Selo tom="neutro">Sem cotação</Selo>
                     </div>
                   ) : (
                     <small>
-                      Cotação R$ {formatarDecimal(posicao.cotacao.preco)} em{' '}
+                      Cotação{' '}
+                      {posicao.cotacao.precoUsd === null ? '—' : `US$ ${formatarDecimal(posicao.cotacao.precoUsd)}`} em{' '}
                       {formatarDiaMes(diaEmSaoPaulo(posicao.cotacao.momento))}
                     </small>
+                  )}
+                  {posicao.valorUsdCentavos !== null && (
+                    <small>Vale {formatarCentavosEmDolar(posicao.valorUsdCentavos)}</small>
                   )}
                 </div>
                 <div className="item-lado">
@@ -595,7 +616,10 @@ export default function Cripto({
                   </span>
                 </div>
                 <div className="item-lado">
-                  <span className="item-valor">{formatarCentavos(movimento.custoCentavos)}</span>
+                  <span className="item-valor">
+                    {movimento.custoUsdCentavos === null ? '—' : formatarCentavosEmDolar(movimento.custoUsdCentavos)}
+                  </span>
+                  {movimento.custoCentavos !== null && <small>{formatarCentavos(movimento.custoCentavos)}</small>}
                   {confirmando === movimento.id ? (
                     <div className="item-botoes">
                       <button

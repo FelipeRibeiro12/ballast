@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import com.felipe.ballast.IntegrationTest;
 import com.felipe.ballast.TestClock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
@@ -28,14 +30,23 @@ class NetWorthTest {
 
   @Autowired MockMvc mvc;
   @Autowired TestClock clock;
+  @Autowired JdbcClient jdbc;
   private CryptoApi api;
   private CryptoApi.Actor actor;
   private String bitcoin;
   private String expense;
   private String income;
 
+  // PTAX de 1,00 desde antes de todo movimento daqui: o valor em reais fica igual ao em dólar, e os
+  // números deste teste falam só da posição. A conversão de verdade está no DollarConversionTest.
+  private static final LocalDate DOLLAR_DAY = LocalDate.of(2025, 1, 2);
+
   @BeforeEach
   void setUp() throws Exception {
+    jdbc.sql(
+            "INSERT INTO indice (serie, data, valor) VALUES ('dolar', :d, 1) ON CONFLICT DO NOTHING")
+        .param("d", DOLLAR_DAY)
+        .update();
     api = new CryptoApi(mvc);
     actor = api.newActor();
     bitcoin = api.createAssetOk(actor.session(), CryptoApi.bitcoin());
@@ -46,6 +57,9 @@ class NetWorthTest {
   @AfterEach
   void tearDown() {
     clock.reset();
+    jdbc.sql("DELETE FROM indice WHERE serie = 'dolar' AND data = :d")
+        .param("d", DOLLAR_DAY)
+        .update();
   }
 
   private String categoryId(String name) throws Exception {
@@ -129,7 +143,7 @@ class NetWorthTest {
 
     JsonNode position = positions("?data=2026-03-10").get("posicoes").get(0);
 
-    assertThat(position.get("cotacao").get("preco").asString()).isEqualTo("150");
+    assertThat(position.get("cotacao").get("precoUsd").asString()).isEqualTo("150");
     assertThat(Instant.parse(position.get("cotacao").get("momento").asString()))
         .isEqualTo(Instant.parse("2026-03-11T02:30:00Z"));
     assertThat(position.get("valorCentavos").asLong()).isEqualTo(30_000);

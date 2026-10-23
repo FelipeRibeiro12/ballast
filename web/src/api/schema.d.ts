@@ -883,16 +883,16 @@ export interface components {
             /** Format: date-time */
             momento: string;
             /**
-             * @description Reais por unidade, em texto, sem zero à direita
-             * @example 350000.5
+             * @description Dólares por unidade, em texto, sem zero à direita
+             * @example 70000.5
              */
-            preco: string;
+            precoUsd: string;
         };
         CotacaoDaPosicao: {
             /** Format: date-time */
             momento: string;
-            /** @description Reais por unidade */
-            preco: string;
+            /** @description Dólares por unidade, em texto; nulo na cotação antiga em reais sem PTAX */
+            precoUsd: string | null;
         };
         CotacaoRequest: {
             /**
@@ -902,10 +902,10 @@ export interface components {
              */
             momento?: string;
             /**
-             * @description Reais por unidade, em texto: até 12 dígitos inteiros e 8 casas
+             * @description Dólares por unidade, em texto: até 12 dígitos inteiros e 8 casas
              * @example 350000.5
              */
-            preco: string;
+            precoUsd: string;
         };
         CriarContaRequest: {
             /** @description Obrigatório quando tipo é cartao_credito e proibido nos outros tipos */
@@ -950,6 +950,12 @@ export interface components {
             modo: "percentual" | "valor";
             /** @description De 2 a 10 parcelas. A ordem do array é a ordem das parcelas */
             parcelas: components["schemas"]["ParcelaDivisaoRequest"][];
+        };
+        Dolar: {
+            /** Format: date */
+            data: string;
+            /** @description Reais por dólar, em texto */
+            valor: string;
         };
         Erro: {
             erro: string;
@@ -1135,8 +1141,16 @@ export interface components {
             ativoId: string;
             /** Format: uuid */
             contaId: string;
-            /** Format: int64 */
-            custoCentavos: number;
+            /**
+             * Format: int64
+             * @description Em centavos de real pela PTAX da data; nulo sem PTAX
+             */
+            custoCentavos: number | null;
+            /**
+             * Format: int64
+             * @description Em centavos de dólar; nulo no movimento antigo em reais sem PTAX
+             */
+            custoUsdCentavos: number | null;
             /** Format: date */
             data: string;
             /** Format: uuid */
@@ -1156,9 +1170,9 @@ export interface components {
             contaId: string;
             /**
              * Format: int64
-             * @description O que pagou na compra ou recebeu na venda, em centavos de real
+             * @description O que pagou na compra ou recebeu na venda, em centavos de dólar
              */
-            custoCentavos: number;
+            custoUsdCentavos: number;
             /**
              * Format: date
              * @example 2026-03-10
@@ -1242,16 +1256,23 @@ export interface components {
             cotacao: components["schemas"]["CotacaoDaPosicao"];
             /**
              * Format: int64
-             * @description Custo das compras menos o das vendas, em centavos; negativo quando a venda rendeu mais que o custo
+             * @description Compras menos vendas em centavos de real, pela PTAX da data de cada movimento; nulo sem a PTAX de algum movimento em dólar
              */
-            custoCentavos: number;
-            /** @description Compras menos vendas até a data, em texto, sem zero à direita */
+            custoCentavos: number | null;
+            /**
+             * Format: int64
+             * @description Compras menos vendas em centavos de dólar; nulo sem a PTAX de algum movimento em reais
+             */
+            custoUsdCentavos: number | null;
+            /** @description Tokens: compras menos vendas até a data, em texto, sem zero à direita */
             quantidade: string;
             /**
              * Format: int64
-             * @description Quantidade vezes preço, em centavos com HALF_EVEN; nulo sem cotação
+             * @description Valor em reais pela PTAX da data; nulo sem cotação ou sem PTAX
              */
             valorCentavos: number | null;
+            /** Format: int64 */
+            valorUsdCentavos: number | null;
         };
         PosicaoSemCotacao: {
             /** Format: uuid */
@@ -1264,6 +1285,8 @@ export interface components {
         PosicoesCripto: {
             /** Format: date */
             data: string;
+            /** @description PTAX usada na conversão: a última até a data; nula se ainda não há */
+            dolar: components["schemas"]["Dolar"];
             posicoes: components["schemas"]["PosicaoCripto"][];
         };
         Recorrencia: {

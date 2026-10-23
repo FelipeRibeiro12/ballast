@@ -2983,27 +2983,30 @@ components:
         momento:
           type: string
           format: date-time
-        preco:
+        precoUsd:
           type: string
-          description: "Reais por unidade, em texto, sem zero à direita"
-          example: "350000.5"
+          description: "Dólares por unidade, em texto, sem zero à direita"
+          example: "70000.5"
       required:
       - ativoId
       - fonte
       - momento
-      - preco
+      - precoUsd
     CotacaoDaPosicao:
       type: object
       properties:
         momento:
           type: string
           format: date-time
-        preco:
-          type: string
-          description: Reais por unidade
+        precoUsd:
+          type:
+          - string
+          - "null"
+          description: "Dólares por unidade, em texto; nulo na cotação antiga em reais\
+            \ sem PTAX"
       required:
       - momento
-      - preco
+      - precoUsd
     CotacaoRequest:
       type: object
       properties:
@@ -3012,13 +3015,14 @@ components:
           format: date-time
           description: ISO-8601 com fuso. Ausente vale o instante da requisição
           example: 2026-10-21T15:00:00-03:00
-        preco:
+        precoUsd:
           type: string
-          description: "Reais por unidade, em texto: até 12 dígitos inteiros e 8 casas"
+          description: "Dólares por unidade, em texto: até 12 dígitos inteiros e 8\
+            \ casas"
           example: "350000.5"
           pattern: "(?=.*[1-9])[0-9]{1,12}(\\.[0-9]{1,8})?"
       required:
-      - preco
+      - precoUsd
     CriarContaRequest:
       type: object
       properties:
@@ -3121,6 +3125,18 @@ components:
       required:
       - modo
       - parcelas
+    Dolar:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+        valor:
+          type: string
+          description: "Reais por dólar, em texto"
+      required:
+      - data
+      - valor
     Erro:
       type: object
       properties:
@@ -3462,10 +3478,18 @@ components:
           type: string
           format: uuid
         custoCentavos:
-          type: integer
+          type:
+          - integer
+          - "null"
           format: int64
-          maximum: 9007199254740991
-          minimum: 1
+          description: Em centavos de real pela PTAX da data; nulo sem PTAX
+        custoUsdCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: Em centavos de dólar; nulo no movimento antigo em reais sem
+            PTAX
         data:
           type: string
           format: date
@@ -3485,6 +3509,7 @@ components:
       - ativoId
       - contaId
       - custoCentavos
+      - custoUsdCentavos
       - data
       - id
       - quantidade
@@ -3498,11 +3523,11 @@ components:
         contaId:
           type: string
           format: uuid
-        custoCentavos:
+        custoUsdCentavos:
           type: integer
           format: int64
           description: "O que pagou na compra ou recebeu na venda, em centavos de\
-            \ real"
+            \ dólar"
           maximum: 9007199254740991
           minimum: 1
         data:
@@ -3523,7 +3548,7 @@ components:
       required:
       - ativoId
       - contaId
-      - custoCentavos
+      - custoUsdCentavos
       - data
       - quantidade
       - tipo
@@ -3646,31 +3671,43 @@ components:
           description: Última cotação até o fim do dia em America/Sao_Paulo; nula
             sem cotação
         custoCentavos:
-          type: integer
+          type:
+          - integer
+          - "null"
           format: int64
-          description: "Custo das compras menos o das vendas, em centavos; negativo\
-            \ quando a venda rendeu mais que o custo"
-          maximum: 9007199254740991
-          minimum: -9007199254740991
+          description: "Compras menos vendas em centavos de real, pela PTAX da data\
+            \ de cada movimento; nulo sem a PTAX de algum movimento em dólar"
+        custoUsdCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: Compras menos vendas em centavos de dólar; nulo sem a PTAX
+            de algum movimento em reais
         quantidade:
           type: string
-          description: "Compras menos vendas até a data, em texto, sem zero à direita"
+          description: "Tokens: compras menos vendas até a data, em texto, sem zero\
+            \ à direita"
         valorCentavos:
           type:
           - integer
           - "null"
           format: int64
-          description: "Quantidade vezes preço, em centavos com HALF_EVEN; nulo sem\
-            \ cotação"
-          maximum: 9007199254740991
-          minimum: -9007199254740991
+          description: Valor em reais pela PTAX da data; nulo sem cotação ou sem PTAX
+        valorUsdCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
       required:
       - ativoId
       - contaId
       - cotacao
       - custoCentavos
+      - custoUsdCentavos
       - quantidade
       - valorCentavos
+      - valorUsdCentavos
     PosicaoSemCotacao:
       type: object
       properties:
@@ -3693,12 +3730,18 @@ components:
         data:
           type: string
           format: date
+        dolar:
+          type: "null"
+          $ref: "#/components/schemas/Dolar"
+          description: "PTAX usada na conversão: a última até a data; nula se ainda\
+            \ não há"
         posicoes:
           type: array
           items:
             $ref: "#/components/schemas/PosicaoCripto"
       required:
       - data
+      - dolar
       - posicoes
     Recorrencia:
       type: object

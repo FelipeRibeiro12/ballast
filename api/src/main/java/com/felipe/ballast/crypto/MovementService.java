@@ -1,5 +1,6 @@
 package com.felipe.ballast.crypto;
 
+import com.felipe.ballast.fixedincome.IndexUpdater;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -16,10 +17,12 @@ class MovementService {
 
   private final CryptoQueries queries;
   private final WriteTransaction transaction;
+  private final IndexUpdater indices;
 
-  MovementService(CryptoQueries queries, WriteTransaction transaction) {
+  MovementService(CryptoQueries queries, WriteTransaction transaction, IndexUpdater indices) {
     this.queries = queries;
     this.transaction = transaction;
+    this.indices = indices;
   }
 
   // accountId e assetId chegam nulos quando o texto do cliente não era UUID.
@@ -29,7 +32,7 @@ class MovementService {
       MovementType type,
       BigDecimal quantity,
       LocalDate date,
-      BigDecimal cost) {}
+      BigDecimal costUsd) {}
 
   sealed interface CreateResult {
     record Created(CryptoQueries.Movement movement) implements CreateResult {}
@@ -50,8 +53,14 @@ class MovementService {
     WOULD_GO_NEGATIVE
   }
 
+  // Fora da transação: movimento antigo pede a PTAX que ainda não está guardada (ADR-038). O
+  // Banco Central fora do ar não atrapalha, só deixa o valor em reais vazio até a próxima rodada.
   CreateResult create(UUID userId, Input input) {
-    return transaction.execute(status -> createLocked(status, userId, input));
+    CreateResult result = transaction.execute(status -> createLocked(status, userId, input));
+    if (result instanceof CreateResult.Created) {
+      indices.updateFrom(input.date());
+    }
+    return result;
   }
 
   DeleteResult delete(UUID userId, UUID id) {
@@ -95,7 +104,7 @@ class MovementService {
             input.type(),
             input.quantity(),
             input.date(),
-            input.cost());
+            input.costUsd());
     // Só a venda pode baixar a posição. Conferir depois de gravar cobre também a venda retroativa
     // que tira de uma venda posterior a quantidade que ela já usava.
     if (input.type() == MovementType.SELL

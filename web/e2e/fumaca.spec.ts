@@ -241,7 +241,7 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     const movimento = page.getByRole('form', { name: 'Novo movimento' })
     await movimento.getByLabel('Quantidade').fill('0,5')
     await movimento.getByLabel('Data').fill('2026-01-10')
-    await movimento.getByLabel('Quanto pagou, em reais').fill('150.000,00')
+    await movimento.getByLabel('Quanto pagou, em dólares').fill('30.000,00')
     await movimento.getByRole('button', { name: 'Registrar compra' }).click()
     await expect(painel).toHaveCount(0)
     const posicoes = page.getByRole('list', { name: 'Posições' })
@@ -249,11 +249,12 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await expect(posicoes).toContainText('Sem cotação')
 
     await posicoes.getByRole('button', { name: 'Informar cotação de BTC' }).click()
-    await page.getByLabel('Preço de 1 BTC em reais').fill('400.000,00')
+    await page.getByLabel('Preço de 1 BTC em dólares').fill('80.000,00')
     await page.getByRole('button', { name: 'Salvar cotação' }).click()
     await expect(painel).toHaveCount(0)
-    await expect(posicoes).toContainText(reais('200.000,00'))
-    await expect(page.getByRole('region', { name: 'Patrimônio' })).toContainText(reais('200.000,00'))
+    // O valor em reais depende da PTAX do dia (ADR-038); o em dólar não.
+    await expect(posicoes).toContainText(/US\$\s40\.000,00/)
+    await expect(page.getByRole('region', { name: 'Patrimônio' })).toContainText('Cripto')
     await capturar(page, projeto, '11b-cripto')
   })
 

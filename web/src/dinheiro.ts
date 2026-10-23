@@ -3,16 +3,26 @@
 const LIMITE_SEGURO = BigInt(Number.MAX_SAFE_INTEGER)
 
 const formatadorBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+const formatadorUSD = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' })
 
 // Aceita bigint para o total das contas poder passar do limite seguro sem perder o centavo.
 export function formatarCentavos(centavos: number | bigint): string {
+  return formatarComo(formatadorBRL, centavos)
+}
+
+// Centavos de dólar no formato brasileiro, como "US$ 1.234,56" (ADR-038).
+export function formatarCentavosEmDolar(centavos: number | bigint): string {
+  return formatarComo(formatadorUSD, centavos)
+}
+
+function formatarComo(formatador: Intl.NumberFormat, centavos: number | bigint): string {
   const valor = BigInt(centavos)
   const negativo = valor < 0n
   const digitos = (negativo ? -valor : valor).toString().padStart(3, '0')
   // O Intl aceita string decimal exata, então a divisão por 100 nunca vira Number.
   const decimal = `${negativo ? '-' : ''}${digitos.slice(0, -2)}.${digitos.slice(-2)}`
   if (!eDecimalExato(decimal)) throw new RangeError('centavos fora do formato esperado')
-  return formatadorBRL.format(decimal)
+  return formatador.format(decimal)
 }
 
 // O tipo do Intl só aceita string numérica comprovada, por isso o guarda em vez de um cast.

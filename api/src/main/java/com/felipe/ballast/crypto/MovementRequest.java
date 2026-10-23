@@ -44,10 +44,10 @@ public record MovementRequest(
         @NotNull(message = DATE_MESSAGE)
         @ValidIsoDate(message = DATE_MESSAGE)
         String date,
-    @JsonProperty("custoCentavos")
+    @JsonProperty("custoUsdCentavos")
         @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
-            description = "O que pagou na compra ou recebeu na venda, em centavos de real",
+            description = "O que pagou na compra ou recebeu na venda, em centavos de dólar",
             minimum = "1",
             maximum = "9007199254740991")
         @NotNull(message = COST_MESSAGE)
@@ -62,7 +62,8 @@ public record MovementRequest(
       "quantidade deve ser um decimal maior que zero, em texto, com até 20 dígitos inteiros e 18"
           + " casas";
   static final String DATE_MESSAGE = "data deve ser uma data AAAA-MM-DD com ano entre 1900 e 2199";
-  static final String COST_MESSAGE = "custoCentavos deve ser um inteiro entre 1 e 9007199254740991";
+  static final String COST_MESSAGE =
+      "custoUsdCentavos deve ser um inteiro entre 1 e 9007199254740991";
 
   BigDecimal parsedQuantity() {
     return new BigDecimal(quantity);
@@ -72,8 +73,8 @@ public record MovementRequest(
     return IsoDates.parse(date).orElseThrow();
   }
 
-  // Centavos inteiros entram como numeric(18,2) exato, sem passar por double.
-  BigDecimal cost() {
+  // Centavos de dólar entram como numeric(18,2) exato, sem passar por double.
+  BigDecimal costUsd() {
     return BigDecimal.valueOf(costCents, 2);
   }
 }

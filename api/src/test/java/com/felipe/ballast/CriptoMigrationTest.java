@@ -407,8 +407,9 @@ class CriptoMigrationTest {
       String custo) {
     return jdbc.sql(
             "INSERT INTO movimento_cripto (id, usuario_id, conta_id, ativo_id, tipo, quantidade,"
-                + " data, custo) VALUES (:id, :usuario, :conta, :ativo, :tipo,"
-                + " CAST(:quantidade AS numeric), CAST(:data AS date), CAST(:custo AS numeric))")
+                + " data, custo, moeda) VALUES (:id, :usuario, :conta, :ativo, :tipo,"
+                + " CAST(:quantidade AS numeric), CAST(:data AS date), CAST(:custo AS numeric),"
+                + " 'USD')")
         .param("id", UUID.randomUUID())
         .param("usuario", usuario)
         .param("conta", conta)
@@ -422,8 +423,9 @@ class CriptoMigrationTest {
   private JdbcClient.StatementSpec cotacao(
       UUID usuario, UUID ativo, String momento, String preco, String fonte) {
     return jdbc.sql(
-            "INSERT INTO cotacao (usuario_id, ativo_id, momento, preco, fonte) VALUES (:usuario,"
-                + " :ativo, CAST(:momento AS timestamptz), CAST(:preco AS numeric), :fonte)")
+            "INSERT INTO cotacao (usuario_id, ativo_id, momento, preco, fonte, moeda) VALUES"
+                + " (:usuario, :ativo, CAST(:momento AS timestamptz), CAST(:preco AS numeric),"
+                + " :fonte, 'USD')")
         .param("usuario", usuario)
         .param("ativo", ativo)
         .param("momento", momento)

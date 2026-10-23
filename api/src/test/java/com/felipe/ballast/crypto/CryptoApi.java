@@ -75,7 +75,7 @@ public final class CryptoApi {
   public void quoteOk(Cookie session, String assetId, String price, String moment)
       throws Exception {
     Map<String, Object> body = new LinkedHashMap<>();
-    body.put("preco", price);
+    body.put("precoUsd", price);
     body.put("momento", moment);
     expect(quote(session, assetId, body), 201);
   }
@@ -88,7 +88,7 @@ public final class CryptoApi {
     body.put("tipo", type);
     body.put("quantidade", quantity);
     body.put("data", date);
-    body.put("custoCentavos", cents);
+    body.put("custoUsdCentavos", cents);
     return body;
   }
 
