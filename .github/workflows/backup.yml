@@ -36,9 +36,11 @@ jobs:
           fi
           umask 077
           arquivo="ballast-$(date -u +%Y%m%dT%H%M%SZ).dump"
-          # pg_dump da mesma versão do servidor (Postgres 17 no Neon), com TLS verificado.
+          # pg_dump da mesma versão do servidor (Postgres 17 no Neon), com TLS verificado. A imagem
+          # do postgres não traz certificados de CA: usa os do runner.
           docker run --rm -e PGHOST -e PGDATABASE -e PGUSER -e PGPASSWORD \
-            -e PGSSLMODE=verify-full -e PGSSLROOTCERT=system \
+            -e PGSSLMODE=verify-full -e PGSSLROOTCERT=/etc/ssl/certs/ca-certificates.crt \
+            -v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro \
             postgres:17 pg_dump --format=custom > "$arquivo"
           # Dump que o pg_restore não lê é pior que nenhum: daria falsa segurança.
           docker run --rm -i postgres:17 pg_restore --list < "$arquivo" > /dev/null
