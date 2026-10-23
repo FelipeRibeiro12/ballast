@@ -741,3 +741,14 @@ em reais vem da PTAX do Banco Central.
   CHECK no banco) é baixada junto com CDI e IPCA, ao subir, às 8h e ao gravar um
   movimento com data anterior à primeira PTAX guardada; nesse caso a resposta do
   `POST` já vem com o custo em reais.
+
+## Cotação automática (ADR-040)
+
+Emenda "Cripto em dólar".
+
+- `GET /posicoes-cripto` traz `cotacao: {precoUsd, momento, fonte}`. `fonte` é
+  `manual` (digitada pela rota de cotação) ou `coingecko` (gravada pelo job).
+  A cotação da posição é a última até a data, de qualquer fonte.
+- Nenhuma rota chama a CoinGecko. Com ela fora, as posições e o patrimônio
+  seguem com a última cotação guardada, e `momento` mostra de quando ela é.
+- `POST /ativos-cripto/{id}/cotacoes` continua gravando só `manual`.

@@ -2995,6 +2995,12 @@ components:
     CotacaoDaPosicao:
       type: object
       properties:
+        fonte:
+          type: string
+          description: "manual quando digitada, coingecko quando veio do job (ADR-040)"
+          enum:
+          - manual
+          - coingecko
         momento:
           type: string
           format: date-time
@@ -3005,6 +3011,7 @@ components:
           description: "Dólares por unidade, em texto; nulo na cotação antiga em reais\
             \ sem PTAX"
       required:
+      - fonte
       - momento
       - precoUsd
     CotacaoRequest:

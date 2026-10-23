@@ -889,6 +889,11 @@ export interface components {
             precoUsd: string;
         };
         CotacaoDaPosicao: {
+            /**
+             * @description manual quando digitada, coingecko quando veio do job (ADR-040)
+             * @enum {string}
+             */
+            fonte: "manual" | "coingecko";
             /** Format: date-time */
             momento: string;
             /** @description Dólares por unidade, em texto; nulo na cotação antiga em reais sem PTAX */

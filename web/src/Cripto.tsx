@@ -13,7 +13,7 @@ import {
 } from './api'
 import type { AtivoCripto, AtivoCriptoRequest, Conta, MovimentoCripto, PosicoesCripto } from './api'
 import { formatarDecimal, lerPreco, lerQuantidade } from './decimais'
-import { diaEmSaoPaulo, formatarDataCompleta, formatarDiaMes, hojeLocal } from './datas'
+import { diaEmSaoPaulo, formatarDataCompleta, formatarDiaMes, hojeLocal, horaEmSaoPaulo } from './datas'
 import { formatarCentavos, formatarCentavosEmDolar, lerValorPositivo } from './dinheiro'
 import { IconeMais } from './icones'
 import { carregar, mensagemDeEscrita } from './leitura'
@@ -566,7 +566,9 @@ export default function Cripto({
                     <small>
                       Cotação{' '}
                       {posicao.cotacao.precoUsd === null ? '—' : `US$ ${formatarDecimal(posicao.cotacao.precoUsd)}`} em{' '}
-                      {formatarDiaMes(diaEmSaoPaulo(posicao.cotacao.momento))}
+                      {formatarDiaMes(diaEmSaoPaulo(posicao.cotacao.momento))} às{' '}
+                      {horaEmSaoPaulo(posicao.cotacao.momento)} ·{' '}
+                      {posicao.cotacao.fonte === 'coingecko' ? 'CoinGecko' : 'digitada'}
                     </small>
                   )}
                   {posicao.valorUsdCentavos !== null && (

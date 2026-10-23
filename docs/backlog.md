@@ -11,10 +11,12 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F14 — Cotação automática
-Worker com ticker, série histórica, cache da última cotação conhecida, data da
-cotação visível na interface.
-Teste obrigatório: API fora do ar não pode travar lançamento.
+### F14.1 — Histórico de cotação para trás
+A F14 grava a série daqui para frente. Para patrimônio em data anterior à
+primeira cotação, buscar o diário em `/coins/{id}/market_chart/range` (o Demo
+cobre 365 dias), uma vez por ativo. Precisa do id da moeda para token
+(`/coins/{plataforma}/contract/{contrato}`). Dono: backend. Paga antes da F18
+(patrimônio no tempo).
 
 ### F15 — Aporte × valorização
 Quanto do crescimento foi aporte e quanto foi preço. Sem isso, cripto subindo
