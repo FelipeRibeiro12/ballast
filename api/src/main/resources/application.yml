@@ -67,6 +67,15 @@ ballast:
     # BALLAST_INDICES_JOB_ENABLED=false.
     job-enabled: true
     cron: "0 0 8 * * *"
+  cotacoes:
+    # API v3 da CoinGecko, plano Demo (ADR-040). Sem COINGECKO_API_KEY o job não chama nada.
+    base-url: ${COINGECKO_API_URL:https://api.coingecko.com/api/v3}
+    api-key: ${COINGECKO_API_KEY:}
+    # Para desligar, BALLAST_COTACOES_JOB_ENABLED=false.
+    job-enabled: true
+    # Com os nativos e as cinco plataformas de token, no pior caso 6 pedidos por rodada:
+    # a cada 30 min são uns 8.700 por mês, dentro dos 10 mil do plano Demo.
+    interval: PT30M
   seed:
     email: ${SEED_EMAIL:}
     password: ${SEED_SENHA:}

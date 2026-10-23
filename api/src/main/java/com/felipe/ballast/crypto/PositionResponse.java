@@ -48,7 +48,12 @@ public record PositionResponse(
               description =
                   "Dólares por unidade, em texto; nulo na cotação antiga em reais sem PTAX")
           String precoUsd,
-      @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant momento) {}
+      @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant momento,
+      @Schema(
+              requiredMode = Schema.RequiredMode.REQUIRED,
+              allowableValues = {"manual", "coingecko"},
+              description = "manual quando digitada, coingecko quando veio do job (ADR-040)")
+          String fonte) {}
 
   // dollar é a PTAX da data da posição, para mostrar em dólar a cotação antiga gravada em reais.
   static PositionResponse from(NetWorthService.ValuedPosition valued, BigDecimal dollar) {
@@ -60,7 +65,11 @@ public record PositionResponse(
               ? position.price()
               // 8 casas, o formato que a rota de cotação aceita (QA do PR #23).
               : dollar == null ? null : position.price().divide(dollar, 8, RoundingMode.HALF_EVEN);
-      quote = new QuoteValue(usd == null ? null : Decimals.format(usd), position.quotedAt());
+      quote =
+          new QuoteValue(
+              usd == null ? null : Decimals.format(usd),
+              position.quotedAt(),
+              position.quoteSource());
     }
     return new PositionResponse(
         position.accountId(),

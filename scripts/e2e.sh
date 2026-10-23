@@ -80,7 +80,8 @@ env -i PATH="$PATH" HOME="$HOME" ${JAVA_HOME:+JAVA_HOME="$JAVA_HOME"} \
   DB_USER=ballast_app DB_PASSWORD="$senha_app" \
   DB_MIGRATION_USER=ballast_dono DB_MIGRATION_PASSWORD="$senha_dono" \
   REGISTRO_ABERTO=true COOKIE_SECURE=false APP_ENV=development \
-  BALLAST_RECURRENCE_JOB_ENABLED=false HOST=127.0.0.1 PORT="$porta_api" \
+  BALLAST_RECURRENCE_JOB_ENABLED=false BALLAST_COTACOES_JOB_ENABLED=false \
+  HOST=127.0.0.1 PORT="$porta_api" \
   java -jar "$jar" >"$tmp/api.log" 2>&1 &
 pids+=("$!")
 esperar "API em /healthz" 90 curl -fsS "http://127.0.0.1:$porta_api/healthz"

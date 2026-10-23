@@ -58,8 +58,8 @@ class CryptoQueries {
       String currency,
       BigDecimal dollar) {}
 
-  // Custos exatos nas duas moedas (nulo quando falta o dólar de algum movimento). price e quotedAt
-  // são nulos sem cotação até a data; priceCurrency diz a moeda do preço.
+  // Custos exatos nas duas moedas (nulo quando falta o dólar de algum movimento). price, quotedAt e
+  // quoteSource são nulos sem cotação até a data; priceCurrency diz a moeda do preço.
   record Position(
       UUID accountId,
       UUID assetId,
@@ -68,7 +68,8 @@ class CryptoQueries {
       BigDecimal costUsd,
       BigDecimal price,
       String priceCurrency,
-      Instant quotedAt) {}
+      Instant quotedAt,
+      String quoteSource) {}
 
   record LockedAccount(boolean crypto, boolean archived) {}
 
@@ -133,6 +134,38 @@ class CryptoQueries {
         .param("assetId", assetId)
         .param("moment", OffsetDateTime.ofInstant(moment, ZoneOffset.UTC))
         .param("price", price)
+        .update();
+  }
+
+  // O job lê os ativos de todos os usuários: é processo do sistema, não rota, e o que ele grava
+  // fica com o dono de cada ativo. Ativo não confiável (spam sincronizado, ADR-009) não é cotado.
+  List<AssetRef> trustedAssetRefs() {
+    return jdbc.sql(
+            "SELECT DISTINCT rede, contrato FROM ativo_cripto WHERE confiavel"
+                + " ORDER BY rede, contrato")
+        .query(
+            (rs, row) ->
+                new AssetRef(
+                    CryptoNetwork.fromValue(rs.getString("rede")), rs.getString("contrato")))
+        .list();
+  }
+
+  // Uma linha por ativo de cada usuário com essa rede e contrato. A mesma atualização do provedor
+  // chega de novo até ele publicar outra; o conflito na PK descarta, e também preserva a cotação
+  // digitada no mesmo instante. Devolve quantas linhas entraram.
+  int insertProviderQuote(AssetRef asset, Instant moment, BigDecimal priceUsd) {
+    return jdbc.sql(
+            """
+            INSERT INTO cotacao (usuario_id, ativo_id, momento, preco, fonte, moeda)
+            SELECT usuario_id, id, :moment, :price, 'coingecko', 'USD' FROM ativo_cripto
+            WHERE confiavel AND rede = :network
+              AND contrato IS NOT DISTINCT FROM CAST(:contract AS text)
+            ON CONFLICT (ativo_id, momento) DO NOTHING
+            """)
+        .param("moment", OffsetDateTime.ofInstant(moment, ZoneOffset.UTC))
+        .param("price", priceUsd)
+        .param("network", asset.network().value())
+        .param("contract", asset.contract())
         .update();
   }
 
@@ -250,12 +283,12 @@ class CryptoQueries {
                 + " FROM movimento GROUP BY conta_id, ativo_id"
                 + ")"
                 + " SELECT p.conta_id, p.ativo_id, p.quantidade, p.custo_brl, p.custo_usd,"
-                + " q.preco, q.moeda, q.momento"
+                + " q.preco, q.moeda, q.momento, q.fonte"
                 + " FROM posicao p"
                 + " JOIN conta c ON c.id = p.conta_id AND c.usuario_id = :userId"
                 + " JOIN ativo_cripto a ON a.id = p.ativo_id AND a.usuario_id = :userId"
                 + " LEFT JOIN LATERAL ("
-                + "   SELECT preco, moeda, momento FROM cotacao"
+                + "   SELECT preco, moeda, momento, fonte FROM cotacao"
                 + "   WHERE ativo_id = p.ativo_id AND usuario_id = :userId AND momento < :limit"
                 + "   ORDER BY momento DESC LIMIT 1"
                 + " ) q ON true"
@@ -274,7 +307,8 @@ class CryptoQueries {
                     rs.getBigDecimal("custo_usd"),
                     rs.getBigDecimal("preco"),
                     rs.getString("moeda"),
-                    instantOrNull(rs, "momento")))
+                    instantOrNull(rs, "momento"),
+                    rs.getString("fonte")))
         .list();
   }
 
