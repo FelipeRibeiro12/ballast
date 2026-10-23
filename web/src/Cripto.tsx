@@ -52,6 +52,16 @@ function rotuloDoAtivo(ativo: AtivoCripto | undefined): string {
   return `${ativo.simbolo} · ${ROTULO_DA_REDE[ativo.rede]}`
 }
 
+// O sinal vira a palavra: "Perda em aberto US$ 100,00" lê melhor que um menos na frente. Os reais só
+// levam sinal quando contrariam o dólar, o caso em que o câmbio virou o resultado.
+function descreverResultado(onde: string, usdCentavos: number, centavos: number | null): string {
+  const reais =
+    centavos === null
+      ? ''
+      : ` (${formatarCentavos(Math.sign(centavos) === Math.sign(usdCentavos) ? Math.abs(centavos) : centavos)})`
+  return `${usdCentavos < 0 ? 'Perda' : 'Ganho'} ${onde} ${formatarCentavosEmDolar(Math.abs(usdCentavos))}${reais}`
+}
+
 function NovoAtivo({ aoCriar, aoSessaoExpirar }: { aoCriar: () => void; aoSessaoExpirar: () => void }) {
   const [rede, setRede] = useState<Rede>('bitcoin')
   const [contrato, setContrato] = useState('')
@@ -557,6 +567,19 @@ export default function Cripto({
                     posicao.custoCentavos !== null && (
                       <small>Compras menos vendas {formatarCentavos(posicao.custoCentavos)}</small>
                     )
+                  )}
+                  {posicao.custoMedioUsd !== null && (
+                    <small>
+                      Custo médio US$ {formatarDecimal(posicao.custoMedioUsd)} por {ativo?.simbolo ?? 'unidade'}
+                    </small>
+                  )}
+                  {posicao.ganhoUsdCentavos !== null && (
+                    <small>{descreverResultado('em aberto', posicao.ganhoUsdCentavos, posicao.ganhoCentavos)}</small>
+                  )}
+                  {posicao.realizadoUsdCentavos !== null && posicao.realizadoUsdCentavos !== 0 && (
+                    <small>
+                      {descreverResultado('nas vendas', posicao.realizadoUsdCentavos, posicao.realizadoCentavos)}
+                    </small>
                   )}
                   {posicao.cotacao === null ? (
                     <div className="item-selos">

@@ -9,6 +9,8 @@ const patrimonio = {
   data: '2026-10-22',
   contasCentavos: 500_000,
   criptoCentavos: 4_320_000,
+  criptoAportadoCentavos: 4_000_000,
+  criptoValorizacaoCentavos: 320_000,
   rendaFixaCentavos: 1_050_000,
   totalCentavos: 5_870_000,
   semCotacao: [{ contaId: 'c1', ativoId: 'a2', quantidade: '10' }],
@@ -57,6 +59,16 @@ describe('Investimentos', () => {
     expect(within(resumo).getByText(texto('R$ 43.200,00'))).toBeVisible()
     expect(within(resumo).getByRole('status')).toHaveTextContent('1 posição sem cotação ficou fora do total.')
     expect(urlsPedidas()).toContain('/patrimonio?data=2026-10-22')
+  })
+
+  it('separa na cripto o que foi aporte do que foi valorização', async () => {
+    mockFetch()
+    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} aoSessaoExpirar={vi.fn()} />)
+
+    const resumo = await screen.findByRole('region', { name: 'Patrimônio' })
+    expect(
+      within(resumo).getByText(texto('Na cripto, R$ 40.000,00 de aporte e R$ 3.200,00 de valorização.')),
+    ).toBeVisible()
   })
 
   it('abre em renda fixa e troca para cripto', async () => {
