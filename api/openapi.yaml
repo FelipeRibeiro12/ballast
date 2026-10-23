@@ -3702,6 +3702,8 @@ components:
         categoriaId:
           type: string
           format: uuid
+        categoriaNome:
+          type: string
         desde:
           type: string
           description: Mês em que este teto começou a valer
@@ -3733,6 +3735,7 @@ components:
           minimum: 1
       required:
       - categoriaId
+      - categoriaNome
       - desde
       - gastoCentavos
       - previstoCentavos

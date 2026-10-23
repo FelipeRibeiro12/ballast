@@ -16,7 +16,12 @@ class BudgetQueries {
 
   // Valor de lançamento tem 2 casas: as somas saem exatas, sem arredondar.
   record Consumption(
-      UUID categoryId, BigDecimal ceiling, LocalDate since, BigDecimal spent, BigDecimal planned) {}
+      UUID categoryId,
+      String categoryName,
+      BigDecimal ceiling,
+      LocalDate since,
+      BigDecimal spent,
+      BigDecimal planned) {}
 
   private final JdbcClient jdbc;
 
@@ -75,7 +80,7 @@ class BudgetQueries {
                 AND l.data_competencia >= :start AND l.data_competencia < :end
               GROUP BY a.orcada
             )
-            SELECT v.categoria_id, v.teto, v.desde,
+            SELECT v.categoria_id, c.nome, v.teto, v.desde,
               COALESCE(k.gasto, 0) AS gasto, COALESCE(k.previsto, 0) AS previsto
             FROM vigente v
             JOIN categoria c ON c.id = v.categoria_id AND c.usuario_id = :userId
@@ -91,6 +96,7 @@ class BudgetQueries {
             (rs, row) ->
                 new Consumption(
                     rs.getObject("categoria_id", UUID.class),
+                    rs.getString("nome"),
                     rs.getBigDecimal("teto"),
                     rs.getObject("desde", LocalDate.class),
                     rs.getBigDecimal("gasto"),

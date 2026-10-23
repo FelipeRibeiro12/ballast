@@ -17,6 +17,7 @@ record BudgetListResponse(
   @Schema(name = "Orcamento")
   record Item(
       @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID categoriaId,
+      @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String categoriaNome,
       @Schema(
               requiredMode = Schema.RequiredMode.REQUIRED,
               minimum = "1",
@@ -56,6 +57,7 @@ record BudgetListResponse(
                 b ->
                     new Item(
                         b.categoryId(),
+                        b.categoryName(),
                         cents(b.ceiling()),
                         b.since().toString(),
                         cents(b.spent()),

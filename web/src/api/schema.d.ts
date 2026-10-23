@@ -1238,6 +1238,7 @@ export interface components {
         Orcamento: {
             /** Format: uuid */
             categoriaId: string;
+            categoriaNome: string;
             /** @description Mês em que este teto começou a valer */
             desde: string;
             /**

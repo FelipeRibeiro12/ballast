@@ -30,6 +30,7 @@ class BudgetService {
   // left é teto menos gasto e fica negativo quando o gasto passa do teto.
   record Budget(
       UUID categoryId,
+      String categoryName,
       BigDecimal ceiling,
       YearMonth since,
       BigDecimal spent,
@@ -56,6 +57,7 @@ class BudgetService {
                 c ->
                     new Budget(
                         c.categoryId(),
+                        c.categoryName(),
                         c.ceiling(),
                         YearMonth.from(c.since()),
                         c.spent(),

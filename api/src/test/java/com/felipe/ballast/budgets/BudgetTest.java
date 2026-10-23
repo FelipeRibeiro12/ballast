@@ -86,6 +86,7 @@ class BudgetTest {
     JsonNode budget = only("2026-03");
 
     assertThat(budget.get("categoriaId").asString()).isEqualTo(groceries);
+    assertThat(budget.get("categoriaNome").asString()).isEqualTo("Mercado");
     assertThat(budget.get("tetoCentavos").asLong()).isEqualTo(80_000);
     assertThat(budget.get("desde").asString()).isEqualTo("2026-03");
     assertThat(budget.get("gastoCentavos").asLong()).isEqualTo(30_000);
