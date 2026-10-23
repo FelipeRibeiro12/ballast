@@ -2,6 +2,23 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-23 — F17: metas
+
+O que entrou:
+- Migration V19 com `meta` e `aporte_meta` (FK composta e CASCADE).
+- Rotas de meta e de aporte. A retirada nunca deixa o acumulado negativo, com a meta travada por `FOR UPDATE`.
+- Projeção na leitura: falta, necessário por mês arredondado para cima, chegada pelo plano e pelo ritmo dos três meses fechados.
+- No web, a tela Metas (criar, editar, aportar, retirar, ver e apagar aportes, apagar meta), os atalhos Orçamento e Metas e o cartão no Início.
+
+Decisões: ADR-045. Aporte à mão e aporte mensal como plano, sem recorrência nem ligação com lançamento. Feita numa worktree a partir da main, com o PR #30 de produção ainda aberto.
+
+Teste:
+- Três meses de 333,33 não chegam a 1.000: o necessário arredonda para cima.
+- O mês corrente fica fora do ritmo.
+- Retirada maior que o acumulado é recusada, e apagar o depósito de que ela depende também.
+- Usuário A não vê nem mexe na meta de B.
+
+Em aberto: o desenho da navegação e o aporte ligado à transferência, no backlog.
 ## 2026-10-23 — Produção em tier gratuito, preparada sem deploy
 
 O que entrou:

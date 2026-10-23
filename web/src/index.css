@@ -442,6 +442,25 @@ form > button + button {
   box-shadow: var(--sombra-1);
 }
 
+/* Os mesmos segmentos como links entre telas (Orçamento e Metas). */
+.segmentos a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 var(--esp-3);
+  border-radius: 9px;
+  color: var(--texto-suave);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.segmentos a[aria-current='page'] {
+  background: var(--superficie);
+  color: var(--texto);
+  box-shadow: var(--sombra-1);
+}
+
 .segmentos.cheio {
   display: flex;
   width: 100%;

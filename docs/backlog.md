@@ -11,9 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F17 — Metas
-Criar, aporte recorrente, progresso, e "no ritmo atual chego em tal data".
-
 ### F18 — Gráficos
 Gasto por categoria, receita versus despesa no mês, patrimônio no tempo,
 consumo de orçamento. Mobile-first: tem que ser legível em 360px.
@@ -83,6 +80,8 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **F29** — Capacitor para publicar nas lojas
 - **DÍVIDA** — Cabeçalhos de segurança do front no Vercel (CSP, HSTS, `X-Content-Type-Options`, `frame-ancestors`): o ADR-044 só leva `/api` para a VM, e as respostas da API já saem com os do Spring Security. Dono: frontend, antes de abrir o cadastro.
 - **DÍVIDA** — Imagens de produção por tag (`eclipse-temurin:25-jre-noble`, `caddy:2.10`, `postgres:17`): fixar por digest com atualização automática, junto com a dívida das actions abaixo. Dono: devops.
+- **DÍVIDA** — Navegação com seções fora da barra: Orçamento e Metas só abrem pelo Início e pelos atalhos de planejamento (ADR-043, ADR-045). A próxima seção pede outro desenho (menu "Mais" ou rótulos curtos), com teste em 360px. Dono: frontend.
+- **DÍVIDA** — Aporte de meta ligado à transferência que moveu o dinheiro, para não registrar duas vezes (ADR-045). Precisa decidir o que acontece quando a transferência é editada ou apagada. Dono: backend.
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
 - **DÍVIDA** — Remover a tabela `health_check` e o `/healthz` que lê dela por migration nova, quando a F1 trouxer uma tabela real para o endpoint tocar.
 - **DÍVIDA** — O Makefile faz `-include .env` com `export`, então todo alvo (inclusive `make test` e `make lint`) herda o `.env` inteiro, contra o menor privilégio do `seguranca.md`. Registrada em 2026-10-03, sem correção agendada; destrava quando um alvo precisar de segredo que os outros não devem ver. Com a api Java o `.env` tem `DB_PASSWORD` solto, e `make setup` (`pnpm install`) também o herda: um `postinstall` malicioso leria a senha (auditoria do PR da migração, B6).

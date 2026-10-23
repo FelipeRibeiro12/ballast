@@ -21,6 +21,11 @@ export function mesIso({ ano, mes }: Mes): string {
   return `${String(ano).padStart(4, '0')}-${doisDigitos(mes)}`
 }
 
+export function lerMesIso(texto: string): Mes {
+  const [ano, mes] = texto.split('-').map(Number)
+  return { ano, mes }
+}
+
 export function mesDeHoje(agora: Date = new Date()): Mes {
   return { ano: agora.getFullYear(), mes: agora.getMonth() + 1 }
 }
