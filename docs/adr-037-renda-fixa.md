@@ -93,6 +93,18 @@ a aplicação (data e valor aplicado). Sobre ele aplica-se o fator de M até D:
 - `GET /patrimonio` ganha `rendaFixaCentavos`, a soma do **líquido** de cada
   título na data: é o que se receberia resgatando, e para LCI e LCA é o bruto.
 
+## Decisões da implementação (auditoria e revisão do PR #22)
+
+- A busca de índice começa no primeiro dado que o Banco Central tem (CDI em
+  04/03/1986, IPCA em janeiro de 1980), e o IPCA é pedido a partir do dia 1º do
+  mês. Aplicação de 1900 pedia dezenas de janelas vazias a cada cadastro e a
+  cada rodada do job.
+- Uma atualização de índice por vez; quem chega com outra rodando não espera.
+- Valor fora da faixa plausível não é gravado: CDI de 0 a 10% ao dia, IPCA de
+  -5% a 100% ao mês. Gravado errado, ele ficaria para sempre.
+- Taxa até 1000: acima disso a raiz 252 por Newton partindo de 1 não converge.
+- Data futura vale o valor de hoje, o que também limita o laço de dias úteis.
+
 ## Justificativa
 
 Usar a própria série do CDI como calendário de dias úteis evita manter a lista

@@ -184,8 +184,12 @@ public class FixedIncomeService {
     return queries.find(userId, id);
   }
 
-  // Vazio quando algum valor sai da faixa do JSON.
-  Optional<ValuedList> list(UUID userId, LocalDate date) {
+  // Vazio quando algum valor sai da faixa do JSON. Data futura vale o valor de hoje: não há
+  // projeção
+  // de índice, e o laço de dias úteis fica limitado (auditoria do PR #22).
+  Optional<ValuedList> list(UUID userId, LocalDate requested) {
+    LocalDate today = today();
+    LocalDate date = requested.isAfter(today) ? today : requested;
     List<FixedIncomeQueries.Title> titles = queries.list(userId);
     Map<UUID, FixedIncomeQueries.Mark> marks = queries.marksUpTo(userId, date);
     LocalDate from =

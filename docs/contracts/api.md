@@ -667,7 +667,7 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   vencimento, indexador, taxa}` responde 201 com o `TituloRendaFixa`; `PUT
   /{id}` com o mesmo corpo responde 200; `DELETE /{id}` responde 204.
 - `tipo`: `lci`, `lca` ou `cdb`. `indexador`: `prefixado`, `cdi` ou `ipca`.
-  `taxa` é **string** decimal maior que zero, até 5 dígitos inteiros e 4 casas:
+  `taxa` é **string** decimal maior que zero e até 1000, com até 4 casas:
   % ao ano no prefixado, % do CDI no `cdi`, % ao ano acima do IPCA no `ipca`.
   `nome` de 1 a 100. `vencimento` opcional.
 - Recusas, todas 400: `dataAplicacao não pode ser no futuro`, `vencimento deve
@@ -677,7 +677,7 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   que não é UUID: 404 `não encontrado`.
 - `GET ?data=` (padrão hoje em `America/Sao_Paulo`) responde `{data, indices:
   {cdiAte, ipcaAte}, titulos}`, só dos títulos de contas ativas, por data de
-  aplicação. Cada título traz `valorBrutoCentavos`, `iofCentavos`,
+  aplicação; data futura vale o valor de hoje, sem projeção. Cada título traz `valorBrutoCentavos`, `iofCentavos`,
   `irCentavos`, `valorLiquidoCentavos` e `rendimentoCentavos` na data: nulos
   antes da aplicação, zero depois do resgate (com o rendimento do resgate). IOF
   e IR são estimativa e só existem no CDB. `resgate` e `ultimaMarcacao` são

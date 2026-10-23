@@ -161,6 +161,13 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Desfazer o resgate de um título só apagando e cadastrando de novo; não há rota para tirar o resgate (F13.2). Dono: backend e frontend.
 - **DÍVIDA** — O IPCA do título usa o IPCA do mês (ou o último publicado) com pro rata pelos dias corridos, sem a projeção nem o aniversário que o banco usa; a marcação corrige (ADR-037). Rever se o desvio incomodar. Dono: backend.
 - **DÍVIDA** — O e2e e o CI sobem a API com o job de índices ligado, que consulta o Banco Central de verdade ao subir. O fluxo não depende do resultado (título aplicado no dia vale o aplicado), mas é rede externa num teste. Desligar no `scripts/e2e.sh` ou usar uma fonte local. Dono: devops.
+- **DÍVIDA** — Título vencido continua rendendo depois do vencimento (revisão do PR #22). Parar o cálculo no vencimento, ou avisar na tela que venceu. Dono: backend e frontend.
+- **DÍVIDA** — Resgate numa data anterior a uma marcação deixa a marcação "depois do resgate" e ela aparece como último valor do banco (revisão do PR #22). Recusar ou esconder. Dono: backend.
+- **DÍVIDA** — Custo do cálculo: raiz 252 por Newton refeita por título a cada leitura, e um INSERT por índice no primeiro download (~1.260 linhas por 5 anos). Memorizar a raiz por taxa e gravar em lote (revisão do PR #22). Dono: backend, quando medir lentidão.
+- **DÍVIDA** — Sem teto de títulos por usuário nem rate limit nas leituras de renda fixa e patrimônio (auditoria do PR #22, M1). Entra com os outros tetos e o rate limit da F20.5. Dono: backend.
+- **DÍVIDA** — Resposta do Banco Central sem teto de bytes nem prazo total (auditoria do PR #22, B1); o `docs/ameacas.md` pede que resposta gigante não derrube o worker. Ler com limite. Dono: backend.
+- **DÍVIDA** — "Ver posições" da conta cripto e o link antigo `#/cripto` abrem Investimentos na aba Renda fixa (revisão do PR #22). Aceitar a aba na rota, como `#/investimentos/cripto`. Dono: frontend.
+- **DÍVIDA** — O web usa `CriptoNaoEncontradoError` e `recusarRespostaDeCripto` também para título de renda fixa (revisão do PR #22). Renomear para um erro de investimento. Dono: frontend.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

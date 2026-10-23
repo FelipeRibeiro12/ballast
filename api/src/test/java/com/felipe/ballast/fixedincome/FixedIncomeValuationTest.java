@@ -180,6 +180,18 @@ class FixedIncomeValuationTest {
   }
 
   @Test
+  void aFutureDateIsValuedAsToday() throws Exception {
+    api.createOk(actor.session(), title(broker, "lci", "cdi", "100", 100_000, "2035-03-01"));
+
+    long today =
+        valued("?data=2035-03-31").get("titulos").get(0).get("valorBrutoCentavos").asLong();
+    long future =
+        valued("?data=2199-12-31").get("titulos").get(0).get("valorBrutoCentavos").asLong();
+
+    assertThat(future).isEqualTo(today);
+  }
+
+  @Test
   void theListSaysUpToWhenThereAreIndices() throws Exception {
     JsonNode indices = CryptoApi.expect(api.indices(actor.session()), 200);
     JsonNode body = valued("?data=2035-03-15");

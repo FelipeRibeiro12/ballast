@@ -28,9 +28,6 @@ class BcbIndexSource implements IndexSource {
 
   private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/uuuu");
 
-  // numeric(12,8) da V14: até 9999,99999999. Fora disso o dado veio errado e não entra.
-  private static final BigDecimal LIMIT = new BigDecimal("10000");
-
   // O Banco Central fora não pode prender a thread do job nem a requisição de quem cadastra.
   private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
@@ -80,8 +77,10 @@ class BcbIndexSource implements IndexSource {
       try {
         LocalDate date = LocalDate.parse(String.valueOf(item.get("data")), DATE);
         BigDecimal value = new BigDecimal(String.valueOf(item.get("valor")));
-        if (value.abs().compareTo(LIMIT) < 0) {
+        if (series.plausible(value)) {
           points.add(new IndexPoint(date, value));
+        } else {
+          log.warn("valor do banco central fora da faixa ignorado: serie={}", series.value());
         }
       } catch (DateTimeParseException | NumberFormatException e) {
         log.warn("valor do banco central ignorado: serie={} formato inesperado", series.value());

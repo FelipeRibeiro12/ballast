@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -22,6 +23,7 @@ public class IndexUpdater {
   // O SGS recusa janela maior que 10 anos nas séries diárias; 5 deixa folga.
   private static final int CHUNK_YEARS = 5;
 
+  private final ReentrantLock running = new ReentrantLock();
   private final IndexSource source;
   private final IndexQueries queries;
   private final Clock clock;
@@ -42,9 +44,28 @@ public class IndexUpdater {
   }
 
   // Preenche antes do primeiro valor guardado (aplicação antiga) e depois do último (dias novos).
-  void updateFrom(LocalDate from) {
+  // Uma atualização por vez: quem chega com outra rodando volta na hora, e a que roda já baixa o
+  // que falta. Sem isso, cadastros em paralelo multiplicavam os pedidos ao Banco Central.
+  void updateFrom(LocalDate requested) {
+    if (!running.tryLock()) {
+      return;
+    }
+    try {
+      updateSeries(requested);
+    } finally {
+      running.unlock();
+    }
+  }
+
+  private void updateSeries(LocalDate requested) {
     LocalDate today = today();
     for (IndexSeries series : IndexSeries.values()) {
+      LocalDate from =
+          requested.isBefore(series.firstPublished()) ? series.firstPublished() : requested;
+      // O IPCA vem datado do dia 1º: pedir a partir do dia 15 perderia o mês da aplicação.
+      if (series == IndexSeries.IPCA) {
+        from = from.withDayOfMonth(1);
+      }
       try {
         Optional<LocalDate> first = queries.first(series);
         Optional<LocalDate> last = queries.last(series);

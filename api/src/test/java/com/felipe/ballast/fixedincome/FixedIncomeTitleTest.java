@@ -88,6 +88,8 @@ class FixedIncomeTitleTest {
             with(lci(), "taxa", "-1"),
             with(lci(), "taxa", 95),
             with(lci(), "taxa", "123456"),
+            with(lci(), "taxa", "1000.0001"),
+            with(lci(), "taxa", "5000"),
             with(lci(), "taxa", "1.12345"),
             with(lci(), "nome", ""),
             with(lci(), "nome", "x".repeat(101)),

@@ -6,6 +6,7 @@ import com.felipe.ballast.entries.ValidIsoDate;
 import com.felipe.ballast.identity.CodePointSize;
 import com.felipe.ballast.identity.NoControlCharacters;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -64,13 +65,15 @@ public record TitleRequest(
             pattern = RATE_PATTERN)
         @NotNull(message = RATE_MESSAGE)
         @Pattern(regexp = RATE_PATTERN, message = RATE_MESSAGE)
+        @DecimalMax(value = "1000", message = RATE_MESSAGE)
         String rate) {
 
   // Number.MAX_SAFE_INTEGER: acima disso o JavaScript perde o centavo (ADR-023).
   static final long MAX_CENTS = 9_007_199_254_740_991L;
 
-  // numeric(9,4): até 5 dígitos inteiros e 4 casas, maior que zero.
-  static final String RATE_PATTERN = "(?=.*[1-9])[0-9]{1,5}(\\.[0-9]{1,4})?";
+  // Até 1000: acima disso a raiz 252 por Newton não converge (auditoria do PR #22), e nenhum título
+  // real paga 1000% ao ano nem 1000% do CDI.
+  static final String RATE_PATTERN = "(?=.*[1-9])[0-9]{1,4}(\\.[0-9]{1,4})?";
 
   static final String NAME_MESSAGE =
       "nome deve ter entre 1 e 100 caracteres e não pode ter caracteres de controle";
@@ -81,7 +84,7 @@ public record TitleRequest(
   static final String MATURITY_MESSAGE =
       "vencimento deve ser uma data AAAA-MM-DD com ano entre 1900 e 2199";
   static final String RATE_MESSAGE =
-      "taxa deve ser um decimal maior que zero, em texto, com até 5 dígitos inteiros e 4 casas";
+      "taxa deve ser um decimal maior que zero e até 1000, em texto, com até 4 casas";
 
   // O CHECK do banco recusa espaço nas pontas. Vencimento em branco é sem vencimento.
   public TitleRequest {

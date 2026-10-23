@@ -77,6 +77,21 @@ class BcbIndexSourceTest {
   }
 
   @Test
+  void skipsAValueOutsideThePlausibleRangeOfTheSeries() {
+    server
+        .expect(requestTo(containsString("bcdata.sgs.12")))
+        .andRespond(
+            withSuccess(
+                "[{\"data\":\"01/10/2026\",\"valor\":\"5000\"},"
+                    + "{\"data\":\"02/10/2026\",\"valor\":\"-0.01\"},"
+                    + "{\"data\":\"05/10/2026\",\"valor\":\"0.05\"}]",
+                MediaType.APPLICATION_JSON));
+
+    assertThat(source.fetch(IndexSeries.CDI, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 5)))
+        .containsExactly(new IndexPoint(LocalDate.of(2026, 10, 5), new BigDecimal("0.05")));
+  }
+
+  @Test
   void aServerErrorIsThrownForTheUpdaterToLog() {
     server.expect(requestTo(containsString("bcdata.sgs.12"))).andRespond(withServerError());
 

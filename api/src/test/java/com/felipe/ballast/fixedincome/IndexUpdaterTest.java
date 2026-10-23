@@ -35,7 +35,8 @@ class IndexUpdaterTest {
   void tearDown() {
     source.reset();
     clock.reset();
-    jdbc.sql("DELETE FROM indice WHERE data >= DATE '2030-01-01'").update();
+    jdbc.sql("DELETE FROM indice WHERE data >= DATE '2030-01-01' OR data < DATE '1990-01-01'")
+        .update();
   }
 
   private long stored(IndexSeries series) {
@@ -74,6 +75,32 @@ class IndexUpdaterTest {
 
     assertThat(source.requests()).noneMatch(request -> request.contains("2041-03-02 2041-03-03"));
     assertThat(source.requests()).noneMatch(request -> request.endsWith("2041-02-28"));
+  }
+
+  @Test
+  void anApplicationBeforeTheSeriesExistAsksFromTheFirstPublishedDayOnlyOnce() {
+    jdbc.sql("DELETE FROM indice WHERE data < DATE '2030-01-01'").update();
+    source.publish(IndexSeries.CDI, point("1986-03-04", "0.5"));
+    source.publish(IndexSeries.IPCA, point("1980-01-01", "6"));
+    clock.freeze(Instant.parse("1987-01-10T15:00:00Z"));
+
+    updater.updateFrom(LocalDate.of(1900, 1, 1));
+    source.reset();
+    updater.updateFrom(LocalDate.of(1900, 1, 1));
+
+    // Na segunda rodada só o que vem depois do último valor, em pedaços de até 5 anos.
+    assertThat(source.requests())
+        .containsExactly(
+            "cdi 1986-03-05 1987-01-10",
+            "ipca 1980-01-02 1985-01-01",
+            "ipca 1985-01-02 1987-01-10");
+  }
+
+  @Test
+  void anIpcaApplicationInTheMiddleOfTheMonthAsksFromTheFirstDay() {
+    updater.updateFrom(LocalDate.of(2041, 2, 15));
+
+    assertThat(source.requests()).contains("ipca 2041-02-01 2041-03-10");
   }
 
   private static IndexPoint point(String date, String value) {
