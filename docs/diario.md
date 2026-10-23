@@ -2,6 +2,20 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-23 — F14: cotação automática pela CoinGecko
+
+O que entrou: migration V16 com a fonte `coingecko` no CHECK de `cotacao`; cliente da CoinGecko (plano Demo, chave no cabeçalho, nativos num pedido e tokens por plataforma, preço lido em `BigDecimal`); job a cada 30 min gravando uma linha por ativo confiável de cada usuário, idempotente pelo `last_updated_at`; `fonte` na cotação da posição; no web, dia, hora e fonte da cotação.
+Decisões: ADR-040 (provedor escolhido pelo dono). Fora de ADR: o e2e sobe com o job desligado.
+Dívida registrada: F14.1, histórico para trás pelo `market_chart/range`.
+Teste obrigatório: com a fonte fora do ar o job não lança, movimento e lançamento gravam e a posição mostra a última cotação, sem nenhuma requisição chamar a fonte.
+Em aberto: rodar com a chave real do dono; sem ela o job só avisa no log.
+
+## 2026-10-23 — Correção: total do mês pela data de caixa (PR #24)
+
+O que entrou: Receitas e Despesas contam só o realizado com caixa até hoje; compra no cartão antes do vencimento e lançamento com data futura vão para "Previsto no mês", com selo, e o agendado fora de cartão se confirma antes com a data de hoje. "Próximas previstas" segue a mesma regra.
+Decisões: ADR-039. O saldo da conta corrente continua somando o agendado (ADR-024) e fica com o dono.
+Pipeline: verde em todos os checks.
+
 ## 2026-10-22 — F13.3: cripto em dólar (PR #23)
 
 O que entrou: migration V15 com `moeda` em `movimento_cripto` e `cotacao` (o que a F13 gravou fica em reais) e a série `dolar` (PTAX) no índice, com faixa por CHECK; custo e cotação digitados em US$; posição com tokens, US$ e R$ pela PTAX da data; custo em reais pela PTAX da data do movimento; no web, valores em dólar e em reais e o aviso da PTAX usada.

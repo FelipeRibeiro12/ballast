@@ -270,7 +270,7 @@ cotacao
   ativo_id    uuid not null         -- FK composta: ativo do mesmo usuário
   momento     timestamptz not null
   preco       numeric(20,8) not null    -- > 0, em reais por unidade
-  fonte       text not null             -- 'manual' (a F14 alarga o CHECK)
+  fonte       text not null             -- 'manual' | 'coingecko' (V16)
   primary key (ativo_id, momento)
 ```
 
@@ -335,7 +335,6 @@ recebe lançamento (ver abaixo).
 - Venda não deixar a posição negativa, e apagar compra que deixaria alguma data
   negativa: a escrita trava a linha da conta com `FOR UPDATE` e confere a soma
   (ADR-035).
-- `cotacao.fonte` só aceita `manual` por enquanto.
 
 **Índice da F13.** `movimento_cripto_usuario_conta_data (usuario_id, conta_id,
 data)` serve as três leituras de movimento. Medido num Postgres 17 descartável
@@ -402,6 +401,11 @@ nela a partir do cliente. Só o job grava.
 **Valor não é coluna.** O valor de um título numa data é calculado da última
 marcação até a data (ou da aplicação) com o fator do indexador, como o saldo é a
 soma dos lançamentos. Os dias úteis são os dias com CDI publicado.
+
+**Fonte automática (F14, ADR-040, migration `V16`).** `cotacao_fonte_valida`
+aceita `manual` e `coingecko`. O job grava uma linha por ativo `confiavel` de
+cada usuário, com o `usuario_id` do dono, `moeda = USD` e `momento` igual ao
+`last_updated_at` do provedor; conflito na PK é descartado.
 
 **Moeda (F13.3, ADR-038, migration `V15`).** `movimento_cripto` e `cotacao`
 ganham `moeda text not null` (`BRL` | `USD`, sem default): as linhas da F13 são
