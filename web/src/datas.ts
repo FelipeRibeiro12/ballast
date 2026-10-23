@@ -16,6 +16,11 @@ export function hojeLocal(agora: Date = new Date()): string {
   return formatarData(agora.getFullYear(), agora.getMonth() + 1, agora.getDate())
 }
 
+// O mês da API, AAAA-MM.
+export function mesIso({ ano, mes }: Mes): string {
+  return `${String(ano).padStart(4, '0')}-${doisDigitos(mes)}`
+}
+
 export function mesDeHoje(agora: Date = new Date()): Mes {
   return { ano: agora.getFullYear(), mes: agora.getMonth() + 1 }
 }

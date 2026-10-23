@@ -5,6 +5,7 @@ import {
   horaEmSaoPaulo,
   intervaloDoMes,
   mesDeHoje,
+  mesIso,
   rotuloDoDia,
   rotuloDoMes,
   somarDias,
@@ -94,5 +95,12 @@ describe('horaEmSaoPaulo', () => {
   it('mostra a hora de São Paulo, mesmo quando em UTC já é outro dia', () => {
     expect(horaEmSaoPaulo('2026-10-22T01:30:00Z')).toBe('22:30')
     expect(horaEmSaoPaulo('2026-10-21T03:05:00Z')).toBe('00:05')
+  })
+})
+
+describe('mesIso', () => {
+  it('escreve o mês com dois dígitos e o ano com quatro', () => {
+    expect(mesIso({ ano: 2026, mes: 3 })).toBe('2026-03')
+    expect(mesIso({ ano: 2199, mes: 12 })).toBe('2199-12')
   })
 })

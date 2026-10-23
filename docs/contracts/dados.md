@@ -1031,16 +1031,24 @@ O arquivo original **não é guardado** depois de processado. O que fica é
 
 ```
 orcamento
-  id            uuid pk
-  usuario_id    uuid fk not null
-  categoria_id  uuid fk not null
-  mes           date not null         -- sempre dia 1
-  teto          numeric(18,2) not null
-  unique (usuario_id, categoria_id, mes)
+  usuario_id      uuid fk not null on delete cascade
+  categoria_id    uuid not null        -- FK composta: categoria de despesa do mesmo usuário, on delete cascade
+  desde           date not null        -- dia 1, de 1900-01-01 a 2199-12-01
+  teto            numeric(18,2) null   -- > 0 e até 90071992547409.91; nulo encerra a partir de desde
+  tipo_categoria  text gerada ('despesa')   -- a aplicação não escreve
+  criado_em       timestamptz not null default now()
+  primary key (usuario_id, categoria_id, desde)
 ```
 
+Migration `V18` (F16, ADR-043). **Vigência, não uma linha por mês:** o teto de
+um mês é a linha da categoria com o maior `desde` até ele. Isso desvia do
+rascunho anterior (`mes` e `teto not null`), que obrigava a repetir o teto todo
+mês.
+
 Consumo usa `data_competencia`, não `data_caixa`: o orçamento de outubro conta
-a compra feita em outubro, mesmo que a fatura caia em novembro.
+a compra feita em outubro, mesmo que a fatura caia em novembro. Soma a
+categoria e as filhas. Gasto é o realizado com competência até hoje; previsto é
+o previsto e o realizado com data depois de hoje.
 
 ---
 
@@ -1078,7 +1086,7 @@ create index on lancamento (usuario_id, hash_externo) where hash_externo is not 
 create index on importacao_linha (importacao_id, decisao);
 ```
 
-Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`. A `V12` não acrescenta nenhum (a PK de `conta_categoria_permitida` serve, conferido com `EXPLAIN`). A `V13` cria `movimento_cripto (usuario_id, conta_id, data)` e dispensa o índice descendente de `cotacao`, porque a PK serve (seção Cripto).
+Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`. A `V12` não acrescenta nenhum (a PK de `conta_categoria_permitida` serve, conferido com `EXPLAIN`). A `V13` cria `movimento_cripto (usuario_id, conta_id, data)` e dispensa o índice descendente de `cotacao`, porque a PK serve (seção Cripto). A `V18` cria o de `(usuario_id, data_competencia, categoria_id)` para o orçamento.
 O primeiro serve saldo e fluxo de caixa; o segundo, gráfico por categoria e
 orçamento. Antes de adicionar qualquer outro, rode `EXPLAIN ANALYZE` e mostre o
 antes e o depois.

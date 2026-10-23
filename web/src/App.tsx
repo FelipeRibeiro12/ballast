@@ -19,6 +19,7 @@ import Lancamentos from './Lancamentos'
 import Recorrencias from './Recorrencias'
 import { useRota } from './rota'
 import Investimentos from './Investimentos'
+import Orcamento from './Orcamento'
 import Topo from './Topo'
 import { Carregando } from './ui'
 
@@ -468,6 +469,7 @@ function App() {
             }}
           />
         </div>
+        {rota === 'orcamento' && <Orcamento aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'investimentos' && (
           <Investimentos
             contasDeInvestimento={contasDeInvestimento}

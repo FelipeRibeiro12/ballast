@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ServicoIndisponivelError, SessaoExpiradaError, fetchLancamentos } from './api'
-import type { Conta, Lancamento, Usuario } from './api'
-import { formatarDiaMes, hojeLocal, somarDias } from './datas'
+import { ServicoIndisponivelError, SessaoExpiradaError, fetchLancamentos, fetchOrcamentos } from './api'
+import type { Conta, Lancamento, Orcamento, OrcamentosDoMes, Usuario } from './api'
+import { formatarDiaMes, hojeLocal, mesDeHoje, mesIso, rotuloDoMes, somarDias } from './datas'
 import { formatarCentavos } from './dinheiro'
+import { carregar } from './leitura'
+import type { Estado } from './leitura'
+import { ConsumoDoMes } from './Orcamento'
+import { hashDaSecao } from './rota'
 import SaldoProjetado from './SaldoProjetado'
 import { aindaNaoAconteceu } from './totaisDoMes'
 import { Carregando, EstadoVazio } from './ui'
@@ -195,6 +199,77 @@ function ProximasPrevistas({
   )
 }
 
+const TETOS_NO_INICIO = 3
+
+// Do mais consumido ao menos, comparando gasto/teto em BigInt sem dividir.
+function porConsumo(a: Orcamento, b: Orcamento): number {
+  const esquerda = BigInt(b.gastoCentavos) * BigInt(a.tetoCentavos)
+  const direita = BigInt(a.gastoCentavos) * BigInt(b.tetoCentavos)
+  return esquerda > direita ? 1 : esquerda < direita ? -1 : 0
+}
+
+// O Orçamento não cabe na barra de navegação em 360px: este cartão é a porta de entrada dele.
+function ResumoDoOrcamento({ aoSessaoExpirar }: { aoSessaoExpirar: () => void }) {
+  const [estado, setEstado] = useState<Estado<OrcamentosDoMes>>({ tipo: 'carregando' })
+  const [mes] = useState(() => mesDeHoje())
+
+  useEffect(() => {
+    let vale = true
+    carregar(() => fetchOrcamentos(mesIso(mes)), 'o orçamento', aoSessaoExpirar, setEstado, () => vale)
+    return () => {
+      vale = false
+    }
+  }, [mes, aoSessaoExpirar])
+
+  const titulo = `Orçamento de ${rotuloDoMes(mes)}`
+  const acima = estado.tipo === 'ok' ? estado.dados.orcamentos.filter((o) => o.restanteCentavos < 0).length : 0
+  return (
+    <section className="cartao" aria-label={titulo}>
+      <h3 className="titulo-cartao">{titulo}</h3>
+      {estado.tipo === 'carregando' && <Carregando texto="Carregando o orçamento..." linhas={2} />}
+      {estado.tipo === 'erro' && (
+        <p role="alert" className="erro">
+          {estado.mensagem}
+        </p>
+      )}
+      {estado.tipo === 'ok' && estado.dados.orcamentos.length === 0 && (
+        <EstadoVazio
+          titulo="Nenhum teto neste mês."
+          dica="Defina quanto quer gastar por categoria de despesa."
+          acao={
+            <a className="botao" href={hashDaSecao('orcamento')}>
+              Definir tetos
+            </a>
+          }
+        />
+      )}
+      {estado.tipo === 'ok' && estado.dados.orcamentos.length > 0 && (
+        <>
+          {acima > 0 && (
+            <p role="status">{acima === 1 ? '1 categoria acima do teto' : `${acima} categorias acima do teto`}</p>
+          )}
+          <ul className="lancamentos" aria-label="Tetos do mês">
+            {[...estado.dados.orcamentos]
+              .sort(porConsumo)
+              .slice(0, TETOS_NO_INICIO)
+              .map((orcamento) => (
+                <li key={orcamento.categoriaId}>
+                  <div className="item-corpo">
+                    <strong className="item-titulo">{orcamento.categoriaNome}</strong>
+                    <ConsumoDoMes orcamento={orcamento} />
+                  </div>
+                </li>
+              ))}
+          </ul>
+          <p className="cartao-rodape">
+            <a href={hashDaSecao('orcamento')}>Ver orçamento</a>
+          </p>
+        </>
+      )}
+    </section>
+  )
+}
+
 export default function Inicio({
   usuario,
   contas,
@@ -230,6 +305,7 @@ export default function Inicio({
         <div className="coluna">
           <div ref={aoMontarVencidas} />
           <ProximasPrevistas contas={contas} versao={versaoDaLista} aoSessaoExpirar={aoSessaoExpirar} />
+          <ResumoDoOrcamento aoSessaoExpirar={aoSessaoExpirar} />
         </div>
       </div>
     </section>

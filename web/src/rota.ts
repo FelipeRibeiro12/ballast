@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 
-export type Secao = 'inicio' | 'lancamentos' | 'contas' | 'recorrencias' | 'investimentos'
+export type Secao = 'inicio' | 'lancamentos' | 'contas' | 'recorrencias' | 'orcamento' | 'investimentos'
 
+// As da barra de navegação. Com seis os rótulos se sobrepõem em 360px, então o Orçamento abre
+// pelo cartão do Início e não tem lugar aqui.
 export const SECOES: readonly Secao[] = ['inicio', 'lancamentos', 'contas', 'recorrencias', 'investimentos']
+
+const TODAS_AS_SECOES: readonly Secao[] = [...SECOES, 'orcamento']
 
 export const ROTULO_DA_SECAO: Record<Secao, string> = {
   inicio: 'Início',
   lancamentos: 'Lançamentos',
   contas: 'Contas',
   recorrencias: 'Recorrências',
+  orcamento: 'Orçamento',
   investimentos: 'Investimentos',
 }
 
@@ -17,7 +22,7 @@ export function lerSecao(hash: string): Secao {
   const nome = hash.replace(/^#\/?/, '')
   // A aba Cripto da F13 virou Investimentos; o link antigo ainda chega lá.
   if (nome === 'cripto') return 'investimentos'
-  return SECOES.find((secao) => secao === nome) ?? 'inicio'
+  return TODAS_AS_SECOES.find((secao) => secao === nome) ?? 'inicio'
 }
 
 export function hashDaSecao(secao: Secao): string {
