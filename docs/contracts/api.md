@@ -679,6 +679,28 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   `categoria não encontrada`. Categoria de receita: 400 `orçamento só vale para
   categoria de despesa`.
 
+## Metas (ADR-045)
+
+- `GET /metas`, `POST /metas`, `PUT /metas/{id}`, `DELETE /metas/{id}`. Corpo:
+  `{titulo, valorAlvoCentavos, dataAlvo?, aporteMensalCentavos?}`. No PUT,
+  ausente ou nulo deixa sem valor.
+- Cada meta traz, além do corpo:
+  - `acumuladoCentavos` e `faltaCentavos`;
+  - `atingida` e `prazoVencido`;
+  - `necessarioPorMesCentavos`: até a data alvo, contando o mês atual,
+    arredondado para cima;
+  - `chegadaPeloPlano`: AAAA-MM pelo aporte mensal;
+  - `ritmoMensalCentavos`: média dos três meses fechados;
+  - `chegadaPeloRitmo`: AAAA-MM nesse ritmo.
+- `GET /metas/{id}/aportes`: do mais novo ao mais antigo.
+- `POST /metas/{id}/aportes` com `{valorCentavos, data}`. Positivo guarda,
+  negativo retira, zero dá 400. Responde 201 com a meta atualizada. Data no
+  futuro e retirada maior que o acumulado dão 400.
+- `DELETE /metas/{id}/aportes/{aporteId}`: 204. Responde 400 quando o
+  acumulado ficaria negativo.
+- Meta ou aporte de outro usuário, inexistente ou id que não é UUID: 404
+  `meta não encontrada`.
+
 ## Renda fixa (ADR-037)
 
 ### Conta de investimento

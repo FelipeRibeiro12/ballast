@@ -945,27 +945,32 @@ Migration `V7` (ADR-025). O que o banco garante, e como:
 
 ```
 meta
-  id                uuid pk
-  usuario_id        uuid fk not null
-  titulo            text not null
-  valor_alvo        numeric(18,2) not null
-  data_alvo         date null
-  conta_id          uuid fk null       -- onde o dinheiro está guardado
-  regra_id          uuid fk null       -- aporte recorrente
-  aporte_previsto   numeric(18,2) null
-  concluida_em      timestamptz null
+  id              uuid pk (gerado na aplicação)
+  usuario_id      uuid fk not null on delete cascade
+  titulo          text not null          -- 1 a 100, sem espaço nas pontas
+  valor_alvo      numeric(18,2) not null -- > 0 e até 90071992547409.91
+  data_alvo       date null              -- 1900 a 2199
+  aporte_mensal   numeric(18,2) null     -- plano, > 0; nada se lança sozinho
+  criado_em       timestamptz not null default now()
+  unique (id, usuario_id)                -- alvo da FK composta
 
 aporte_meta
-  id            uuid pk
-  meta_id       uuid fk not null
-  lancamento_id uuid fk null           -- se veio de um lançamento real
-  valor         numeric(18,2) not null
-  data          date not null
+  id          uuid pk (gerado na aplicação)
+  usuario_id  uuid fk not null on delete cascade
+  meta_id     uuid not null      -- FK composta: meta do mesmo usuário, on delete cascade
+  valor       numeric(18,2) not null   -- positivo guarda, negativo retira; nunca zero
+  data        date not null            -- 1900 a 2199; a API só aceita até hoje
+  criado_em   timestamptz not null default now()
+  index (usuario_id, meta_id, data)
 ```
 
-Progresso é `soma(aportes) / valor_alvo`. Com `data_alvo` e `aporte_previsto`,
-dá para responder "no ritmo atual, chego em qual data" — que é mais útil que a
-porcentagem sozinha.
+Migration `V19` (F17, ADR-045). **Desvio do rascunho anterior:** sem
+`conta_id`, sem `regra_id`, sem `lancamento_id` e sem `concluida_em`. O aporte
+é registrado à mão, o aporte mensal é plano e "atingida" é calculada.
+
+Progresso é `soma(aporte_meta.valor)`, que a aplicação nunca deixa negativo
+(trava a meta com `FOR UPDATE`). A projeção ("necessário por mês", "chega pelo
+plano", "chega no ritmo") é calculada na leitura.
 
 ## Importação de extrato e fatura
 
