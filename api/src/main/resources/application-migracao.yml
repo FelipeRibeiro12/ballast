@@ -1,0 +1,18 @@
+# Passo de migração do deploy (ADR-044): roda o Flyway como dono do schema, confere o schema com o
+# JPA e sai. Recebe DATABASE_URL, DB_MIGRATION_USER, DB_MIGRATION_PASSWORD e o nome em DB_USER,
+# que o GRANT da V3 usa. A senha da aplicação não chega a este passo.
+spring:
+  main:
+    web-application-type: none
+  datasource:
+    username: ${DB_MIGRATION_USER}
+    password: ${DB_MIGRATION_PASSWORD}
+
+# Sem job: com o agendador ligado a JVM não sai, e o índice do Banco Central rodaria na subida.
+ballast:
+  recurrence:
+    job-enabled: false
+  indices:
+    job-enabled: false
+  cotacoes:
+    job-enabled: false
