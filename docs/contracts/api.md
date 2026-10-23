@@ -587,6 +587,18 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   falta de cotação.
 - Qualquer valor fora de ±9007199254740991 dá 400 `patrimônio fora do limite`.
 
+#### Custo médio e valorização (ADR-042)
+
+- Cada item de `GET /posicoes-cripto` traz `custoMedioUsd` (texto, dólares por
+  unidade, até 8 casas), `custoDaPosicaoUsdCentavos` e `custoDaPosicaoCentavos`
+  (custo médio do que resta), `ganhoUsdCentavos` e `ganhoCentavos` (valor menos
+  custo da posição, nulos sem cotação) e `realizadoUsdCentavos` e
+  `realizadoCentavos` (recebido nas vendas menos o custo médio do vendido).
+- No mesmo dia a compra conta antes da venda.
+- `GET /patrimonio` traz `criptoAportadoCentavos` (compras menos vendas, em
+  reais, das posições com cotação) e `criptoValorizacaoCentavos`
+  (`criptoCentavos` menos o aportado). Nulos sem a PTAX de algum movimento.
+
 ## Editar e apagar contas e recorrências (ADR-036)
 
 ### Editar conta (`PATCH /contas/{id}`)
