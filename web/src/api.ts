@@ -1,10 +1,11 @@
 import type { components } from './api/schema'
+import { baseDaApi } from './rotasDaApi'
 
 export type Healthz = components['schemas']['HealthResponse']
 
 export class ApiError extends Error {}
 
-const baseUrl: string = import.meta.env.VITE_API_URL ?? ''
+const baseUrl: string = baseDaApi(import.meta.env)
 
 function isHealthz(valor: unknown): valor is Healthz {
   return (

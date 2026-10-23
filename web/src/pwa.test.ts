@@ -26,14 +26,14 @@ describe('opcoesDoPwa', () => {
     const denylist = opcoesDoPwa.workbox?.navigateFallbackDenylist ?? []
     const cai = (caminho: string): boolean => denylist.some((regex) => regex.test(caminho))
 
-    it.each(['/contas', '/contas/1', '/lancamentos?de=x', '/auth/eu', '/healthz', '/saldo-projetado'])(
+    it.each(['/contas', '/contas/1', '/lancamentos?de=x', '/auth/eu', '/healthz', '/saldo-projetado', '/api/contas', '/api'])(
       'deixa %s fora do fallback',
       (caminho) => {
         expect(cai(caminho)).toBe(true)
       },
     )
 
-    it.each(['/', '/index.html', '/contasX'])('mantém %s no fallback', (caminho) => {
+    it.each(['/', '/index.html', '/contasX', '/apix'])('mantém %s no fallback', (caminho) => {
       expect(cai(caminho)).toBe(false)
     })
   })

@@ -1,5 +1,5 @@
 import type { VitePWAOptions } from 'vite-plugin-pwa'
-import { padraoDoProxy } from './rotasDaApi.ts'
+import { padraoDoPrefixo, padraoDoProxy } from './rotasDaApi.ts'
 
 // Fica fora do vite.config.ts para o teste importar sem subir o Vite.
 export const opcoesDoPwa: Partial<VitePWAOptions> = {
@@ -28,7 +28,8 @@ export const opcoesDoPwa: Partial<VitePWAOptions> = {
   workbox: {
     globPatterns: ['**/*.{html,js,css,svg,png,webmanifest}'],
     navigateFallback: '/index.html',
-    // Mesma lista do proxy, para uma rota da API nunca virar o index.html.
-    navigateFallbackDenylist: [new RegExp(padraoDoProxy)],
+    // Mesma lista do proxy, para uma rota da API nunca virar o index.html. O prefixo é o caminho
+    // da API em produção (ADR-044).
+    navigateFallbackDenylist: [new RegExp(padraoDoProxy), new RegExp(padraoDoPrefixo)],
   },
 }
