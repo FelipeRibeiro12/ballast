@@ -11,13 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F13.3 — Cripto em dólar
-Cotação e custo de compra e venda em USD, como a exchange mostra, com o valor em
-reais pela PTAX do Banco Central da data. Quantidade de tokens, preço em USD e
-em BRL na tela. Emenda o ADR-035.
-Teste obrigatório: Banco Central fora do ar mostra o último dólar conhecido com
-a data, não erro nem zero.
-
 ### F14 — Cotação automática
 Worker com ticker, série histórica, cache da última cotação conhecida, data da
 cotação visível na interface.
