@@ -2,6 +2,13 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-23 — F15: aporte × valorização
+
+O que entrou: custo médio ponderado por posição, em dólar e em reais, calculado na leitura a partir dos movimentos (compra antes de venda no mesmo dia); na posição, custo médio, custo do que resta, ganho em aberto e ganho das vendas; no patrimônio, aporte e valorização da cripto; no web, as três linhas na posição e a frase no resumo do patrimônio.
+Decisões: ADR-042. Sem migration: o custo é obrigatório no movimento desde a F13, e o custo faltando passou para a F24.
+Teste: três vendas de um terço fecham o custo inteiro; compras menos vendas é o custo que resta menos o realizado; a venda gravada antes da compra do mesmo dia usa o custo das duas.
+Em aberto: ganho realizado de posição zerada não aparece.
+
 ## 2026-10-23 — F14.1: histórico de cotação para trás
 
 O que entrou: migration V17 com `ativo_cripto.historico_em`; `market_chart/range` da CoinGecko por id do nativo e por plataforma e contrato do token, 364 dias, 404 como ativo desconhecido; o job da cotação, depois de cotar, busca até 10 ativos pendentes por rodada e grava só os dias antes da primeira cotação de cada dono, na mesma transação da marca; o filtro de preço da F14 virou um método só.

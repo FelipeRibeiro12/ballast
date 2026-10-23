@@ -24,6 +24,24 @@ public record NetWorthResponse(
         long criptoCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Compras menos vendas, em reais, das posições somadas em criptoCentavos (ADR-042);"
+                    + " nulo sem a PTAX de algum movimento",
+            minimum = "-9007199254740991",
+            maximum = "9007199254740991")
+        Long criptoAportadoCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "criptoCentavos menos criptoAportadoCentavos: o que veio do preço e do dólar, com"
+                    + " o ganho das vendas",
+            minimum = "-9007199254740991",
+            maximum = "9007199254740991")
+        Long criptoValorizacaoCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
             description = "Soma do líquido estimado dos títulos de renda fixa na data",
             minimum = "-9007199254740991",
             maximum = "9007199254740991")
@@ -54,6 +72,8 @@ public record NetWorthResponse(
         date,
         cents(netWorth.accounts()),
         cents(netWorth.crypto()),
+        nullableCents(netWorth.cryptoContribution()),
+        nullableCents(netWorth.cryptoAppreciation()),
         cents(netWorth.fixedIncome()),
         cents(netWorth.total()),
         unquoted);
@@ -62,5 +82,9 @@ public record NetWorthResponse(
   // O serviço já conferiu a faixa; longValueExact falha alto se algum valor escapar.
   private static long cents(BigDecimal amount) {
     return amount.movePointRight(2).longValueExact();
+  }
+
+  private static Long nullableCents(BigDecimal amount) {
+    return amount == null ? null : cents(amount);
   }
 }

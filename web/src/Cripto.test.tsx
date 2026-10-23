@@ -64,6 +64,13 @@ const posicoes = {
       cotacao: { precoUsd: '70000.1', momento: '2026-10-22T01:30:00Z', fonte: 'coingecko' },
       valorUsdCentavos: 864_000,
       valorCentavos: 4_320_000,
+      custoMedioUsd: '64800.00052488',
+      custoDaPosicaoUsdCentavos: 800_000,
+      custoDaPosicaoCentavos: 4_000_000,
+      ganhoUsdCentavos: 64_000,
+      ganhoCentavos: 320_000,
+      realizadoUsdCentavos: 0,
+      realizadoCentavos: 0,
     },
     {
       contaId: 'c1',
@@ -74,6 +81,13 @@ const posicoes = {
       cotacao: null,
       valorUsdCentavos: null,
       valorCentavos: null,
+      custoMedioUsd: '1',
+      custoDaPosicaoUsdCentavos: 1_000,
+      custoDaPosicaoCentavos: 5_000,
+      ganhoUsdCentavos: null,
+      ganhoCentavos: null,
+      realizadoUsdCentavos: 0,
+      realizadoCentavos: 0,
     },
   ],
 }
@@ -169,6 +183,40 @@ describe('Cripto', () => {
     expect(within(btc).getByText(texto('R$ 43.200,00'))).toBeVisible()
     expect(within(semCotacao).getByText('Sem cotação')).toBeVisible()
     expect(within(semCotacao).getByText('—')).toBeVisible()
+  })
+
+  it('separa o custo médio, o ganho em aberto e o das vendas', async () => {
+    mockFetch()
+    renderizar()
+
+    const lista = await screen.findByRole('list', { name: 'Posições' })
+    const [btc, usdc] = within(lista).getAllByRole('listitem')
+    expect(within(btc).getByText(texto('Custo médio US$ 64.800,00052488 por BTC'))).toBeVisible()
+    expect(within(btc).getByText(texto('Ganho em aberto US$ 640,00 (R$ 3.200,00)'))).toBeVisible()
+    // Sem venda não há o que realizar, e sem cotação não há ganho para mostrar.
+    expect(within(btc).queryByText(/nas vendas/)).toBeNull()
+    expect(within(usdc).queryByText(/em aberto/)).toBeNull()
+  })
+
+  it('mostra perda em aberto e o ganho realizado nas vendas', async () => {
+    const comVenda = {
+      ...posicoes,
+      posicoes: [
+        {
+          ...posicoes.posicoes[0],
+          ganhoUsdCentavos: -10_000,
+          ganhoCentavos: -50_000,
+          realizadoUsdCentavos: 5_000,
+          realizadoCentavos: 25_000,
+        },
+      ],
+    }
+    mockFetch({ 'GET /posicoes-cripto?data=2026-10-22': responde(comVenda) })
+    renderizar()
+
+    const lista = await screen.findByRole('list', { name: 'Posições' })
+    expect(within(lista).getByText(texto('Perda em aberto US$ 100,00 (R$ 500,00)'))).toBeVisible()
+    expect(within(lista).getByText(texto('Ganho nas vendas US$ 50,00 (R$ 250,00)'))).toBeVisible()
   })
 
   it('sem conta cripto, explica onde criar e não oferece movimento', async () => {

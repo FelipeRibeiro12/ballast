@@ -1271,7 +1271,22 @@ function isPosicaoCripto(valor: unknown): valor is PosicaoCripto {
     !('valorUsdCentavos' in valor) ||
     !inteiroSeguroOuNulo(valor.valorUsdCentavos) ||
     !('valorCentavos' in valor) ||
-    !inteiroSeguroOuNulo(valor.valorCentavos)
+    !inteiroSeguroOuNulo(valor.valorCentavos) ||
+    // Custo médio, ganho em aberto e realizado nas vendas (ADR-042).
+    !('custoMedioUsd' in valor) ||
+    !(valor.custoMedioUsd === null || eDecimalEmTexto(valor.custoMedioUsd)) ||
+    !('custoDaPosicaoUsdCentavos' in valor) ||
+    !inteiroSeguroOuNulo(valor.custoDaPosicaoUsdCentavos) ||
+    !('custoDaPosicaoCentavos' in valor) ||
+    !inteiroSeguroOuNulo(valor.custoDaPosicaoCentavos) ||
+    !('ganhoUsdCentavos' in valor) ||
+    !inteiroSeguroOuNulo(valor.ganhoUsdCentavos) ||
+    !('ganhoCentavos' in valor) ||
+    !inteiroSeguroOuNulo(valor.ganhoCentavos) ||
+    !('realizadoUsdCentavos' in valor) ||
+    !inteiroSeguroOuNulo(valor.realizadoUsdCentavos) ||
+    !('realizadoCentavos' in valor) ||
+    !inteiroSeguroOuNulo(valor.realizadoCentavos)
   ) {
     return false
   }
@@ -1327,6 +1342,10 @@ function isPatrimonio(valor: unknown): valor is Patrimonio {
     Number.isSafeInteger(valor.contasCentavos) &&
     'criptoCentavos' in valor &&
     Number.isSafeInteger(valor.criptoCentavos) &&
+    'criptoAportadoCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.criptoAportadoCentavos) &&
+    'criptoValorizacaoCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.criptoValorizacaoCentavos) &&
     'rendaFixaCentavos' in valor &&
     Number.isSafeInteger(valor.rendaFixaCentavos) &&
     'totalCentavos' in valor &&

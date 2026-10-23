@@ -1237,9 +1237,19 @@ export interface components {
             contasCentavos: number;
             /**
              * Format: int64
+             * @description Compras menos vendas, em reais, das posições somadas em criptoCentavos (ADR-042); nulo sem a PTAX de algum movimento
+             */
+            criptoAportadoCentavos: number | null;
+            /**
+             * Format: int64
              * @description Soma do valor das posições com cotação
              */
             criptoCentavos: number;
+            /**
+             * Format: int64
+             * @description criptoCentavos menos criptoAportadoCentavos: o que veio do preço e do dólar, com o ganho das vendas
+             */
+            criptoValorizacaoCentavos: number | null;
             /** Format: date */
             data: string;
             /**
@@ -1266,11 +1276,43 @@ export interface components {
             custoCentavos: number | null;
             /**
              * Format: int64
+             * @description Custo médio das unidades que restam, em centavos de real pela PTAX de cada movimento; nulo sem a PTAX de algum movimento em dólar
+             */
+            custoDaPosicaoCentavos: number | null;
+            /**
+             * Format: int64
+             * @description Custo médio das unidades que restam, em centavos de dólar; nulo sem a PTAX de algum movimento em reais
+             */
+            custoDaPosicaoUsdCentavos: number | null;
+            /** @description Custo médio ponderado em dólares por unidade, em texto, com 8 casas no máximo (ADR-042); nulo sem a PTAX de algum movimento em reais */
+            custoMedioUsd: string | null;
+            /**
+             * Format: int64
              * @description Compras menos vendas em centavos de dólar; nulo sem a PTAX de algum movimento em reais
              */
             custoUsdCentavos: number | null;
+            /**
+             * Format: int64
+             * @description valorCentavos menos custoDaPosicaoCentavos, com o efeito do dólar; nulo quando falta um dos dois
+             */
+            ganhoCentavos: number | null;
+            /**
+             * Format: int64
+             * @description valorUsdCentavos menos custoDaPosicaoUsdCentavos: o que o preço fez com o que restou; nulo quando falta um dos dois
+             */
+            ganhoUsdCentavos: number | null;
             /** @description Tokens: compras menos vendas até a data, em texto, sem zero à direita */
             quantidade: string;
+            /**
+             * Format: int64
+             * @description Recebido nas vendas menos o custo médio do que foi vendido, em centavos de real; nulo sem a PTAX de algum movimento em dólar
+             */
+            realizadoCentavos: number | null;
+            /**
+             * Format: int64
+             * @description Recebido nas vendas menos o custo médio do que foi vendido, em centavos de dólar; nulo sem a PTAX de algum movimento em reais
+             */
+            realizadoUsdCentavos: number | null;
             /**
              * Format: int64
              * @description Valor em reais pela PTAX da data; nulo sem cotação ou sem PTAX

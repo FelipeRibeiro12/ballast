@@ -38,7 +38,56 @@ public record PositionResponse(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description = "Valor em reais pela PTAX da data; nulo sem cotação ou sem PTAX")
-        Long valorCentavos) {
+        Long valorCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Custo médio ponderado em dólares por unidade, em texto, com 8 casas no máximo"
+                    + " (ADR-042); nulo sem a PTAX de algum movimento em reais")
+        String custoMedioUsd,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Custo médio das unidades que restam, em centavos de dólar; nulo sem a PTAX de"
+                    + " algum movimento em reais")
+        Long custoDaPosicaoUsdCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Custo médio das unidades que restam, em centavos de real pela PTAX de cada"
+                    + " movimento; nulo sem a PTAX de algum movimento em dólar")
+        Long custoDaPosicaoCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "valorUsdCentavos menos custoDaPosicaoUsdCentavos: o que o preço fez com o que"
+                    + " restou; nulo quando falta um dos dois")
+        Long ganhoUsdCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "valorCentavos menos custoDaPosicaoCentavos, com o efeito do dólar; nulo quando"
+                    + " falta um dos dois")
+        Long ganhoCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Recebido nas vendas menos o custo médio do que foi vendido, em centavos de"
+                    + " dólar; nulo sem a PTAX de algum movimento em reais")
+        Long realizadoUsdCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Recebido nas vendas menos o custo médio do que foi vendido, em centavos de real;"
+                    + " nulo sem a PTAX de algum movimento em dólar")
+        Long realizadoCentavos) {
 
   @Schema(name = "CotacaoDaPosicao")
   public record QuoteValue(
@@ -79,7 +128,14 @@ public record PositionResponse(
         cents(valued.costBrl()),
         quote,
         cents(valued.valueUsd()),
-        cents(valued.valueBrl()));
+        cents(valued.valueBrl()),
+        valued.averageCostUsd() == null ? null : Decimals.format(valued.averageCostUsd()),
+        cents(valued.basisUsd()),
+        cents(valued.basisBrl()),
+        cents(valued.gainUsd()),
+        cents(valued.gainBrl()),
+        cents(valued.realizedUsd()),
+        cents(valued.realizedBrl()));
   }
 
   // O serviço já arredondou e conferiu a faixa; longValueExact falha alto se algum valor escapar.

@@ -11,14 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F15 — Aporte × valorização
-Quanto do crescimento foi aporte e quanto foi preço. Sem isso, cripto subindo
-parece economia.
-Inclui o custo médio da posição de cripto: hoje `custoCentavos` é compras menos
-vendas e a tela o chama assim (QA da F13, D2).
-Depende de `preco_unitario` nas movimentações — e ele é nullable, então a tela
-precisa pedir o custo quando faltar.
-
 ### F16 — Orçamento por categoria
 Teto mensal, consumo por `data_competencia`, quanto falta.
 
@@ -60,6 +52,8 @@ indexador, `confiavel = false` por padrão para ativo desconhecido, data da
 Redes do MVP: Ethereum, Base, Solana.
 Teste obrigatório: indexador fora do ar mostra saldo antigo com a data, não
 erro nem zero; token de spam não entra no patrimônio.
+Movimento sincronizado chega sem custo: o custo médio da posição fica nulo e a
+tela pede o custo em vez de inventar (ADR-042).
 
 ### F25 — Conectar carteira
 Botão que preenche o endereço automaticamente. EVM com `wagmi` v2 e descoberta

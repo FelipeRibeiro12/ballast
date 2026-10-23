@@ -40,6 +40,15 @@ function ResumoDoPatrimonio({ estado }: { estado: Estado<Patrimonio> }) {
           <dd>{formatarCentavos(dados.criptoCentavos)}</dd>
         </div>
       </dl>
+      {dados.criptoCentavos !== 0 && dados.criptoAportadoCentavos !== null && dados.criptoValorizacaoCentavos !== null && (
+        <p>
+          Na cripto, {formatarCentavos(dados.criptoAportadoCentavos)} de aporte e{' '}
+          {dados.criptoValorizacaoCentavos < 0
+            ? `${formatarCentavos(-dados.criptoValorizacaoCentavos)} de desvalorização`
+            : `${formatarCentavos(dados.criptoValorizacaoCentavos)} de valorização`}
+          .
+        </p>
+      )}
       {semCotacao > 0 && (
         <p role="status">
           {semCotacao === 1
