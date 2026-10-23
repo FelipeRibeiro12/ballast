@@ -11,9 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F16 — Orçamento por categoria
-Teto mensal, consumo por `data_competencia`, quanto falta.
-
 ### F17 — Metas
 Criar, aporte recorrente, progresso, e "no ritmo atual chego em tal data".
 

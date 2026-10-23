@@ -661,6 +661,24 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   canceladas ficam como lançamentos avulsos, sem `templateId`. 404 igual ao
   `GET`.
 
+## Orçamento (ADR-043)
+
+- `GET /orcamentos?mes=AAAA-MM`: sem `mes`, o mês corrente em
+  `America/Sao_Paulo`. Responde `{mes, orcamentos: [...]}` com as categorias
+  que têm teto no mês, pelo nome. Cada item: `categoriaId`, `categoriaNome`,
+  `tetoCentavos`, `desde` (AAAA-MM em que esse teto começou), `gastoCentavos`
+  (realizado com competência no mês até hoje), `previstoCentavos` (previsto e
+  realizado com data depois de hoje) e `restanteCentavos` (teto menos gasto,
+  negativo quando passou). Soma a categoria e as filhas. 400 para `mes` fora do
+  formato ou "orçamento fora do limite".
+- `PUT /orcamentos/{categoriaId}` com `{tetoCentavos, aPartirDe}`: o teto vale
+  de `aPartirDe` até a próxima mudança. No mesmo mês, troca. 204.
+- `DELETE /orcamentos/{categoriaId}?aPartirDe=AAAA-MM`: encerra a partir do
+  mês; os anteriores ficam. 204.
+- Categoria de outro usuário, inexistente ou id que não é UUID: 404
+  `categoria não encontrada`. Categoria de receita: 400 `orçamento só vale para
+  categoria de despesa`.
+
 ## Renda fixa (ADR-037)
 
 ### Conta de investimento

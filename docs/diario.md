@@ -2,6 +2,13 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-23 — F16: orçamento por categoria
+
+O que entrou: migration V18 com `orcamento` por vigência (teto nulo encerra) e o índice de competência em `lancamento`; `GET`, `PUT` e `DELETE /orcamentos` com gasto por competência até hoje, previsto e restante, somando as categorias filhas; no web, a tela Orçamento com navegação por mês, novo teto, editar e encerrar a partir do mês, e um cartão no Início com os três tetos mais consumidos.
+Decisões: ADR-043. Vigência no lugar de uma linha por mês. O Orçamento ficou fora da barra de navegação porque seis rótulos se sobrepõem em 360px (conferido com screenshot no Chromium); entra pelo Início.
+Antes: deixei `strict` escrito nos tsconfig (PR #28); o TypeScript 6 já ligava por padrão.
+Em aberto: nada.
+
 ## 2026-10-23 — F15: aporte × valorização
 
 O que entrou: custo médio ponderado por posição, em dólar e em reais, calculado na leitura a partir dos movimentos (compra antes de venda no mesmo dia); na posição, custo médio, custo do que resta, ganho em aberto e ganho das vendas; no patrimônio, aporte e valorização da cripto; no web, as três linhas na posição e a frase no resumo do patrimônio.
