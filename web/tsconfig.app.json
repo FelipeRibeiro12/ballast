@@ -17,6 +17,8 @@
     "jsx": "react-jsx",
 
     /* Linting */
+    /* O TypeScript 6 já liga por padrão; escrito para não depender do padrão da versão. */
+    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
