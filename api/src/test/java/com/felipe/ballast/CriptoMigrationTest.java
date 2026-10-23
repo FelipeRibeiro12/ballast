@@ -286,9 +286,12 @@ class CriptoMigrationTest {
     assertConstraint(
         "cotacao_preco_positivo",
         cotacao(f.usuario, f.ativo, "2026-10-02T12:00:00Z", "-1", "manual"));
+    // A V16 aceita a fonte automática da F14 (ADR-040); outra fonte continua recusada.
+    assertThat(cotacao(f.usuario, f.ativo, "2026-10-02T12:00:00Z", "1", "coingecko").update())
+        .isEqualTo(1);
     assertConstraint(
         "cotacao_fonte_valida",
-        cotacao(f.usuario, f.ativo, "2026-10-02T12:00:00Z", "1", "coingecko"));
+        cotacao(f.usuario, f.ativo, "2026-10-03T12:00:00Z", "1", "binance"));
   }
 
   @Test
