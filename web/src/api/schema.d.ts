@@ -4133,7 +4133,7 @@ export interface operations {
                     "application/json": components["schemas"]["TituloRendaFixa"];
                 };
             };
-            /** @description Como no POST, e aplicação depois do resgate */
+            /** @description Como no POST, e aplicação depois do resgate (no mesmo dia vale) */
             400: {
                 headers: {
                     [name: string]: unknown;

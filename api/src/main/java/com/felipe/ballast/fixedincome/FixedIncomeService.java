@@ -30,6 +30,7 @@ public class FixedIncomeService {
 
   private static final String ACCOUNT_FK = "titulo_renda_fixa_conta_investimento_do_usuario";
   private static final String REDEMPTION_AFTER = "titulo_renda_fixa_resgate_depois";
+  private static final String MARK_TITLE_FK = "marcacao_renda_fixa_titulo_do_usuario";
 
   private final FixedIncomeQueries queries;
   private final IndexQueries indices;
@@ -123,10 +124,14 @@ public class FixedIncomeService {
             UUID saved = id;
             if (id == null) {
               saved = queries.insert(userId, fields);
-            } else {
-              queries.update(userId, id, fields);
+            } else if (queries.update(userId, id, fields) == 0) {
+              // Apagado por outra requisição entre a leitura e o UPDATE (QA da F13.2).
+              return SaveResult.Rejected.NOT_FOUND;
             }
-            return new SaveResult.Saved(queries.find(userId, saved).orElseThrow());
+            return queries
+                .find(userId, saved)
+                .<SaveResult>map(SaveResult.Saved::new)
+                .orElse(SaveResult.Rejected.NOT_FOUND);
           });
     } catch (DataIntegrityViolationException e) {
       if (Constraints.isViolated(e, ACCOUNT_FK)) {
@@ -146,6 +151,18 @@ public class FixedIncomeService {
 
   // Marcação entre a aplicação e hoje, e não depois do resgate.
   DatedResult mark(UUID userId, UUID id, LocalDate date, BigDecimal value) {
+    try {
+      return markLocked(userId, id, date, value);
+    } catch (DataIntegrityViolationException e) {
+      // O título foi apagado depois da leitura: a FK da marcação recusa (QA da F13.2).
+      if (Constraints.isViolated(e, MARK_TITLE_FK)) {
+        return DatedResult.NOT_FOUND;
+      }
+      throw e;
+    }
+  }
+
+  private DatedResult markLocked(UUID userId, UUID id, LocalDate date, BigDecimal value) {
     return transaction.execute(
         status -> {
           Optional<FixedIncomeQueries.Title> title = queries.find(userId, id);

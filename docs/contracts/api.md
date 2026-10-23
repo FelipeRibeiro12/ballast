@@ -673,7 +673,8 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
 - Recusas, todas 400: `dataAplicacao não pode ser no futuro`, `vencimento deve
   ser depois da aplicação`, `conta não encontrada` (inexistente, alheia ou id
   malformado), `conta deve ser de investimento`, `conta arquivada` e, no `PUT`,
-  `dataAplicacao deve ser antes do resgate`. Título alheio, inexistente ou id
+  `dataAplicacao não pode ser depois do resgate` (resgate no dia da aplicação
+  vale). Título alheio, inexistente ou id
   que não é UUID: 404 `não encontrado`.
 - `GET ?data=` (padrão hoje em `America/Sao_Paulo`) responde `{data, indices:
   {cdiAte, ipcaAte}, titulos}`, só dos títulos de contas ativas, por data de

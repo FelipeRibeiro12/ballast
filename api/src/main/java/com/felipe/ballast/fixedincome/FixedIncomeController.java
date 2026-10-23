@@ -46,7 +46,7 @@ class FixedIncomeController {
   private static final ErrorResponse MATURITY_BEFORE =
       new ErrorResponse("vencimento deve ser depois da aplicação");
   private static final ErrorResponse APPLICATION_AFTER_REDEMPTION =
-      new ErrorResponse("dataAplicacao deve ser antes do resgate");
+      new ErrorResponse("dataAplicacao não pode ser depois do resgate");
   private static final ErrorResponse DATE_OUT_OF_RANGE =
       new ErrorResponse("data deve ficar entre a aplicação e hoje");
   private static final ErrorResponse REDEEMED = new ErrorResponse("título já resgatado nessa data");
@@ -105,7 +105,7 @@ class FixedIncomeController {
       content = @Content(schema = @Schema(implementation = TitleResponse.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "Como no POST, e aplicação depois do resgate",
+      description = "Como no POST, e aplicação depois do resgate (no mesmo dia vale)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",

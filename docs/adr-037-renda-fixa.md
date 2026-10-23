@@ -104,6 +104,8 @@ a aplicação (data e valor aplicado). Sobre ele aplica-se o fator de M até D:
   -5% a 100% ao mês. Gravado errado, ele ficaria para sempre.
 - Taxa até 1000: acima disso a raiz 252 por Newton partindo de 1 não converge.
 - Data futura vale o valor de hoje, o que também limita o laço de dias úteis.
+- Depois do último CDI guardado, feriado conta como dia útil (aproximação aceita:
+  o QA mediu 26 centavos em 2 anos a 6%; some quando o CDI do período chega).
 
 ## Justificativa
 

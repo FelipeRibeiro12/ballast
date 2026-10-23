@@ -2258,7 +2258,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Como no POST, e aplicação depois do resgate"
+          description: "Como no POST, e aplicação depois do resgate (no mesmo dia\
+            \ vale)"
         "401":
           content:
             application/json:

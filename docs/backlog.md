@@ -168,6 +168,10 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Resposta do Banco Central sem teto de bytes nem prazo total (auditoria do PR #22, B1); o `docs/ameacas.md` pede que resposta gigante não derrube o worker. Ler com limite. Dono: backend.
 - **DÍVIDA** — "Ver posições" da conta cripto e o link antigo `#/cripto` abrem Investimentos na aba Renda fixa (revisão do PR #22). Aceitar a aba na rota, como `#/investimentos/cripto`. Dono: frontend.
 - **DÍVIDA** — O web usa `CriptoNaoEncontradoError` e `recusarRespostaDeCripto` também para título de renda fixa (revisão do PR #22). Renomear para um erro de investimento. Dono: frontend.
+- **DÍVIDA** — Um título no teto de valor faz a lista de renda fixa e o patrimônio responderem 400 `fora do limite` sem dizer qual título (QA da F13.2, D2). Devolver o título sem valor, como a posição sem cotação. Dono: backend.
+- **DÍVIDA** — Cadastrar título com aplicação antiga e o Banco Central mudo segura a requisição até 10 s (2 séries x 5 s) (QA da F13.2, D3). Levar a busca para fora da requisição. Dono: backend.
+- **DÍVIDA** — Sem IPCA guardado, o título IPCA + taxa rende só a taxa; com CDI incompleto (Banco Central fora na primeira aplicação), o valor sai menor; a tela só avisa quando não há CDI nenhum (QA da F13.2, D4 e D5). Avisar por título quando o índice não cobre o período. Dono: backend e frontend.
+- **DÍVIDA** — Editar a aplicação para depois de uma marcação tira a marcação do cálculo, mas ela continua como último valor do banco na tela (QA da F13.2, D6). Recusar ou esconder. Dono: backend.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

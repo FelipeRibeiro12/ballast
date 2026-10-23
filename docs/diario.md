@@ -2,6 +2,16 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-22 — F13.2: renda fixa (PR #22)
+
+O que entrou: migration V14 com o tipo `investimento`, `titulo_renda_fixa`, `marcacao_renda_fixa` e `indice` (público, sem `usuario_id`); download de CDI e IPCA do Banco Central ao subir e às 8h; cálculo em `BigDecimal` de prefixado, % do CDI e IPCA + taxa, com a raiz 252 por Newton e os dias úteis tirados da série do CDI; IR e IOF estimados no CDB; rotas de título, marcação, resgate e índices; renda fixa no patrimônio e na exclusão de conta; no web, a aba Investimentos com renda fixa e cripto e o patrimônio no topo.
+Decisões: ADR-037 (cálculo híbrido e CDB com bruto e líquido, escolhas do dono). Fora de ADR: a V14 não faz DROP e deixa a coluna da V13 redundante; data futura vale o valor de hoje; taxa até 1000.
+Dívida registrada: coluna redundante da V13 (depende de autorização para o DROP), desfazer resgate, IPCA sem projeção, vencimento que continua rendendo, título no teto derrubando a lista, aviso por título quando o índice não cobre o período, busca de índice dentro da requisição, tetos e rate limit, link para a aba Cripto, nomes de erro reaproveitados, e2e consultando o Banco Central.
+Achados do QA: 1 bloqueou (contrato dizia "antes do resgate" e o banco aceita o mesmo dia; texto corrigido), 6 dívidas (uma corrigida: corrida dava 500 e passou a 404; cinco registradas), 2 sugestões (uma registrada no ADR). 59 de 59 contas à mão bateram.
+Achados do revisor: 0 bloquearam, 2 corrigir antes (IPCA no meio do mês sem o mês da aplicação; busca síncrona amplificada por data antiga; os dois corrigidos), 7 sugestões registradas. Security: 0 críticos, 1 alto (aplicação de 1900 pedia dezenas de janelas vazias ao Banco Central por cadastro; busca passou a começar no primeiro dado da série, uma atualização por vez), 2 médios (data futura e valor implausível do Banco Central, corrigidos; teto e rate limit registrados), 3 baixos (taxa extrema e faixa do numeric corrigidos; teto de bytes registrado).
+Pipeline: verde em todos os checks, o e2e incluído.
+Em aberto: nada.
+
 ## 2026-10-22 — F13.1: editar e apagar contas e recorrências (PR #21)
 
 O que entrou: `PATCH /contas/{id}` com nome, saldo inicial, limite e conta de pagamento; `DELETE /contas/{id}` que leva tudo da conta e converte a perna de transferência da outra conta em lançamento comum; `GET /contas/{id}/resumo-exclusao`; `PUT`, reativar e `DELETE /recorrencias/{id}`; deadlock (40P01) respondendo 503; no web, editar e apagar conta com confirmação pelo nome, editar, reativar e apagar recorrência com o formulário de criação em modo edição; passo no e2e.
