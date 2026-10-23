@@ -1,6 +1,8 @@
 package com.felipe.ballast.crypto;
 
+import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 
 // De onde vem a cotação automática. Em produção é a CoinGecko; nos testes, uma fonte em memória
@@ -9,4 +11,8 @@ import java.util.Map;
 public interface QuoteSource {
 
   Map<AssetRef, ProviderQuote> fetch(Collection<AssetRef> assets);
+
+  // Um preço por dia entre from e to, do mais antigo ao mais novo. Vazio quando a fonte não
+  // conhece o ativo; exceção quando ela falha.
+  List<ProviderQuote> history(AssetRef asset, Instant from, Instant to);
 }

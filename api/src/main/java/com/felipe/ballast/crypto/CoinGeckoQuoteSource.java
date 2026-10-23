@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
@@ -143,6 +144,67 @@ class CoinGeckoQuoteSource implements QuoteSource {
           }
         });
     return quotes;
+  }
+
+  // market_chart/range devolve um ponto por dia às 00:00 UTC quando o intervalo passa de 90 dias.
+  // Token vai pelo contrato direto, sem descobrir antes o id da moeda.
+  @Override
+  public List<ProviderQuote> history(AssetRef asset, Instant from, Instant to) {
+    String range = "/market_chart/range?vs_currency=usd&from={from}&to={to}&precision=full";
+    JsonNode body;
+    try {
+      if (asset.contract() == null) {
+        body =
+            get(
+                "/coins/{id}" + range,
+                NATIVE_ID.get(asset.network()),
+                from.getEpochSecond(),
+                to.getEpochSecond());
+      } else if (PLATFORM_ID.containsKey(asset.network())) {
+        body =
+            get(
+                "/coins/{platform}/contract/{contract}" + range,
+                PLATFORM_ID.get(asset.network()),
+                asset.contract(),
+                from.getEpochSecond(),
+                to.getEpochSecond());
+      } else {
+        return List.of();
+      }
+    } catch (HttpClientErrorException.NotFound e) {
+      return List.of();
+    }
+    JsonNode prices = body.get("prices");
+    if (prices == null || !prices.isArray()) {
+      throw new IllegalStateException("histórico da coingecko fora do formato");
+    }
+    List<ProviderQuote> history = new ArrayList<>();
+    int skipped = 0;
+    for (JsonNode point : prices) {
+      ProviderQuote quote = readPoint(point);
+      if (quote == null) {
+        skipped++;
+      } else {
+        history.add(quote);
+      }
+    }
+    if (skipped > 0) {
+      log.warn("histórico da coingecko: {} pontos ignorados", skipped);
+    }
+    return history;
+  }
+
+  // [milissegundos, preço]. Nulo para o que não for isso com preço positivo.
+  private static ProviderQuote readPoint(JsonNode point) {
+    if (!point.isArray() || point.size() != 2) {
+      return null;
+    }
+    JsonNode moment = point.get(0);
+    JsonNode price = point.get(1);
+    if (!moment.isIntegralNumber() || !price.isNumber() || price.decimalValue().signum() <= 0) {
+      return null;
+    }
+    return new ProviderQuote(price.decimalValue(), Instant.ofEpochMilli(moment.longValue()));
   }
 
   private JsonNode get(String uri, Object... variables) {

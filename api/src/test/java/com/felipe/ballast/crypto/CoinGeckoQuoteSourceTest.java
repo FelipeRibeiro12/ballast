@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.ExpectedCount.never;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withResourceNotFound;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
@@ -153,6 +154,76 @@ class CoinGeckoQuoteSourceTest {
         .andRespond(withServerError());
 
     assertThatThrownBy(() -> source.fetch(List.of(new AssetRef(CryptoNetwork.BITCOIN, null))))
+        .isInstanceOf(RuntimeException.class);
+  }
+
+  private static final Instant FROM = Instant.ofEpochSecond(1761350400);
+  private static final Instant TO = Instant.ofEpochSecond(1792713600);
+
+  @Test
+  void asksTheDailyHistoryOfANativeCoinByIdAndKeepsOnlyValidPoints() {
+    server
+        .expect(
+            requestTo(
+                BASE
+                    + "/coins/polygon-ecosystem-token/market_chart/range?vs_currency=usd"
+                    + "&from=1761350400&to=1792713600&precision=full"))
+        .andExpect(header("x-cg-demo-api-key", "chave-de-teste"))
+        .andRespond(
+            withSuccess(
+                "{\"prices\":[[1761350400000,0.30000000000000004],[1761436800000,\"x\"],"
+                    + "[1761523200000,-1],[1761609600000],[1761696000000,0.2]],"
+                    + "\"market_caps\":[],\"total_volumes\":[]}",
+                MediaType.APPLICATION_JSON));
+
+    List<ProviderQuote> history =
+        source.history(new AssetRef(CryptoNetwork.POLYGON, null), FROM, TO);
+
+    // Texto, negativo e ponto sem preço ficam de fora; o resto chega sem passar por double.
+    assertThat(history)
+        .containsExactly(
+            new ProviderQuote(
+                new BigDecimal("0.30000000000000004"), Instant.ofEpochMilli(1761350400000L)),
+            new ProviderQuote(new BigDecimal("0.2"), Instant.ofEpochMilli(1761696000000L)));
+    server.verify();
+  }
+
+  @Test
+  void asksTheHistoryOfATokenByPlatformAndContract() {
+    server
+        .expect(
+            requestTo(
+                BASE
+                    + "/coins/base/contract/"
+                    + USDC_BASE
+                    + "/market_chart/range?vs_currency=usd&from=1761350400&to=1792713600"
+                    + "&precision=full"))
+        .andRespond(
+            withSuccess("{\"prices\":[[1761350400000,0.9999]]}", MediaType.APPLICATION_JSON));
+
+    assertThat(source.history(new AssetRef(CryptoNetwork.BASE, USDC_BASE), FROM, TO))
+        .extracting(ProviderQuote::priceUsd)
+        .usingElementComparator(BigDecimal::compareTo)
+        .containsExactly(new BigDecimal("0.9999"));
+    server.verify();
+  }
+
+  @Test
+  void aTokenTheProviderDoesNotKnowHasNoHistory() {
+    server
+        .expect(requestTo(org.hamcrest.Matchers.containsString("/market_chart/range")))
+        .andRespond(withResourceNotFound().body("{\"error\":\"coin not found\"}"));
+
+    assertThat(source.history(new AssetRef(CryptoNetwork.ETHEREUM, USDC_BASE), FROM, TO)).isEmpty();
+  }
+
+  @Test
+  void aProviderErrorInTheHistoryComesUpAsAnException() {
+    server
+        .expect(requestTo(org.hamcrest.Matchers.containsString("/market_chart/range")))
+        .andRespond(withServerError());
+
+    assertThatThrownBy(() -> source.history(new AssetRef(CryptoNetwork.BITCOIN, null), FROM, TO))
         .isInstanceOf(RuntimeException.class);
   }
 }
