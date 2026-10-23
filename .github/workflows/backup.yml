@@ -1,0 +1,51 @@
+# pg_dump de produção para o Object Storage do Oracle (ADR-044). O Neon Free só volta 6 h no tempo;
+# este dump é o que sobra se a conta, o projeto ou um dado mais antigo se perder.
+name: backup
+
+on:
+  schedule:
+    # Domingo, 06:00 UTC (03:00 em São Paulo). Para diário: '0 6 * * *'.
+    - cron: '0 6 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pg-dump:
+    runs-on: ubuntu-24.04
+    # Ambiente separado do producao: aprovação manual lá travaria o cron aqui.
+    environment: backup
+    timeout-minutes: 20
+    steps:
+      # O repositório é público e o log também: nada aqui imprime dado, host ou URL.
+      - name: dump, conferência, cifra e envio
+        env:
+          PGHOST: ${{ secrets.PGHOST }}
+          PGDATABASE: ${{ secrets.PGDATABASE }}
+          PGUSER: ${{ secrets.PGUSER }}
+          PGPASSWORD: ${{ secrets.PGPASSWORD }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          OCI_BACKUP_PAR_URL: ${{ secrets.OCI_BACKUP_PAR_URL }}
+        run: |
+          set -euo pipefail
+          # Antes do runbook (passo 7) os segredos não existem: avisa em vez de falhar toda semana.
+          if [ -z "$PGHOST" ] || [ -z "$OCI_BACKUP_PAR_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::notice::segredos do ambiente backup ainda não configurados"
+            exit 0
+          fi
+          umask 077
+          arquivo="ballast-$(date -u +%Y%m%dT%H%M%SZ).dump"
+          # pg_dump da mesma versão do servidor (Postgres 17 no Neon), com TLS verificado.
+          docker run --rm -e PGHOST -e PGDATABASE -e PGUSER -e PGPASSWORD \
+            -e PGSSLMODE=verify-full -e PGSSLROOTCERT=system \
+            postgres:17 pg_dump --format=custom > "$arquivo"
+          # Dump que o pg_restore não lê é pior que nenhum: daria falsa segurança.
+          docker run --rm -i postgres:17 pg_restore --list < "$arquivo" > /dev/null
+          # Cifrado antes de sair do runner. A senha vai pela entrada padrão, não pela linha de comando.
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
+            --passphrase-fd 0 --symmetric --cipher-algo AES256 -o "$arquivo.gpg" "$arquivo"
+          # O PAR do bucket só permite gravar objeto: quem pegar a URL não lê nem apaga backup.
+          curl -fsS --retry 3 --upload-file "$arquivo.gpg" "${OCI_BACKUP_PAR_URL}${arquivo}.gpg" > /dev/null
+          echo "enviado: $arquivo.gpg ($(stat -c %s "$arquivo.gpg") bytes)"
+          rm -f "$arquivo" "$arquivo.gpg"

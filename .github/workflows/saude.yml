@@ -1,0 +1,28 @@
+# Bate no /healthz de produção pelo mesmo caminho do usuário: Vercel, Caddy, API e Neon (ADR-044).
+# Falhou, o GitHub manda e-mail para quem mexeu por último no cron.
+name: saude
+
+on:
+  schedule:
+    # De hora em hora. O /healthz toca o banco, e cada toque acorda o Neon por 5 min: de 5 em 5 min
+    # ele nunca dormiria e a cota de 100 CU-hora do Free acabaria no meio do mês.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  healthz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: /api/healthz
+        env:
+          PRODUCAO_URL: ${{ vars.PRODUCAO_URL }}
+        run: |
+          if [ -z "$PRODUCAO_URL" ]; then
+            echo "::notice::PRODUCAO_URL ainda não definida nas variáveis do repositório"
+            exit 0
+          fi
+          # Retentativa cobre o Neon acordando (até alguns segundos), não uma API fora.
+          curl -fsS --max-time 20 --retry 3 --retry-delay 10 --retry-all-errors "$PRODUCAO_URL/api/healthz"
