@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { SessaoExpiradaError, deleteOrcamento, fetchCategorias, fetchOrcamentos, putOrcamento } from './api'
 import type { Categoria, Orcamento as OrcamentoDoMes, OrcamentosDoMes } from './api'
-import { mesDeHoje, mesIso, rotuloDoMes, somarMeses } from './datas'
+import { lerMesIso, mesDeHoje, mesIso, rotuloDoMes, somarMeses } from './datas'
 import type { Mes } from './datas'
 import { centavosParaCampo, formatarCentavos, lerValorPositivo } from './dinheiro'
 import { IconeMais, IconeSetaDireita, IconeSetaEsquerda } from './icones'
@@ -10,16 +10,12 @@ import { carregar, mensagemDeEscrita } from './leitura'
 import type { Estado } from './leitura'
 import MenuDeAcoes from './MenuDeAcoes'
 import Painel from './Painel'
+import AtalhosDePlanejamento from './Planejamento'
 import { Carregando, EstadoVazio, Selo } from './ui'
 
 // A faixa do CHECK da V18.
 const ANO_MINIMO = 1900
 const ANO_MAXIMO = 2199
-
-function lerMesIso(texto: string): Mes {
-  const [ano, mes] = texto.split('-').map(Number)
-  return { ano, mes }
-}
 
 // Só para a largura da barra: percentual inteiro do teto já gasto, em BigInt, até 100.
 function percentualGasto(tetoCentavos: number, gastoCentavos: number): number {
@@ -213,6 +209,7 @@ export default function Orcamento({ aoSessaoExpirar }: { aoSessaoExpirar: () => 
           Novo teto
         </button>
       </header>
+      <AtalhosDePlanejamento atual="orcamento" />
       <div className="mes-barra">
         <div className="mes-nav">
           <button

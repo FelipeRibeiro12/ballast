@@ -62,15 +62,6 @@ export function IconeRecorrencias({ tamanho }: Props) {
   )
 }
 
-export function IconeOrcamento({ tamanho }: Props) {
-  return (
-    <Base tamanho={tamanho}>
-      <path d="M12 3a9 9 0 1 0 9 9h-9z" />
-      <path d="M15 3.5A9 9 0 0 1 20.5 9H15z" />
-    </Base>
-  )
-}
-
 export function IconeBeneficio({ tamanho }: Props) {
   return (
     <Base tamanho={tamanho}>

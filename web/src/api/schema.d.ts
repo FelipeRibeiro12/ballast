@@ -403,6 +403,89 @@ export interface paths {
         patch: operations["patchLancamentosById"];
         trace?: never;
     };
+    "/metas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as metas com o acumulado e a projeção
+         * @description Pelo título sem diferenciar caixa (ADR-045).
+         */
+        get: operations["getMetas"];
+        put?: never;
+        /** Cria uma meta */
+        post: operations["postMetas"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Troca título, alvo, data e aporte mensal da meta
+         * @description Os aportes ficam. dataAlvo e aporteMensalCentavos ausentes ficam sem valor.
+         */
+        put: operations["putMetasById"];
+        post?: never;
+        /** Apaga a meta e os aportes dela */
+        delete: operations["deleteMetasById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metas/{id}/aportes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Aportes e retiradas da meta, do mais novo ao mais antigo */
+        get: operations["getMetasByIdAportes"];
+        put?: never;
+        /**
+         * Registra um aporte (positivo) ou uma retirada (negativo)
+         * @description Data até hoje em America/Sao_Paulo. A retirada não pode passar do acumulado. Responde a meta já com o aporte.
+         */
+        post: operations["postMetasByIdAportes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metas/{id}/aportes/{aporteId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Apaga um aporte ou uma retirada
+         * @description Recusado quando deixaria o acumulado negativo.
+         */
+        delete: operations["deleteMetasByIdAportesByAporteId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/movimentos-cripto": {
         parameters: {
             query?: never;
@@ -722,6 +805,26 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AporteMeta: {
+            /** Format: date */
+            data: string;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: int64
+             * @description Positivo guardou, negativo retirou
+             */
+            valorCentavos: number;
+        };
+        AporteMetaRequest: {
+            /** Format: date */
+            data: string;
+            /**
+             * Format: int64
+             * @description Positivo guarda, negativo retira. Zero não vale
+             */
+            valorCentavos: number;
+        };
         AtivoCripto: {
             /** @description Sempre true no ativo digitado pelo usuário */
             confiavel: boolean;
@@ -1184,6 +1287,56 @@ export interface components {
             data: string;
             /** Format: int64 */
             saldoCentavos: number;
+        };
+        Meta: {
+            /**
+             * Format: int64
+             * @description Soma dos aportes menos as retiradas
+             */
+            acumuladoCentavos: number;
+            /** Format: int64 */
+            aporteMensalCentavos: number | null;
+            atingida: boolean;
+            /** @description Mês em que chega aportando o aporte mensal, contando o atual */
+            chegadaPeloPlano: string | null;
+            /** @description Mês em que chega no ritmo atual; nulo sem ritmo positivo */
+            chegadaPeloRitmo: string | null;
+            /** Format: date */
+            dataAlvo: string | null;
+            /**
+             * Format: int64
+             * @description Alvo menos o acumulado, nunca abaixo de zero
+             */
+            faltaCentavos: number;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: int64
+             * @description Quanto aportar por mês, contando o atual, para chegar na data alvo; arredondado para cima. Nulo sem data, com o prazo vencido ou já atingida
+             */
+            necessarioPorMesCentavos: number | null;
+            /** @description A data alvo passou sem atingir */
+            prazoVencido: boolean;
+            /**
+             * Format: int64
+             * @description Média mensal dos aportes dos três meses fechados antes do atual
+             */
+            ritmoMensalCentavos: number;
+            titulo: string;
+            /** Format: int64 */
+            valorAlvoCentavos: number;
+        };
+        MetaRequest: {
+            /**
+             * Format: int64
+             * @description Quanto pretende guardar por mês. É plano: nada se lança sozinho
+             */
+            aporteMensalCentavos?: number | null;
+            /** Format: date */
+            dataAlvo?: string | null;
+            titulo: string;
+            /** Format: int64 */
+            valorAlvoCentavos: number;
         };
         MovimentoCripto: {
             /** Format: uuid */
@@ -3458,6 +3611,322 @@ export interface operations {
             };
             /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getMetas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metas do usuário */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Meta"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postMetas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetaRequest"];
+            };
+        };
+        responses: {
+            /** @description Meta criada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Meta"];
+                };
+            };
+            /** @description Entrada inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putMetasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetaRequest"];
+            };
+        };
+        responses: {
+            /** @description Meta atualizada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Meta"];
+                };
+            };
+            /** @description Entrada inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Meta de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteMetasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Meta apagada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Meta de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getMetasByIdAportes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Aportes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AporteMeta"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Meta de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postMetasByIdAportes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AporteMetaRequest"];
+            };
+        };
+        responses: {
+            /** @description Meta com o aporte */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Meta"];
+                };
+            };
+            /** @description Entrada inválida, data no futuro ou retirada maior que o acumulado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Meta de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Escrita concorrente esperou a trava além do prazo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteMetasByIdAportesByAporteId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                aporteId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Aporte apagado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description O acumulado ficaria negativo */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Meta ou aporte de outro usuário, inexistente ou id que não é UUID */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

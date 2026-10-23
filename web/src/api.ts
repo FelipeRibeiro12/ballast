@@ -1681,3 +1681,147 @@ export async function deleteOrcamento(categoriaId: string, aPartirDe: string): P
   })
   if (resposta.status !== 204) return recusarRespostaDeOrcamento(resposta, 'DELETE /orcamentos/{categoriaId}')
 }
+
+export type Meta = components['schemas']['Meta']
+export type MetaRequest = components['schemas']['MetaRequest']
+export type AporteMeta = components['schemas']['AporteMeta']
+
+export class MetaNaoEncontradaError extends ApiError {}
+
+export class MetaInvalidaError extends ApiError {
+  // null quando o corpo do 400 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('meta recusada por entrada inválida')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+function eMesOuNulo(valor: unknown): boolean {
+  return valor === null || (typeof valor === 'string' && /^\d{4}-\d{2}$/.test(valor))
+}
+
+function isMeta(valor: unknown): valor is Meta {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'titulo' in valor &&
+    typeof valor.titulo === 'string' &&
+    'valorAlvoCentavos' in valor &&
+    Number.isSafeInteger(valor.valorAlvoCentavos) &&
+    'dataAlvo' in valor &&
+    (valor.dataAlvo === null || eDataIso(valor.dataAlvo)) &&
+    'aporteMensalCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.aporteMensalCentavos) &&
+    'acumuladoCentavos' in valor &&
+    Number.isSafeInteger(valor.acumuladoCentavos) &&
+    'faltaCentavos' in valor &&
+    Number.isSafeInteger(valor.faltaCentavos) &&
+    'atingida' in valor &&
+    typeof valor.atingida === 'boolean' &&
+    'prazoVencido' in valor &&
+    typeof valor.prazoVencido === 'boolean' &&
+    'necessarioPorMesCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.necessarioPorMesCentavos) &&
+    'chegadaPeloPlano' in valor &&
+    eMesOuNulo(valor.chegadaPeloPlano) &&
+    'ritmoMensalCentavos' in valor &&
+    Number.isSafeInteger(valor.ritmoMensalCentavos) &&
+    'chegadaPeloRitmo' in valor &&
+    eMesOuNulo(valor.chegadaPeloRitmo)
+  )
+}
+
+function isAporteMeta(valor: unknown): valor is AporteMeta {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'valorCentavos' in valor &&
+    Number.isSafeInteger(valor.valorCentavos) &&
+    'data' in valor &&
+    eDataIso(valor.data)
+  )
+}
+
+async function recusarRespostaDeMeta(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 404) throw new MetaNaoEncontradaError('meta não encontrada')
+  if (resposta.status === 400) throw new MetaInvalidaError(await lerMensagemDeErro(resposta))
+  throw new ApiError(`${origem} respondeu ${resposta.status}`)
+}
+
+async function enviarMeta(caminho: string, metodo: 'POST' | 'PUT', dados: unknown): Promise<Response> {
+  return fetch(`${baseUrl}${caminho}`, {
+    method: metodo,
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+}
+
+export async function fetchMetas(): Promise<Meta[]> {
+  const resposta = await fetch(`${baseUrl}/metas`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeMeta(resposta, '/metas')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isMeta)) throw new ApiError('/metas com formato inesperado')
+  return corpo
+}
+
+export async function postMeta(dados: MetaRequest): Promise<Meta> {
+  const resposta = await enviarMeta('/metas', 'POST', dados)
+  if (resposta.status !== 201) return recusarRespostaDeMeta(resposta, 'POST /metas')
+  const corpo: unknown = await resposta.json()
+  if (!isMeta(corpo)) throw new ApiError('POST /metas com formato inesperado')
+  return corpo
+}
+
+export async function putMeta(id: string, dados: MetaRequest): Promise<Meta> {
+  const resposta = await enviarMeta(`/metas/${encodeURIComponent(id)}`, 'PUT', dados)
+  if (!resposta.ok) return recusarRespostaDeMeta(resposta, 'PUT /metas/{id}')
+  const corpo: unknown = await resposta.json()
+  if (!isMeta(corpo)) throw new ApiError('PUT /metas/{id} com formato inesperado')
+  return corpo
+}
+
+export async function deleteMeta(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/metas/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeMeta(resposta, 'DELETE /metas/{id}')
+}
+
+export async function fetchAportes(metaId: string): Promise<AporteMeta[]> {
+  const resposta = await fetch(`${baseUrl}/metas/${encodeURIComponent(metaId)}/aportes`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarRespostaDeMeta(resposta, '/metas/{id}/aportes')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isAporteMeta)) {
+    throw new ApiError('/metas/{id}/aportes com formato inesperado')
+  }
+  return corpo
+}
+
+// valorCentavos positivo guarda, negativo retira.
+export async function postAporte(metaId: string, valorCentavos: number, data: string): Promise<Meta> {
+  const resposta = await enviarMeta(`/metas/${encodeURIComponent(metaId)}/aportes`, 'POST', { valorCentavos, data })
+  if (resposta.status !== 201) return recusarRespostaDeMeta(resposta, 'POST /metas/{id}/aportes')
+  const corpo: unknown = await resposta.json()
+  if (!isMeta(corpo)) throw new ApiError('POST /metas/{id}/aportes com formato inesperado')
+  return corpo
+}
+
+export async function deleteAporte(metaId: string, aporteId: string): Promise<void> {
+  const resposta = await fetch(
+    `${baseUrl}/metas/${encodeURIComponent(metaId)}/aportes/${encodeURIComponent(aporteId)}`,
+    { method: 'DELETE', credentials: 'same-origin' },
+  )
+  if (resposta.status !== 204) return recusarRespostaDeMeta(resposta, 'DELETE /metas/{id}/aportes/{aporteId}')
+}

@@ -8,23 +8,21 @@ import {
   IconeLancamentos,
   IconeLua,
   IconeMonitor,
-  IconeOrcamento,
   IconeRecorrencias,
   IconeSair,
   IconeSol,
   Logo,
 } from './icones'
 import { ROTULO_DA_SECAO, SECOES, hashDaSecao } from './rota'
-import type { Secao } from './rota'
+import type { Secao, SecaoDaBarra } from './rota'
 import { ROTULO_DO_TEMA, TEMAS, useTema } from './tema'
 import type { Tema } from './tema'
 
-const ICONE_DA_SECAO: Record<Secao, ReactNode> = {
+const ICONE_DA_SECAO: Record<SecaoDaBarra, ReactNode> = {
   inicio: <IconeInicio />,
   lancamentos: <IconeLancamentos />,
   contas: <IconeContas />,
   recorrencias: <IconeRecorrencias />,
-  orcamento: <IconeOrcamento />,
   investimentos: <IconeInvestimentos />,
 }
 

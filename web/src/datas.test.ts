@@ -4,6 +4,7 @@ import {
   hojeLocal,
   horaEmSaoPaulo,
   intervaloDoMes,
+  lerMesIso,
   mesDeHoje,
   mesIso,
   rotuloDoDia,
@@ -102,5 +103,10 @@ describe('mesIso', () => {
   it('escreve o mês com dois dígitos e o ano com quatro', () => {
     expect(mesIso({ ano: 2026, mes: 3 })).toBe('2026-03')
     expect(mesIso({ ano: 2199, mes: 12 })).toBe('2199-12')
+  })
+
+  it('lê de volta o mesmo mês', () => {
+    expect(lerMesIso('2027-04')).toEqual({ ano: 2027, mes: 4 })
+    expect(mesIso(lerMesIso('1900-01'))).toBe('1900-01')
   })
 })

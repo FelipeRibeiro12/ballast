@@ -88,6 +88,7 @@ function mockFetch(rotas: Rotas): void {
       }
       if (chave.startsWith('GET /saldo-projetado?')) return Promise.resolve(jsonResponse(saldoProjetadoPadrao, 200))
       if (chave.startsWith('GET /orcamentos?')) return Promise.resolve(jsonResponse({ mes: url.slice(-7), orcamentos: [] }, 200))
+      if (chave === 'GET /metas') return Promise.resolve(jsonResponse([], 200))
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),
   )
@@ -309,6 +310,55 @@ describe('Início', () => {
       const cartao = await screen.findByRole('region', { name: 'Orçamento de outubro de 2026' })
       expect(await within(cartao).findByText('Nenhum teto neste mês.')).toBeVisible()
       expect(within(cartao).getByRole('link', { name: 'Definir tetos' })).toHaveAttribute('href', '#/orcamento')
+    })
+  })
+
+  describe('metas', () => {
+    function meta(id: string, titulo: string, atingida: boolean): Record<string, unknown> {
+      return {
+        id,
+        titulo,
+        valorAlvoCentavos: 100_000,
+        dataAlvo: null,
+        aporteMensalCentavos: null,
+        acumuladoCentavos: atingida ? 100_000 : 40_000,
+        faltaCentavos: atingida ? 0 : 60_000,
+        atingida,
+        prazoVencido: false,
+        necessarioPorMesCentavos: null,
+        chegadaPeloPlano: null,
+        ritmoMensalCentavos: 0,
+        chegadaPeloRitmo: null,
+      }
+    }
+
+    it('mostra até três metas, as abertas primeiro, e leva para a tela', async () => {
+      mockFetch({
+        'GET /metas': responde([
+          meta('m1', 'Celular', true),
+          meta('m2', 'Viagem', false),
+          meta('m3', 'Carro', false),
+          meta('m4', 'Casa', false),
+        ]),
+      })
+      render(<App />)
+
+      const cartao = await screen.findByRole('region', { name: 'Metas' })
+      const itens = within(await within(cartao).findByRole('list', { name: 'Metas em andamento' })).getAllByRole('listitem')
+      expect(itens).toHaveLength(3)
+      expect(itens[0]).toHaveTextContent('Viagem')
+      expect(itens[0]).toHaveTextContent(texto('R$ 400,00 de R$ 1.000,00'))
+      expect(within(cartao).queryByText('Celular')).toBeNull()
+      expect(within(cartao).getByRole('link', { name: 'Ver metas' })).toHaveAttribute('href', '#/metas')
+    })
+
+    it('sem meta, leva para criar', async () => {
+      mockFetch({})
+      render(<App />)
+
+      const cartao = await screen.findByRole('region', { name: 'Metas' })
+      expect(await within(cartao).findByText('Nenhuma meta ainda.')).toBeVisible()
+      expect(within(cartao).getByRole('link', { name: 'Criar meta' })).toHaveAttribute('href', '#/metas')
     })
   })
 })
