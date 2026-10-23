@@ -3528,7 +3528,7 @@ components:
           format: int64
           description: "O que pagou na compra ou recebeu na venda, em centavos de\
             \ dólar"
-          maximum: 9007199254740991
+          maximum: 180143985094819
           minimum: 1
         data:
           type: string

@@ -53,12 +53,19 @@ class MovementService {
     WOULD_GO_NEGATIVE
   }
 
-  // Fora da transação: movimento antigo pede a PTAX que ainda não está guardada (ADR-038). O
-  // Banco Central fora do ar não atrapalha, só deixa o valor em reais vazio até a próxima rodada.
+  // Fora da transação e só para movimento antes da primeira PTAX guardada (ADR-038): o resto o job
+  // diário traz, e chamar o Banco Central em todo POST seria latência e abuso (auditoria do PR
+  // #23).
   CreateResult create(UUID userId, Input input) {
     CreateResult result = transaction.execute(status -> createLocked(status, userId, input));
-    if (result instanceof CreateResult.Created) {
+    if (result instanceof CreateResult.Created created
+        && queries.firstDollarDate().map(first -> input.date().isBefore(first)).orElse(true)) {
       indices.updateFrom(input.date());
+      // Lido de novo para a resposta já trazer o custo em reais pela PTAX que acabou de chegar.
+      return queries
+          .findMovement(userId, created.movement().id())
+          .<CreateResult>map(CreateResult.Created::new)
+          .orElse(result);
     }
     return result;
   }

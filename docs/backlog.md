@@ -165,6 +165,7 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Cadastrar título com aplicação antiga e o Banco Central mudo segura a requisição até 10 s (2 séries x 5 s) (QA da F13.2, D3). Levar a busca para fora da requisição. Dono: backend.
 - **DÍVIDA** — Sem IPCA guardado, o título IPCA + taxa rende só a taxa; com CDI incompleto (Banco Central fora na primeira aplicação), o valor sai menor; a tela só avisa quando não há CDI nenhum (QA da F13.2, D4 e D5). Avisar por título quando o índice não cobre o período. Dono: backend e frontend.
 - **DÍVIDA** — Editar a aplicação para depois de uma marcação tira a marcação do cálculo, mas ela continua como último valor do banco na tela (QA da F13.2, D6). Recusar ou esconder. Dono: backend.
+- **DÍVIDA** — `IndexQueries.earliestInvestment` também olha movimentos de cripto e o nome mente; e faltam testes de venda com PTAX, de posição misturando movimento em reais e em dólar e de meio centavo na conversão (revisão do PR #23). Dono: backend.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

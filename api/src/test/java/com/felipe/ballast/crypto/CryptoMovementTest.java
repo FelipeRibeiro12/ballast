@@ -220,7 +220,7 @@ class CryptoMovementTest {
             with(ok, "data", "10/03/2026"),
             with(ok, "custoUsdCentavos", 0),
             with(ok, "custoUsdCentavos", -1),
-            with(ok, "custoUsdCentavos", 9_007_199_254_740_992L),
+            with(ok, "custoUsdCentavos", 180_143_985_094_820L),
             with(ok, "custoUsdCentavos", 10.5),
             with(ok, "usuarioId", actor.user().id().toString()));
     for (Map<String, Object> body : bad) {
@@ -236,8 +236,7 @@ class CryptoMovementTest {
 
   @Test
   void acceptsTheLargestCost() throws Exception {
-    assertThat(
-            api.move(actor.session(), buy("1", "2026-03-10", 9_007_199_254_740_991L)).getStatus())
+    assertThat(api.move(actor.session(), buy("1", "2026-03-10", 180_143_985_094_819L)).getStatus())
         .isEqualTo(201);
   }
 

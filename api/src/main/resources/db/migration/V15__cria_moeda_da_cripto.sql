@@ -20,8 +20,14 @@ ALTER TABLE indice ADD CONSTRAINT indice_serie_valida
     CHECK (serie IN ('cdi', 'ipca', 'dolar')) NOT VALID;
 ALTER TABLE indice VALIDATE CONSTRAINT indice_serie_valida;
 
+-- A PTAX divide valor em reais na leitura: zero ou valor absurdo derrubaria as posições de todos.
+-- A aplicação já descarta o que sai de R$ 0,50 a R$ 50,00; o banco garante (auditoria do PR #23).
+ALTER TABLE indice ADD CONSTRAINT indice_dolar_faixa
+    CHECK (serie <> 'dolar' OR valor BETWEEN 0.5 AND 50);
+
 -- Para desfazer (rode à mão):
 -- DELETE FROM indice WHERE serie = 'dolar';
+-- ALTER TABLE indice DROP CONSTRAINT indice_dolar_faixa;
 -- ALTER TABLE indice DROP CONSTRAINT indice_serie_valida;
 -- ALTER TABLE indice ADD CONSTRAINT indice_serie_valida CHECK (serie IN ('cdi', 'ipca'));
 -- ALTER TABLE cotacao DROP CONSTRAINT cotacao_moeda_valida;

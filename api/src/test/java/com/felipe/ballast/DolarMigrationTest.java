@@ -103,4 +103,16 @@ class DolarMigrationTest {
         .isEqualTo(1);
     jdbc.sql("DELETE FROM indice WHERE serie = 'dolar' AND data = DATE '1952-01-02'").update();
   }
+
+  @Test
+  void theDollarHasAPlausibleRangeInTheDatabase() {
+    assertThatThrownBy(
+            () ->
+                jdbc.sql(
+                        "INSERT INTO indice (serie, data, valor)"
+                            + " VALUES ('dolar', DATE '1952-01-03', 0)")
+                    .update())
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("indice_dolar_faixa");
+  }
 }

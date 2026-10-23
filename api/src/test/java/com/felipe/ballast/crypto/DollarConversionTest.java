@@ -3,8 +3,12 @@ package com.felipe.ballast.crypto;
 import static com.felipe.ballast.crypto.CryptoApi.movement;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.felipe.ballast.FakeIndexSource;
 import com.felipe.ballast.IntegrationTest;
 import com.felipe.ballast.TestClock;
+import com.felipe.ballast.fixedincome.IndexPoint;
+import com.felipe.ballast.fixedincome.IndexSeries;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -23,6 +27,7 @@ class DollarConversionTest {
   @Autowired MockMvc mvc;
   @Autowired JdbcClient jdbc;
   @Autowired TestClock clock;
+  @Autowired FakeIndexSource source;
   private CryptoApi api;
   private CryptoApi.Actor actor;
   private String bitcoin;
@@ -41,6 +46,7 @@ class DollarConversionTest {
   @AfterEach
   void tearDown() {
     clock.reset();
+    source.reset();
     clearDollar();
   }
 
@@ -124,5 +130,20 @@ class DollarConversionTest {
 
     assertThat(listed.get("custoCentavos").asLong()).isEqualTo(100_000);
     assertThat(listed.get("custoUsdCentavos").asLong()).isEqualTo(19_848);
+  }
+
+  @Test
+  void aMovementBeforeTheFirstPtaxFetchesItAndAnswersWithTheReais() throws Exception {
+    source.publish(
+        IndexSeries.DOLLAR, new IndexPoint(LocalDate.of(2036, 2, 27), new BigDecimal("5")));
+
+    JsonNode created =
+        CryptoApi.expect(
+            api.move(
+                actor.session(),
+                movement(actor.cryptoId(), bitcoin, "compra", "1", "2036-02-27", 100_000)),
+            201);
+
+    assertThat(created.get("custoCentavos").asLong()).isEqualTo(500_000);
   }
 }

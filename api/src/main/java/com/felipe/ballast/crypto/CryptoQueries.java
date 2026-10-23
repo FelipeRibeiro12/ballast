@@ -278,6 +278,12 @@ class CryptoQueries {
         .list();
   }
 
+  Optional<LocalDate> firstDollarDate() {
+    return jdbc.sql("SELECT min(data) FROM indice WHERE serie = 'dolar'")
+        .query(LocalDate.class)
+        .optional();
+  }
+
   // A PTAX da data, ou vazio se ainda não há nenhuma até ela.
   Optional<Dollar> dollarAt(LocalDate date) {
     return jdbc.sql(

@@ -547,11 +547,16 @@ export default function Cripto({
                   <span className="item-meta">
                     {rotuloDoAtivo(ativo)} · {nomesDeConta.get(posicao.contaId) ?? 'Conta'}
                   </span>
-                  {posicao.custoUsdCentavos !== null && (
+                  {/* O lançado na F13 em reais segue visível mesmo sem a PTAX que o leva para dólar. */}
+                  {posicao.custoUsdCentavos !== null ? (
                     <small>
                       Compras menos vendas {formatarCentavosEmDolar(posicao.custoUsdCentavos)}
                       {posicao.custoCentavos !== null && ` (${formatarCentavos(posicao.custoCentavos)})`}
                     </small>
+                  ) : (
+                    posicao.custoCentavos !== null && (
+                      <small>Compras menos vendas {formatarCentavos(posicao.custoCentavos)}</small>
+                    )
                   )}
                   {posicao.cotacao === null ? (
                     <div className="item-selos">

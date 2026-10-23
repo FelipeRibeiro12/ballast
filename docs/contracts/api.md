@@ -718,7 +718,8 @@ em reais vem da PTAX do Banco Central.
   (mesmas regras de formato; a mensagem de erro cita `precoUsd`) e responde
   `{ativoId, momento, precoUsd, fonte}`.
 - `POST /movimentos-cripto` recebe `custoUsdCentavos` no lugar de
-  `custoCentavos` (de 1 a 9007199254740991). O `MovimentoCripto` traz
+  `custoCentavos` (de 1 a 180143985094819: vezes a PTAX máxima aceita, R$ 50,
+  ainda cabe no inteiro seguro do JavaScript). O `MovimentoCripto` traz
   `custoUsdCentavos` e `custoCentavos`, este em reais pela PTAX da data do
   movimento. Movimento gravado na F13 é em reais: `custoCentavos` é o que foi
   digitado e `custoUsdCentavos` sai pela PTAX. Sem PTAX até a data, o campo
@@ -732,6 +733,7 @@ em reais vem da PTAX do Banco Central.
 - Sem PTAX até a data, `valorCentavos` é `null` e a posição entra em
   `semCotacao` do patrimônio, fora do total; o patrimônio nunca falha por falta
   de dólar.
-- A PTAX (série 1 do SGS, desde 01/07/1994) é baixada junto com CDI e IPCA, ao
-  subir, às 8h e ao gravar um movimento com data anterior à primeira PTAX
-  guardada.
+- A PTAX (série 1 do SGS, desde 01/07/1994, entre R$ 0,50 e R$ 50,00 também por
+  CHECK no banco) é baixada junto com CDI e IPCA, ao subir, às 8h e ao gravar um
+  movimento com data anterior à primeira PTAX guardada; nesse caso a resposta do
+  `POST` já vem com o custo em reais.
