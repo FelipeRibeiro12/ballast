@@ -752,3 +752,6 @@ Emenda "Cripto em dólar".
 - Nenhuma rota chama a CoinGecko. Com ela fora, as posições e o patrimônio
   seguem com a última cotação guardada, e `momento` mostra de quando ela é.
 - `POST /ativos-cripto/{id}/cotacoes` continua gravando só `manual`.
+- Ativo novo ganha, numa das rodadas seguintes do job, a cotação diária do
+  último ano antes da primeira cotação dele (ADR-041). A posição e o
+  patrimônio de uma data passada passam a ter preço sem mudar o formato.
