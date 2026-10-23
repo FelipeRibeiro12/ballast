@@ -7,6 +7,8 @@ describe('lerSecao', () => {
     ['#/lancamentos', 'lancamentos'],
     ['#/contas', 'contas'],
     ['#/recorrencias', 'recorrencias'],
+    // Fora da barra de navegação, mas com rota: o cartão do Início leva até ela.
+    ['#/orcamento', 'orcamento'],
   ])('lê %s', (hash, esperada) => {
     expect(lerSecao(hash)).toBe(esperada)
   })

@@ -8,6 +8,7 @@ import {
   IconeLancamentos,
   IconeLua,
   IconeMonitor,
+  IconeOrcamento,
   IconeRecorrencias,
   IconeSair,
   IconeSol,
@@ -23,6 +24,7 @@ const ICONE_DA_SECAO: Record<Secao, ReactNode> = {
   lancamentos: <IconeLancamentos />,
   contas: <IconeContas />,
   recorrencias: <IconeRecorrencias />,
+  orcamento: <IconeOrcamento />,
   investimentos: <IconeInvestimentos />,
 }
 

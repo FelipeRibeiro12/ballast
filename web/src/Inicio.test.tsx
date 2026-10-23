@@ -87,6 +87,7 @@ function mockFetch(rotas: Rotas): void {
         return Promise.resolve(jsonResponse({ lancamentos: [], maisAlgum: false }, 200))
       }
       if (chave.startsWith('GET /saldo-projetado?')) return Promise.resolve(jsonResponse(saldoProjetadoPadrao, 200))
+      if (chave.startsWith('GET /orcamentos?')) return Promise.resolve(jsonResponse({ mes: url.slice(-7), orcamentos: [] }, 200))
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),
   )
@@ -260,6 +261,54 @@ describe('Início', () => {
       render(<App />)
       expect(await screen.findByRole('form', { name: /entrar/i })).toBeVisible()
       await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/sessão acabou/i))
+    })
+  })
+
+  describe('orçamento do mês', () => {
+    function orcamento(nome: string, teto: number, gasto: number): Record<string, unknown> {
+      return {
+        categoriaId: nome,
+        categoriaNome: nome,
+        tetoCentavos: teto,
+        desde: '2026-10',
+        gastoCentavos: gasto,
+        previstoCentavos: 0,
+        restanteCentavos: teto - gasto,
+      }
+    }
+
+    it('mostra os três tetos mais consumidos e quantos passaram', async () => {
+      mockFetch({
+        'GET /orcamentos?mes=2026-10': responde({
+          mes: '2026-10',
+          orcamentos: [
+            orcamento('Lazer', 10_000, 1_000),
+            orcamento('Mercado', 80_000, 85_000),
+            orcamento('Transporte', 20_000, 15_000),
+            orcamento('Saúde', 50_000, 20_000),
+          ],
+        }),
+      })
+      render(<App />)
+
+      const cartao = await screen.findByRole('region', { name: 'Orçamento de outubro de 2026' })
+      const itens = within(await within(cartao).findByRole('list', { name: 'Tetos do mês' })).getAllByRole('listitem')
+      expect(itens).toHaveLength(3)
+      expect(itens[0]).toHaveTextContent('Mercado')
+      expect(itens[1]).toHaveTextContent('Transporte')
+      expect(itens[2]).toHaveTextContent('Saúde')
+      expect(itens[0]).toHaveTextContent(texto('R$ 850,00 de R$ 800,00'))
+      expect(within(cartao).getByText('1 categoria acima do teto')).toBeVisible()
+      expect(within(cartao).getByRole('link', { name: 'Ver orçamento' })).toHaveAttribute('href', '#/orcamento')
+    })
+
+    it('sem teto no mês, leva para definir', async () => {
+      mockFetch({})
+      render(<App />)
+
+      const cartao = await screen.findByRole('region', { name: 'Orçamento de outubro de 2026' })
+      expect(await within(cartao).findByText('Nenhum teto neste mês.')).toBeVisible()
+      expect(within(cartao).getByRole('link', { name: 'Definir tetos' })).toHaveAttribute('href', '#/orcamento')
     })
   })
 })

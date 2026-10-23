@@ -1,18 +1,29 @@
-import { CriptoInvalidoError, CriptoRepetidoError, ServicoIndisponivelError, SessaoExpiradaError } from './api'
+import {
+  CriptoInvalidoError,
+  CriptoRepetidoError,
+  OrcamentoInvalidoError,
+  ServicoIndisponivelError,
+  SessaoExpiradaError,
+} from './api'
 
-// Leitura e mensagens comuns às telas de Investimentos (cripto e renda fixa).
+// Leitura e mensagens comuns às telas de Investimentos (cripto e renda fixa) e de Orçamento.
 export type Estado<T> = { tipo: 'carregando' } | { tipo: 'erro'; mensagem: string } | { tipo: 'ok'; dados: T }
 
 export const MENSAGEM_INDISPONIVEL = 'Serviço indisponível. Tente de novo em instantes.'
 
 export function mensagemDeLeitura(erro: unknown, oQue: string): string {
   if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
-  if (erro instanceof CriptoInvalidoError && erro.mensagemServidor !== null) return erro.mensagemServidor
+  if ((erro instanceof CriptoInvalidoError || erro instanceof OrcamentoInvalidoError) && erro.mensagemServidor !== null) {
+    return erro.mensagemServidor
+  }
   return `Não foi possível carregar ${oQue}.`
 }
 
 export function mensagemDeEscrita(erro: unknown, padrao: string): string {
-  if ((erro instanceof CriptoInvalidoError || erro instanceof CriptoRepetidoError) && erro.mensagemServidor !== null) {
+  if (
+    (erro instanceof CriptoInvalidoError || erro instanceof CriptoRepetidoError || erro instanceof OrcamentoInvalidoError) &&
+    erro.mensagemServidor !== null
+  ) {
     return erro.mensagemServidor
   }
   if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL

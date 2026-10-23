@@ -1591,3 +1591,93 @@ export async function postResgate(id: string, data: string, valorCentavos: numbe
   if (!resposta.ok) return recusarRespostaDeCripto(resposta, 'POST /titulos-renda-fixa/{id}/resgate')
   return lerTitulo(resposta, 'POST /titulos-renda-fixa/{id}/resgate')
 }
+
+export type OrcamentosDoMes = components['schemas']['OrcamentosDoMes']
+export type Orcamento = components['schemas']['Orcamento']
+
+export class OrcamentoNaoEncontradoError extends ApiError {}
+
+export class OrcamentoInvalidoError extends ApiError {
+  // null quando o corpo do 400 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('orçamento recusado por entrada inválida')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+function eMesIso(valor: unknown): boolean {
+  return typeof valor === 'string' && /^\d{4}-\d{2}$/.test(valor)
+}
+
+// Gasto e previsto nunca negativos; o restante fica negativo quando o gasto passa do teto.
+function isOrcamento(valor: unknown): valor is Orcamento {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'categoriaId' in valor &&
+    typeof valor.categoriaId === 'string' &&
+    'categoriaNome' in valor &&
+    typeof valor.categoriaNome === 'string' &&
+    'tetoCentavos' in valor &&
+    Number.isSafeInteger(valor.tetoCentavos) &&
+    'desde' in valor &&
+    eMesIso(valor.desde) &&
+    'gastoCentavos' in valor &&
+    Number.isSafeInteger(valor.gastoCentavos) &&
+    'previstoCentavos' in valor &&
+    Number.isSafeInteger(valor.previstoCentavos) &&
+    'restanteCentavos' in valor &&
+    Number.isSafeInteger(valor.restanteCentavos)
+  )
+}
+
+function isOrcamentosDoMes(valor: unknown): valor is OrcamentosDoMes {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'mes' in valor &&
+    eMesIso(valor.mes) &&
+    'orcamentos' in valor &&
+    Array.isArray(valor.orcamentos) &&
+    valor.orcamentos.every(isOrcamento)
+  )
+}
+
+async function recusarRespostaDeOrcamento(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 404) throw new OrcamentoNaoEncontradoError('categoria não encontrada')
+  if (resposta.status === 400) throw new OrcamentoInvalidoError(await lerMensagemDeErro(resposta))
+  throw new ApiError(`${origem} respondeu ${resposta.status}`)
+}
+
+// mes em AAAA-MM.
+export async function fetchOrcamentos(mes: string): Promise<OrcamentosDoMes> {
+  const parametros = new URLSearchParams({ mes })
+  const resposta = await fetch(`${baseUrl}/orcamentos?${parametros.toString()}`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeOrcamento(resposta, '/orcamentos')
+  const corpo: unknown = await resposta.json()
+  if (!isOrcamentosDoMes(corpo)) throw new ApiError('/orcamentos com formato inesperado')
+  return corpo
+}
+
+export async function putOrcamento(categoriaId: string, tetoCentavos: number, aPartirDe: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/orcamentos/${encodeURIComponent(categoriaId)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tetoCentavos, aPartirDe }),
+  })
+  if (resposta.status !== 204) return recusarRespostaDeOrcamento(resposta, 'PUT /orcamentos/{categoriaId}')
+}
+
+export async function deleteOrcamento(categoriaId: string, aPartirDe: string): Promise<void> {
+  const parametros = new URLSearchParams({ aPartirDe })
+  const resposta = await fetch(`${baseUrl}/orcamentos/${encodeURIComponent(categoriaId)}?${parametros.toString()}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeOrcamento(resposta, 'DELETE /orcamentos/{categoriaId}')
+}
