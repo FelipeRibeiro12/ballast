@@ -46,6 +46,7 @@ class EntryService {
       ACCOUNT_NOT_FOUND,
       ACCOUNT_ARCHIVED,
       CRYPTO_ACCOUNT,
+      INVESTMENT_ACCOUNT,
       CATEGORY_NOT_FOUND,
       CATEGORY_NOT_PERMITTED,
       BALANCE_OUT_OF_RANGE,
@@ -318,6 +319,9 @@ class EntryService {
     }
     if (queries.isCryptoAccount(userId, input.accountId())) {
       return Optional.of(SaveResult.Rejected.CRYPTO_ACCOUNT);
+    }
+    if (queries.isInvestmentAccount(userId, input.accountId())) {
+      return Optional.of(SaveResult.Rejected.INVESTMENT_ACCOUNT);
     }
     if (accountArchived.get() && !sameAccount) {
       return Optional.of(SaveResult.Rejected.ACCOUNT_ARCHIVED);

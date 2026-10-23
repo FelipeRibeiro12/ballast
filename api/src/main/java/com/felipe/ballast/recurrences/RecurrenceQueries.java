@@ -192,6 +192,16 @@ class RecurrenceQueries {
         .single();
   }
 
+  boolean isInvestmentAccount(UUID userId, UUID accountId) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM conta WHERE usuario_id = :userId AND id = :id"
+                + " AND tipo = 'investimento')")
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(Boolean.class)
+        .single();
+  }
+
   // Lê "arquivada" sem travar a conta: o job não pode segurar a conta enquanto espera linha de
   // lançamento, que é a ordem inversa de PUT e confirmar. Vazio quando a conta não existe.
   Optional<Boolean> isAccountArchived(UUID userId, UUID accountId) {

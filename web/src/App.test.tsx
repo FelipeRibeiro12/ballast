@@ -143,7 +143,7 @@ describe('App: sessão', () => {
       'Lançamentos',
       'Contas',
       'Recorrências',
-      'Cripto',
+      'Investimentos',
     ])
     expect(within(navegacao).getByRole('link', { name: 'Início' })).toHaveAttribute('aria-current', 'page')
     expect(chamadasA('GET /saldo-projetado?dias=90').length).toBeGreaterThan(0)
@@ -171,7 +171,7 @@ describe('App: sessão', () => {
     expect(await screen.findByRole('region', { name: 'Lançamentos' })).toBeVisible()
   })
 
-  it('a conta cripto fica fora dos selects de lançamento e aparece só na aba Cripto', async () => {
+  it('a conta cripto fica fora dos selects de lançamento e aparece só na aba Investimentos', async () => {
     const base = {
       moeda: 'BRL',
       saldoInicialCentavos: 0,
@@ -198,8 +198,9 @@ describe('App: sessão', () => {
     const opcoes = within(within(formulario).getByLabelText('Conta')).getAllByRole('option')
     expect(opcoes.map((opcao) => opcao.textContent)).toEqual(['Nubank'])
 
-    fireEvent.click(within(screen.getByRole('navigation', { name: 'Seções' })).getByRole('link', { name: 'Cripto' }))
-    expect(await screen.findByRole('region', { name: 'Cripto' })).toBeVisible()
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Seções' })).getByRole('link', { name: 'Investimentos' }))
+    expect(await screen.findByRole('region', { name: 'Investimentos' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Cripto' }))
     expect(await screen.findByText('Nenhum ativo cadastrado.')).toBeVisible()
   })
 

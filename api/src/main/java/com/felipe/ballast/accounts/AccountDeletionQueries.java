@@ -10,7 +10,12 @@ import org.springframework.stereotype.Repository;
 @Repository
 class AccountDeletionQueries {
 
-  record Summary(long entries, long transfers, long recurrences, long cryptoMovements) {}
+  record Summary(
+      long entries,
+      long transfers,
+      long recurrences,
+      long cryptoMovements,
+      long fixedIncomeTitles) {}
 
   private final JdbcClient jdbc;
 
@@ -35,11 +40,15 @@ class AccountDeletionQueries {
               (SELECT count(*) FROM transferencia
                WHERE usuario_id = :userId AND (conta_saida_id = :id OR conta_entrada_id = :id)),
               (SELECT count(*) FROM template_lancamento WHERE usuario_id = :userId AND conta_id = :id),
-              (SELECT count(*) FROM movimento_cripto WHERE usuario_id = :userId AND conta_id = :id)
+              (SELECT count(*) FROM movimento_cripto WHERE usuario_id = :userId AND conta_id = :id),
+              (SELECT count(*) FROM titulo_renda_fixa WHERE usuario_id = :userId AND conta_id = :id)
             """)
         .param("userId", userId)
         .param("id", accountId)
-        .query((rs, row) -> new Summary(rs.getLong(1), rs.getLong(2), rs.getLong(3), rs.getLong(4)))
+        .query(
+            (rs, row) ->
+                new Summary(
+                    rs.getLong(1), rs.getLong(2), rs.getLong(3), rs.getLong(4), rs.getLong(5)))
         .single();
   }
 
@@ -196,6 +205,11 @@ class AccountDeletionQueries {
 
   // A lista de categorias permitidas sai junto pelo ON DELETE CASCADE da V12.
   int deleteAccountRows(UUID userId, UUID accountId) {
+    // As marcações saem junto pelo ON DELETE CASCADE da V14.
+    jdbc.sql("DELETE FROM titulo_renda_fixa WHERE usuario_id = :userId AND conta_id = :id")
+        .param("userId", userId)
+        .param("id", accountId)
+        .update();
     jdbc.sql("DELETE FROM movimento_cripto WHERE usuario_id = :userId AND conta_id = :id")
         .param("userId", userId)
         .param("id", accountId)

@@ -353,6 +353,56 @@ momento DESC LIMIT 1`) usa a PK `(ativo_id, momento)` lida de trás para frente
 linha `create index on cotacao (ativo_id, momento desc)` de "Índices iniciais"
 não é necessária.
 
+### Renda fixa
+
+Recorte da F13.2 (ADR-037), migration `V14`. LCI, LCA e CDB digitados, com o
+valor calculado pelos índices do Banco Central e corrigível pela marcação.
+
+```
+conta.tipo ganha 'investimento'   -- saldo_inicial 0, não recebe lançamento
+conta.recebe_lancamento bool generated (tipo not in ('cripto','investimento'))
+  -- alvo da FK lancamento_conta_recebe_lancamento; aceita_lancamento da V13
+  -- continua valendo e ficou redundante
+
+titulo_renda_fixa
+  id              uuid pk (sem DEFAULT)
+  usuario_id      uuid fk not null on delete cascade
+  conta_id        uuid not null     -- FK composta: conta do mesmo usuário, tipo investimento
+  tipo            text not null     -- lci | lca | cdb
+  nome            text not null     -- 1 a 100, sem espaço nas pontas
+  valor_aplicado  numeric(18,2) not null   -- > 0 e até 90071992547409.91
+  data_aplicacao  date not null
+  vencimento      date null         -- depois da aplicação
+  indexador       text not null     -- prefixado | cdi | ipca
+  taxa            numeric(9,4) not null    -- > 0; % a.a., % do CDI ou % a.a. acima do IPCA
+  data_resgate    date null         -- junto com valor_resgate, não antes da aplicação
+  valor_resgate   numeric(18,2) null
+  criado_em       timestamptz not null default now()
+  tipo_conta      text generated always as ('investimento') stored
+  unique (id, usuario_id)
+
+marcacao_renda_fixa                 -- o valor que o banco mostrou
+  usuario_id  uuid fk not null on delete cascade
+  titulo_id   uuid not null         -- FK composta com o título, on delete cascade
+  data        date not null
+  valor       numeric(18,2) not null    -- >= 0
+  primary key (titulo_id, data)
+
+indice                              -- dado público do Banco Central (SGS)
+  serie  text not null              -- cdi (série 12, % ao dia) | ipca (433, % ao mês)
+  data   date not null
+  valor  numeric(12,8) not null     -- o percentual publicado
+  primary key (serie, data)
+```
+
+**`indice` não tem `usuario_id`** (desvio do "toda tabela tem `usuario_id`",
+ADR-037): é a mesma série para todo mundo, sem dono, e nenhuma rota escreve
+nela a partir do cliente. Só o job grava.
+
+**Valor não é coluna.** O valor de um título numa data é calculado da última
+marcação até a data (ou da aplicação) com o fator do indexador, como o saldo é a
+soma dos lançamentos. Os dias úteis são os dias com CDI publicado.
+
 ### Carteira observada
 
 Endereço público que alimenta uma conta do tipo `cripto`. Cadastrado digitando

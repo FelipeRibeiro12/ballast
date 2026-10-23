@@ -11,14 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F13.2 — Renda fixa (LCI, LCA, CDB)
-Título com valor aplicado, data, vencimento e indexador (prefixado, % do CDI,
-IPCA + taxa). Valor calculado com CDI e IPCA do Banco Central (SGS) e corrigível
-pelo valor que o banco mostra. LCI e LCA isentas; CDB com bruto e líquido
-estimado (IR regressivo e IOF). Entra no patrimônio.
-Teste obrigatório: Banco Central fora do ar não trava nada e mostra a data do
-último índice; título prefixado fecha centavo com a conta de dias úteis.
-
 ### F13.3 — Cripto em dólar
 Cotação e custo de compra e venda em USD, como a exchange mostra, com o valor em
 reais pela PTAX do Banco Central da data. Quantidade de tokens, preço em USD e
@@ -165,6 +157,21 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — A conversão da perna de transferência ao apagar conta busca a categoria "Outros"/"Outras receitas" pelo nome; sem a semente, o DELETE dá 500 (revisão do PR #21). Hoje toda conta recebe a semente e não há CRUD de categoria. Resolver na fatia do CRUD de categoria, marcando as sementes como fixas. Dono: backend.
 - **DÍVIDA** — Editar recorrência, ou apagar conta, ao mesmo tempo que se edita uma ocorrência dela dá 503 por deadlock em 5 de 5 rodadas (QA da F13.1, D1). Sem 500 e sem dado gravado pela metade; repetir resolve. Suspeita: o DELETE das previstas sem ordem contra o UPDATE que marca `desgarrado`, ou a FK de `lancamento.template_id` pedindo KEY SHARE no template travado FOR UPDATE. Reproduzir com `pg_locks`, corrigir a ordem e travar com teste de concorrência. Dono: backend e dba.
 - **DÍVIDA** — Trocar a divisão de salário de uma recorrência depois de uma parcela realizada no mês deixa a soma do mês diferente do total (R$ 1.000 em 2 partes com a 1ª realizada, trocado para 3 partes: o mês soma R$ 1.166,70) (QA da F13.1, D2). Coerente com "realizada fica", mas nada avisa. Avisar no formulário de edição ou regerar o mês corrente inteiro quando a divisão muda. Dono: tech-lead com o dono do produto.
+- **DÍVIDA** — `conta.aceita_lancamento` e a FK `lancamento_conta_aceita_lancamento` da V13 ficaram redundantes com `recebe_lancamento` da V14 (ADR-037). Remover é DROP de coluna: pare e avise o dono antes. Dono: dba.
+- **DÍVIDA** — Desfazer o resgate de um título só apagando e cadastrando de novo; não há rota para tirar o resgate (F13.2). Dono: backend e frontend.
+- **DÍVIDA** — O IPCA do título usa o IPCA do mês (ou o último publicado) com pro rata pelos dias corridos, sem a projeção nem o aniversário que o banco usa; a marcação corrige (ADR-037). Rever se o desvio incomodar. Dono: backend.
+- **DÍVIDA** — O e2e e o CI sobem a API com o job de índices ligado, que consulta o Banco Central de verdade ao subir. O fluxo não depende do resultado (título aplicado no dia vale o aplicado), mas é rede externa num teste. Desligar no `scripts/e2e.sh` ou usar uma fonte local. Dono: devops.
+- **DÍVIDA** — Título vencido continua rendendo depois do vencimento (revisão do PR #22). Parar o cálculo no vencimento, ou avisar na tela que venceu. Dono: backend e frontend.
+- **DÍVIDA** — Resgate numa data anterior a uma marcação deixa a marcação "depois do resgate" e ela aparece como último valor do banco (revisão do PR #22). Recusar ou esconder. Dono: backend.
+- **DÍVIDA** — Custo do cálculo: raiz 252 por Newton refeita por título a cada leitura, e um INSERT por índice no primeiro download (~1.260 linhas por 5 anos). Memorizar a raiz por taxa e gravar em lote (revisão do PR #22). Dono: backend, quando medir lentidão.
+- **DÍVIDA** — Sem teto de títulos por usuário nem rate limit nas leituras de renda fixa e patrimônio (auditoria do PR #22, M1). Entra com os outros tetos e o rate limit da F20.5. Dono: backend.
+- **DÍVIDA** — Resposta do Banco Central sem teto de bytes nem prazo total (auditoria do PR #22, B1); o `docs/ameacas.md` pede que resposta gigante não derrube o worker. Ler com limite. Dono: backend.
+- **DÍVIDA** — "Ver posições" da conta cripto e o link antigo `#/cripto` abrem Investimentos na aba Renda fixa (revisão do PR #22). Aceitar a aba na rota, como `#/investimentos/cripto`. Dono: frontend.
+- **DÍVIDA** — O web usa `CriptoNaoEncontradoError` e `recusarRespostaDeCripto` também para título de renda fixa (revisão do PR #22). Renomear para um erro de investimento. Dono: frontend.
+- **DÍVIDA** — Um título no teto de valor faz a lista de renda fixa e o patrimônio responderem 400 `fora do limite` sem dizer qual título (QA da F13.2, D2). Devolver o título sem valor, como a posição sem cotação. Dono: backend.
+- **DÍVIDA** — Cadastrar título com aplicação antiga e o Banco Central mudo segura a requisição até 10 s (2 séries x 5 s) (QA da F13.2, D3). Levar a busca para fora da requisição. Dono: backend.
+- **DÍVIDA** — Sem IPCA guardado, o título IPCA + taxa rende só a taxa; com CDI incompleto (Banco Central fora na primeira aplicação), o valor sai menor; a tela só avisa quando não há CDI nenhum (QA da F13.2, D4 e D5). Avisar por título quando o índice não cobre o período. Dono: backend e frontend.
+- **DÍVIDA** — Editar a aplicação para depois de uma marcação tira a marcação do cálculo, mas ela continua como último valor do banco na tela (QA da F13.2, D6). Recusar ou esconder. Dono: backend.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo

@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 
-export type Secao = 'inicio' | 'lancamentos' | 'contas' | 'recorrencias' | 'cripto'
+export type Secao = 'inicio' | 'lancamentos' | 'contas' | 'recorrencias' | 'investimentos'
 
-export const SECOES: readonly Secao[] = ['inicio', 'lancamentos', 'contas', 'recorrencias', 'cripto']
+export const SECOES: readonly Secao[] = ['inicio', 'lancamentos', 'contas', 'recorrencias', 'investimentos']
 
 export const ROTULO_DA_SECAO: Record<Secao, string> = {
   inicio: 'Início',
   lancamentos: 'Lançamentos',
   contas: 'Contas',
   recorrencias: 'Recorrências',
-  cripto: 'Cripto',
+  investimentos: 'Investimentos',
 }
 
 // Hash desconhecido ou vazio cai no Início: um link velho nunca deixa a tela em branco.
 export function lerSecao(hash: string): Secao {
   const nome = hash.replace(/^#\/?/, '')
+  // A aba Cripto da F13 virou Investimentos; o link antigo ainda chega lá.
+  if (nome === 'cripto') return 'investimentos'
   return SECOES.find((secao) => secao === nome) ?? 'inicio'
 }
 

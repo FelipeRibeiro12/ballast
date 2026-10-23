@@ -29,6 +29,7 @@ class TransferService {
       CARD_AS_ORIGIN,
       BENEFIT_ACCOUNT,
       CRYPTO_ACCOUNT,
+      INVESTMENT_ACCOUNT,
       BALANCE_OUT_OF_RANGE
     }
   }
@@ -99,6 +100,10 @@ class TransferService {
     if (entryQueries.isCryptoAccount(userId, input.fromAccountId())
         || entryQueries.isCryptoAccount(userId, input.toAccountId())) {
       return CreateResult.Rejected.CRYPTO_ACCOUNT;
+    }
+    if (entryQueries.isInvestmentAccount(userId, input.fromAccountId())
+        || entryQueries.isInvestmentAccount(userId, input.toAccountId())) {
+      return CreateResult.Rejected.INVESTMENT_ACCOUNT;
     }
     // Saída do cartão não entra em nenhuma fatura, mas baixaria o saldo dele: a fatura ficaria paga
     // com dívida no saldo. Só o pagamento (cartão como destino) é transferência.

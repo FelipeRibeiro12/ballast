@@ -2148,3 +2148,30 @@ p[role='status'] {
   margin: var(--esp-2) 0;
   padding-left: var(--esp-4);
 }
+
+/* Renda fixa (ADR-037) */
+.titulo-valores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-1) var(--esp-4);
+  margin-top: var(--esp-1);
+  font-size: 0.8125rem;
+}
+
+.titulo-valores dt {
+  color: var(--texto-fraco);
+}
+
+.titulo-valores dd {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Os botões do título ocupam a linha inteira embaixo dele, e quebram se não couberem. */
+.titulo-acoes {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-2);
+  margin-top: var(--esp-1);
+}

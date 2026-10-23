@@ -10,15 +10,16 @@ import org.springframework.context.annotation.Import;
 
 // Mesmo conjunto de propriedades em todos os testes de integração: o Spring reaproveita o
 // contexto (e o container do Postgres) entre as classes. Argon2 barato, cadastro aberto,
-// api-docs ligado, que é como a spec é gerada, e o job de recorrência desligado.
+// api-docs ligado, que é como a spec é gerada, os jobs desligados e o Banco Central em memória.
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-@Import({TestcontainersConfiguration.class, TestClock.Config.class})
+@Import({TestcontainersConfiguration.class, TestClock.Config.class, FakeIndexSource.Config.class})
 @SpringBootTest(
     properties = {
       "ballast.registration-open=true",
       "springdoc.api-docs.enabled=true",
       "ballast.recurrence.job-enabled=false",
+      "ballast.indices.job-enabled=false",
       "ballast.password.memory-kib=8",
       "ballast.password.iterations=1",
       "ballast.password.parallelism=1"

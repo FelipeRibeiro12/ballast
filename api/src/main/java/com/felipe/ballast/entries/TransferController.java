@@ -43,6 +43,8 @@ class TransferController {
       new ErrorResponse("conta de benefício não participa de transferência");
   private static final ErrorResponse CRYPTO_ACCOUNT =
       new ErrorResponse("conta cripto não participa de transferência");
+  private static final ErrorResponse INVESTMENT_ACCOUNT =
+      new ErrorResponse("conta de investimento não participa de transferência");
   private static final ErrorResponse BALANCE_OUT_OF_RANGE =
       new ErrorResponse("saldo da conta fora do limite");
 
@@ -119,6 +121,7 @@ class TransferController {
       case CARD_AS_ORIGIN -> ResponseEntity.badRequest().body(CARD_AS_ORIGIN);
       case BENEFIT_ACCOUNT -> ResponseEntity.badRequest().body(BENEFIT_ACCOUNT);
       case CRYPTO_ACCOUNT -> ResponseEntity.badRequest().body(CRYPTO_ACCOUNT);
+      case INVESTMENT_ACCOUNT -> ResponseEntity.badRequest().body(INVESTMENT_ACCOUNT);
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
     };
   }

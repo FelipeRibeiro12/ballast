@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatarDecimal, lerPreco, lerQuantidade } from './decimais'
+import { formatarDecimal, lerPreco, lerQuantidade, lerTaxa } from './decimais'
 
 describe('lerQuantidade', () => {
   it.each([
@@ -46,5 +46,21 @@ describe('formatarDecimal', () => {
     ['123456789012345678901234567890.000000000000000001', '123.456.789.012.345.678.901.234.567.890,000000000000000001'],
   ])('mostra %s como %s sem passar por Number', (texto, esperado) => {
     expect(formatarDecimal(texto)).toBe(esperado)
+  })
+})
+
+describe('lerTaxa', () => {
+  it.each([
+    ['95', '95'],
+    ['12,5', '12.5'],
+    ['12.5', '12.5'],
+    ['100,1234', '100.1234'],
+    [' 6 ', '6'],
+  ])('lê %s como %s', (texto, esperado) => {
+    expect(lerTaxa(texto)).toBe(esperado)
+  })
+
+  it.each(['', '0', '0,0', '-1', '123456', '1,12345', '95%', 'abc'])('recusa %s', (texto) => {
+    expect(lerTaxa(texto)).toBeNull()
   })
 })

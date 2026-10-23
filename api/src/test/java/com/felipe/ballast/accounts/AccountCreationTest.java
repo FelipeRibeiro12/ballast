@@ -228,7 +228,7 @@ class AccountCreationTest {
 
   @ParameterizedTest
   @ValueSource(
-      strings = {"cartao_credito", "Beneficio", "Cripto", "investimento", "Corrente", "", "0"})
+      strings = {"cartao_credito", "Beneficio", "Cripto", "previdencia", "Corrente", "", "0"})
   void rejectsATypeOutsideTheList(String type) throws Exception {
     MockHttpServletResponse response = api.create(session, account("Conta", type, null));
 

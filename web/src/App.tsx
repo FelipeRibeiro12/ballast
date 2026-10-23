@@ -18,7 +18,7 @@ import Inicio from './Inicio'
 import Lancamentos from './Lancamentos'
 import Recorrencias from './Recorrencias'
 import { useRota } from './rota'
-import Cripto from './Cripto'
+import Investimentos from './Investimentos'
 import Topo from './Topo'
 import { Carregando } from './ui'
 
@@ -302,13 +302,18 @@ function App() {
   // Onde o Início abre espaço para as vencidas que a tela de Lançamentos desenha.
   const [slotDeVencidas, setSlotDeVencidas] = useState<HTMLElement | null>(null)
   const [rota, irPara] = useRota()
-  // Conta cripto não recebe lançamento (ADR-035): fica fora dos selects e aparece só na aba Cripto.
+  // Conta cripto e de investimento não recebem lançamento (ADR-035, ADR-037): ficam fora dos selects e
+  // aparecem só na aba Investimentos.
   // Memo porque as telas buscam de novo quando a lista de contas muda de identidade.
   const contasEmReais = useMemo(
-    () => contasAtivas?.filter((conta) => conta.tipo !== 'cripto') ?? null,
+    () => contasAtivas?.filter((conta) => conta.tipo !== 'cripto' && conta.tipo !== 'investimento') ?? null,
     [contasAtivas],
   )
   const contasCripto = useMemo(() => contasAtivas?.filter((conta) => conta.tipo === 'cripto') ?? [], [contasAtivas])
+  const contasDeInvestimento = useMemo(
+    () => contasAtivas?.filter((conta) => conta.tipo === 'investimento') ?? [],
+    [contasAtivas],
+  )
 
   useEffect(() => {
     let ativo = true
@@ -463,7 +468,13 @@ function App() {
             }}
           />
         </div>
-        {rota === 'cripto' && <Cripto contas={contasCripto} aoSessaoExpirar={aoSessaoExpirar} />}
+        {rota === 'investimentos' && (
+          <Investimentos
+            contasDeInvestimento={contasDeInvestimento}
+            contasCripto={contasCripto}
+            aoSessaoExpirar={aoSessaoExpirar}
+          />
+        )}
         <Rodape />
       </main>
     </div>

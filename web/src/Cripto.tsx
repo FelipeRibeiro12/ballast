@@ -1,29 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
-  CriptoInvalidoError,
   CriptoNaoEncontradoError,
-  CriptoRepetidoError,
-  ServicoIndisponivelError,
   SessaoExpiradaError,
   deleteMovimentoCripto,
   fetchAtivosCripto,
   fetchMovimentosCripto,
-  fetchPatrimonio,
   fetchPosicoesCripto,
   postAtivoCripto,
   postCotacao,
   postMovimentoCripto,
 } from './api'
-import type { AtivoCripto, AtivoCriptoRequest, Conta, MovimentoCripto, Patrimonio, PosicoesCripto } from './api'
+import type { AtivoCripto, AtivoCriptoRequest, Conta, MovimentoCripto, PosicoesCripto } from './api'
 import { formatarDecimal, lerPreco, lerQuantidade } from './decimais'
 import { diaEmSaoPaulo, formatarDataCompleta, formatarDiaMes, hojeLocal } from './datas'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
 import { IconeMais } from './icones'
+import { carregar, mensagemDeEscrita } from './leitura'
+import type { Estado } from './leitura'
 import Painel from './Painel'
 import { Carregando, EstadoVazio, Selo } from './ui'
 
-type Estado<T> = { tipo: 'carregando' } | { tipo: 'erro'; mensagem: string } | { tipo: 'ok'; dados: T }
 
 type Rede = AtivoCripto['rede']
 
@@ -50,48 +47,9 @@ const DECIMAIS_DO_NATIVO: Record<Rede, number> = {
 
 type Abertura = { tipo: 'movimento' } | { tipo: 'ativo' } | { tipo: 'cotacao'; ativo: AtivoCripto }
 
-const MENSAGEM_INDISPONIVEL = 'Serviço indisponível. Tente de novo em instantes.'
-
-function mensagemDeLeitura(erro: unknown, oQue: string): string {
-  if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
-  if (erro instanceof CriptoInvalidoError && erro.mensagemServidor !== null) return erro.mensagemServidor
-  return `Não foi possível carregar ${oQue}.`
-}
-
-function mensagemDeEscrita(erro: unknown, padrao: string): string {
-  if ((erro instanceof CriptoInvalidoError || erro instanceof CriptoRepetidoError) && erro.mensagemServidor !== null) {
-    return erro.mensagemServidor
-  }
-  if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
-  return padrao
-}
-
 function rotuloDoAtivo(ativo: AtivoCripto | undefined): string {
   if (ativo === undefined) return 'Ativo'
   return `${ativo.simbolo} · ${ROTULO_DA_REDE[ativo.rede]}`
-}
-
-// Entrega o resultado em guardar, a menos que a tela já tenha mudado (aindaVale falso).
-function carregar<T>(
-  buscar: () => Promise<T>,
-  oQue: string,
-  aoSessaoExpirar: () => void,
-  guardar: (estado: Estado<T>) => void,
-  aindaVale: () => boolean,
-): void {
-  buscar().then(
-    (dados) => {
-      if (aindaVale()) guardar({ tipo: 'ok', dados })
-    },
-    (erro: unknown) => {
-      if (!aindaVale()) return
-      if (erro instanceof SessaoExpiradaError) {
-        aoSessaoExpirar()
-        return
-      }
-      guardar({ tipo: 'erro', mensagem: mensagemDeLeitura(erro, oQue) })
-    },
-  )
 }
 
 function NovoAtivo({ aoCriar, aoSessaoExpirar }: { aoCriar: () => void; aoSessaoExpirar: () => void }) {
@@ -431,44 +389,19 @@ function NovaCotacao({
   )
 }
 
-function ResumoDoPatrimonio({ estado }: { estado: Estado<Patrimonio> }) {
-  if (estado.tipo === 'carregando') return <Carregando texto="Carregando patrimônio..." linhas={2} />
-  if (estado.tipo === 'erro') {
-    return (
-      <p role="alert" className="erro">
-        {estado.mensagem}
-      </p>
-    )
-  }
-  const { dados } = estado
-  const semCotacao = dados.semCotacao.length
-  return (
-    <section className="cartao destaque" aria-label="Patrimônio">
-      <p className="destaque-rotulo">Patrimônio em {formatarDataCompleta(dados.data)}</p>
-      <p className="destaque-valor">{formatarCentavos(dados.totalCentavos)}</p>
-      <dl className="destaque-detalhes">
-        <div>
-          <dt>Contas</dt>
-          <dd>{formatarCentavos(dados.contasCentavos)}</dd>
-        </div>
-        <div>
-          <dt>Cripto</dt>
-          <dd>{formatarCentavos(dados.criptoCentavos)}</dd>
-        </div>
-      </dl>
-      {semCotacao > 0 && (
-        <p role="status">
-          {semCotacao === 1
-            ? '1 posição sem cotação ficou fora do total.'
-            : `${semCotacao} posições sem cotação ficaram fora do total.`}
-        </p>
-      )}
-    </section>
-  )
-}
-
-export default function Cripto({ contas, aoSessaoExpirar }: { contas: Conta[]; aoSessaoExpirar: () => void }) {
-  const [data, setData] = useState(hojeLocal())
+// A data e o patrimônio ficam na tela de Investimentos; quem desenha remonta este componente quando
+// a data muda (key), e aoMudar avisa para o patrimônio ser buscado de novo.
+export default function Cripto({
+  contas,
+  data,
+  aoMudar,
+  aoSessaoExpirar,
+}: {
+  contas: Conta[]
+  data: string
+  aoMudar: () => void
+  aoSessaoExpirar: () => void
+}) {
   const [versao, setVersao] = useState(0)
   const [abertura, setAbertura] = useState<Abertura | null>(null)
   const [confirmando, setConfirmando] = useState<string | null>(null)
@@ -478,11 +411,7 @@ export default function Cripto({ contas, aoSessaoExpirar }: { contas: Conta[]; a
 
   const [ativos, setAtivos] = useState<Estado<AtivoCripto[]>>({ tipo: 'carregando' })
   const [movimentos, setMovimentos] = useState<Estado<MovimentoCripto[]>>({ tipo: 'carregando' })
-  const [patrimonio, setPatrimonio] = useState<Estado<Patrimonio>>({ tipo: 'carregando' })
   const [posicoes, setPosicoes] = useState<Estado<PosicoesCripto>>({ tipo: 'carregando' })
-
-  // O campo de data fica vazio enquanto o usuário apaga para digitar outra; aí não busca nada.
-  const dataValida = /^\d{4}-\d{2}-\d{2}$/.test(data)
 
   useEffect(() => {
     let vale = true
@@ -494,14 +423,12 @@ export default function Cripto({ contas, aoSessaoExpirar }: { contas: Conta[]; a
   }, [versao, aoSessaoExpirar])
 
   useEffect(() => {
-    if (!dataValida) return
     let vale = true
-    carregar(() => fetchPatrimonio(data), 'o patrimônio', aoSessaoExpirar, setPatrimonio, () => vale)
     carregar(() => fetchPosicoesCripto(data), 'as posições', aoSessaoExpirar, setPosicoes, () => vale)
     return () => {
       vale = false
     }
-  }, [data, dataValida, versao, aoSessaoExpirar])
+  }, [data, versao, aoSessaoExpirar])
 
   const ativosPorId = new Map(ativos.tipo === 'ok' ? ativos.dados.map((ativo) => [ativo.id, ativo]) : [])
   const nomesDeConta = new Map(contas.map((conta) => [conta.id, conta.nome]))
@@ -511,6 +438,7 @@ export default function Cripto({ contas, aoSessaoExpirar }: { contas: Conta[]; a
   function depoisDeMudar(): void {
     setAbertura(null)
     setVersao((n) => n + 1)
+    aoMudar()
   }
 
   async function apagar(movimento: MovimentoCripto): Promise<void> {
@@ -522,6 +450,7 @@ export default function Cripto({ contas, aoSessaoExpirar }: { contas: Conta[]; a
       await deleteMovimentoCripto(movimento.id)
       setConfirmando(null)
       setVersao((n) => n + 1)
+      aoMudar()
     } catch (erro) {
       if (erro instanceof SessaoExpiradaError) {
         aoSessaoExpirar()
@@ -543,7 +472,7 @@ export default function Cripto({ contas, aoSessaoExpirar }: { contas: Conta[]; a
   return (
     <section aria-labelledby="titulo-cripto">
       <header className="pagina-topo">
-        <h2 id="titulo-cripto">Cripto</h2>
+        <h3 id="titulo-cripto">Cripto</h3>
         <div className="topo-botoes">
           <button type="button" className="discreto" onClick={() => setAbertura({ tipo: 'ativo' })}>
             Novo ativo
@@ -559,22 +488,6 @@ export default function Cripto({ contas, aoSessaoExpirar }: { contas: Conta[]; a
       <p className="aviso-cripto">
         O Ballast só guarda o que você digita. Ele nunca pede frase de recuperação (seed) nem chave privada.
       </p>
-      <div className="campo campo-data">
-        <label htmlFor="cripto-data">Posição em</label>
-        <input
-          id="cripto-data"
-          type="date"
-          min="1900-01-01"
-          max="2199-12-31"
-          value={data}
-          onChange={(evento) => {
-            setData(evento.target.value)
-            setPatrimonio({ tipo: 'carregando' })
-            setPosicoes({ tipo: 'carregando' })
-          }}
-        />
-      </div>
-      {dataValida ? <ResumoDoPatrimonio estado={patrimonio} /> : <p role="status">Escolha uma data.</p>}
       {falhaDeAcao !== null && (
         <p role="alert" className="erro">
           {falhaDeAcao}
@@ -599,16 +512,16 @@ export default function Cripto({ contas, aoSessaoExpirar }: { contas: Conta[]; a
           }
         />
       )}
-      {dataValida && posicoes.tipo === 'carregando' && <Carregando texto="Carregando posições..." />}
-      {dataValida && posicoes.tipo === 'erro' && (
+      {posicoes.tipo === 'carregando' && <Carregando texto="Carregando posições..." />}
+      {posicoes.tipo === 'erro' && (
         <p role="alert" className="erro">
           {posicoes.mensagem}
         </p>
       )}
-      {dataValida && posicoes.tipo === 'ok' && posicoes.dados.posicoes.length === 0 && podeMovimentar && (
+      {posicoes.tipo === 'ok' && posicoes.dados.posicoes.length === 0 && podeMovimentar && (
         <EstadoVazio titulo="Nenhuma posição nesta data." dica="Registre uma compra para começar." />
       )}
-      {dataValida && posicoes.tipo === 'ok' && posicoes.dados.posicoes.length > 0 && (
+      {posicoes.tipo === 'ok' && posicoes.dados.posicoes.length > 0 && (
         <ul className="lancamentos lista-cartao" aria-label="Posições">
           {posicoes.dados.posicoes.map((posicao) => {
             const ativo = ativosPorId.get(posicao.ativoId)

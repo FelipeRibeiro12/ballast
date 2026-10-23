@@ -181,6 +181,7 @@ const TIPOS_DE_CONTA: readonly string[] = [
   'cartao_credito',
   'beneficio',
   'cripto',
+  'investimento',
 ]
 
 function isDiaDoMes(valor: unknown): boolean {
@@ -323,7 +324,9 @@ function isResumoExclusao(valor: unknown): valor is ResumoExclusaoConta {
     'recorrencias' in valor &&
     Number.isSafeInteger(valor.recorrencias) &&
     'movimentosCripto' in valor &&
-    Number.isSafeInteger(valor.movimentosCripto)
+    Number.isSafeInteger(valor.movimentosCripto) &&
+    'titulosRendaFixa' in valor &&
+    Number.isSafeInteger(valor.titulosRendaFixa)
   )
 }
 
@@ -1304,6 +1307,8 @@ function isPatrimonio(valor: unknown): valor is Patrimonio {
     Number.isSafeInteger(valor.contasCentavos) &&
     'criptoCentavos' in valor &&
     Number.isSafeInteger(valor.criptoCentavos) &&
+    'rendaFixaCentavos' in valor &&
+    Number.isSafeInteger(valor.rendaFixaCentavos) &&
     'totalCentavos' in valor &&
     Number.isSafeInteger(valor.totalCentavos) &&
     'semCotacao' in valor &&
@@ -1403,4 +1408,147 @@ export async function fetchPatrimonio(data: string): Promise<Patrimonio> {
   const corpo: unknown = await resposta.json()
   if (!isPatrimonio(corpo)) throw new ApiError('/patrimonio com formato inesperado')
   return corpo
+}
+
+export type TituloRendaFixa = components['schemas']['TituloRendaFixa']
+export type TitulosRendaFixa = components['schemas']['TitulosRendaFixa']
+export type TituloRendaFixaRequest = components['schemas']['TituloRendaFixaRequest']
+export type Indices = components['schemas']['Indices']
+
+const TIPOS_DE_TITULO: readonly string[] = ['lci', 'lca', 'cdb']
+const INDEXADORES: readonly string[] = ['prefixado', 'cdi', 'ipca']
+
+function inteiroSeguroOuNulo(valor: unknown): boolean {
+  return valor === null || Number.isSafeInteger(valor)
+}
+
+function isValorNaData(valor: unknown): boolean {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'data' in valor &&
+    eDataIso(valor.data) &&
+    'valorCentavos' in valor &&
+    Number.isSafeInteger(valor.valorCentavos)
+  )
+}
+
+function isTituloRendaFixa(valor: unknown): valor is TituloRendaFixa {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'tipo' in valor &&
+    typeof valor.tipo === 'string' &&
+    TIPOS_DE_TITULO.includes(valor.tipo) &&
+    'nome' in valor &&
+    typeof valor.nome === 'string' &&
+    'valorAplicadoCentavos' in valor &&
+    Number.isSafeInteger(valor.valorAplicadoCentavos) &&
+    'dataAplicacao' in valor &&
+    eDataIso(valor.dataAplicacao) &&
+    'vencimento' in valor &&
+    (valor.vencimento === null || eDataIso(valor.vencimento)) &&
+    'indexador' in valor &&
+    typeof valor.indexador === 'string' &&
+    INDEXADORES.includes(valor.indexador) &&
+    'taxa' in valor &&
+    eDecimalEmTexto(valor.taxa) &&
+    'resgate' in valor &&
+    (valor.resgate === null || isValorNaData(valor.resgate)) &&
+    'ultimaMarcacao' in valor &&
+    (valor.ultimaMarcacao === null || isValorNaData(valor.ultimaMarcacao)) &&
+    'valorBrutoCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.valorBrutoCentavos) &&
+    'iofCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.iofCentavos) &&
+    'irCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.irCentavos) &&
+    'valorLiquidoCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.valorLiquidoCentavos) &&
+    'rendimentoCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.rendimentoCentavos)
+  )
+}
+
+function isIndices(valor: unknown): valor is Indices {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'cdiAte' in valor &&
+    (valor.cdiAte === null || eDataIso(valor.cdiAte)) &&
+    'ipcaAte' in valor &&
+    (valor.ipcaAte === null || eDataIso(valor.ipcaAte))
+  )
+}
+
+function isTitulosRendaFixa(valor: unknown): valor is TitulosRendaFixa {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'data' in valor &&
+    eDataIso(valor.data) &&
+    'indices' in valor &&
+    isIndices(valor.indices) &&
+    'titulos' in valor &&
+    Array.isArray(valor.titulos) &&
+    valor.titulos.every(isTituloRendaFixa)
+  )
+}
+
+async function lerTitulo(resposta: Response, origem: string): Promise<TituloRendaFixa> {
+  const corpo: unknown = await resposta.json()
+  if (!isTituloRendaFixa(corpo)) throw new ApiError(`${origem} com formato inesperado`)
+  return corpo
+}
+
+// Os erros seguem os de cripto: mesma família de telas e mesmas classes na tela.
+export async function fetchTitulosRendaFixa(data: string): Promise<TitulosRendaFixa> {
+  const parametros = new URLSearchParams({ data })
+  const resposta = await fetch(`${baseUrl}/titulos-renda-fixa?${parametros.toString()}`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarRespostaDeCripto(resposta, '/titulos-renda-fixa')
+  const corpo: unknown = await resposta.json()
+  if (!isTitulosRendaFixa(corpo)) throw new ApiError('/titulos-renda-fixa com formato inesperado')
+  return corpo
+}
+
+export async function postTituloRendaFixa(dados: TituloRendaFixaRequest): Promise<TituloRendaFixa> {
+  const resposta = await enviarJson('/titulos-renda-fixa', dados)
+  if (!resposta.ok) return recusarRespostaDeCripto(resposta, 'POST /titulos-renda-fixa')
+  return lerTitulo(resposta, 'POST /titulos-renda-fixa')
+}
+
+export async function putTituloRendaFixa(id: string, dados: TituloRendaFixaRequest): Promise<TituloRendaFixa> {
+  const resposta = await fetch(`${baseUrl}/titulos-renda-fixa/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeCripto(resposta, 'PUT /titulos-renda-fixa/{id}')
+  return lerTitulo(resposta, 'PUT /titulos-renda-fixa/{id}')
+}
+
+export async function deleteTituloRendaFixa(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/titulos-renda-fixa/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeCripto(resposta, 'DELETE /titulos-renda-fixa/{id}')
+}
+
+export async function postMarcacao(id: string, data: string, valorCentavos: number): Promise<void> {
+  const resposta = await enviarJson(`/titulos-renda-fixa/${encodeURIComponent(id)}/marcacoes`, { data, valorCentavos })
+  if (resposta.status !== 201) return recusarRespostaDeCripto(resposta, 'POST /titulos-renda-fixa/{id}/marcacoes')
+}
+
+export async function postResgate(id: string, data: string, valorCentavos: number): Promise<TituloRendaFixa> {
+  const resposta = await enviarJson(`/titulos-renda-fixa/${encodeURIComponent(id)}/resgate`, { data, valorCentavos })
+  if (!resposta.ok) return recusarRespostaDeCripto(resposta, 'POST /titulos-renda-fixa/{id}/resgate')
+  return lerTitulo(resposta, 'POST /titulos-renda-fixa/{id}/resgate')
 }

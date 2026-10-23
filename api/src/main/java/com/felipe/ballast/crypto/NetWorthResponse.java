@@ -23,6 +23,12 @@ public record NetWorthResponse(
         long criptoCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "Soma do líquido estimado dos títulos de renda fixa na data",
+            minimum = "-9007199254740991",
+            maximum = "9007199254740991")
+        long rendaFixaCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
             minimum = "-9007199254740991",
             maximum = "9007199254740991")
         long totalCentavos,
@@ -47,6 +53,7 @@ public record NetWorthResponse(
         date,
         PositionResponse.cents(netWorth.accounts()),
         PositionResponse.cents(netWorth.crypto()),
+        PositionResponse.cents(netWorth.fixedIncome()),
         PositionResponse.cents(netWorth.total()),
         unquoted);
   }

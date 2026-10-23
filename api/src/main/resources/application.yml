@@ -60,6 +60,13 @@ ballast:
     job-enabled: true
     # Spring cron (segundos primeiro), no fuso America/Sao_Paulo: 03:00 todo dia.
     cron: "0 0 3 * * *"
+  indices:
+    # API pública do SGS do Banco Central, sem chave (ADR-037).
+    base-url: https://api.bcb.gov.br
+    # Baixa CDI e IPCA ao subir e todo dia às 8h em America/Sao_Paulo. Para desligar,
+    # BALLAST_INDICES_JOB_ENABLED=false.
+    job-enabled: true
+    cron: "0 0 8 * * *"
   seed:
     email: ${SEED_EMAIL:}
     password: ${SEED_SENHA:}

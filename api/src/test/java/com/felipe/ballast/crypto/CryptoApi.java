@@ -134,7 +134,7 @@ public final class CryptoApi {
     return expect(response, 201).get("id").asString();
   }
 
-  static JsonNode expect(MockHttpServletResponse response, int status) throws Exception {
+  public static JsonNode expect(MockHttpServletResponse response, int status) throws Exception {
     if (response.getStatus() != status) {
       throw new IllegalStateException(
           "chamada de teste falhou: " + response.getStatus() + " " + text(response));

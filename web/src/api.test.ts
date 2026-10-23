@@ -201,7 +201,7 @@ describe('rotas de contas', () => {
     expect(fetch).toHaveBeenLastCalledWith('/contas?arquivadas=true', { credentials: 'same-origin' })
   })
 
-  it.each([[{ ...conta, saldoCentavos: '10' }], [{ ...conta, tipo: 'investimento' }], [{ ...conta, saldoCentavos: 1.5 }]])(
+  it.each([[{ ...conta, saldoCentavos: '10' }], [{ ...conta, tipo: 'previdencia' }], [{ ...conta, saldoCentavos: 1.5 }]])(
     'fetchContas recusa conta fora do formato %j',
     async (invalida) => {
       responder([invalida], 200)
@@ -301,7 +301,7 @@ describe('rotas de contas', () => {
   })
 
   it('fetchResumoExclusao lê as contagens e recusa formato errado', async () => {
-    const resumo = { lancamentos: 3, transferencias: 1, recorrencias: 0, movimentosCripto: 0 }
+    const resumo = { lancamentos: 3, transferencias: 1, recorrencias: 0, movimentosCripto: 0, titulosRendaFixa: 0 }
     responder(resumo, 200)
     expect(await fetchResumoExclusao('a/b')).toEqual(resumo)
     expect(fetch).toHaveBeenCalledWith('/contas/a%2Fb/resumo-exclusao', { credentials: 'same-origin' })
