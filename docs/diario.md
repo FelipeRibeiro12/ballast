@@ -2,6 +2,13 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-23 — F14.1: histórico de cotação para trás
+
+O que entrou: migration V17 com `ativo_cripto.historico_em`; `market_chart/range` da CoinGecko por id do nativo e por plataforma e contrato do token, 364 dias, 404 como ativo desconhecido; o job da cotação, depois de cotar, busca até 10 ativos pendentes por rodada e grava só os dias antes da primeira cotação de cada dono, na mesma transação da marca; o filtro de preço da F14 virou um método só.
+Decisões: ADR-041. O endpoint por contrato dispensou o pedido do id da moeda que o backlog previa.
+Teste: o ponto diário enche a posição de uma data passada; a cotação digitada segura o que vem depois dela; fonte fora deixa o ativo pendente; ativo desconhecido é pedido uma vez.
+Em aberto: rodar com a chave real do dono.
+
 ## 2026-10-23 — F14: cotação automática pela CoinGecko
 
 O que entrou: migration V16 com a fonte `coingecko` no CHECK de `cotacao`; cliente da CoinGecko (plano Demo, chave no cabeçalho, nativos num pedido e tokens por plataforma, preço lido em `BigDecimal`); job a cada 30 min gravando uma linha por ativo confiável de cada usuário, idempotente pelo `last_updated_at`; `fonte` na cotação da posição; no web, dia, hora e fonte da cotação.

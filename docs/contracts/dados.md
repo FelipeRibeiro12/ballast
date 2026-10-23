@@ -250,6 +250,7 @@ ativo_cripto
   decimais    smallint not null     -- 0 a 18 (BTC 8, ETH 18, USDC 6)
   confiavel   bool not null default false
   criado_em   timestamptz not null default now()
+  historico_em timestamptz null     -- quando o histórico de cotação foi buscado; nulo é pendente (V17)
   unique nulls not distinct (usuario_id, rede, contrato)
   unique (id, usuario_id)           -- alvo das FKs compostas
 
@@ -406,6 +407,12 @@ soma dos lançamentos. Os dias úteis são os dias com CDI publicado.
 aceita `manual` e `coingecko`. O job grava uma linha por ativo `confiavel` de
 cada usuário, com o `usuario_id` do dono, `moeda = USD` e `momento` igual ao
 `last_updated_at` do provedor; conflito na PK é descartado.
+
+**Histórico para trás (F14.1, ADR-041, migration `V17`).** `ativo_cripto`
+ganha `historico_em`. O job busca uma vez o preço diário do último ano de cada
+ativo `confiavel` com `historico_em` nulo e grava em `cotacao`, com `fonte =
+coingecko`, só os dias antes da primeira cotação daquele ativo. Os pontos e a
+marca entram na mesma transação.
 
 **Moeda (F13.3, ADR-038, migration `V15`).** `movimento_cripto` e `cotacao`
 ganham `moeda text not null` (`BRL` | `USD`, sem default): as linhas da F13 são

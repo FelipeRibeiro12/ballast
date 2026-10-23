@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,16 +54,12 @@ public class QuoteUpdater {
       int stored = 0;
       for (Map.Entry<AssetRef, ProviderQuote> entry : quotes.entrySet()) {
         ProviderQuote quote = entry.getValue();
-        // Oito casas, o que a coluna guarda. HALF_EVEN pelo mesmo motivo do valor da posição
-        // (ADR-035): avaliação sem direção certa para o meio.
-        BigDecimal price = quote.priceUsd().setScale(8, RoundingMode.HALF_EVEN);
-        if (price.signum() <= 0
-            || price.compareTo(MAX_PRICE) > 0
-            || quote.updatedAt().isAfter(latest)) {
+        Optional<BigDecimal> price = storablePrice(quote.priceUsd());
+        if (price.isEmpty() || quote.updatedAt().isAfter(latest)) {
           log.warn("cotação automática fora da faixa ignorada: rede={}", entry.getKey().network());
           continue;
         }
-        stored += queries.insertProviderQuote(entry.getKey(), quote.updatedAt(), price);
+        stored += queries.insertProviderQuote(entry.getKey(), quote.updatedAt(), price.get());
       }
       log.info("cotação automática: {} ativos pedidos, {} cotações novas", assets.size(), stored);
     } catch (RuntimeException e) {
@@ -71,5 +68,15 @@ public class QuoteUpdater {
     } finally {
       running.unlock();
     }
+  }
+
+  // Oito casas, o que a coluna guarda. HALF_EVEN pelo mesmo motivo do valor da posição (ADR-035):
+  // avaliação sem direção certa para o meio. Vazio quando arredonda para zero ou não cabe.
+  static Optional<BigDecimal> storablePrice(BigDecimal priceUsd) {
+    BigDecimal price = priceUsd.setScale(8, RoundingMode.HALF_EVEN);
+    if (price.signum() <= 0 || price.compareTo(MAX_PRICE) > 0) {
+      return Optional.empty();
+    }
+    return Optional.of(price);
   }
 }

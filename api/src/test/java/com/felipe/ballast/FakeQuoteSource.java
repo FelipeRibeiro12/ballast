@@ -3,6 +3,7 @@ package com.felipe.ballast;
 import com.felipe.ballast.crypto.AssetRef;
 import com.felipe.ballast.crypto.ProviderQuote;
 import com.felipe.ballast.crypto.QuoteSource;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -18,12 +19,20 @@ import org.springframework.context.annotation.Primary;
 // Um bean só para todos os testes, como o FakeIndexSource; quem mexe chama reset no fim.
 public class FakeQuoteSource implements QuoteSource {
 
+  public record HistoryRequest(AssetRef asset, Instant from, Instant to) {}
+
   private final Map<AssetRef, ProviderQuote> published = new ConcurrentHashMap<>();
+  private final Map<AssetRef, List<ProviderQuote>> histories = new ConcurrentHashMap<>();
   private final List<AssetRef> requests = new CopyOnWriteArrayList<>();
+  private final List<HistoryRequest> historyRequests = new CopyOnWriteArrayList<>();
   private final AtomicBoolean down = new AtomicBoolean();
 
   public void publish(AssetRef asset, ProviderQuote quote) {
     published.put(asset, quote);
+  }
+
+  public void publishHistory(AssetRef asset, List<ProviderQuote> history) {
+    histories.put(asset, List.copyOf(history));
   }
 
   public void goDown() {
@@ -34,9 +43,15 @@ public class FakeQuoteSource implements QuoteSource {
     return List.copyOf(requests);
   }
 
+  public List<HistoryRequest> historyRequests() {
+    return List.copyOf(historyRequests);
+  }
+
   public void reset() {
     published.clear();
+    histories.clear();
     requests.clear();
+    historyRequests.clear();
     down.set(false);
   }
 
@@ -54,6 +69,15 @@ public class FakeQuoteSource implements QuoteSource {
       }
     }
     return quotes;
+  }
+
+  @Override
+  public List<ProviderQuote> history(AssetRef asset, Instant from, Instant to) {
+    historyRequests.add(new HistoryRequest(asset, from, to));
+    if (down.get()) {
+      throw new IllegalStateException("coingecko fora do ar no teste");
+    }
+    return histories.getOrDefault(asset, List.of());
   }
 
   @TestConfiguration(proxyBeanMethods = false)

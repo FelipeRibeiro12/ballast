@@ -169,6 +169,72 @@ class CryptoQueries {
         .update();
   }
 
+  record PendingHistory(UUID userId, UUID assetId) {}
+
+  // Os ativos que ainda não tiveram o histórico buscado, mais antigos primeiro (ADR-041). Uma linha
+  // por rede e contrato: um pedido serve a todos os donos.
+  List<AssetRef> pendingHistoryRefs(int limit) {
+    return jdbc.sql(
+            "SELECT rede, contrato FROM ativo_cripto WHERE confiavel AND historico_em IS NULL"
+                + " GROUP BY rede, contrato ORDER BY min(criado_em), rede, contrato LIMIT :limit")
+        .param("limit", limit)
+        .query(
+            (rs, row) ->
+                new AssetRef(
+                    CryptoNetwork.fromValue(rs.getString("rede")), rs.getString("contrato")))
+        .list();
+  }
+
+  List<PendingHistory> pendingHistoryAssets(AssetRef asset) {
+    return jdbc.sql(
+            """
+            SELECT usuario_id, id FROM ativo_cripto
+            WHERE confiavel AND historico_em IS NULL AND rede = :network
+              AND contrato IS NOT DISTINCT FROM CAST(:contract AS text)
+            """)
+        .param("network", asset.network().value())
+        .param("contract", asset.contract())
+        .query(
+            (rs, row) ->
+                new PendingHistory(
+                    rs.getObject("usuario_id", UUID.class), rs.getObject("id", UUID.class)))
+        .list();
+  }
+
+  Optional<Instant> firstQuoteMoment(UUID userId, UUID assetId) {
+    return jdbc.sql(
+            "SELECT momento FROM cotacao WHERE usuario_id = :userId AND ativo_id = :assetId"
+                + " ORDER BY momento LIMIT 1")
+        .param("userId", userId)
+        .param("assetId", assetId)
+        .query(OffsetDateTime.class)
+        .optional()
+        .map(OffsetDateTime::toInstant);
+  }
+
+  // O conflito na PK guarda a cotação que já estava no mesmo instante.
+  int insertHistoryQuote(UUID userId, UUID assetId, Instant moment, BigDecimal priceUsd) {
+    return jdbc.sql(
+            """
+            INSERT INTO cotacao (usuario_id, ativo_id, momento, preco, fonte, moeda)
+            VALUES (:userId, :assetId, :moment, :price, 'coingecko', 'USD')
+            ON CONFLICT (ativo_id, momento) DO NOTHING
+            """)
+        .param("userId", userId)
+        .param("assetId", assetId)
+        .param("moment", OffsetDateTime.ofInstant(moment, ZoneOffset.UTC))
+        .param("price", priceUsd)
+        .update();
+  }
+
+  void markHistoryDone(UUID userId, UUID assetId, Instant at) {
+    jdbc.sql("UPDATE ativo_cripto SET historico_em = :at WHERE usuario_id = :userId AND id = :id")
+        .param("at", OffsetDateTime.ofInstant(at, ZoneOffset.UTC))
+        .param("userId", userId)
+        .param("id", assetId)
+        .update();
+  }
+
   // Trava a linha da conta até o fim da transação, como as escritas de lançamento: duas vendas da
   // mesma conta passam uma de cada vez pela conferência da posição. Vazio para conta alheia ou
   // inexistente. Quem arquiva faz UPDATE nesta mesma linha e espera na fila.
