@@ -71,6 +71,9 @@ class AccountController {
   private static final ErrorResponse CRYPTO_WITH_BALANCE =
       new ErrorResponse("conta cripto não tem saldo em reais");
 
+  private static final ErrorResponse INVESTMENT_WITH_BALANCE =
+      new ErrorResponse("conta de investimento não tem saldo em reais");
+
   private static final ErrorResponse PAYS_A_CARD =
       new ErrorResponse("esta conta paga um cartão; troque a conta de pagamento antes");
 
@@ -149,6 +152,10 @@ class AccountController {
     // O valor da conta cripto vem das posições (ADR-035); o CHECK da V13 recusaria com 500.
     if (request.type() == AccountType.CRYPTO && request.initialBalanceCents() != 0) {
       return ResponseEntity.badRequest().body(CRYPTO_WITH_BALANCE);
+    }
+    // Os títulos dão o valor da conta de investimento (ADR-037), como as posições na cripto.
+    if (request.type() == AccountType.INVESTMENT && request.initialBalanceCents() != 0) {
+      return ResponseEntity.badRequest().body(INVESTMENT_WITH_BALANCE);
     }
     // Conta de benefício sem o campo grava lista vazia: aceita qualquer categoria.
     List<UUID> permitted = null;
@@ -368,6 +375,7 @@ class AccountController {
           case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
           case NAME_TAKEN -> ResponseEntity.status(HttpStatus.CONFLICT).body(NAME_TAKEN);
           case CRYPTO_WITH_BALANCE -> ResponseEntity.badRequest().body(CRYPTO_WITH_BALANCE);
+          case INVESTMENT_WITH_BALANCE -> ResponseEntity.badRequest().body(INVESTMENT_WITH_BALANCE);
           case CARD_NOT_ALLOWED -> ResponseEntity.badRequest().body(CARD_NOT_ALLOWED);
           case PAYMENT_ACCOUNT_NOT_FOUND ->
               ResponseEntity.badRequest().body(PAYMENT_ACCOUNT_NOT_FOUND);

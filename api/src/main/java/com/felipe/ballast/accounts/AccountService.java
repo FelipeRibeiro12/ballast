@@ -117,6 +117,7 @@ class AccountService {
       NOT_FOUND,
       NAME_TAKEN,
       CRYPTO_WITH_BALANCE,
+      INVESTMENT_WITH_BALANCE,
       CARD_NOT_ALLOWED,
       PAYMENT_ACCOUNT_NOT_FOUND,
       PAYMENT_ACCOUNT_NOT_ELIGIBLE,
@@ -255,6 +256,11 @@ class AccountService {
         && input.initialBalance() != null
         && input.initialBalance().signum() != 0) {
       return UpdateResult.Rejected.CRYPTO_WITH_BALANCE;
+    }
+    if (type.get() == AccountType.INVESTMENT
+        && input.initialBalance() != null
+        && input.initialBalance().signum() != 0) {
+      return UpdateResult.Rejected.INVESTMENT_WITH_BALANCE;
     }
     if (input.cardGiven() && type.get() != AccountType.CREDIT_CARD) {
       return UpdateResult.Rejected.CARD_NOT_ALLOWED;

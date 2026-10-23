@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { postLogout } from './api'
 import {
   IconeContas,
-  IconeCripto,
+  IconeInvestimentos,
   IconeInicio,
   IconeLancamentos,
   IconeLua,
@@ -23,7 +23,7 @@ const ICONE_DA_SECAO: Record<Secao, ReactNode> = {
   lancamentos: <IconeLancamentos />,
   contas: <IconeContas />,
   recorrencias: <IconeRecorrencias />,
-  cripto: <IconeCripto />,
+  investimentos: <IconeInvestimentos />,
 }
 
 const ICONE_DO_TEMA: Record<Tema, ReactNode> = {

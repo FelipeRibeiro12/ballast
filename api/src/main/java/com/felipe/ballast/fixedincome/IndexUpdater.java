@@ -1,6 +1,7 @@
 package com.felipe.ballast.fixedincome;
 
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
@@ -20,8 +21,6 @@ public class IndexUpdater {
 
   // O SGS recusa janela maior que 10 anos nas séries diárias; 5 deixa folga.
   private static final int CHUNK_YEARS = 5;
-
-  private static final int CDI_GAP_DAYS = 5;
 
   private final IndexSource source;
   private final IndexQueries queries;
@@ -69,13 +68,19 @@ public class IndexUpdater {
     }
   }
 
-  // Sem folga, a janela vazia antes do primeiro valor (fim de semana, feriado, ou o IPCA datado do
-  // dia 1º) seria pedida de novo em toda rodada. Carnaval dá até 4 dias seguidos sem CDI.
+  // A janela antes do primeiro valor só falta se tiver dia de semana (no CDI) ou mês inteiro (no
+  // IPCA, datado do dia 1º). Sem isso o fim de semana vazio seria pedido de novo em toda rodada.
+  // Feriado ainda gera um pedido pequeno repetido, que volta vazio.
   private static boolean missingBefore(IndexSeries series, LocalDate from, LocalDate first) {
     if (series == IndexSeries.IPCA) {
       return YearMonth.from(from).isBefore(YearMonth.from(first));
     }
-    return from.isBefore(first.minusDays(CDI_GAP_DAYS));
+    for (LocalDate day = from; day.isBefore(first); day = day.plusDays(1)) {
+      if (day.getDayOfWeek() != DayOfWeek.SATURDAY && day.getDayOfWeek() != DayOfWeek.SUNDAY) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private void fetchRange(IndexSeries series, LocalDate from, LocalDate to) {

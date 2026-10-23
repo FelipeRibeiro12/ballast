@@ -648,3 +648,62 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   divisão e todas as previstas dela, inclusive as vencidas. Realizadas e
   canceladas ficam como lançamentos avulsos, sem `templateId`. 404 igual ao
   `GET`.
+
+## Renda fixa (ADR-037)
+
+### Conta de investimento
+
+- `tipo` ganha `investimento`, com as regras da conta cripto: `saldoInicialCentavos`
+  só 0 (outro valor dá 400 `conta de investimento não tem saldo em reais`, no
+  `POST` e no `PATCH`), não recebe lançamento nem recorrência (400 `conta de
+  investimento não recebe lançamento`) e não entra em transferência (400 `conta
+  de investimento não participa de transferência`).
+- `DELETE /contas/{id}` leva os títulos e as marcações da conta, e o resumo de
+  exclusão ganha `titulosRendaFixa`.
+
+### Título (`/titulos-renda-fixa`)
+
+- `POST` com `{contaId, tipo, nome, valorAplicadoCentavos, dataAplicacao,
+  vencimento, indexador, taxa}` responde 201 com o `TituloRendaFixa`; `PUT
+  /{id}` com o mesmo corpo responde 200; `DELETE /{id}` responde 204.
+- `tipo`: `lci`, `lca` ou `cdb`. `indexador`: `prefixado`, `cdi` ou `ipca`.
+  `taxa` é **string** decimal maior que zero, até 5 dígitos inteiros e 4 casas:
+  % ao ano no prefixado, % do CDI no `cdi`, % ao ano acima do IPCA no `ipca`.
+  `nome` de 1 a 100. `vencimento` opcional.
+- Recusas, todas 400: `dataAplicacao não pode ser no futuro`, `vencimento deve
+  ser depois da aplicação`, `conta não encontrada` (inexistente, alheia ou id
+  malformado), `conta deve ser de investimento`, `conta arquivada` e, no `PUT`,
+  `dataAplicacao deve ser antes do resgate`. Título alheio, inexistente ou id
+  que não é UUID: 404 `não encontrado`.
+- `GET ?data=` (padrão hoje em `America/Sao_Paulo`) responde `{data, indices:
+  {cdiAte, ipcaAte}, titulos}`, só dos títulos de contas ativas, por data de
+  aplicação. Cada título traz `valorBrutoCentavos`, `iofCentavos`,
+  `irCentavos`, `valorLiquidoCentavos` e `rendimentoCentavos` na data: nulos
+  antes da aplicação, zero depois do resgate (com o rendimento do resgate). IOF
+  e IR são estimativa e só existem no CDB. `resgate` e `ultimaMarcacao` são
+  `{data, valorCentavos}` ou `null`.
+- O valor parte da última marcação até a data (ou da aplicação) e aplica o
+  fator do indexador; os dias úteis são os dias com CDI publicado, e os dias de
+  semana depois do último CDI guardado usam o último CDI. Arredondado uma vez
+  para centavos com `HALF_EVEN`. Fora de ±9007199254740991: 400 `renda fixa fora
+  do limite`.
+- Cadastrar ou editar com aplicação antes do primeiro índice guardado busca os
+  índices que faltam no Banco Central antes de responder; com o Banco Central
+  fora, o título é gravado do mesmo jeito.
+
+### Marcação e resgate
+
+- `POST /titulos-renda-fixa/{id}/marcacoes` com `{data, valorCentavos}` grava o
+  valor que o banco mostrou e responde 201 sem corpo. Outra no mesmo dia troca o
+  valor. Data antes da aplicação ou no futuro: 400 `data deve ficar entre a
+  aplicação e hoje`; no dia do resgate ou depois: 400 `título já resgatado
+  nessa data`.
+- `POST /titulos-renda-fixa/{id}/resgate` com `{data, valorCentavos}` responde
+  200 com o título; de novo, troca data e valor. Mesma faixa de data.
+
+### Índices e patrimônio
+
+- `GET /indices` responde `{cdiAte, ipcaAte}`, a última data guardada de cada
+  série (`null` se o Banco Central nunca respondeu).
+- `GET /patrimonio` ganha `rendaFixaCentavos`, a soma do líquido estimado dos
+  títulos na data, e o `totalCentavos` passa a incluí-la.

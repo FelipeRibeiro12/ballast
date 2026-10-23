@@ -49,14 +49,6 @@ const compra = {
   custoCentavos: 4_000_000,
 }
 
-const patrimonio = {
-  data: '2026-10-22',
-  contasCentavos: 500_000,
-  criptoCentavos: 4_320_000,
-  totalCentavos: 4_820_000,
-  semCotacao: [{ contaId: 'c1', ativoId: 'a2', quantidade: '10' }],
-}
-
 const posicoes = {
   data: '2026-10-22',
   posicoes: [
@@ -99,7 +91,6 @@ function mockFetch(rotas: Rotas = {}): void {
       if (rota) return rota(corpo)
       if (chave === 'GET /ativos-cripto') return Promise.resolve(jsonResponse([bitcoin, usdc], 200))
       if (chave === 'GET /movimentos-cripto') return Promise.resolve(jsonResponse([compra], 200))
-      if (chave.startsWith('GET /patrimonio?')) return Promise.resolve(jsonResponse(patrimonio, 200))
       if (chave.startsWith('GET /posicoes-cripto?')) return Promise.resolve(jsonResponse(posicoes, 200))
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),
@@ -123,8 +114,9 @@ const texto = (valor: string): RegExp =>
 
 function renderizar(contas: Conta[] = [exchange]) {
   const aoSessaoExpirar = vi.fn()
-  render(<Cripto contas={contas} aoSessaoExpirar={aoSessaoExpirar} />)
-  return { aoSessaoExpirar }
+  const aoMudar = vi.fn()
+  render(<Cripto contas={contas} data="2026-10-22" aoMudar={aoMudar} aoSessaoExpirar={aoSessaoExpirar} />)
+  return { aoSessaoExpirar, aoMudar }
 }
 
 beforeEach(() => {
@@ -141,18 +133,7 @@ describe('Cripto', () => {
     mockFetch()
     renderizar()
     expect(screen.getByText(/nunca pede frase de recuperação \(seed\) nem chave privada/)).toBeVisible()
-    await screen.findByRole('region', { name: 'Patrimônio' })
-  })
-
-  it('mostra o patrimônio de hoje com contas, cripto e o aviso das posições sem cotação', async () => {
-    mockFetch()
-    renderizar()
-    const resumo = await screen.findByRole('region', { name: 'Patrimônio' })
-    expect(within(resumo).getByText(texto('R$ 48.200,00'))).toBeVisible()
-    expect(within(resumo).getByText(texto('R$ 5.000,00'))).toBeVisible()
-    expect(within(resumo).getByText(texto('R$ 43.200,00'))).toBeVisible()
-    expect(within(resumo).getByRole('status')).toHaveTextContent('1 posição sem cotação ficou fora do total.')
-    expect(urlsPedidas()).toContain('/patrimonio?data=2026-10-22')
+    await screen.findByRole('list', { name: 'Posições' })
     expect(urlsPedidas()).toContain('/posicoes-cripto?data=2026-10-22')
   })
 
@@ -170,15 +151,6 @@ describe('Cripto', () => {
     expect(within(semCotacao).getByText('—')).toBeVisible()
   })
 
-  it('busca de novo ao trocar a data', async () => {
-    mockFetch()
-    renderizar()
-    await screen.findByRole('list', { name: 'Posições' })
-    fireEvent.change(screen.getByLabelText('Posição em'), { target: { value: '2026-03-10' } })
-    await waitFor(() => expect(urlsPedidas()).toContain('/posicoes-cripto?data=2026-03-10'))
-    expect(urlsPedidas()).toContain('/patrimonio?data=2026-03-10')
-  })
-
   it('sem conta cripto, explica onde criar e não oferece movimento', async () => {
     mockFetch()
     renderizar([])
@@ -188,7 +160,7 @@ describe('Cripto', () => {
 
   it('registra uma compra com a quantidade em texto e o custo em centavos', async () => {
     mockFetch({ 'POST /movimentos-cripto': responde(compra, 201) })
-    renderizar()
+    const { aoMudar } = renderizar()
     fireEvent.click(await screen.findByRole('button', { name: 'Novo movimento' }))
     const formulario = screen.getByRole('form', { name: 'Novo movimento' })
     fireEvent.change(within(formulario).getByLabelText('Quantidade'), { target: { value: '0,123456789012345678' } })
@@ -206,6 +178,8 @@ describe('Cripto', () => {
     })
     await waitFor(() => expect(screen.queryByRole('form', { name: 'Novo movimento' })).toBeNull())
     expect(chamadas('GET /movimentos-cripto').length).toBeGreaterThan(1)
+    // O patrimônio fica na tela de Investimentos; ela é avisada para buscar de novo.
+    expect(aoMudar).toHaveBeenCalled()
   })
 
   it('recusa quantidade fora do formato sem chamar a API', async () => {
@@ -307,9 +281,4 @@ describe('Cripto', () => {
     await waitFor(() => expect(aoSessaoExpirar).toHaveBeenCalled())
   })
 
-  it('mostra erro quando o patrimônio fica fora do limite', async () => {
-    mockFetch({ 'GET /patrimonio?data=2026-10-22': responde({ erro: 'patrimônio fora do limite' }, 400) })
-    renderizar()
-    expect(await screen.findByText('patrimônio fora do limite')).toBeVisible()
-  })
 })

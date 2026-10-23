@@ -10,6 +10,9 @@ const FORMATO_PRECO = /^(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,8}))?$/
 
 const MAX_DIGITOS_PRECO = 12
 
+// Taxa de renda fixa (95, 12,5): vírgula ou ponto, até 5 dígitos inteiros e 4 casas (ADR-037).
+const FORMATO_TAXA = /^(\d{1,5})(?:[.,](\d{1,4}))?$/
+
 function temDigitoDiferenteDeZero(texto: string): boolean {
   return /[1-9]/.test(texto)
 }
@@ -38,4 +41,12 @@ export function formatarDecimal(decimal: string): string {
   const [inteiro, fracao] = (negativo ? decimal.slice(1) : decimal).split('.')
   const agrupado = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
   return `${negativo ? '-' : ''}${agrupado}${fracao === undefined ? '' : `,${fracao}`}`
+}
+
+export function lerTaxa(texto: string): string | null {
+  const partes = FORMATO_TAXA.exec(texto.trim())
+  if (partes === null) return null
+  const [, inteiro, fracao] = partes
+  const decimal = fracao === undefined ? inteiro : `${inteiro}.${fracao}`
+  return temDigitoDiferenteDeZero(decimal) ? decimal : null
 }

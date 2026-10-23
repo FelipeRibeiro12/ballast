@@ -44,6 +44,8 @@ class RecurrenceController {
   private static final ErrorResponse ACCOUNT_ARCHIVED = new ErrorResponse("conta arquivada");
   private static final ErrorResponse CRYPTO_ACCOUNT =
       new ErrorResponse("conta cripto não recebe lançamento");
+  private static final ErrorResponse INVESTMENT_ACCOUNT =
+      new ErrorResponse("conta de investimento não recebe lançamento");
   private static final ErrorResponse CATEGORY_NOT_PERMITTED =
       new ErrorResponse("categoria não permitida nesta conta");
   private static final ErrorResponse CATEGORY_NOT_FOUND =
@@ -127,6 +129,7 @@ class RecurrenceController {
       case ACCOUNT_NOT_FOUND -> ResponseEntity.badRequest().body(ACCOUNT_NOT_FOUND);
       case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
       case CRYPTO_ACCOUNT -> ResponseEntity.badRequest().body(CRYPTO_ACCOUNT);
+      case INVESTMENT_ACCOUNT -> ResponseEntity.badRequest().body(INVESTMENT_ACCOUNT);
       case CATEGORY_NOT_FOUND -> ResponseEntity.badRequest().body(CATEGORY_NOT_FOUND);
       case CATEGORY_NOT_PERMITTED -> ResponseEntity.badRequest().body(CATEGORY_NOT_PERMITTED);
     };
@@ -340,6 +343,7 @@ class RecurrenceController {
       case ACCOUNT_NOT_FOUND -> ResponseEntity.badRequest().body(ACCOUNT_NOT_FOUND);
       case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
       case CRYPTO_ACCOUNT -> ResponseEntity.badRequest().body(CRYPTO_ACCOUNT);
+      case INVESTMENT_ACCOUNT -> ResponseEntity.badRequest().body(INVESTMENT_ACCOUNT);
       case CATEGORY_NOT_FOUND -> ResponseEntity.badRequest().body(CATEGORY_NOT_FOUND);
       case CATEGORY_NOT_PERMITTED -> ResponseEntity.badRequest().body(CATEGORY_NOT_PERMITTED);
     };

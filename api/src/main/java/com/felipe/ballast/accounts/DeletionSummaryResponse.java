@@ -13,10 +13,15 @@ public record DeletionSummaryResponse(
             description = "Transferências com outra conta; a perna de lá vira lançamento comum")
         long transferencias,
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED) long recorrencias,
-    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) long movimentosCripto) {
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) long movimentosCripto,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) long titulosRendaFixa) {
 
   static DeletionSummaryResponse from(AccountDeletionQueries.Summary summary) {
     return new DeletionSummaryResponse(
-        summary.entries(), summary.transfers(), summary.recurrences(), summary.cryptoMovements());
+        summary.entries(),
+        summary.transfers(),
+        summary.recurrences(),
+        summary.cryptoMovements(),
+        summary.fixedIncomeTitles());
   }
 }

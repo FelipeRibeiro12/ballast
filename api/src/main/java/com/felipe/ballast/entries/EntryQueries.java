@@ -105,6 +105,18 @@ class EntryQueries {
         .single();
   }
 
+  // Conta de investimento também não recebe lançamento (ADR-037); a FK
+  // lancamento_conta_recebe_lancamento da V14 segura o resto.
+  boolean isInvestmentAccount(UUID userId, UUID accountId) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM conta WHERE usuario_id = :userId AND id = :id"
+                + " AND tipo = 'investimento')")
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(Boolean.class)
+        .single();
+  }
+
   // Fechamento e vencimento do cartão da conta; vazio quando a conta não é de cartão. Os dois dias
   // não mudam depois que o cartão nasce (ADR-031), então não precisa travar nada para ler.
   Optional<CardBilling> findCardBilling(UUID userId, UUID accountId) {

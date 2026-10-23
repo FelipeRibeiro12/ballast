@@ -313,6 +313,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/indices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Até quando há CDI e IPCA guardados */
+        get: operations["getIndices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/lancamentos": {
         parameters: {
             query?: never;
@@ -534,6 +551,85 @@ export interface paths {
         get: operations["getSaldoProjetado"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/titulos-renda-fixa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista os títulos com o valor numa data
+         * @description Valor bruto, IOF e IR estimados (só CDB), líquido e rendimento na data. Nulos antes da aplicação; zero depois do resgate. Sem data, vale hoje em America/Sao_Paulo.
+         */
+        get: operations["getTitulosRendaFixa"];
+        put?: never;
+        /** Cadastra um título de renda fixa numa conta de investimento */
+        post: operations["postTitulosRendaFixa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/titulos-renda-fixa/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edita um título de renda fixa */
+        put: operations["putTitulosRendaFixaById"];
+        post?: never;
+        /** Apaga um título de renda fixa e as marcações dele */
+        delete: operations["deleteTitulosRendaFixaById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/titulos-renda-fixa/{id}/marcacoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grava o valor que o banco mostrou numa data
+         * @description Vira o ponto de partida do cálculo dali em diante. Outra no mesmo dia troca o valor.
+         */
+        post: operations["postTitulosRendaFixaByIdMarcacoes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/titulos-renda-fixa/{id}/resgate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registra o resgate do título
+         * @description Data e valor recebido. Resgatar de novo troca os dois.
+         */
+        post: operations["postTitulosRendaFixaByIdResgate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -777,7 +873,7 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto" | "investimento";
         };
         Cotacao: {
             /** Format: uuid */
@@ -823,7 +919,7 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto" | "investimento";
         };
         DiaProjetado: {
             /** Format: date */
@@ -897,6 +993,18 @@ export interface components {
         };
         HealthResponse: {
             mensagem: string;
+        };
+        Indices: {
+            /**
+             * Format: date
+             * @description Último dia com CDI publicado guardado
+             */
+            cdiAte: string | null;
+            /**
+             * Format: date
+             * @description Mês do último IPCA guardado, no primeiro dia
+             */
+            ipcaAte: string | null;
         };
         Lancamento: {
             /**
@@ -1115,6 +1223,11 @@ export interface components {
             criptoCentavos: number;
             /** Format: date */
             data: string;
+            /**
+             * Format: int64
+             * @description Soma do líquido estimado dos títulos de renda fixa na data
+             */
+            rendaFixaCentavos: number;
             /** @description Posições sem cotação até a data, fora do total */
             semCotacao: components["schemas"]["PosicaoSemCotacao"][];
             /** Format: int64 */
@@ -1277,6 +1390,8 @@ export interface components {
             movimentosCripto: number;
             /** Format: int64 */
             recorrencias: number;
+            /** Format: int64 */
+            titulosRendaFixa: number;
             /**
              * Format: int64
              * @description Transferências com outra conta; a perna de lá vira lançamento comum
@@ -1311,6 +1426,76 @@ export interface components {
              * @description Soma com sinal das previstas com dataCaixa antes de hoje
              */
             vencidasCentavos: number;
+        };
+        TituloRendaFixa: {
+            /** Format: uuid */
+            contaId: string;
+            /** Format: date */
+            dataAplicacao: string;
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            indexador: "prefixado" | "cdi" | "ipca";
+            /**
+             * Format: int64
+             * @description Estimativa; zero em LCI e LCA
+             */
+            iofCentavos: number | null;
+            /**
+             * Format: int64
+             * @description Estimativa; zero em LCI e LCA
+             */
+            irCentavos: number | null;
+            nome: string;
+            /**
+             * Format: int64
+             * @description Bruto menos aplicado
+             */
+            rendimentoCentavos: number | null;
+            resgate: components["schemas"]["ValorNaData"];
+            /** @description Em texto */
+            taxa: string;
+            /** @enum {string} */
+            tipo: "lci" | "lca" | "cdb";
+            /** @description O último valor que o banco mostrou */
+            ultimaMarcacao: components["schemas"]["ValorNaData"];
+            /** Format: int64 */
+            valorAplicadoCentavos: number;
+            /** Format: int64 */
+            valorBrutoCentavos: number | null;
+            /**
+             * Format: int64
+             * @description Bruto menos IOF e IR estimados
+             */
+            valorLiquidoCentavos: number | null;
+            /** Format: date */
+            vencimento: string | null;
+        };
+        TituloRendaFixaRequest: {
+            /** Format: uuid */
+            contaId: string;
+            /** Format: date */
+            dataAplicacao: string;
+            /** @enum {string} */
+            indexador: "prefixado" | "cdi" | "ipca";
+            nome: string;
+            /**
+             * @description Em texto. Prefixado: % ao ano. CDI: % do CDI. IPCA: % ao ano acima do IPCA
+             * @example 95
+             */
+            taxa: string;
+            /** @enum {string} */
+            tipo: "lci" | "lca" | "cdb";
+            /** Format: int64 */
+            valorAplicadoCentavos: number;
+            /** Format: date */
+            vencimento?: string | null;
+        };
+        TitulosRendaFixa: {
+            /** Format: date */
+            data: string;
+            indices: components["schemas"]["Indices"];
+            titulos: components["schemas"]["TituloRendaFixa"][];
         };
         Transferencia: {
             /** Format: uuid */
@@ -1369,6 +1554,18 @@ export interface components {
             /** Format: uuid */
             id: string;
             nome: string | null;
+        };
+        ValorNaData: {
+            /** Format: date */
+            data: string;
+            /** Format: int64 */
+            valorCentavos: number;
+        };
+        ValorNaDataRequest: {
+            /** Format: date */
+            data: string;
+            /** Format: int64 */
+            valorCentavos: number;
         };
     };
     responses: never;
@@ -2667,6 +2864,35 @@ export interface operations {
             };
         };
     };
+    getIndices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Última data de cada série */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Indices"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     getLancamentos: {
         parameters: {
             query: {
@@ -3783,6 +4009,296 @@ export interface operations {
             };
             /** @description Banco indisponível; pode tentar de novo */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getTitulosRendaFixa: {
+        parameters: {
+            query?: {
+                data?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Títulos das contas ativas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TitulosRendaFixa"];
+                };
+            };
+            /** @description data fora do formato ou "renda fixa fora do limite" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postTitulosRendaFixa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TituloRendaFixaRequest"];
+            };
+        };
+        responses: {
+            /** @description Título criado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TituloRendaFixa"];
+                };
+            };
+            /** @description Entrada inválida, aplicação no futuro, vencimento antes da aplicação, conta inexistente, alheia, de outro tipo ou arquivada */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putTitulosRendaFixaById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TituloRendaFixaRequest"];
+            };
+        };
+        responses: {
+            /** @description Título editado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TituloRendaFixa"];
+                };
+            };
+            /** @description Como no POST, e aplicação depois do resgate */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Título de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteTitulosRendaFixaById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Apagado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Título de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postTitulosRendaFixaByIdMarcacoes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValorNaDataRequest"];
+            };
+        };
+        responses: {
+            /** @description Marcação gravada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Entrada inválida, data antes da aplicação, no futuro ou depois do resgate */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Título de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postTitulosRendaFixaByIdResgate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValorNaDataRequest"];
+            };
+        };
+        responses: {
+            /** @description Título com o resgate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TituloRendaFixa"];
+                };
+            };
+            /** @description Entrada inválida, data antes da aplicação ou no futuro */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Título de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

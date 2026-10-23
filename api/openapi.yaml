@@ -1092,6 +1092,27 @@ paths:
       summary: Verifica se a API alcança o banco
       tags:
       - health
+  /indices:
+    get:
+      operationId: getIndices
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Indices"
+          description: Última data de cada série
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+      security:
+      - cookieAuth: []
+      summary: Até quando há CDI e IPCA guardados
+      tags:
+      - renda-fixa
   /lancamentos:
     get:
       description: "Filtra por dataCaixa, com as duas pontas incluídas, do mais novo\
@@ -2101,6 +2122,257 @@ paths:
       summary: Série diária do saldo projetado por dataCaixa
       tags:
       - saldo-projetado
+  /titulos-renda-fixa:
+    get:
+      description: "Valor bruto, IOF e IR estimados (só CDB), líquido e rendimento\
+        \ na data. Nulos antes da aplicação; zero depois do resgate. Sem data, vale\
+        \ hoje em America/Sao_Paulo."
+      operationId: getTitulosRendaFixa
+      parameters:
+      - in: query
+        name: data
+        required: false
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TitulosRendaFixa"
+          description: Títulos das contas ativas
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: data fora do formato ou "renda fixa fora do limite"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+      security:
+      - cookieAuth: []
+      summary: Lista os títulos com o valor numa data
+      tags:
+      - renda-fixa
+    post:
+      operationId: postTitulosRendaFixa
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TituloRendaFixaRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TituloRendaFixa"
+          description: Título criado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, aplicação no futuro, vencimento antes da\
+            \ aplicação, conta inexistente, alheia, de outro tipo ou arquivada"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Cadastra um título de renda fixa numa conta de investimento
+      tags:
+      - renda-fixa
+  /titulos-renda-fixa/{id}:
+    delete:
+      operationId: deleteTitulosRendaFixaById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Apagado
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Título de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Apaga um título de renda fixa e as marcações dele
+      tags:
+      - renda-fixa
+    put:
+      operationId: putTitulosRendaFixaById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TituloRendaFixaRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TituloRendaFixa"
+          description: Título editado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Como no POST, e aplicação depois do resgate"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Título de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Edita um título de renda fixa
+      tags:
+      - renda-fixa
+  /titulos-renda-fixa/{id}/marcacoes:
+    post:
+      description: Vira o ponto de partida do cálculo dali em diante. Outra no mesmo
+        dia troca o valor.
+      operationId: postTitulosRendaFixaByIdMarcacoes
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValorNaDataRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Marcação gravada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, data antes da aplicação, no futuro ou depois\
+            \ do resgate"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Título de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Grava o valor que o banco mostrou numa data
+      tags:
+      - renda-fixa
+  /titulos-renda-fixa/{id}/resgate:
+    post:
+      description: Data e valor recebido. Resgatar de novo troca os dois.
+      operationId: postTitulosRendaFixaByIdResgate
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValorNaDataRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TituloRendaFixa"
+          description: Título com o resgate
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, data antes da aplicação ou no futuro"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Título de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Registra o resgate do título
+      tags:
+      - renda-fixa
   /transferencias:
     post:
       description: "Cria as duas pernas (tipo transferencia, sem categoria, mesmo\
@@ -2685,6 +2957,7 @@ components:
           - cartao_credito
           - beneficio
           - cripto
+          - investimento
       required:
       - arquivada
       - cartao
@@ -2780,6 +3053,7 @@ components:
           - cartao_credito
           - beneficio
           - cripto
+          - investimento
       required:
       - nome
       - tipo
@@ -2923,6 +3197,24 @@ components:
           type: string
       required:
       - mensagem
+    Indices:
+      type: object
+      properties:
+        cdiAte:
+          type:
+          - string
+          - "null"
+          format: date
+          description: Último dia com CDI publicado guardado
+        ipcaAte:
+          type:
+          - string
+          - "null"
+          format: date
+          description: "Mês do último IPCA guardado, no primeiro dia"
+      required:
+      - cdiAte
+      - ipcaAte
     Lancamento:
       type: object
       properties:
@@ -3315,6 +3607,12 @@ components:
         data:
           type: string
           format: date
+        rendaFixaCentavos:
+          type: integer
+          format: int64
+          description: Soma do líquido estimado dos títulos de renda fixa na data
+          maximum: 9007199254740991
+          minimum: -9007199254740991
         semCotacao:
           type: array
           description: "Posições sem cotação até a data, fora do total"
@@ -3329,6 +3627,7 @@ components:
       - contasCentavos
       - criptoCentavos
       - data
+      - rendaFixaCentavos
       - semCotacao
       - totalCentavos
     PosicaoCripto:
@@ -3647,6 +3946,9 @@ components:
         recorrencias:
           type: integer
           format: int64
+        titulosRendaFixa:
+          type: integer
+          format: int64
         transferencias:
           type: integer
           format: int64
@@ -3656,6 +3958,7 @@ components:
       - lancamentos
       - movimentosCripto
       - recorrencias
+      - titulosRendaFixa
       - transferencias
     SaldoProjetado:
       type: object
@@ -3700,6 +4003,161 @@ components:
       - menorSaldo
       - saldoAtualCentavos
       - vencidasCentavos
+    TituloRendaFixa:
+      type: object
+      properties:
+        contaId:
+          type: string
+          format: uuid
+        dataAplicacao:
+          type: string
+          format: date
+        id:
+          type: string
+          format: uuid
+        indexador:
+          type: string
+          enum:
+          - prefixado
+          - cdi
+          - ipca
+        iofCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: Estimativa; zero em LCI e LCA
+        irCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: Estimativa; zero em LCI e LCA
+        nome:
+          type: string
+        rendimentoCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: Bruto menos aplicado
+        resgate:
+          type: "null"
+          $ref: "#/components/schemas/ValorNaData"
+        taxa:
+          type: string
+          description: Em texto
+        tipo:
+          type: string
+          enum:
+          - lci
+          - lca
+          - cdb
+        ultimaMarcacao:
+          type: "null"
+          $ref: "#/components/schemas/ValorNaData"
+          description: O último valor que o banco mostrou
+        valorAplicadoCentavos:
+          type: integer
+          format: int64
+        valorBrutoCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+        valorLiquidoCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: Bruto menos IOF e IR estimados
+        vencimento:
+          type:
+          - string
+          - "null"
+          format: date
+      required:
+      - contaId
+      - dataAplicacao
+      - id
+      - indexador
+      - iofCentavos
+      - irCentavos
+      - nome
+      - rendimentoCentavos
+      - resgate
+      - taxa
+      - tipo
+      - ultimaMarcacao
+      - valorAplicadoCentavos
+      - valorBrutoCentavos
+      - valorLiquidoCentavos
+      - vencimento
+    TituloRendaFixaRequest:
+      type: object
+      properties:
+        contaId:
+          type: string
+          format: uuid
+        dataAplicacao:
+          type: string
+          format: date
+        indexador:
+          type: string
+          enum:
+          - prefixado
+          - cdi
+          - ipca
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+        taxa:
+          type: string
+          description: "Em texto. Prefixado: % ao ano. CDI: % do CDI. IPCA: % ao ano\
+            \ acima do IPCA"
+          example: "95"
+          pattern: "(?=.*[1-9])[0-9]{1,5}(\\.[0-9]{1,4})?"
+        tipo:
+          type: string
+          enum:
+          - lci
+          - lca
+          - cdb
+        valorAplicadoCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 1
+        vencimento:
+          type:
+          - string
+          - "null"
+          format: date
+      required:
+      - contaId
+      - dataAplicacao
+      - indexador
+      - nome
+      - taxa
+      - tipo
+      - valorAplicadoCentavos
+    TitulosRendaFixa:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+        indices:
+          $ref: "#/components/schemas/Indices"
+        titulos:
+          type: array
+          items:
+            $ref: "#/components/schemas/TituloRendaFixa"
+      required:
+      - data
+      - indices
+      - titulos
     Transferencia:
       type: object
       properties:
@@ -3809,6 +4267,32 @@ components:
       - email
       - id
       - nome
+    ValorNaData:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+        valorCentavos:
+          type: integer
+          format: int64
+      required:
+      - data
+      - valorCentavos
+    ValorNaDataRequest:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+        valorCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 0
+      required:
+      - data
+      - valorCentavos
   securitySchemes:
     cookieAuth:
       in: cookie

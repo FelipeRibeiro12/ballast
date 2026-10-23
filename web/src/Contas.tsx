@@ -18,7 +18,7 @@ import {
 import type { AtualizarContaRequest, Categoria, Conta, CriarContaRequest, ResumoExclusaoConta } from './api'
 import Faturas from './Faturas'
 import { centavosParaCampo, formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
-import { IconeBanco, IconeBeneficio, IconeCartao, IconeCripto, IconeDinheiro, IconeMais } from './icones'
+import { IconeBanco, IconeBeneficio, IconeCartao, IconeCripto, IconeDinheiro, IconeInvestimentos, IconeMais } from './icones'
 import Painel from './Painel'
 import { hashDaSecao } from './rota'
 import { Carregando, EstadoVazio, Selo } from './ui'
@@ -42,9 +42,10 @@ const ROTULO_DO_TIPO: Record<TipoDeConta, string> = {
   cartao_credito: 'Cartão de crédito',
   beneficio: 'Vale-benefício',
   cripto: 'Cripto',
+  investimento: 'Investimento',
 }
 
-const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito', 'beneficio', 'cripto']
+const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito', 'beneficio', 'cripto', 'investimento']
 
 const ICONE_DO_TIPO: Record<TipoDeConta, ReactNode> = {
   corrente: <IconeBanco />,
@@ -53,6 +54,7 @@ const ICONE_DO_TIPO: Record<TipoDeConta, ReactNode> = {
   cartao_credito: <IconeCartao />,
   beneficio: <IconeBeneficio />,
   cripto: <IconeCripto />,
+  investimento: <IconeInvestimentos />,
 }
 
 // Só para a largura da barra: percentual inteiro do limite já usado, calculado em BigInt.
@@ -270,7 +272,8 @@ function EditarConta({
   aoSessaoExpirar: () => void
 }) {
   const eCartao = conta.cartao !== null
-  const eCripto = conta.tipo === 'cripto'
+  // Cripto e investimento não têm saldo em reais (ADR-035, ADR-037).
+  const eCripto = conta.tipo === 'cripto' || conta.tipo === 'investimento'
   const [nome, setNome] = useState(conta.nome)
   const [saldo, setSaldo] = useState(saldoInicialNaTela(conta))
   const [limite, setLimite] = useState(conta.cartao === null ? '' : centavosParaCampo(conta.cartao.limiteCentavos))
@@ -497,6 +500,9 @@ function ApagarConta({
             {resumo.resumo.movimentosCripto > 0 && (
               <li>{plural(resumo.resumo.movimentosCripto, 'movimento de cripto', 'movimentos de cripto')}</li>
             )}
+            {resumo.resumo.titulosRendaFixa > 0 && (
+              <li>{plural(resumo.resumo.titulosRendaFixa, 'título de renda fixa', 'títulos de renda fixa')}</li>
+            )}
           </ul>
           {resumo.resumo.transferencias > 0 && (
             <p>
@@ -558,8 +564,8 @@ function NovaConta({
 
   const eCartao = tipo === 'cartao_credito'
   const eBeneficio = tipo === 'beneficio'
-  // Conta cripto não tem saldo em reais: o valor vem das posições (ADR-035).
-  const eCripto = tipo === 'cripto'
+  // Conta cripto e de investimento não têm saldo em reais: o valor vem das posições e dos títulos.
+  const eCripto = tipo === 'cripto' || tipo === 'investimento'
   const contaPagamentoId = contasDePagamento.some((c) => c.id === pagamentoEscolhido)
     ? pagamentoEscolhido
     : (contasDePagamento[0]?.id ?? '')
@@ -670,7 +676,11 @@ function NovaConta({
         </select>
       </div>
       {eCripto ? (
-        <p role="status">Compras, vendas e cotações da conta ficam na aba Cripto.</p>
+        <p role="status">
+          {tipo === 'cripto'
+            ? 'Compras, vendas e cotações da conta ficam na aba Investimentos.'
+            : 'Os títulos da conta ficam na aba Investimentos.'}
+        </p>
       ) : (
         <div className="campo">
           <label htmlFor="conta-saldo">
@@ -981,9 +991,9 @@ export default function Contas({
                       <strong>{conta.nome}</strong>
                       <span>{ROTULO_DO_TIPO[conta.tipo]}</span>
                     </div>
-                    {conta.tipo === 'cripto' ? (
-                      <a className="conta-saldo" href={hashDaSecao('cripto')}>
-                        Ver posições
+                    {conta.tipo === 'cripto' || conta.tipo === 'investimento' ? (
+                      <a className="conta-saldo" href={hashDaSecao('investimentos')}>
+                        {conta.tipo === 'cripto' ? 'Ver posições' : 'Ver títulos'}
                       </a>
                     ) : (
                       <span className={conta.saldoCentavos < 0 ? 'conta-saldo negativo' : 'conta-saldo'}>

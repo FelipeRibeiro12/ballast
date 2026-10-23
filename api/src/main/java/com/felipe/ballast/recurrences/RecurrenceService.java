@@ -58,6 +58,7 @@ class RecurrenceService {
       ACCOUNT_NOT_FOUND,
       ACCOUNT_ARCHIVED,
       CRYPTO_ACCOUNT,
+      INVESTMENT_ACCOUNT,
       CATEGORY_NOT_FOUND,
       CATEGORY_NOT_PERMITTED
     }
@@ -72,6 +73,7 @@ class RecurrenceService {
       ACCOUNT_NOT_FOUND,
       ACCOUNT_ARCHIVED,
       CRYPTO_ACCOUNT,
+      INVESTMENT_ACCOUNT,
       CATEGORY_NOT_FOUND,
       CATEGORY_NOT_PERMITTED
     }
@@ -135,6 +137,9 @@ class RecurrenceService {
     }
     if (queries.isCryptoAccount(userId, input.accountId())) {
       return CreateResult.Rejected.CRYPTO_ACCOUNT;
+    }
+    if (queries.isInvestmentAccount(userId, input.accountId())) {
+      return CreateResult.Rejected.INVESTMENT_ACCOUNT;
     }
     if (archived.get()) {
       return CreateResult.Rejected.ACCOUNT_ARCHIVED;
@@ -263,6 +268,9 @@ class RecurrenceService {
     }
     if (queries.isCryptoAccount(userId, input.accountId())) {
       return Optional.of(UpdateResult.Rejected.CRYPTO_ACCOUNT);
+    }
+    if (queries.isInvestmentAccount(userId, input.accountId())) {
+      return Optional.of(UpdateResult.Rejected.INVESTMENT_ACCOUNT);
     }
     if (archived.get()) {
       return Optional.of(UpdateResult.Rejected.ACCOUNT_ARCHIVED);

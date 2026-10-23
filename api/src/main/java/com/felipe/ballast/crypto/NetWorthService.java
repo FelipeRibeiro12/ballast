@@ -1,5 +1,6 @@
 package com.felipe.ballast.crypto;
 
+import com.felipe.ballast.fixedincome.FixedIncomeService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -22,9 +23,11 @@ class NetWorthService {
   private static final BigDecimal LIMIT = new BigDecimal("90071992547409.91");
 
   private final CryptoQueries queries;
+  private final FixedIncomeService fixedIncome;
 
-  NetWorthService(CryptoQueries queries) {
+  NetWorthService(CryptoQueries queries, FixedIncomeService fixedIncome) {
     this.queries = queries;
+    this.fixedIncome = fixedIncome;
   }
 
   // value é nulo sem cotação.
@@ -33,6 +36,7 @@ class NetWorthService {
   record NetWorth(
       BigDecimal accounts,
       BigDecimal crypto,
+      BigDecimal fixedIncome,
       BigDecimal total,
       List<CryptoQueries.Position> unquoted) {}
 
@@ -64,11 +68,16 @@ class NetWorthService {
       }
     }
     BigDecimal accounts = queries.accountsBalance(userId, date);
-    BigDecimal total = accounts.add(crypto);
+    // O líquido de cada título: o que se receberia resgatando (ADR-037).
+    Optional<BigDecimal> titles = fixedIncome.netTotal(userId, date);
+    if (titles.isEmpty()) {
+      return Optional.empty();
+    }
+    BigDecimal total = accounts.add(crypto).add(titles.get());
     if (!fits(accounts) || !fits(crypto) || !fits(total)) {
       return Optional.empty();
     }
-    return Optional.of(new NetWorth(accounts, crypto, total, unquoted));
+    return Optional.of(new NetWorth(accounts, crypto, titles.get(), total, unquoted));
   }
 
   // Arredonda uma vez, aqui, por posição: o valor de cada linha é o que a tela mostra, e o total

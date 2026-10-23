@@ -24,7 +24,7 @@ function reais(texto: string): RegExp {
   return new RegExp(`R\\$\\s${texto.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')}`)
 }
 
-type Secao = 'Início' | 'Lançamentos' | 'Contas' | 'Recorrências' | 'Cripto'
+type Secao = 'Início' | 'Lançamentos' | 'Contas' | 'Recorrências' | 'Investimentos'
 
 // A navegação é um só <nav>: barra embaixo no celular, links no topo no desktop.
 async function irPara(page: Page, secao: Secao): Promise<void> {
@@ -226,7 +226,8 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await expect(painel).toHaveCount(0)
     await expect(conta('Exchange E2E').getByRole('link', { name: 'Ver posições' })).toBeVisible()
 
-    await irPara(page, 'Cripto')
+    await irPara(page, 'Investimentos')
+    await page.getByRole('button', { name: 'Cripto', exact: true }).click()
     await expect(page.getByText(/nunca pede frase de recuperação/)).toBeVisible()
     await page.getByRole('button', { name: 'Novo ativo' }).click()
     const ativo = page.getByRole('form', { name: 'Novo ativo' })
@@ -254,6 +255,33 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await expect(posicoes).toContainText(reais('200.000,00'))
     await expect(page.getByRole('region', { name: 'Patrimônio' })).toContainText(reais('200.000,00'))
     await capturar(page, projeto, '11b-cripto')
+  })
+
+  await test.step('renda fixa', async () => {
+    await irPara(page, 'Contas')
+    const novaConta = await abrirNovaConta()
+    await novaConta.getByLabel('Nome').fill('Corretora E2E')
+    await novaConta.getByLabel('Tipo').selectOption('investimento')
+    await novaConta.getByRole('button', { name: 'Criar conta' }).click()
+    await expect(painel).toHaveCount(0)
+    await expect(conta('Corretora E2E').getByRole('link', { name: 'Ver títulos' })).toBeVisible()
+
+    await irPara(page, 'Investimentos')
+    await expect(page.getByRole('region', { name: 'Renda fixa' })).toBeVisible()
+    await page.getByRole('button', { name: 'Novo título' }).click()
+    const titulo = page.getByRole('form', { name: 'Novo título' })
+    await titulo.getByLabel('Nome').fill('CDB E2E')
+    await titulo.getByLabel('Valor aplicado em reais').fill('1.000,00')
+    await titulo.getByLabel('Quanto do CDI, em %').fill('100')
+    await capturar(page, projeto, '11d-novo-titulo')
+    await titulo.getByRole('button', { name: 'Cadastrar título' }).click()
+    await expect(painel).toHaveCount(0)
+    const titulos = page.getByRole('list', { name: 'Títulos' })
+    // Aplicado hoje: sem dia útil corrido, o valor ainda é o aplicado.
+    await expect(titulos).toContainText('CDB E2E')
+    await expect(titulos).toContainText(reais('1.000,00'))
+    await expect(page.getByRole('region', { name: 'Patrimônio' })).toContainText('Renda fixa')
+    await capturar(page, projeto, '11e-renda-fixa')
   })
 
   await test.step('editar e apagar conta e recorrência', async () => {

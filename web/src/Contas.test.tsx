@@ -213,6 +213,7 @@ describe('Contas', () => {
       'Cartão de crédito',
       'Vale-benefício',
       'Cripto',
+      'Investimento',
     ])
   })
 
@@ -228,11 +229,11 @@ describe('Contas', () => {
     fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Exchange' } })
     fireEvent.change(screen.getByLabelText('Tipo'), { target: { value: 'cripto' } })
     expect(screen.queryByLabelText(/saldo inicial/i)).toBeNull()
-    expect(screen.getByText('Compras, vendas e cotações da conta ficam na aba Cripto.')).toBeVisible()
+    expect(screen.getByText('Compras, vendas e cotações da conta ficam na aba Investimentos.')).toBeVisible()
     enviarNovaConta()
 
     const link = await within(secaoContas()).findByRole('link', { name: 'Ver posições' })
-    expect(link).toHaveAttribute('href', '#/cripto')
+    expect(link).toHaveAttribute('href', '#/investimentos')
     expect(JSON.parse(String(chamadasA('POST /contas')[0][1]?.body))).toEqual({
       nome: 'Exchange',
       tipo: 'cripto',
@@ -835,7 +836,7 @@ describe('Conta de benefício', () => {
       ...sessaoViva,
       // Depois do DELETE a tela busca as contas de novo, e o servidor já não tem a conta.
       'GET /contas': () => Promise.resolve(jsonResponse(apagada ? [] : [conta()], 200)),
-      'GET /contas/c1/resumo-exclusao': responde({ lancamentos: 12, transferencias: 2, recorrencias: 1, movimentosCripto: 0 }),
+      'GET /contas/c1/resumo-exclusao': responde({ lancamentos: 12, transferencias: 2, recorrencias: 1, movimentosCripto: 0, titulosRendaFixa: 0 }),
       'DELETE /contas/c1': () => {
         apagada = true
         return Promise.resolve(new Response(null, { status: 204 }))
@@ -863,7 +864,7 @@ describe('Conta de benefício', () => {
     mockFetch({
       ...sessaoViva,
       'GET /contas': responde([conta()]),
-      'GET /contas/c1/resumo-exclusao': responde({ lancamentos: 0, transferencias: 0, recorrencias: 0, movimentosCripto: 0 }),
+      'GET /contas/c1/resumo-exclusao': responde({ lancamentos: 0, transferencias: 0, recorrencias: 0, movimentosCripto: 0, titulosRendaFixa: 0 }),
       'DELETE /contas/c1': responde({ erro: 'esta conta paga um cartão; troque a conta de pagamento antes' }, 400),
     })
     render(<App />)
