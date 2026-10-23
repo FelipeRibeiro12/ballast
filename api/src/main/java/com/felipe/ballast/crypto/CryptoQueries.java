@@ -325,6 +325,20 @@ class CryptoQueries {
         .list();
   }
 
+  // Na ordem do custo médio (ADR-042): por dia, compra antes de venda. A conferência da venda soma
+  // o dia inteiro, e só nessa ordem a posição nunca passa por baixo de zero.
+  List<Movement> movementsUntil(UUID userId, LocalDate date) {
+    return jdbc.sql(
+            MOVEMENT_COLUMNS
+                + " WHERE m.usuario_id = :userId AND m.data <= :date"
+                + " ORDER BY m.conta_id, m.ativo_id, m.data,"
+                + " CASE m.tipo WHEN 'compra' THEN 0 ELSE 1 END, m.criado_em, m.id")
+        .param("userId", userId)
+        .param("date", date)
+        .query(CryptoQueries::mapMovement)
+        .list();
+  }
+
   // Posições das contas ativas com movimento até date, com a última cotação antes de quoteLimit
   // (o começo do dia seguinte em São Paulo). A PK de cotacao serve a busca pela última de trás
   // para frente. Posição zerada fica de fora.

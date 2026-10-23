@@ -3631,10 +3631,28 @@ components:
           description: Saldo até a data das contas ativas que não são cripto
           maximum: 9007199254740991
           minimum: -9007199254740991
+        criptoAportadoCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Compras menos vendas, em reais, das posições somadas em criptoCentavos\
+            \ (ADR-042); nulo sem a PTAX de algum movimento"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
         criptoCentavos:
           type: integer
           format: int64
           description: Soma do valor das posições com cotação
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        criptoValorizacaoCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "criptoCentavos menos criptoAportadoCentavos: o que veio do\
+            \ preço e do dólar, com o ganho das vendas"
           maximum: 9007199254740991
           minimum: -9007199254740991
         data:
@@ -3658,7 +3676,9 @@ components:
           minimum: -9007199254740991
       required:
       - contasCentavos
+      - criptoAportadoCentavos
       - criptoCentavos
+      - criptoValorizacaoCentavos
       - data
       - rendaFixaCentavos
       - semCotacao
@@ -3684,6 +3704,26 @@ components:
           format: int64
           description: "Compras menos vendas em centavos de real, pela PTAX da data\
             \ de cada movimento; nulo sem a PTAX de algum movimento em dólar"
+        custoDaPosicaoCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Custo médio das unidades que restam, em centavos de real pela\
+            \ PTAX de cada movimento; nulo sem a PTAX de algum movimento em dólar"
+        custoDaPosicaoUsdCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Custo médio das unidades que restam, em centavos de dólar;\
+            \ nulo sem a PTAX de algum movimento em reais"
+        custoMedioUsd:
+          type:
+          - string
+          - "null"
+          description: "Custo médio ponderado em dólares por unidade, em texto, com\
+            \ 8 casas no máximo (ADR-042); nulo sem a PTAX de algum movimento em reais"
         custoUsdCentavos:
           type:
           - integer
@@ -3691,10 +3731,38 @@ components:
           format: int64
           description: Compras menos vendas em centavos de dólar; nulo sem a PTAX
             de algum movimento em reais
+        ganhoCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "valorCentavos menos custoDaPosicaoCentavos, com o efeito do\
+            \ dólar; nulo quando falta um dos dois"
+        ganhoUsdCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "valorUsdCentavos menos custoDaPosicaoUsdCentavos: o que o\
+            \ preço fez com o que restou; nulo quando falta um dos dois"
         quantidade:
           type: string
           description: "Tokens: compras menos vendas até a data, em texto, sem zero\
             \ à direita"
+        realizadoCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Recebido nas vendas menos o custo médio do que foi vendido,\
+            \ em centavos de real; nulo sem a PTAX de algum movimento em dólar"
+        realizadoUsdCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Recebido nas vendas menos o custo médio do que foi vendido,\
+            \ em centavos de dólar; nulo sem a PTAX de algum movimento em reais"
         valorCentavos:
           type:
           - integer
@@ -3711,8 +3779,15 @@ components:
       - contaId
       - cotacao
       - custoCentavos
+      - custoDaPosicaoCentavos
+      - custoDaPosicaoUsdCentavos
+      - custoMedioUsd
       - custoUsdCentavos
+      - ganhoCentavos
+      - ganhoUsdCentavos
       - quantidade
+      - realizadoCentavos
+      - realizadoUsdCentavos
       - valorCentavos
       - valorUsdCentavos
     PosicaoSemCotacao:
