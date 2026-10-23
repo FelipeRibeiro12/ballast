@@ -4,6 +4,7 @@ import type { Conta, Lancamento, Usuario } from './api'
 import { formatarDiaMes, hojeLocal, somarDias } from './datas'
 import { formatarCentavos } from './dinheiro'
 import SaldoProjetado from './SaldoProjetado'
+import { aindaNaoAconteceu } from './totaisDoMes'
 import { Carregando, EstadoVazio } from './ui'
 
 const DIAS_A_FRENTE = 30
@@ -113,9 +114,9 @@ function ProximasPrevistas({
     fetchLancamentos(hoje, somarDias(hoje, DIAS_A_FRENTE)).then(
       (lancamentos) => {
         if (!ativo) return
-        // Transferência não nasce prevista, mas o filtro por tipo evita depender disso.
+        // Transferência não é ganho nem gasto; fica fora como no total do mês.
         const previstas = lancamentos
-          .filter((lancamento) => lancamento.status === 'previsto' && lancamento.tipo !== 'transferencia')
+          .filter((lancamento) => aindaNaoAconteceu(lancamento, hoje) && lancamento.tipo !== 'transferencia')
           .sort((a, b) => (a.dataCaixa < b.dataCaixa ? -1 : a.dataCaixa > b.dataCaixa ? 1 : 0))
         setEstado({ tipo: 'ok', previstas })
       },

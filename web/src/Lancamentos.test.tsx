@@ -251,6 +251,87 @@ describe('Lancamentos', () => {
     expect(area.getByText('Resultado').nextSibling).toHaveTextContent(texto('R$ 4.876,55'))
   })
 
+  describe('o que ainda não moveu dinheiro', () => {
+    const visa = conta({
+      id: 'c9',
+      nome: 'Visa',
+      tipo: 'cartao_credito',
+      saldoCentavos: -30000,
+      cartao: { limiteCentavos: 500000, disponivelCentavos: 470000, diaFechamento: 3, diaVencimento: 25, contaPagamentoId: 'c1' },
+    })
+
+    it('compra no cartão antes do vencimento conta como prevista, não como despesa', async () => {
+      mockFetch({
+        ...base,
+        'GET /contas': responde([conta(), visa]),
+        [MES_ATUAL]: responde([
+          lancamento({ id: 'a', titulo: 'Tênis', contaId: 'c9', valorCentavos: 30000, dataCompetencia: '2026-10-02', dataCaixa: '2026-10-25' }),
+          lancamento({ id: 'b', titulo: 'Feira' }),
+          prevista({ id: 'o2', titulo: 'Salário', tipo: 'receita', categoriaId: 'cr1', valorCentavos: 500000, dataCaixa: '2026-10-30' }),
+        ]),
+      })
+      render(<App />)
+      const area = within(await secao())
+      expect(await area.findByText('Tênis')).toBeVisible()
+      expect(area.getByText('Despesas').nextSibling).toHaveTextContent(texto('R$ 123,45'))
+      expect(area.getByText('Receitas').nextSibling).toHaveTextContent(texto('R$ 0,00'))
+      const previsto = area.getByText(/previsto no mês/i)
+      expect(previsto).toHaveTextContent(texto('+R$ 5.000,00'))
+      expect(previsto).toHaveTextContent(texto('−R$ 300,00'))
+      const tenis = area.getByText('Tênis').closest('li')
+      expect(tenis).not.toBeNull()
+      expect(within(tenis as HTMLElement).getByText('Na fatura')).toBeVisible()
+      // A data da compra é fixa e a caixa vem do vencimento: não há o que confirmar antes.
+      expect(within(tenis as HTMLElement).queryByRole('button', { name: 'Confirmar Tênis' })).toBeNull()
+    })
+
+    it('lançamento com data futura fica agendado e entra em despesas quando a data chega', async () => {
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([
+          lancamento({ id: 'a', titulo: 'Boleto', valorCentavos: 20000, dataCompetencia: '2026-10-22', dataCaixa: '2026-10-22' }),
+          lancamento({ id: 'b', titulo: 'Padaria', valorCentavos: 1000, dataCompetencia: '2026-10-19', dataCaixa: '2026-10-19' }),
+        ]),
+      })
+      render(<App />)
+      const area = within(await secao())
+      expect(await area.findByText('Boleto')).toBeVisible()
+      expect(area.getByText('Despesas').nextSibling).toHaveTextContent(texto('R$ 10,00'))
+      expect(area.getByText(/previsto no mês/i)).toHaveTextContent(texto('−R$ 200,00'))
+      const boleto = area.getByText('Boleto').closest('li')
+      expect(within(boleto as HTMLElement).getByText('Agendado')).toBeVisible()
+      const padaria = area.getByText('Padaria').closest('li')
+      expect(within(padaria as HTMLElement).queryByText('Agendado')).toBeNull()
+    })
+
+    it('confirmar o agendado antes da data grava com a data de hoje', async () => {
+      let corpoEnviado: unknown
+      mockFetch({
+        ...base,
+        [MES_ATUAL]: responde([
+          lancamento({ id: 'l1', titulo: 'Boleto', valorCentavos: 20000, dataCompetencia: '2026-10-22', dataCaixa: '2026-10-22' }),
+        ]),
+        'PUT /lancamentos/l1': (corpo) => {
+          corpoEnviado = corpo
+          return Promise.resolve(jsonResponse(lancamento({ titulo: 'Boleto', dataCaixa: '2026-10-19' }), 200))
+        },
+      })
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirmar Boleto' }))
+      await waitFor(() => expect(chamadasA('PUT /lancamentos/l1')).toHaveLength(1))
+      expect(JSON.parse(String(corpoEnviado))).toEqual({
+        tipo: 'despesa',
+        titulo: 'Boleto',
+        descricao: null,
+        valorCentavos: 20000,
+        categoriaId: 'cd1',
+        contaId: 'c1',
+        data: '2026-10-19',
+      })
+      await waitFor(() => expect(chamadasA(MES_ATUAL)).toHaveLength(2))
+    })
+  })
+
   it('mostra a data da compra só quando competência e caixa diferem', async () => {
     mockFetch({
       ...base,

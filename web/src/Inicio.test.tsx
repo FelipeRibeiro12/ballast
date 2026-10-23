@@ -183,13 +183,15 @@ describe('Início', () => {
   })
 
   describe('próximas previstas', () => {
-    it('lista só as previstas, por data, com sinal, conta e valor', async () => {
+    it('lista o que ainda vai mover dinheiro, por data, com sinal, conta e valor', async () => {
       mockFetch({
         'GET /contas': responde([conta()]),
         [PROXIMAS]: responde([
           prevista({ id: 'o2', titulo: 'Salário', tipo: 'receita', valorCentavos: 500000, dataCaixa: '2026-11-05' }),
           prevista(),
-          prevista({ id: 'r9', titulo: 'Feira', status: 'realizado', dataCaixa: '2026-10-20' }),
+          // Realizado hoje já moveu dinheiro; o de caixa futura (compra no cartão) ainda vai mover.
+          prevista({ id: 'r8', titulo: 'Padaria', status: 'realizado', dataCaixa: '2026-10-19' }),
+          prevista({ id: 'r9', titulo: 'Tênis', status: 'realizado', valorCentavos: 30000, dataCaixa: '2026-10-28' }),
           prevista({ id: 'c3', titulo: 'Velha', status: 'cancelado', dataCaixa: '2026-10-21' }),
         ]),
       })
@@ -198,13 +200,14 @@ describe('Início', () => {
       // O nome da conta chega com a lista de contas, que pode vir depois das previstas.
       await within(lista).findAllByText('Nubank')
       const itens = within(lista).getAllByRole('listitem')
-      expect(itens).toHaveLength(2)
+      expect(itens).toHaveLength(3)
       expect(itens[0]).toHaveTextContent('25/10')
       expect(itens[0]).toHaveTextContent('Aluguel')
       expect(itens[0]).toHaveTextContent('Nubank')
       expect(itens[0]).toHaveTextContent(texto('− R$ 1.500,00'))
-      expect(itens[1]).toHaveTextContent('Salário')
-      expect(itens[1]).toHaveTextContent(texto('+ R$ 5.000,00'))
+      expect(itens[1]).toHaveTextContent('Tênis')
+      expect(itens[2]).toHaveTextContent('Salário')
+      expect(itens[2]).toHaveTextContent(texto('+ R$ 5.000,00'))
       expect(screen.getByRole('link', { name: 'Ver todos os lançamentos' })).toHaveAttribute('href', '#/lancamentos')
     })
 
