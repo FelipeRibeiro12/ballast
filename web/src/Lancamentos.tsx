@@ -50,6 +50,7 @@ import {
 import MenuDeAcoes from './MenuDeAcoes'
 import Painel from './Painel'
 import { calcularParcelas } from './parcelas'
+import { aindaNaoAconteceu, somarTotaisDoMes } from './totaisDoMes'
 import { Carregando, EstadoVazio, Selo } from './ui'
 
 type TipoDeLancamento = Lancamento['tipo']
@@ -1156,6 +1157,41 @@ export default function Lancamentos({
     }
   }
 
+  // Confirmar antes da data é dizer que o dinheiro já se moveu: a data passa a ser hoje.
+  async function confirmarAgendado(lancamento: Lancamento, tipo: 'receita' | 'despesa', categoriaId: string): Promise<void> {
+    if (acaoEmVoo.current) return
+    acaoEmVoo.current = true
+    setApagando(lancamento.id)
+    setFalhaDeAcao(null)
+    try {
+      await putLancamento(lancamento.id, {
+        tipo,
+        titulo: lancamento.titulo,
+        descricao: lancamento.descricao,
+        valorCentavos: lancamento.valorCentavos,
+        categoriaId,
+        contaId: lancamento.contaId,
+        data: hojeLocal(),
+      })
+      if (editando?.id === lancamento.id) setEditando(null)
+      depoisDeMudar()
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return
+      }
+      if (erro instanceof LancamentoNaoEncontradoError) {
+        setFalhaDeAcao(MENSAGEM_NAO_EXISTE)
+        depoisDeMudar()
+        return
+      }
+      setFalhaDeAcao(mensagemDeGravacao(erro))
+    } finally {
+      acaoEmVoo.current = false
+      setApagando(null)
+    }
+  }
+
   const nomesDeConta = new Map<string, string>()
   const nomesDeCategoria = new Map<string, string>()
   if (contas !== null) contas.forEach((conta) => nomesDeConta.set(conta.id, conta.nome))
@@ -1164,26 +1200,11 @@ export default function Lancamentos({
     apoio.categorias.forEach((categoria) => nomesDeCategoria.set(categoria.id, categoria.nome))
   }
 
-  // BigInt porque a soma de muitos lançamentos pode passar do inteiro seguro.
-  let receitas = 0n
-  let despesas = 0n
-  let previstoReceitas = 0n
-  let previstoDespesas = 0n
   const hoje = hojeLocal()
-  if (estado.tipo === 'ok') {
-    for (const lancamento of estado.lancamentos) {
-      // Previsto e cancelado não são fato consumado: os totais seguem o saldo, só realizado.
-      if (lancamento.status === 'previsto') {
-        if (lancamento.tipo === 'receita') previstoReceitas += BigInt(lancamento.valorCentavos)
-        else if (lancamento.tipo === 'despesa') previstoDespesas += BigInt(lancamento.valorCentavos)
-        continue
-      }
-      if (lancamento.status !== 'realizado') continue
-      if (lancamento.tipo === 'receita') receitas += BigInt(lancamento.valorCentavos)
-      else if (lancamento.tipo === 'despesa') despesas += BigInt(lancamento.valorCentavos)
-      // Transferência fica fora: mover dinheiro entre contas não é ganho nem gasto.
-    }
-  }
+  const { receitas, despesas, previstoReceitas, previstoDespesas } =
+    estado.tipo === 'ok'
+      ? somarTotaisDoMes(estado.lancamentos, hoje)
+      : { receitas: 0n, despesas: 0n, previstoReceitas: 0n, previstoDespesas: 0n }
 
   const noPrimeiroMes = mes.ano <= ANO_MINIMO && mes.mes === 1
   const noUltimoMes = mes.ano >= ANO_MAXIMO && mes.mes === 12
@@ -1478,6 +1499,15 @@ export default function Lancamentos({
                   const sinal = lancamento.tipo === 'receita' || lancamento.direcao === 'entrada' ? '+' : '−'
                   const ePrevista = lancamento.status === 'previsto'
                   const eCancelada = lancamento.status === 'cancelado'
+                  const cartaoDoItem = cartaoDaConta(lancamento.contaId)
+                  const eAgendado = !ePrevista && !ePerna && aindaNaoAconteceu(lancamento, hoje)
+                  // No cartão a data é a da compra e a caixa é o vencimento: antecipar é pagar a fatura.
+                  const podeConfirmarAgendado =
+                    eAgendado &&
+                    cartaoDoItem === null &&
+                    lancamento.compraParceladaId === null &&
+                    lancamento.categoriaId !== null &&
+                    lancamento.tipo !== 'transferencia'
                   // Só vale o aviso se a série ainda gera e a data cai dentro do que ela repõe.
                   const voltaComoPrevista =
                     lancamento.templateId !== null &&
@@ -1500,7 +1530,7 @@ export default function Lancamentos({
                   return (
                     <li
                       key={lancamento.id}
-                      className={ePrevista ? 'previsto' : eCancelada ? 'cancelado' : undefined}
+                      className={ePrevista || eAgendado ? 'previsto' : eCancelada ? 'cancelado' : undefined}
                     >
                       <span className={`item-icone ${lancamento.tipo}`}>{iconeDoItem(lancamento)}</span>
                       <div className="item-corpo">
@@ -1516,9 +1546,10 @@ export default function Lancamentos({
                         {lancamento.dataCompetencia !== lancamento.dataCaixa && (
                           <small>compra em {formatarDiaMes(lancamento.dataCompetencia)}</small>
                         )}
-                        {(ePrevista || eCancelada || ePerna || lancamento.parcelaOrdem !== null || parcelaDaCompra !== null) && (
+                        {(ePrevista || eAgendado || eCancelada || ePerna || lancamento.parcelaOrdem !== null || parcelaDaCompra !== null) && (
                           <div className="item-selos">
                             {ePrevista && <Selo tom="previsto">Previsto</Selo>}
+                            {eAgendado && <Selo tom="previsto">{cartaoDoItem === null ? 'Agendado' : 'Na fatura'}</Selo>}
                             {eCancelada && <Selo tom="cancelado">Cancelado</Selo>}
                             {ePerna && <Selo tom="transferencia">Transferência</Selo>}
                             {lancamento.parcelaOrdem !== null && (
@@ -1551,6 +1582,21 @@ export default function Lancamentos({
                                 onClick={() => {
                                   setFalhaDeAcao(null)
                                   setConfirmando({ id: lancamento.id, acao: 'ajustar', lugar: 'mes' })
+                                }}
+                              >
+                                Confirmar
+                              </button>
+                            )}
+                            {podeConfirmarAgendado && (
+                              <button
+                                type="button"
+                                className="pequeno destaque-acao"
+                                disabled={apagando !== null}
+                                aria-label={`Confirmar ${lancamento.titulo}`}
+                                onClick={() => {
+                                  const { tipo, categoriaId } = lancamento
+                                  if (tipo === 'transferencia' || categoriaId === null) return
+                                  void confirmarAgendado(lancamento, tipo, categoriaId)
                                 }}
                               >
                                 Confirmar
