@@ -11,14 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F13.2 — Renda fixa (LCI, LCA, CDB)
-Título com valor aplicado, data, vencimento e indexador (prefixado, % do CDI,
-IPCA + taxa). Valor calculado com CDI e IPCA do Banco Central (SGS) e corrigível
-pelo valor que o banco mostra. LCI e LCA isentas; CDB com bruto e líquido
-estimado (IR regressivo e IOF). Entra no patrimônio.
-Teste obrigatório: Banco Central fora do ar não trava nada e mostra a data do
-último índice; título prefixado fecha centavo com a conta de dias úteis.
-
 ### F13.3 — Cripto em dólar
 Cotação e custo de compra e venda em USD, como a exchange mostra, com o valor em
 reais pela PTAX do Banco Central da data. Quantidade de tokens, preço em USD e
@@ -166,6 +158,9 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Editar recorrência, ou apagar conta, ao mesmo tempo que se edita uma ocorrência dela dá 503 por deadlock em 5 de 5 rodadas (QA da F13.1, D1). Sem 500 e sem dado gravado pela metade; repetir resolve. Suspeita: o DELETE das previstas sem ordem contra o UPDATE que marca `desgarrado`, ou a FK de `lancamento.template_id` pedindo KEY SHARE no template travado FOR UPDATE. Reproduzir com `pg_locks`, corrigir a ordem e travar com teste de concorrência. Dono: backend e dba.
 - **DÍVIDA** — Trocar a divisão de salário de uma recorrência depois de uma parcela realizada no mês deixa a soma do mês diferente do total (R$ 1.000 em 2 partes com a 1ª realizada, trocado para 3 partes: o mês soma R$ 1.166,70) (QA da F13.1, D2). Coerente com "realizada fica", mas nada avisa. Avisar no formulário de edição ou regerar o mês corrente inteiro quando a divisão muda. Dono: tech-lead com o dono do produto.
 - **DÍVIDA** — `conta.aceita_lancamento` e a FK `lancamento_conta_aceita_lancamento` da V13 ficaram redundantes com `recebe_lancamento` da V14 (ADR-037). Remover é DROP de coluna: pare e avise o dono antes. Dono: dba.
+- **DÍVIDA** — Desfazer o resgate de um título só apagando e cadastrando de novo; não há rota para tirar o resgate (F13.2). Dono: backend e frontend.
+- **DÍVIDA** — O IPCA do título usa o IPCA do mês (ou o último publicado) com pro rata pelos dias corridos, sem a projeção nem o aniversário que o banco usa; a marcação corrige (ADR-037). Rever se o desvio incomodar. Dono: backend.
+- **DÍVIDA** — O e2e e o CI sobem a API com o job de índices ligado, que consulta o Banco Central de verdade ao subir. O fluxo não depende do resultado (título aplicado no dia vale o aplicado), mas é rede externa num teste. Desligar no `scripts/e2e.sh` ou usar uma fonte local. Dono: devops.
 - **DÍVIDA** — Revisar a imagem do runner — fixada em ubuntu-24.04 em 2026-10-03; conferir migração para a 26 depois de 2026-11.
 
 ## Fora de escopo
