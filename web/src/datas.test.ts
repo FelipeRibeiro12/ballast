@@ -2,6 +2,7 @@ import {
   formatarDataCompleta,
   formatarDiaMes,
   hojeLocal,
+  horaEmSaoPaulo,
   intervaloDoMes,
   mesDeHoje,
   rotuloDoDia,
@@ -86,5 +87,12 @@ describe('formatarDataCompleta', () => {
       expect(rotuloDoDia('2026-10-05', '2026-10-19')).toBe('Segunda-feira, 05/10')
       expect(rotuloDoDia('2026-10-31', '2026-10-19')).toBe('Sábado, 31/10')
     })
+  })
+})
+
+describe('horaEmSaoPaulo', () => {
+  it('mostra a hora de São Paulo, mesmo quando em UTC já é outro dia', () => {
+    expect(horaEmSaoPaulo('2026-10-22T01:30:00Z')).toBe('22:30')
+    expect(horaEmSaoPaulo('2026-10-21T03:05:00Z')).toBe('00:05')
   })
 })

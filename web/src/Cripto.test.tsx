@@ -61,7 +61,7 @@ const posicoes = {
       custoUsdCentavos: 800_000,
       custoCentavos: 4_000_000,
       // 22:30 do dia 21 em São Paulo, já dia 22 em UTC.
-      cotacao: { precoUsd: '70000.1', momento: '2026-10-22T01:30:00Z' },
+      cotacao: { precoUsd: '70000.1', momento: '2026-10-22T01:30:00Z', fonte: 'coingecko' },
       valorUsdCentavos: 864_000,
       valorCentavos: 4_320_000,
     },
@@ -143,6 +143,17 @@ describe('Cripto', () => {
     expect(urlsPedidas()).toContain('/posicoes-cripto?data=2026-10-22')
   })
 
+  it('diz quando a cotação foi digitada', async () => {
+    const digitada = {
+      ...posicoes,
+      posicoes: [{ ...posicoes.posicoes[0], cotacao: { precoUsd: '70000.1', momento: '2026-10-21T13:05:00Z', fonte: 'manual' } }],
+    }
+    mockFetch({ 'GET /posicoes-cripto?data=2026-10-22': responde(digitada) })
+    renderizar()
+    const lista = await screen.findByRole('list', { name: 'Posições' })
+    expect(within(lista).getByText(texto('Cotação US$ 70.000,1 em 21/10 às 10:05 · digitada'))).toBeVisible()
+  })
+
   it('lista as posições com a quantidade inteira em texto, a cotação e o valor', async () => {
     mockFetch()
     renderizar()
@@ -150,7 +161,8 @@ describe('Cripto', () => {
     const [btc, semCotacao] = within(lista).getAllByRole('listitem')
     expect(within(btc).getByText('0,123456789012345678 BTC')).toBeVisible()
     expect(within(btc).getByText('BTC · Bitcoin · Exchange')).toBeVisible()
-    expect(within(btc).getByText(texto('Cotação US$ 70.000,1 em 21/10'))).toBeVisible()
+    // A hora é a de São Paulo, e a fonte diz se veio do job ou foi digitada (ADR-040).
+    expect(within(btc).getByText(texto('Cotação US$ 70.000,1 em 21/10 às 22:30 · CoinGecko'))).toBeVisible()
     expect(within(btc).getByText(texto('Vale US$ 8.640,00'))).toBeVisible()
     expect(within(btc).getByText(texto('Compras menos vendas US$ 8.000,00 (R$ 40.000,00)'))).toBeVisible()
     expect(screen.getByText(texto('Dólar (PTAX) R$ 5 em 21/10/2026.'))).toBeVisible()

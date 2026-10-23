@@ -54,6 +54,18 @@ export function diaEmSaoPaulo(instante: string): string {
   return formatadorDiaSaoPaulo.format(new Date(instante))
 }
 
+const formatadorHoraSaoPaulo = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+// A hora de um instante em São Paulo, como "22:30".
+export function horaEmSaoPaulo(instante: string): string {
+  return formatadorHoraSaoPaulo.format(new Date(instante))
+}
+
 export function formatarDiaMes(data: string): string {
   return `${data.slice(8, 10)}/${data.slice(5, 7)}`
 }
