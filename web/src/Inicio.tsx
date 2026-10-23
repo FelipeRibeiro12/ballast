@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ServicoIndisponivelError, SessaoExpiradaError, fetchLancamentos, fetchOrcamentos } from './api'
-import type { Conta, Lancamento, Orcamento, OrcamentosDoMes, Usuario } from './api'
+import { ServicoIndisponivelError, SessaoExpiradaError, fetchLancamentos, fetchMetas, fetchOrcamentos } from './api'
+import type { Conta, Lancamento, Meta, Orcamento, OrcamentosDoMes, Usuario } from './api'
 import { formatarDiaMes, hojeLocal, mesDeHoje, mesIso, rotuloDoMes, somarDias } from './datas'
 import { formatarCentavos } from './dinheiro'
 import { carregar } from './leitura'
@@ -270,6 +270,66 @@ function ResumoDoOrcamento({ aoSessaoExpirar }: { aoSessaoExpirar: () => void })
   )
 }
 
+const METAS_NO_INICIO = 3
+
+// As metas ainda abertas primeiro; a entrada da tela de Metas, que não cabe na barra (ADR-045).
+function ResumoDasMetas({ aoSessaoExpirar }: { aoSessaoExpirar: () => void }) {
+  const [estado, setEstado] = useState<Estado<Meta[]>>({ tipo: 'carregando' })
+
+  useEffect(() => {
+    let vale = true
+    carregar(fetchMetas, 'as metas', aoSessaoExpirar, setEstado, () => vale)
+    return () => {
+      vale = false
+    }
+  }, [aoSessaoExpirar])
+
+  return (
+    <section className="cartao" aria-label="Metas">
+      <h3 className="titulo-cartao">Metas</h3>
+      {estado.tipo === 'carregando' && <Carregando texto="Carregando as metas..." linhas={2} />}
+      {estado.tipo === 'erro' && (
+        <p role="alert" className="erro">
+          {estado.mensagem}
+        </p>
+      )}
+      {estado.tipo === 'ok' && estado.dados.length === 0 && (
+        <EstadoVazio
+          titulo="Nenhuma meta ainda."
+          dica="Uma meta diz quanto falta e quando você chega lá."
+          acao={
+            <a className="botao" href={hashDaSecao('metas')}>
+              Criar meta
+            </a>
+          }
+        />
+      )}
+      {estado.tipo === 'ok' && estado.dados.length > 0 && (
+        <>
+          <ul className="lancamentos" aria-label="Metas em andamento">
+            {[...estado.dados]
+              .sort((a, b) => Number(a.atingida) - Number(b.atingida))
+              .slice(0, METAS_NO_INICIO)
+              .map((meta) => (
+                <li key={meta.id}>
+                  <div className="item-corpo">
+                    <strong className="item-titulo">{meta.titulo}</strong>
+                    <small>
+                      {formatarCentavos(meta.acumuladoCentavos)} de {formatarCentavos(meta.valorAlvoCentavos)}
+                    </small>
+                  </div>
+                </li>
+              ))}
+          </ul>
+          <p className="cartao-rodape">
+            <a href={hashDaSecao('metas')}>Ver metas</a>
+          </p>
+        </>
+      )}
+    </section>
+  )
+}
+
 export default function Inicio({
   usuario,
   contas,
@@ -306,6 +366,7 @@ export default function Inicio({
           <div ref={aoMontarVencidas} />
           <ProximasPrevistas contas={contas} versao={versaoDaLista} aoSessaoExpirar={aoSessaoExpirar} />
           <ResumoDoOrcamento aoSessaoExpirar={aoSessaoExpirar} />
+          <ResumoDasMetas aoSessaoExpirar={aoSessaoExpirar} />
         </div>
       </div>
     </section>
