@@ -2,6 +2,24 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-23 — F18.1: patrimônio no tempo
+
+O que entrou:
+- `GET /patrimonio/mensal`: o `/patrimonio` do último dia de cada um dos doze meses que terminam no mês pedido. O mês corrente vale hoje.
+- No web, o cartão Patrimônio em Relatórios, com linha, número de destaque, mudança no período, detalhe por parte, aviso de cotação ausente e tabela.
+- `useLargura` saiu do saldo projetado para os dois gráficos usarem (commit de refator).
+
+Decisões: ADR-047. A série chama o mesmo cálculo de `/patrimonio`, sem regra nova. Mês futuro fica de fora.
+
+Teste:
+- O mês fechado vale no último dia e o corrente vale hoje, sem a receita agendada.
+- A cripto sem cotação no mês fica fora do total e é contada à parte.
+- Usuário A não vê o patrimônio de B.
+- Na tela, o teclado escolhe o mês como o toque.
+- Conferido em 360px no Chromium, claro e escuro.
+
+Em aberto: o peso de doze leituras do saldo, junto da dívida do histórico inteiro.
+
 ## 2026-10-23 — F18: relatórios
 
 O que entrou:

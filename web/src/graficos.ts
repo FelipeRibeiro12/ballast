@@ -41,6 +41,15 @@ export function topoDoEixo(maximo: number): number {
   return Number(mantissa * potencia)
 }
 
+// Base e topo do eixo de uma série que pode ficar negativa. O zero sempre entra, e cada lado sobe
+// para um número redondo.
+export function faixaDoEixo(minimo: number, maximo: number): { baixo: number; alto: number } {
+  const baixo = minimo < 0 ? -topoDoEixo(-minimo) : 0
+  const alto = maximo > 0 ? topoDoEixo(maximo) : 0
+  // Série toda em zero ainda precisa de altura: R$ 1 no topo.
+  return baixo === alto ? { baixo, alto: baixo + 100 } : { baixo, alto }
+}
+
 // Rótulo curto do eixo, como "R$ 6 mil". O Intl recebe string decimal exata, nunca centavos / 100.
 export function formatarCompacto(centavos: number): string {
   const digitos = BigInt(centavos).toString().padStart(3, '0')

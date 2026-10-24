@@ -1901,3 +1901,59 @@ export async function fetchRelatorio(mes: string): Promise<RelatorioDoMes> {
   if (!isRelatorioDoMes(corpo)) throw new ApiError('/relatorios com formato inesperado')
   return corpo
 }
+
+export type PatrimonioMensal = components['schemas']['PatrimonioMensal']
+export type PatrimonioDoMes = components['schemas']['PatrimonioDoMes']
+
+function centavosComSinal(valor: unknown): boolean {
+  return Number.isSafeInteger(valor)
+}
+
+function isPatrimonioDoMes(valor: unknown): valor is PatrimonioDoMes {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'mes' in valor &&
+    eMesIso(valor.mes) &&
+    'data' in valor &&
+    typeof valor.data === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(valor.data) &&
+    'contasCentavos' in valor &&
+    centavosComSinal(valor.contasCentavos) &&
+    'criptoCentavos' in valor &&
+    centavosComSinal(valor.criptoCentavos) &&
+    'rendaFixaCentavos' in valor &&
+    centavosComSinal(valor.rendaFixaCentavos) &&
+    'totalCentavos' in valor &&
+    centavosComSinal(valor.totalCentavos) &&
+    'posicoesSemCotacao' in valor &&
+    centavosNaoNegativos(valor.posicoesSemCotacao)
+  )
+}
+
+function isPatrimonioMensal(valor: unknown): valor is PatrimonioMensal {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'mes' in valor &&
+    eMesIso(valor.mes) &&
+    'meses' in valor &&
+    Array.isArray(valor.meses) &&
+    valor.meses.every(isPatrimonioDoMes)
+  )
+}
+
+// mes em AAAA-MM. O 400 reaproveita o erro do relatório: as duas leituras são da mesma tela.
+export async function fetchPatrimonioMensal(mes: string): Promise<PatrimonioMensal> {
+  const parametros = new URLSearchParams({ mes })
+  const resposta = await fetch(`${baseUrl}/patrimonio/mensal?${parametros.toString()}`, { credentials: 'same-origin' })
+  if (!resposta.ok) {
+    if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+    if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+    if (resposta.status === 400) throw new RelatorioInvalidoError(await lerMensagemDeErro(resposta))
+    throw new ApiError(`/patrimonio/mensal respondeu ${resposta.status}`)
+  }
+  const corpo: unknown = await resposta.json()
+  if (!isPatrimonioMensal(corpo)) throw new ApiError('/patrimonio/mensal com formato inesperado')
+  return corpo
+}
