@@ -238,11 +238,10 @@ apagar uma ocorrência (seção no fim).
   na data original.
 - `DELETE /lancamentos/{id}` numa ocorrência `previsto` dá 400 `cancele a
   ocorrência` e nada muda: cancele. Ocorrência `realizado` ou `cancelado` pode ser
-  apagada (204). Apagar libera a data para a regra: se a data é de hoje em diante
-  e a recorrência segue ativa, o job a gera de novo como `previsto` na próxima
-  rodada; data de antes de hoje não volta.
-  Quem quer só tirar a ocorrência do saldo e da lista de previstas cancela, não
-  apaga.
+  apagada (204). Apagar `cancelado` some de vez: a data nunca volta como
+  `previsto` (ADR-054). Apagar `realizado` libera a data para a regra: se é de
+  hoje em diante e a recorrência segue ativa, o job a gera de novo como `previsto`
+  na próxima rodada; data de antes de hoje não volta.
 - A resposta do lançamento não traz `desgarrado`. Quem precisa saber se a
   linha saiu do controle da regra usa `status` (confirmada e cancelada já saíram).
 

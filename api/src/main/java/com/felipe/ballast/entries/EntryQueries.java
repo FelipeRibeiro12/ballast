@@ -132,6 +132,23 @@ class EntryQueries {
 
   // purchaseId é o parcela_de_id: nulo fora de compra parcelada, e igual ao próprio id na primeira
   // parcela. As duas datas servem à parcela, que não muda de conta nem de data pelo PUT.
+  // Guarda a chave da ocorrência cancelada que vai ser apagada, para a regra não gerar a data de
+  // novo (ADR-054). Roda antes do DELETE, na mesma transação, porque lê a linha que vai sumir.
+  void markCancelledOccurrenceDeleted(UUID userId, UUID entryId) {
+    jdbc.sql(
+            """
+            INSERT INTO ocorrencia_apagada (template_id, usuario_id, ocorrencia_data, parcela_ordem)
+            SELECT template_id, usuario_id, ocorrencia_data, COALESCE(parcela_ordem, 0)
+            FROM lancamento
+            WHERE usuario_id = :userId AND id = :id AND template_id IS NOT NULL
+              AND status = 'cancelado'
+            ON CONFLICT DO NOTHING
+            """)
+        .param("userId", userId)
+        .param("id", entryId)
+        .update();
+  }
+
   record LockedEntry(
       String title,
       UUID categoryId,

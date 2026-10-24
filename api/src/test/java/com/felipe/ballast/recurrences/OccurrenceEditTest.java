@@ -243,7 +243,8 @@ class OccurrenceEditTest {
   }
 
   @Test
-  void deletingACancelledFutureOccurrenceBehavesTheSame() throws Exception {
+  void deletingACancelledFutureOccurrenceRemovesItForGoodAndTheJobDoesNotBringItBack()
+      throws Exception {
     String id = occurrenceId(FIRST);
     api.cancel(actor.session(), id);
 
@@ -251,7 +252,30 @@ class OccurrenceEditTest {
     assertThat(db.byKey(templateId, FIRST)).isEmpty();
     job.run();
 
-    assertThat(db.byKey(templateId, FIRST).orElseThrow().status()).isEqualTo("previsto");
+    assertThat(db.byKey(templateId, FIRST)).isEmpty();
+    assertThat(db.countOccurrences(templateId)).isEqualTo(11);
+  }
+
+  @Test
+  void aDeletedCancelledOccurrenceStaysGoneWhenTheRecurrenceIsReactivated()
+      throws Exception {
+    String id = occurrenceId(FIRST);
+    api.cancel(actor.session(), id);
+    api.deleteEntry(actor.session(), id);
+
+    api.deactivate(actor.session(), templateId);
+    api.setActive(actor.session(), templateId, "{\"ativo\":true}");
+
+    assertThat(db.byKey(templateId, FIRST)).isEmpty();
+  }
+
+  @Test
+  void deletingTheRecurrenceWorksAfterACancelledOccurrenceWasDeleted() throws Exception {
+    String id = occurrenceId(FIRST);
+    api.cancel(actor.session(), id);
+    api.deleteEntry(actor.session(), id);
+
+    assertThat(api.remove(actor.session(), templateId).getStatus()).isEqualTo(204);
   }
 
   @Test

@@ -276,12 +276,14 @@ class EntryService {
       return DeleteResult.FIRST_INSTALLMENT;
     }
     // Apagar uma prevista liberaria a chave (template, data) e a regra geraria a mesma ocorrência
-    // de novo. Cancelar guarda a linha e a chave. Realizada e cancelada podem sair.
+    // de novo. Cancelar guarda a linha e a chave. Realizada e cancelada podem sair; a cancelada
+    // deixa uma marca em ocorrencia_apagada e nunca mais volta (ADR-054).
     if (entry.get().templateId() != null && PLANNED.equals(entry.get().status())) {
       return DeleteResult.CANCEL_OCCURRENCE;
     }
     UUID account = entry.get().accountId();
     queries.lockAccount(userId, account);
+    queries.markCancelledOccurrenceDeleted(userId, id);
     if (entries.deleteOwned(userId, id) == 0) {
       return DeleteResult.NOT_FOUND;
     }

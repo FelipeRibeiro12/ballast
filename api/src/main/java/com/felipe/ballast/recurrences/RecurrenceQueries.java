@@ -42,6 +42,9 @@ class RecurrenceQueries {
       """
       ) AS o(id, dia, caixa, ordem, valor)
       WHERE t.id = :templateId AND t.usuario_id = :userId
+        AND NOT EXISTS (SELECT 1 FROM ocorrencia_apagada a
+                        WHERE a.template_id = t.id AND a.ocorrencia_data = o.dia
+                          AND a.parcela_ordem = COALESCE(o.ordem, 0))
       ON CONFLICT (template_id, ocorrencia_data, parcela_ordem)
       WHERE template_id IS NOT NULL DO NOTHING
       """;
