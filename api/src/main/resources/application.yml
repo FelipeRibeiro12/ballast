@@ -30,6 +30,10 @@ spring:
     placeholders:
       app_user: ${DB_USER}
   jackson:
+    read:
+      # Chave repetida vira 400. Sem isto vale a última, e quem valida antes da API pode ter
+      # visto a primeira.
+      strict-duplicate-detection: true
     deserialization:
       # O Boot ignora campo desconhecido por padrão; aqui vira 400, e lixo depois do JSON também.
       fail-on-unknown-properties: true
