@@ -548,6 +548,60 @@ paths:
       summary: Liga o MFA com o primeiro código do autenticador
       tags:
       - auth
+  /auth/mfa/codigos-de-recuperacao:
+    post:
+      description: Pede o código do autenticador de agora; código de recuperação não
+        vale aqui. Os códigos novos só aparecem nesta resposta. Conta no mesmo atraso
+        por usuário do restante do MFA.
+      operationId: postAuthMfaCodigosDeRecuperacao
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaCodigoRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaAtivacao"
+          description: Códigos novos; os antigos deixam de valer
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: código inválido
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: mfa não está ativo
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Atraso por usuário em vigor, ou limite por IP"
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+              style: simple
+      security:
+      - cookieAuth: []
+      summary: Gera dez códigos de recuperação novos e invalida os antigos
+      tags:
+      - auth
   /auth/mfa/configurar:
     post:
       description: Pede a senha. O MFA só liga no POST /auth/mfa/ativar; chamar de

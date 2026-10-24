@@ -182,6 +182,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/mfa/codigos-de-recuperacao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gera dez códigos de recuperação novos e invalida os antigos
+         * @description Pede o código do autenticador de agora; código de recuperação não vale aqui. Os códigos novos só aparecem nesta resposta. Conta no mesmo atraso por usuário do restante do MFA.
+         */
+        post: operations["postAuthMfaCodigosDeRecuperacao"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/mfa/configurar": {
         parameters: {
             query?: never;
@@ -2795,6 +2815,67 @@ export interface operations {
                 };
             };
             /** @description Atraso progressivo por usuário depois de 3 códigos errados */
+            429: {
+                headers: {
+                    "Retry-After": number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postAuthMfaCodigosDeRecuperacao: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaCodigoRequest"];
+            };
+        };
+        responses: {
+            /** @description Códigos novos; os antigos deixam de valer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaAtivacao"];
+                };
+            };
+            /** @description código inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description mfa não está ativo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Atraso por usuário em vigor, ou limite por IP */
             429: {
                 headers: {
                     "Retry-After": number;

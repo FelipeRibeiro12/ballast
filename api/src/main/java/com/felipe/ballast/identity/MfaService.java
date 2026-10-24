@@ -106,10 +106,7 @@ class MfaService {
     Instant now = clock.instant();
     reserve(userId, now);
     OptionalLong step = matchTotp(userId, row, normalize(code), now);
-    List<String> codes = new ArrayList<>();
-    for (int i = 0; i < RECOVERY_CODES; i++) {
-      codes.add(newRecoveryCode());
-    }
+    List<String> codes = newRecoveryCodes();
     boolean activated =
         step.isPresent()
             && Boolean.TRUE.equals(
@@ -132,7 +129,29 @@ class MfaService {
     if (!activated) {
       throw MfaError.of(HttpStatus.BAD_REQUEST, "código inválido");
     }
-    return codes.stream().map(c -> c.substring(0, 5) + "-" + c.substring(5)).toList();
+    return codes.stream().map(MfaService::format).toList();
+  }
+
+  // Só o código do app, e não um de recuperação: quem tem só um código de recuperação (ou só a
+  // sessão) não renova a lista. Gastar o código antigo e trocar a lista são uma transação só.
+  List<String> regenerateRecoveryCodes(UUID userId, String code) {
+    if (!isActive(userId)) {
+      throw MfaError.of(HttpStatus.CONFLICT, "mfa não está ativo");
+    }
+    List<String> codes = newRecoveryCodes();
+    Boolean replaced =
+        transaction.execute(
+            status -> {
+              if (!verify(userId, code, false)) {
+                return false;
+              }
+              queries.replaceRecoveryCodes(userId, codes.stream().map(MfaService::hashOf).toList());
+              return true;
+            });
+    if (!Boolean.TRUE.equals(replaced)) {
+      throw MfaError.of(HttpStatus.BAD_REQUEST, "código inválido");
+    }
+    return codes.stream().map(MfaService::format).toList();
   }
 
   // Senha e código: quem tem só a sessão, ou só o celular, não desliga.
@@ -175,6 +194,10 @@ class MfaService {
 
   // A tentativa é contada antes de conferir, como no login: fail-closed.
   private boolean verify(UUID userId, String code) {
+    return verify(userId, code, true);
+  }
+
+  private boolean verify(UUID userId, String code, boolean acceptRecoveryCode) {
     MfaQueries.Row row =
         queries
             .find(userId)
@@ -184,7 +207,7 @@ class MfaService {
     reserve(userId, now);
     String normalized = normalize(code);
     boolean valid;
-    if (normalized.length() == RECOVERY_LENGTH) {
+    if (acceptRecoveryCode && normalized.length() == RECOVERY_LENGTH) {
       valid = queries.consumeRecoveryCode(userId, hashOf(normalized), now);
       if (valid) {
         log.warn(
@@ -234,6 +257,18 @@ class MfaService {
   // Aceita o código como o usuário copiar: com espaço, hífen ou maiúscula.
   private static String normalize(String code) {
     return code.replaceAll("[\\s-]", "").toLowerCase(Locale.ROOT);
+  }
+
+  private static List<String> newRecoveryCodes() {
+    List<String> codes = new ArrayList<>();
+    for (int i = 0; i < RECOVERY_CODES; i++) {
+      codes.add(newRecoveryCode());
+    }
+    return codes;
+  }
+
+  private static String format(String recoveryCode) {
+    return recoveryCode.substring(0, 5) + "-" + recoveryCode.substring(5);
   }
 
   private static String newRecoveryCode() {

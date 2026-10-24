@@ -149,6 +149,51 @@ class MfaController {
   }
 
   @Operation(
+      operationId = "postAuthMfaCodigosDeRecuperacao",
+      summary = "Gera dez códigos de recuperação novos e invalida os antigos",
+      description =
+          "Pede o código do autenticador de agora; código de recuperação não vale aqui. Os códigos"
+              + " novos só aparecem nesta resposta. Conta no mesmo atraso por usuário do restante do"
+              + " MFA.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Códigos novos; os antigos deixam de valer",
+      content = @Content(schema = @Schema(implementation = MfaResponses.Activation.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description = "código inválido",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "mfa não está ativo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "429",
+      description = "Atraso por usuário em vigor, ou limite por IP",
+      headers = @Header(name = "Retry-After", required = true, schema = @Schema(type = "integer")),
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @PostMapping(
+      path = "/auth/mfa/codigos-de-recuperacao",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  MfaResponses.Activation regenerateRecoveryCodes(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @Valid @RequestBody MfaRequests.Code request,
+      HttpServletRequest http) {
+    List<String> codes = mfa.regenerateRecoveryCodes(user.id(), request.code());
+    log.warn(
+        "mfa: códigos de recuperação renovados usuario_id={} ip={}",
+        user.id(),
+        ClientAddress.of(http));
+    return new MfaResponses.Activation(codes);
+  }
+
+  @Operation(
       operationId = "postAuthMfaDesativar",
       summary = "Desliga o MFA",
       description = "Pede a senha e um código, do autenticador ou de recuperação.",

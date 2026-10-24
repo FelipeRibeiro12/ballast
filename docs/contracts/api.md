@@ -906,6 +906,12 @@ Emenda "Cripto em dólar".
 - `POST /auth/mfa/desativar` `{"senha", "codigo"}`: aceita o código do app ou
   um de recuperação e responde 204. Erros: 400 `senha incorreta` ou
   `código inválido`, 409 `mfa não está ativo`, 429.
+- `POST /auth/mfa/codigos-de-recuperacao` `{"codigo"}`: gera dez códigos novos e
+  invalida os antigos (ADR-053). Pede o código do app de agora; código de
+  recuperação e código já usado dão 400. Responde 200 com
+  `{"codigosDeRecuperacao"}`, como o `ativar`, mostrados só aqui. Erros: 400
+  `código inválido`, 409 `mfa não está ativo`, 429 com `Retry-After`. Entra no
+  mesmo atraso por usuário e no limite de login por IP.
 - `POST /auth/login` com MFA ligado e senha certa responde 202
   `{"mfaPendente":true}`, sem sessão, e põe o cookie `ballast_mfa` (5 min).
 - `POST /auth/login/mfa` `{"codigo"}` é público e lê o cookie `ballast_mfa`.

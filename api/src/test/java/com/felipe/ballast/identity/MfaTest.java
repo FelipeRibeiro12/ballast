@@ -439,6 +439,88 @@ class MfaTest {
     assertThat(error(response)).isEqualTo("mfa não está ativo");
   }
 
+  private static final String RECOVERY_PATH = "/auth/mfa/codigos-de-recuperacao";
+
+  private List<String> codesOf(MockHttpServletResponse response) throws Exception {
+    List<String> codes = new ArrayList<>();
+    body(response).get("codigosDeRecuperacao").forEach(code -> codes.add(code.asString()));
+    return codes;
+  }
+
+  @Test
+  void newRecoveryCodesReplaceTheOldOnes() throws Exception {
+    byte[] secret = configure();
+    List<String> old = activate(secret);
+    clock.advance(Duration.ofSeconds(30));
+
+    MockHttpServletResponse response =
+        send(RECOVERY_PATH, Map.of("codigo", codeNow(secret)), session);
+
+    assertThat(response.getStatus()).isEqualTo(200);
+    List<String> fresh = codesOf(response);
+    assertThat(fresh).hasSize(10).doesNotContainAnyElementsOf(old);
+    assertThat(status().get("codigosRestantes").asInt()).isEqualTo(10);
+    assertThat(answer(challenge(), old.get(0)).getStatus()).isEqualTo(401);
+    assertThat(answer(challenge(), fresh.get(0)).getStatus()).isEqualTo(200);
+  }
+
+  @Test
+  void newRecoveryCodesWithAWrongCodeKeepTheOldOnes() throws Exception {
+    byte[] secret = configure();
+    List<String> old = activate(secret);
+    clock.advance(Duration.ofSeconds(30));
+    String wrong = codeNow(secret).equals("000000") ? "111111" : "000000";
+
+    MockHttpServletResponse response = send(RECOVERY_PATH, Map.of("codigo", wrong), session);
+
+    assertThat(response.getStatus()).isEqualTo(400);
+    assertThat(error(response)).isEqualTo("código inválido");
+    assertThat(answer(challenge(), old.get(0)).getStatus()).isEqualTo(200);
+  }
+
+  // Quem tem só um código de recuperação, ou o código da ativação de um passo atrás, não
+  // renova: a rota pede o código do app de agora.
+  @Test
+  void newRecoveryCodesAcceptOnlyTheAuthenticatorCode() throws Exception {
+    byte[] secret = configure();
+    List<String> old = activate(secret);
+
+    MockHttpServletResponse withRecovery =
+        send(RECOVERY_PATH, Map.of("codigo", old.get(0)), session);
+    MockHttpServletResponse replayed =
+        send(RECOVERY_PATH, Map.of("codigo", codeNow(secret)), session);
+
+    assertThat(withRecovery.getStatus()).isEqualTo(400);
+    assertThat(replayed.getStatus()).isEqualTo(400);
+    assertThat(status().get("codigosRestantes").asInt()).isEqualTo(10);
+  }
+
+  @Test
+  void newRecoveryCodesWhenOffIsAConflict() throws Exception {
+    MockHttpServletResponse response = send(RECOVERY_PATH, Map.of("codigo", "123456"), session);
+
+    assertThat(response.getStatus()).isEqualTo(409);
+    assertThat(error(response)).isEqualTo("mfa não está ativo");
+  }
+
+  @Test
+  void newRecoveryCodesShareTheMfaDelay() throws Exception {
+    byte[] secret = configure();
+    activate(secret);
+    clock.advance(Duration.ofSeconds(30));
+    String right = codeNow(secret);
+    String wrong = right.equals("000000") ? "111111" : "000000";
+    for (int i = 0; i < 4; i++) {
+      assertThat(send(RECOVERY_PATH, Map.of("codigo", wrong), session).getStatus()).isEqualTo(400);
+    }
+
+    MockHttpServletResponse delayed = send(RECOVERY_PATH, Map.of("codigo", right), session);
+
+    assertThat(delayed.getStatus()).isEqualTo(429);
+    assertThat(delayed.getHeader("Retry-After")).isEqualTo("2");
+    assertThat(answer(challenge(), right).getStatus()).isEqualTo(429);
+  }
+
   @Test
   void codeFieldHasALimit() throws Exception {
     configure();
@@ -453,7 +535,12 @@ class MfaTest {
   @Test
   void routesNeedASession() throws Exception {
     assertThat(mvc.perform(get("/auth/mfa")).andReturn().getResponse().getStatus()).isEqualTo(401);
-    for (String path : List.of("/auth/mfa/configurar", "/auth/mfa/ativar", "/auth/mfa/desativar")) {
+    for (String path :
+        List.of(
+            "/auth/mfa/configurar",
+            "/auth/mfa/ativar",
+            "/auth/mfa/desativar",
+            "/auth/mfa/codigos-de-recuperacao")) {
       assertThat(send(path, Map.of("senha", TestUsers.PASSWORD, "codigo", "123456")).getStatus())
           .as(path)
           .isEqualTo(401);
