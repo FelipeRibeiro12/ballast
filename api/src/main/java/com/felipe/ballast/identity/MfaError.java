@@ -4,7 +4,7 @@ import java.time.Duration;
 import org.springframework.http.HttpStatus;
 
 // Recusa do MFA com o status e a mensagem fixa que vão para o cliente. O MfaController traduz.
-final class MfaError extends RuntimeException {
+public final class MfaError extends RuntimeException {
 
   private final HttpStatus status;
   private final Duration retryAfter;
@@ -24,11 +24,11 @@ final class MfaError extends RuntimeException {
         HttpStatus.TOO_MANY_REQUESTS, "muitas tentativas, tente mais tarde", retryAfter);
   }
 
-  HttpStatus status() {
+  public HttpStatus status() {
     return status;
   }
 
-  Duration retryAfter() {
+  public Duration retryAfter() {
     return retryAfter;
   }
 }

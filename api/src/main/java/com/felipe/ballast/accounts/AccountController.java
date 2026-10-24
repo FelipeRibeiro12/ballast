@@ -1,9 +1,11 @@
 package com.felipe.ballast.accounts;
 
 import com.felipe.ballast.identity.AuthenticatedUser;
+import com.felipe.ballast.identity.MfaGate;
 import com.felipe.ballast.web.CanonicalUuid;
 import com.felipe.ballast.web.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -91,9 +93,11 @@ class AccountController {
       new ErrorResponse("arquivadas deve ser true ou false");
 
   private final AccountService accounts;
+  private final MfaGate mfaGate;
 
-  AccountController(AccountService accounts) {
+  AccountController(AccountService accounts, MfaGate mfaGate) {
     this.accounts = accounts;
+    this.mfaGate = mfaGate;
   }
 
   @Operation(
@@ -331,6 +335,11 @@ class AccountController {
       description = "Content-Type diferente de application/json",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "429",
+      description = "Atraso por usuário do MFA em vigor, ou limite por IP",
+      headers = @Header(name = "Retry-After", required = true, schema = @Schema(type = "integer")),
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "503",
       description = "Banco indisponível ou conta travada por mais de 2 s",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -393,13 +402,16 @@ class AccountController {
       description =
           "Lançamentos, recorrências, cartão, categorias permitidas e movimentos de cripto da conta"
               + " saem juntos. Numa transferência com outra conta, a perna de lá vira despesa em"
-              + " Outros (saída) ou receita em Outras receitas (entrada), e o saldo dela não muda.",
+              + " Outros (saída) ou receita em Outras receitas (entrada), e o saldo dela não muda."
+              + " Com o MFA ligado, o corpo {\"codigo\"} é obrigatório (código do autenticador ou de"
+              + " recuperação); sem MFA, o corpo é ignorado e pode faltar.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(responseCode = "204", description = "Apagada")
   @ApiResponse(
       responseCode = "400",
       description =
           "A conta é conta de pagamento de um cartão, ou pagou fatura de cartão por transferência;"
+              + " ou, com o MFA ligado, código ausente, inválido ou já usado (código inválido);"
               + " nada é apagado",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
@@ -417,7 +429,12 @@ class AccountController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @DeleteMapping(path = "/contas/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> delete(
-      @AuthenticationPrincipal AuthenticatedUser user, @PathVariable("id") String id) {
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable("id") String id,
+      @Valid @RequestBody(required = false) DeleteAccountRequest request) {
+    // O código vem antes de olhar a conta: assim a resposta sobre o código é a mesma para conta
+    // de outro usuário e conta inexistente, e o 404 não vira pista.
+    mfaGate.requireCode(user.id(), request == null ? null : request.code());
     Optional<UUID> accountId = CanonicalUuid.parse(id);
     if (accountId.isEmpty()) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);

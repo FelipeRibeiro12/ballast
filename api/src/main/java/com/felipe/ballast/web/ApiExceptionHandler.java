@@ -1,5 +1,6 @@
 package com.felipe.ballast.web;
 
+import com.felipe.ballast.identity.MfaError;
 import com.felipe.ballast.identity.PasswordHasherBusyException;
 import java.util.Comparator;
 import java.util.Objects;
@@ -69,6 +70,21 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
       HttpStatusCode statusCode,
       WebRequest request) {
     return body(statusCode, headers, messageFor(statusCode));
+  }
+
+  // Recusa do MFA, nas rotas de /auth e em quem pede o código para uma ação sensível. O texto é
+  // fixo e o atraso vai em Retry-After.
+  @ExceptionHandler(MfaError.class)
+  ResponseEntity<ErrorResponse> handleMfa(MfaError error) {
+    ResponseEntity.BodyBuilder response = ResponseEntity.status(error.status());
+    if (error.retryAfter() != null) {
+      // Para cima: dizer 0 faria o cliente tentar de novo ainda dentro do atraso.
+      long seconds = Math.max(1, (error.retryAfter().toMillis() + 999) / 1000);
+      response.header(HttpHeaders.RETRY_AFTER, Long.toString(seconds));
+    }
+    return response
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(new ErrorResponse(error.getMessage()));
   }
 
   // Banco fora: CannotGetJdbcConnectionException (JdbcClient) é filha da primeira; o JPA falha

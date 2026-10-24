@@ -193,7 +193,7 @@ class MfaService {
   }
 
   // A tentativa é contada antes de conferir, como no login: fail-closed.
-  private boolean verify(UUID userId, String code) {
+  boolean verify(UUID userId, String code) {
     return verify(userId, code, true);
   }
 

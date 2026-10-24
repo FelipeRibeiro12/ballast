@@ -74,7 +74,7 @@ class MfaTest {
   }
 
   // Base32 da RFC 4648, só para o teste fazer o papel do autenticador.
-  private static byte[] decodeBase32(String text) {
+  static byte[] decodeBase32(String text) {
     String alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     int buffer = 0;

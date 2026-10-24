@@ -653,6 +653,14 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   cartão; apagar desmontaria a fatura. Arquive a conta`.
 - Conta de outro usuário, inexistente ou id que não é UUID: 404 `não
   encontrado`. Funciona com a conta arquivada.
+- Com o MFA ligado (ADR-053), o `DELETE` pede o código num corpo JSON
+  `{"codigo"}`, do app ou de recuperação (1 a 32 caracteres). O corpo é opcional
+  no contrato: sem MFA ele é ignorado e o `DELETE` sem corpo segue valendo. Com
+  MFA, corpo ausente ou código errado dá 400 `código inválido` e nada é
+  apagado; no atraso por usuário do MFA dá 429 com `Retry-After`. O código é
+  conferido antes de olhar a conta, e gasta mesmo quando a resposta depois é
+  404 ou 400 de regra. A conferência de `Origin` vale como em todo método que
+  muda estado.
 - `GET /contas/{id}/resumo-exclusao` responde `{lancamentos, transferencias,
   recorrencias, movimentosCripto}` com as contagens que o `DELETE` levaria, para
   o web pedir a confirmação. Mesmo 404.

@@ -19,7 +19,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -285,18 +284,5 @@ class MfaController {
             HttpHeaders.SET_COOKIE, cookies.open(session.token(), IdentityService.SESSION_LIFETIME))
         .header(HttpHeaders.SET_COOKIE, cookies.expireChallenge())
         .body(UserResponse.from(profile));
-  }
-
-  @ExceptionHandler(MfaError.class)
-  ResponseEntity<ErrorResponse> handle(MfaError error) {
-    ResponseEntity.BodyBuilder response = ResponseEntity.status(error.status());
-    if (error.retryAfter() != null) {
-      // Para cima: dizer 0 faria o cliente tentar de novo ainda dentro do atraso.
-      long seconds = Math.max(1, (error.retryAfter().toMillis() + 999) / 1000);
-      response.header(HttpHeaders.RETRY_AFTER, Long.toString(seconds));
-    }
-    return response
-        .contentType(MediaType.APPLICATION_JSON)
-        .body(new ErrorResponse(error.getMessage()));
   }
 }

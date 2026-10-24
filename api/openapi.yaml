@@ -1082,7 +1082,9 @@ paths:
       description: "Lançamentos, recorrências, cartão, categorias permitidas e movimentos\
         \ de cripto da conta saem juntos. Numa transferência com outra conta, a perna\
         \ de lá vira despesa em Outros (saída) ou receita em Outras receitas (entrada),\
-        \ e o saldo dela não muda."
+        \ e o saldo dela não muda. Com o MFA ligado, o corpo {\"codigo\"} é obrigató\
+        rio (código do autenticador ou de recuperação); sem MFA, o corpo é ignorado\
+        \ e pode faltar."
       operationId: deleteContasById
       parameters:
       - in: path
@@ -1090,6 +1092,11 @@ paths:
         required: true
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApagarContaRequest"
       responses:
         "204":
           content:
@@ -1103,7 +1110,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: "A conta é conta de pagamento de um cartão, ou pagou fatura\
-            \ de cartão por transferência; nada é apagado"
+            \ de cartão por transferência; ou, com o MFA ligado, código ausente, invá\
+            lido ou já usado (código inválido); nada é apagado"
         "401":
           content:
             application/json:
@@ -1231,6 +1239,18 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Content-Type diferente de application/json
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Atraso por usuário do MFA em vigor, ou limite por IP"
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+              style: simple
         "503":
           content:
             application/json:
@@ -3394,6 +3414,16 @@ paths:
       - transferencias
 components:
   schemas:
+    ApagarContaRequest:
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: "Código do autenticador ou de recuperação, de 1 a 32 caracteres"
+          maxLength: 32
+          minLength: 1
+      required:
+      - codigo
     AporteMeta:
       type: object
       properties:
