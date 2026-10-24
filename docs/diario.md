@@ -442,3 +442,12 @@ Dívida registrada: lançamentos, metas e orçamentos seguem sem teto
 Achados do revisor: reviewer e security dispensados
 Pipeline: a preencher no PR
 Em aberto: paginação e idempotência (onda 4b).
+
+## 2026-10-24 — Rodada de fechamento, onda 4b: paginação e idempotência
+
+O que entrou: paginação por cursor em lançamentos e movimentos de cripto, chave de idempotência nos POST de dinheiro (V23) e o web seguindo o cursor e mandando a chave.
+Decisões: ADR-056
+Dívida registrada: espera de 10 s por chave em andamento, `Location` no replay, mensagens 422 e 409 no web, resposta guardada em texto puro
+Achados do revisor: security 0 bloqueantes, 3 baixos viraram dívida
+Pipeline: a preencher no PR
+Em aberto: nada

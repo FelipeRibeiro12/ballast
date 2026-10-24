@@ -3,9 +3,11 @@ package com.felipe.ballast.security;
 import com.felipe.ballast.identity.IdentityProperties;
 import com.felipe.ballast.identity.IdentityService;
 import com.felipe.ballast.identity.SessionAuthenticationFilter;
+import com.felipe.ballast.web.IdempotencyFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
@@ -14,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -38,7 +41,9 @@ class SecurityConfig {
       HttpSecurity http,
       IdentityProperties properties,
       IdentityService identity,
-      Environment environment)
+      Environment environment,
+      JdbcClient jdbc,
+      Clock clock)
       throws Exception {
     // Vazio ou ausente vale falso: só "true" explícito abre a spec.
     boolean apiDocsEnabled =
@@ -53,6 +58,8 @@ class SecurityConfig {
         .addFilterBefore(
             new SessionAuthenticationFilter(identity, publicRoutes, properties.isCookieSecure()),
             AuthorizationFilter.class)
+        // Depois da autorização: o escopo da chave de idempotência é o usuário da sessão.
+        .addFilterAfter(new IdempotencyFilter(jdbc, clock), AuthorizationFilter.class)
         .authorizeHttpRequests(
             auth -> auth.requestMatchers(publicRoutes).permitAll().anyRequest().authenticated())
         .exceptionHandling(

@@ -29,7 +29,7 @@ class CryptoQueries {
   // O custo nas duas moedas, exato: quem lê arredonda uma vez. Nulo quando falta o dólar da data.
   private static final String MOVEMENT_COLUMNS =
       "SELECT m.id, m.conta_id, m.ativo_id, m.tipo, m.quantidade, m.data, m.custo, m.moeda,"
-          + " d.dolar FROM movimento_cripto m"
+          + " m.criado_em, d.dolar FROM movimento_cripto m"
           + " LEFT JOIN LATERAL (SELECT "
           + String.format(DOLLAR_AT, "m.data")
           + " AS dolar) d ON true";
@@ -56,6 +56,7 @@ class CryptoQueries {
       LocalDate date,
       BigDecimal cost,
       String currency,
+      Instant createdAt,
       BigDecimal dollar) {}
 
   // Custos exatos nas duas moedas (nulo quando falta o dólar de algum movimento). price, quotedAt e
@@ -310,17 +311,28 @@ class CryptoQueries {
         .update();
   }
 
-  // accountId e assetId nulos não filtram.
-  List<Movement> listMovements(UUID userId, UUID accountId, UUID assetId) {
+  // accountId e assetId nulos não filtram. after nulo começa do topo; com valor, só o que vem
+  // depois dele na ordem (data, criado_em, id) decrescente. fetch é o limite da página mais um.
+  List<Movement> listMovements(
+      UUID userId, UUID accountId, UUID assetId, MovementCursor after, int fetch) {
     return jdbc.sql(
             MOVEMENT_COLUMNS
                 + " WHERE m.usuario_id = :userId"
                 + " AND (CAST(:accountId AS uuid) IS NULL OR m.conta_id = :accountId)"
                 + " AND (CAST(:assetId AS uuid) IS NULL OR m.ativo_id = :assetId)"
-                + " ORDER BY m.data DESC, m.criado_em DESC, m.id DESC")
+                + " AND (CAST(:afterId AS uuid) IS NULL"
+                + " OR (m.data, m.criado_em, m.id) < (:afterDate, :afterCreatedAt, :afterId))"
+                + " ORDER BY m.data DESC, m.criado_em DESC, m.id DESC LIMIT :fetch")
         .param("userId", userId)
         .param("accountId", accountId)
         .param("assetId", assetId)
+        .param("afterId", after == null ? null : after.id())
+        .param("afterDate", after == null ? LocalDate.EPOCH : after.date())
+        .param(
+            "afterCreatedAt",
+            OffsetDateTime.ofInstant(
+                after == null ? Instant.EPOCH : after.createdAt(), ZoneOffset.UTC))
+        .param("fetch", fetch)
         .query(CryptoQueries::mapMovement)
         .list();
   }
@@ -468,6 +480,7 @@ class CryptoQueries {
         rs.getObject("data", LocalDate.class),
         rs.getBigDecimal("custo"),
         rs.getString("moeda"),
+        rs.getObject("criado_em", OffsetDateTime.class).toInstant(),
         rs.getBigDecimal("dolar"));
   }
 }

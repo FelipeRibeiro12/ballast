@@ -885,6 +885,50 @@ Emenda "Cripto em dólar".
   último ano antes da primeira cotação dele (ADR-041). A posição e o
   patrimônio de uma data passada passam a ter preço sem mudar o formato.
 
+## Paginação e idempotência (ADR-056)
+
+### Paginação por cursor
+
+Vale em `GET /lancamentos` e `GET /movimentos-cripto`. As outras listagens ficam
+sem paginar: contas, recorrências, títulos e ativos têm teto por usuário (ADR-055).
+
+- Parâmetros opcionais `limite` e `cursor`. `limite` é inteiro de 1 a 1000, padrão
+  1000. Fora disso, ou com texto, dá 400 `limite deve ser um inteiro de 1 a 1000`.
+- O corpo continua sendo o array de sempre. Quando há mais itens, a resposta traz
+  o cabeçalho `X-Next-Cursor` com o cursor da próxima página; na última página o
+  cabeçalho não vem.
+- Para a próxima página, repita a mesma chamada, com os mesmos filtros, e
+  acrescente `cursor=<valor do cabeçalho>`. Cursor inválido ou adulterado dá 400
+  `cursor inválido`.
+- O cursor é opaco: não interprete nem monte. Vale só como ponto de partida e a
+  consulta continua escopada pelo usuário da sessão.
+- Ordem estável: `dataCaixa`, `criadoEm`, `id` decrescentes em `/lancamentos`; `data`,
+  `criadoEm`, `id` decrescentes em `/movimentos-cripto`. Sem `limite` e `cursor`,
+  a resposta é a de antes, até 1000 itens.
+
+### Idempotency-Key
+
+Cabeçalho opcional em `POST /contas`, `/lancamentos`, `/transferencias`,
+`/compras-parceladas`, `/recorrencias`, `/metas`, `/metas/{id}/aportes`,
+`/movimentos-cripto`, `/titulos-renda-fixa` e
+`/titulos-renda-fixa/{id}/marcacoes` e `/resgate`. Nas outras rotas é ignorado.
+
+- Formato: 1 a 80 caracteres entre letras, dígitos e `. _ : -` (um UUID serve).
+  Fora do formato, ou repetido no mesmo pedido, dá 400
+  `Idempotency-Key inválida`.
+- Mesma chave, mesmo usuário, mesma rota e mesmo corpo (bytes iguais): devolve o
+  status e o corpo da resposta original, com `Idempotent-Replayed: true`, sem
+  gravar de novo. Só resposta 2xx fica guardada; um erro libera a chave para o
+  cliente corrigir e tentar de novo.
+- Mesma chave com outra rota ou outro corpo: 422
+  `Idempotency-Key já usada com outra requisição`.
+- Mesma chave ainda em andamento: a segunda requisição espera até 10 s a
+  primeira terminar e devolve a resposta dela. Passado o prazo, 409
+  `requisição com esta Idempotency-Key ainda em andamento` com `Retry-After: 1`.
+- A chave vale por 24 h e é do usuário: a mesma chave de outro usuário é outra.
+- O cliente deve gerar uma chave por intenção do usuário (um clique em salvar) e
+  reusá-la só no retry daquela mesma requisição.
+
 ## Limites (ADR-049)
 
 - Por IP (IPv6 pelo `/64`): 600 requisições por minuto em qualquer rota, 10

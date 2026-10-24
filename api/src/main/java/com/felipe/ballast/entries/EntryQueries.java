@@ -3,8 +3,10 @@ package com.felipe.ballast.entries;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,22 +52,30 @@ class EntryQueries {
         .optional();
   }
 
-  // Período por data_caixa, pontas incluídas. accountId nulo não filtra por conta.
-  List<EntrySummary> list(UUID userId, LocalDate from, LocalDate to, UUID accountId) {
-    String where = "WHERE l.usuario_id = :userId AND l.data_caixa BETWEEN :from AND :to";
-    if (accountId == null) {
-      return jdbc.sql(COLUMNS + where + ORDER)
-          .param("userId", userId)
-          .param("from", from)
-          .param("to", to)
-          .query(EntryQueries::map)
-          .list();
-    }
-    return jdbc.sql(COLUMNS + where + " AND l.conta_id = :accountId" + ORDER)
+  // Período por data_caixa, pontas incluídas. accountId nulo não filtra por conta. after nulo
+  // começa do topo; com valor, só o que vem depois dele na ordem (data_caixa, criado_em, id)
+  // decrescente. fetch é o limite da página mais um.
+  List<EntrySummary> list(
+      UUID userId, LocalDate from, LocalDate to, UUID accountId, EntryCursor after, int fetch) {
+    return jdbc.sql(
+            COLUMNS
+                + "WHERE l.usuario_id = :userId AND l.data_caixa BETWEEN :from AND :to"
+                + " AND (CAST(:accountId AS uuid) IS NULL OR l.conta_id = :accountId)"
+                + " AND (CAST(:afterId AS uuid) IS NULL"
+                + " OR (l.data_caixa, l.criado_em, l.id) < (:afterDate, :afterCreatedAt, :afterId))"
+                + ORDER
+                + " LIMIT :fetch")
         .param("userId", userId)
         .param("from", from)
         .param("to", to)
         .param("accountId", accountId)
+        .param("afterId", after == null ? null : after.id())
+        .param("afterDate", after == null ? LocalDate.EPOCH : after.cashDate())
+        .param(
+            "afterCreatedAt",
+            OffsetDateTime.ofInstant(
+                after == null ? Instant.EPOCH : after.createdAt(), ZoneOffset.UTC))
+        .param("fetch", fetch)
         .query(EntryQueries::map)
         .list();
   }

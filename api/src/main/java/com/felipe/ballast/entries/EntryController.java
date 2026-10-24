@@ -3,7 +3,9 @@ package com.felipe.ballast.entries;
 import com.felipe.ballast.identity.AuthenticatedUser;
 import com.felipe.ballast.web.CanonicalUuid;
 import com.felipe.ballast.web.ErrorResponse;
+import com.felipe.ballast.web.Paging;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -15,8 +17,8 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -167,18 +169,26 @@ class EntryController {
               + " (depois criadoEm e id, também decrescentes). de e ate são obrigatórios e o"
               + " intervalo tem no máximo 366 dias contando os dois extremos. contaId, se vier,"
               + " precisa ser um UUID; conta que não é do usuário ou não existe devolve lista"
-              + " vazia, sem distinguir.",
+              + " vazia, sem distinguir. limite (1 a 1000, padrão 1000) corta a página; se houver"
+              + " mais, o cabeçalho X-Next-Cursor traz o cursor para o parâmetro cursor da próxima"
+              + " chamada, com os mesmos filtros. Sem mais itens o cabeçalho não vem.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",
       description = "Lançamentos do período",
+      headers =
+          @Header(
+              name = Paging.NEXT_CURSOR_HEADER,
+              description = "Cursor da próxima página; ausente na última",
+              schema = @Schema(type = "string")),
       content =
           @Content(array = @ArraySchema(schema = @Schema(implementation = EntryResponse.class))))
   @ApiResponse(
       responseCode = "400",
       description =
           "de ou ate ausente ou fora do formato AAAA-MM-DD (ano de 1900 a 2199), de depois de"
-              + " ate, intervalo maior que 366 dias ou contaId que não é UUID",
+              + " ate, intervalo maior que 366 dias, contaId que não é UUID, limite fora de 1 a 1000 ou"
+              + " cursor inválido",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -198,7 +208,11 @@ class EntryController {
           @RequestParam(name = "ate", required = false)
           String to,
       @Schema(type = "string", format = "uuid") @RequestParam(name = "contaId", required = false)
-          String accountId) {
+          String accountId,
+      @Schema(type = "integer", minimum = "1", maximum = "1000", defaultValue = "1000")
+          @RequestParam(name = "limite", required = false)
+          String limit,
+      @Schema(type = "string") @RequestParam(name = "cursor", required = false) String cursor) {
     // Lidos como texto: o conversor padrão de LocalDate aceita formatos que o contrato não prevê.
     Optional<LocalDate> fromDate = IsoDates.parse(from);
     if (fromDate.isEmpty()) {
@@ -222,11 +236,29 @@ class EntryController {
       }
       account = parsed.get();
     }
-    List<EntryResponse> body =
-        entries.list(user.id(), fromDate.get(), toDate.get(), account).stream()
-            .map(EntryResponse::from)
-            .toList();
-    return ResponseEntity.ok(body);
+    OptionalInt pageSize = Paging.parseLimit(limit);
+    if (pageSize.isEmpty()) {
+      return ResponseEntity.badRequest().body(Paging.INVALID_LIMIT);
+    }
+    Optional<EntryCursor> after = cursor == null ? Optional.empty() : EntryCursor.parse(cursor);
+    if (cursor != null && after.isEmpty()) {
+      return ResponseEntity.badRequest().body(Paging.INVALID_CURSOR);
+    }
+    EntryService.Page page =
+        entries.list(
+            user.id(),
+            fromDate.get(),
+            toDate.get(),
+            account,
+            after.orElse(null),
+            pageSize.getAsInt());
+    ResponseEntity.BodyBuilder response = ResponseEntity.ok();
+    if (page.more()) {
+      response.header(
+          Paging.NEXT_CURSOR_HEADER,
+          EntryCursor.of(page.items().get(page.items().size() - 1)).encode());
+    }
+    return response.body(page.items().stream().map(EntryResponse::from).toList());
   }
 
   @Operation(

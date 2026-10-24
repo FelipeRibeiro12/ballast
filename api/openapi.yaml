@@ -752,6 +752,18 @@ paths:
         \ aparece na fatura do seu vencimento. Conta e categoria precisam ser do usuá\
         rio; conta inexistente, de outro usuário e id inválido têm a mesma mensagem."
       operationId: postComprasParceladas
+      parameters:
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
       requestBody:
         content:
           application/json:
@@ -800,6 +812,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Content-Type diferente de application/json
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
         "503":
           content:
             application/json:
@@ -1030,6 +1048,18 @@ paths:
       - contas
     post:
       operationId: postContas
+      parameters:
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
       requestBody:
         content:
           application/json:
@@ -1076,6 +1106,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Content-Type diferente de application/json
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
         "503":
           content:
             application/json:
@@ -1494,7 +1530,10 @@ paths:
         \ para o mais antigo (depois criadoEm e id, também decrescentes). de e ate\
         \ são obrigatórios e o intervalo tem no máximo 366 dias contando os dois extremos.\
         \ contaId, se vier, precisa ser um UUID; conta que não é do usuário ou nã\
-        o existe devolve lista vazia, sem distinguir."
+        o existe devolve lista vazia, sem distinguir. limite (1 a 1000, padrão 1000)\
+        \ corta a página; se houver mais, o cabeçalho X-Next-Cursor traz o cursor\
+        \ para o parâmetro cursor da próxima chamada, com os mesmos filtros. Sem mais\
+        \ itens o cabeçalho não vem."
       operationId: getLancamentos
       parameters:
       - in: query
@@ -1515,6 +1554,19 @@ paths:
         schema:
           type: string
           format: uuid
+      - in: query
+        name: limite
+        required: false
+        schema:
+          type: integer
+          default: 1000
+          maximum: 1000
+          minimum: 1
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -1524,14 +1576,20 @@ paths:
                 items:
                   $ref: "#/components/schemas/Lancamento"
           description: Lançamentos do período
+          headers:
+            X-Next-Cursor:
+              description: Cursor da próxima página; ausente na última
+              schema:
+                type: string
+              style: simple
         "400":
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: "de ou ate ausente ou fora do formato AAAA-MM-DD (ano de 1900\
-            \ a 2199), de depois de ate, intervalo maior que 366 dias ou contaId que\
-            \ não é UUID"
+            \ a 2199), de depois de ate, intervalo maior que 366 dias, contaId que\
+            \ não é UUID, limite fora de 1 a 1000 ou cursor inválido"
         "401":
           content:
             application/json:
@@ -1556,6 +1614,18 @@ paths:
         amento; os três casos de recusa (inexistente, de outro usuário, id inválido)\
         \ têm a mesma mensagem."
       operationId: postLancamentos
+      parameters:
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
       requestBody:
         content:
           application/json:
@@ -1586,6 +1656,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Sem sessão válida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Chave com outra requisição igual ainda em andamento; tentar
+            de novo
         "413":
           content:
             application/json:
@@ -1598,6 +1675,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Content-Type diferente de application/json
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
         "503":
           content:
             application/json:
@@ -1918,6 +2001,18 @@ paths:
       - metas
     post:
       operationId: postMetas
+      parameters:
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
       requestBody:
         content:
           application/json:
@@ -1943,6 +2038,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Sem sessão válida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Chave com outra requisição igual ainda em andamento; tentar
+            de novo
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
       security:
       - cookieAuth: []
       summary: Cria uma meta
@@ -2075,6 +2183,17 @@ paths:
         required: true
         schema:
           type: string
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
       requestBody:
         content:
           application/json:
@@ -2107,6 +2226,19 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "Meta de outro usuário, inexistente ou id que não é UUID; mesmo\
             \ corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Chave com outra requisição igual ainda em andamento; tentar
+            de novo
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
         "503":
           content:
             application/json:
@@ -2166,8 +2298,11 @@ paths:
       - metas
   /movimentos-cripto:
     get:
-      description: "Por data decrescente, o mais novo primeiro. contaId e ativoId\
-        \ de outro usuário dão lista vazia."
+      description: "Por data decrescente, depois criação e id, o mais novo primeiro.\
+        \ contaId e ativoId de outro usuário dão lista vazia. limite (1 a 1000, padrã\
+        o 1000) corta a página; se houver mais, o cabeçalho X-Next-Cursor traz o cursor\
+        \ para o parâmetro cursor da próxima chamada, com os mesmos filtros. Sem mais\
+        \ itens o cabeçalho não vem."
       operationId: getMovimentosCripto
       parameters:
       - in: query
@@ -2182,6 +2317,19 @@ paths:
         schema:
           type: string
           format: uuid
+      - in: query
+        name: limite
+        required: false
+        schema:
+          type: integer
+          default: 1000
+          maximum: 1000
+          minimum: 1
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -2191,12 +2339,19 @@ paths:
                 items:
                   $ref: "#/components/schemas/MovimentoCripto"
           description: Movimentos
+          headers:
+            X-Next-Cursor:
+              description: Cursor da próxima página; ausente na última
+              schema:
+                type: string
+              style: simple
         "400":
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: contaId ou ativoId que não é UUID
+          description: "contaId ou ativoId que não é UUID, limite fora de 1 a 1000\
+            \ ou cursor inválido"
         "401":
           content:
             application/json:
@@ -2218,6 +2373,18 @@ paths:
       description: "A posição do ativo na conta, dia a dia, nunca fica negativa. A\
         \ conta fica travada até o commit."
       operationId: postMovimentosCripto
+      parameters:
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
       requestBody:
         content:
           application/json:
@@ -2264,6 +2431,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Content-Type diferente de application/json
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
         "503":
           content:
             application/json:
@@ -2663,6 +2836,18 @@ paths:
         \ do mesmo tipo do template. Uma série que já terminou é criada com zero ocorrê\
         ncias."
       operationId: postRecorrencias
+      parameters:
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
       requestBody:
         content:
           application/json:
@@ -2710,6 +2895,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Content-Type diferente de application/json
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
         "503":
           content:
             application/json:
@@ -3094,6 +3285,18 @@ paths:
       - renda-fixa
     post:
       operationId: postTitulosRendaFixa
+      parameters:
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
       requestBody:
         content:
           application/json:
@@ -3127,6 +3330,12 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: Teto de títulos do usuário atingido (limite de títulos de renda
             fixa atingido)
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
         "503":
           content:
             application/json:
@@ -3229,6 +3438,17 @@ paths:
         required: true
         schema:
           type: string
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
       requestBody:
         content:
           application/json:
@@ -3262,6 +3482,19 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "Título de outro usuário, inexistente ou id que não é UUID;\
             \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Chave com outra requisição igual ainda em andamento; tentar
+            de novo
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
       security:
       - cookieAuth: []
       summary: Grava o valor que o banco mostrou numa data
@@ -3277,6 +3510,17 @@ paths:
         required: true
         schema:
           type: string
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
       requestBody:
         content:
           application/json:
@@ -3309,6 +3553,19 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "Título de outro usuário, inexistente ou id que não é UUID;\
             \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Chave com outra requisição igual ainda em andamento; tentar
+            de novo
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
       security:
       - cookieAuth: []
       summary: Registra o resgate do título
@@ -3321,6 +3578,18 @@ paths:
         ão. Origem e destino inexistentes, de outro usuário ou com id inválido tê\
         m a mesma mensagem."
       operationId: postTransferencias
+      parameters:
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
       requestBody:
         content:
           application/json:
@@ -3350,6 +3619,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Sem sessão válida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Chave com outra requisição igual ainda em andamento; tentar
+            de novo
         "413":
           content:
             application/json:
@@ -3362,6 +3638,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Content-Type diferente de application/json
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
         "503":
           content:
             application/json:

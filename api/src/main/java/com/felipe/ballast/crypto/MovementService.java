@@ -82,8 +82,14 @@ class MovementService {
     return transaction.execute(status -> deleteLocked(status, userId, id));
   }
 
-  List<CryptoQueries.Movement> list(UUID userId, UUID accountId, UUID assetId) {
-    return queries.listMovements(userId, accountId, assetId);
+  record Page(List<CryptoQueries.Movement> items, boolean more) {}
+
+  // Busca um a mais que o limite só para saber se há próxima página.
+  Page list(UUID userId, UUID accountId, UUID assetId, MovementCursor after, int limit) {
+    List<CryptoQueries.Movement> found =
+        queries.listMovements(userId, accountId, assetId, after, limit + 1);
+    boolean more = found.size() > limit;
+    return new Page(more ? found.subList(0, limit) : found, more);
   }
 
   private CreateResult createLocked(TransactionStatus status, UUID userId, Input input) {
