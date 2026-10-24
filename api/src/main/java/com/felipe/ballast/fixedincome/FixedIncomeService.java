@@ -90,10 +90,10 @@ public class FixedIncomeService {
 
   SaveResult create(UUID userId, FixedIncomeQueries.Fields fields) {
     SaveResult result = save(userId, null, fields);
-    // Fora da transação: aplicação antiga pede índice que ainda não está guardado. A fonte fora do
-    // ar não atrapalha o cadastro, só deixa o valor como aplicado até a próxima rodada do job.
+    // Aplicação antiga pede índice que ainda não está guardado. A busca roda em segundo plano: o
+    // cadastro não espera o Banco Central, e o valor sai como aplicado até o índice chegar.
     if (result instanceof SaveResult.Saved) {
-      updater.updateFrom(fields.applicationDate());
+      updater.requestFrom(fields.applicationDate());
     }
     return result;
   }
@@ -101,7 +101,7 @@ public class FixedIncomeService {
   SaveResult update(UUID userId, UUID id, FixedIncomeQueries.Fields fields) {
     SaveResult result = save(userId, id, fields);
     if (result instanceof SaveResult.Saved) {
-      updater.updateFrom(fields.applicationDate());
+      updater.requestFrom(fields.applicationDate());
     }
     return result;
   }

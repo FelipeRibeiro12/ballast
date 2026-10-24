@@ -2,13 +2,16 @@ package com.felipe.ballast.crypto;
 
 import static com.felipe.ballast.crypto.CryptoApi.movement;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import com.felipe.ballast.FakeIndexSource;
 import com.felipe.ballast.IntegrationTest;
 import com.felipe.ballast.TestClock;
 import com.felipe.ballast.fixedincome.IndexPoint;
 import com.felipe.ballast.fixedincome.IndexSeries;
+import com.felipe.ballast.fixedincome.IndexUpdater;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -28,6 +31,7 @@ class DollarConversionTest {
   @Autowired JdbcClient jdbc;
   @Autowired TestClock clock;
   @Autowired FakeIndexSource source;
+  @Autowired IndexUpdater updater;
   private CryptoApi api;
   private CryptoApi.Actor actor;
   private String bitcoin;
@@ -133,18 +137,31 @@ class DollarConversionTest {
   }
 
   @Test
-  void aMovementBeforeTheFirstPtaxFetchesItAndAnswersWithTheReais() throws Exception {
+  void aMovementBeforeTheFirstPtaxAnswersAtOnceAndTheReaisComeWhenTheFetchEnds() throws Exception {
     source.publish(
         IndexSeries.DOLLAR, new IndexPoint(LocalDate.of(2036, 2, 27), new BigDecimal("5")));
+    source.hold();
+    JsonNode created;
+    try {
+      created =
+          assertTimeoutPreemptively(
+              Duration.ofSeconds(5),
+              () ->
+                  CryptoApi.expect(
+                      api.move(
+                          actor.session(),
+                          movement(
+                              actor.cryptoId(), bitcoin, "compra", "1", "2036-02-27", 100_000)),
+                      201));
+    } finally {
+      source.release();
+    }
 
-    JsonNode created =
-        CryptoApi.expect(
-            api.move(
-                actor.session(),
-                movement(actor.cryptoId(), bitcoin, "compra", "1", "2036-02-27", 100_000)),
-            201);
-
-    assertThat(created.get("custoCentavos").asLong()).isEqualTo(500_000);
+    assertThat(created.get("custoUsdCentavos").asLong()).isEqualTo(100_000);
+    assertThat(created.get("custoCentavos").isNull()).isTrue();
+    assertThat(updater.awaitIdle(Duration.ofSeconds(10))).isTrue();
+    JsonNode listed = CryptoApi.body(api.listMovements(actor.session(), "")).get(0);
+    assertThat(listed.get("custoCentavos").asLong()).isEqualTo(500_000);
   }
 
   @Test

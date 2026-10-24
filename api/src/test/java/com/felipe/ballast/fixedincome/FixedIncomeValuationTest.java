@@ -2,6 +2,7 @@ package com.felipe.ballast.fixedincome;
 
 import static com.felipe.ballast.fixedincome.FixedIncomeApi.title;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import com.felipe.ballast.FakeIndexSource;
 import com.felipe.ballast.IntegrationTest;
@@ -10,6 +11,7 @@ import com.felipe.ballast.crypto.CryptoApi;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Map;
@@ -30,6 +32,7 @@ class FixedIncomeValuationTest {
   @Autowired JdbcClient jdbc;
   @Autowired TestClock clock;
   @Autowired FakeIndexSource source;
+  @Autowired IndexUpdater updater;
   private CryptoApi base;
   private FixedIncomeApi api;
   private CryptoApi.Actor actor;
@@ -215,7 +218,7 @@ class FixedIncomeValuationTest {
   }
 
   @Test
-  void anOldInvestmentFetchesTheMissingIndicesFromTheSource() throws Exception {
+  void anOldInvestmentFetchesTheMissingIndicesFromTheSourceInTheBackground() throws Exception {
     // O atualizador baixa sempre contínuo desde o primeiro valor; aqui o primeiro passa a ser
     // 01/03/2035, como se o Banco Central nunca tivesse sido consultado antes disso.
     jdbc.sql("DELETE FROM indice WHERE serie = 'cdi' AND data < DATE '2035-03-01'").update();
@@ -223,11 +226,35 @@ class FixedIncomeValuationTest {
         IndexSeries.CDI, new IndexPoint(LocalDate.of(2035, 2, 26), new BigDecimal("0.04")));
 
     api.createOk(actor.session(), title(broker, "lci", "cdi", "100", 100_000, "2035-02-26"));
+    assertThat(updater.awaitIdle(Duration.ofSeconds(10))).isTrue();
 
     assertThat(
             jdbc.sql("SELECT count(*) FROM indice WHERE serie = 'cdi' AND data = DATE '2035-02-26'")
                 .query(Long.class)
                 .single())
         .isEqualTo(1);
+  }
+
+  @Test
+  void aSilentBancoCentralDoesNotHoldTheWritesNorTheList() throws Exception {
+    jdbc.sql("DELETE FROM indice WHERE serie = 'cdi' AND data < DATE '2035-03-01'").update();
+    source.hold();
+    try {
+      assertTimeoutPreemptively(
+          Duration.ofSeconds(5),
+          () -> {
+            String id =
+                api.createOk(
+                    actor.session(), title(broker, "lci", "cdi", "100", 100_000, "2035-02-26"));
+            CryptoApi.expect(
+                api.update(
+                    actor.session(), id, title(broker, "lci", "cdi", "90", 100_000, "2035-02-25")),
+                200);
+            valued("");
+          });
+    } finally {
+      source.release();
+    }
+    assertThat(updater.awaitIdle(Duration.ofSeconds(10))).isTrue();
   }
 }
