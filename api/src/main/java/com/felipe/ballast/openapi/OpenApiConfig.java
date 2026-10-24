@@ -1,9 +1,17 @@
 package com.felipe.ballast.openapi;
 
+import com.felipe.ballast.web.IdempotencyFilter;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Operation;
+import io.swagger.v3.oas.models.PathItem;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.media.Content;
+import io.swagger.v3.oas.models.media.MediaType;
 import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.media.StringSchema;
+import io.swagger.v3.oas.models.parameters.HeaderParameter;
+import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import java.util.List;
@@ -41,6 +49,55 @@ class OpenApiConfig {
       makeNullable(openApi, "RecorrenciaRequest", "divisao", "DivisaoRequest");
       makeNullable(openApi, "Conta", "cartao", "Cartao");
     };
+  }
+
+  // Documenta o cabeçalho nas rotas que o filtro de idempotência atende (ADR-056). A lista vem
+  // do próprio filtro, para a spec não divergir do que o servidor faz.
+  @Bean
+  OpenApiCustomizer idempotencyKeyHeader() {
+    return openApi ->
+        IdempotencyFilter.ROUTES.forEach(
+            path -> {
+              PathItem item = openApi.getPaths().get(path);
+              if (item == null || item.getPost() == null) {
+                return;
+              }
+              Operation post = item.getPost();
+              post.addParametersItem(
+                  new HeaderParameter()
+                      .name(IdempotencyFilter.KEY_HEADER)
+                      .required(false)
+                      .description(
+                          "Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e"
+                              + " . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta"
+                              + " 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de"
+                              + " novo; vale por 24 h.")
+                      .schema(new StringSchema().minLength(1).maxLength(80)));
+              addResponseIfAbsent(
+                  post,
+                  "409",
+                  "Chave com outra requisição igual ainda em andamento; tentar de novo");
+              addResponseIfAbsent(
+                  post, "422", "Idempotency-Key já usada com outra rota ou outro corpo");
+            });
+  }
+
+  private static void addResponseIfAbsent(Operation operation, String code, String description) {
+    if (operation.getResponses().containsKey(code)) {
+      return;
+    }
+    operation
+        .getResponses()
+        .addApiResponse(
+            code,
+            new ApiResponse()
+                .description(description)
+                .content(
+                    new Content()
+                        .addMediaType(
+                            "application/json",
+                            new MediaType()
+                                .schema(new Schema<>().$ref("#/components/schemas/Erro")))));
   }
 
   @SuppressWarnings({"rawtypes", "unchecked"})

@@ -3062,7 +3062,10 @@ export interface operations {
     postComprasParceladas: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3119,6 +3122,15 @@ export interface operations {
             };
             /** @description Content-Type diferente de application/json */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3385,7 +3397,10 @@ export interface operations {
     postContas: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3442,6 +3457,15 @@ export interface operations {
             };
             /** @description Content-Type diferente de application/json */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3976,7 +4000,10 @@ export interface operations {
     postLancamentos: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4013,6 +4040,15 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Chave com outra requisição igual ainda em andamento; tentar de novo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Corpo maior que 4 KiB */
             413: {
                 headers: {
@@ -4024,6 +4060,15 @@ export interface operations {
             };
             /** @description Content-Type diferente de application/json */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4379,7 +4424,10 @@ export interface operations {
     postMetas: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4409,6 +4457,24 @@ export interface operations {
             };
             /** @description Sem sessão válida */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Chave com outra requisição igual ainda em andamento; tentar de novo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4554,7 +4620,10 @@ export interface operations {
     postMetasByIdAportes: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: string;
             };
@@ -4595,6 +4664,24 @@ export interface operations {
             };
             /** @description Meta de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Chave com outra requisição igual ainda em andamento; tentar de novo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4720,7 +4807,10 @@ export interface operations {
     postMovimentosCripto: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -4777,6 +4867,15 @@ export interface operations {
             };
             /** @description Content-Type diferente de application/json */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5241,7 +5340,10 @@ export interface operations {
     postRecorrencias: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5298,6 +5400,15 @@ export interface operations {
             };
             /** @description Content-Type diferente de application/json */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5735,7 +5846,10 @@ export interface operations {
     postTitulosRendaFixa: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5774,6 +5888,15 @@ export interface operations {
             };
             /** @description Teto de títulos do usuário atingido (limite de títulos de renda fixa atingido) */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5888,7 +6011,10 @@ export interface operations {
     postTitulosRendaFixaByIdMarcacoes: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: string;
             };
@@ -5936,12 +6062,33 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Chave com outra requisição igual ainda em andamento; tentar de novo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
         };
     };
     postTitulosRendaFixaByIdResgate: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: string;
             };
@@ -5989,12 +6136,33 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Chave com outra requisição igual ainda em andamento; tentar de novo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
         };
     };
     postTransferencias: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6031,6 +6199,15 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Chave com outra requisição igual ainda em andamento; tentar de novo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Corpo maior que 4 KiB */
             413: {
                 headers: {
@@ -6042,6 +6219,15 @@ export interface operations {
             };
             /** @description Content-Type diferente de application/json */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

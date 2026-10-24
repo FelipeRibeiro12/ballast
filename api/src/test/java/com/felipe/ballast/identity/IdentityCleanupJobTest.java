@@ -118,6 +118,38 @@ class IdentityCleanupJobTest {
     assertThat(challengeExists(live)).isTrue();
   }
 
+  // As chaves de idempotência valem 24 h (ADR-056): é o prazo em que um retry ainda faz sentido.
+  @Test
+  void deletesIdempotencyKeysOlderThanADayAndKeepsRecentOnes() {
+    insertKey("velha", now.minus(Duration.ofDays(1)).minusSeconds(1));
+    insertKey("recente", now.minus(Duration.ofHours(23)));
+
+    job.run();
+
+    assertThat(keyExists("velha")).isFalse();
+    assertThat(keyExists("recente")).isTrue();
+  }
+
+  private void insertKey(String key, Instant createdAt) {
+    jdbc.sql(
+            "INSERT INTO idempotencia (usuario_id, chave, rota, corpo_hash, criada_em)"
+                + " VALUES (:user, :key, '/lancamentos', :hash, :at)")
+        .param("user", userId)
+        .param("key", key)
+        .param("hash", "b".repeat(64))
+        .param("at", createdAt.atOffset(ZoneOffset.UTC))
+        .update();
+  }
+
+  private boolean keyExists(String key) {
+    return jdbc.sql("SELECT count(*) FROM idempotencia WHERE usuario_id = :user AND chave = :key")
+            .param("user", userId)
+            .param("key", key)
+            .query(Long.class)
+            .single()
+        == 1;
+  }
+
   private UUID challenge(Instant expiresAt) {
     UUID id = UUID.randomUUID();
     jdbc.sql(

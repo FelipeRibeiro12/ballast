@@ -10,7 +10,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-// Sem isto sessao e tentativa_login só crescem: cada e-mail digitado no login vira uma linha,
+// Sem isto sessao, tentativa_login e idempotencia só crescem: cada e-mail digitado no login vira
+// uma linha,
 // exista a conta ou não. O agendamento liga em IdentityCleanupSchedulingConfig; o método run
 // existe sempre, para o teste chamar direto.
 @Component
@@ -30,6 +31,10 @@ class IdentityCleanupJob {
     this.clock = clock;
   }
 
+  // As chaves de Idempotency-Key (ADR-056) valem um dia: depois disso um retry com a mesma chave
+  // deixou de ser uma repetição do mesmo clique e passa a gravar de novo.
+  static final Duration IDEMPOTENCY_RETENTION = Duration.ofDays(1);
+
   // Sessão revogada não volta a valer; o logout já foi para o log.
   @Scheduled(cron = "${ballast.identity-cleanup.cron}", zone = "America/Sao_Paulo")
   void run() {
@@ -46,10 +51,15 @@ class IdentityCleanupJob {
         jdbc.sql("DELETE FROM desafio_mfa WHERE expira_em <= :now")
             .param("now", now.atOffset(ZoneOffset.UTC))
             .update();
+    int keys =
+        jdbc.sql("DELETE FROM idempotencia WHERE criada_em <= :before")
+            .param("before", now.minus(IDEMPOTENCY_RETENTION).atOffset(ZoneOffset.UTC))
+            .update();
     log.info(
-        "limpeza de identidade: sessoes={} tentativas={} desafios_mfa={}",
+        "limpeza de identidade: sessoes={} tentativas={} desafios_mfa={} chaves_idempotencia={}",
         sessions,
         attempts,
-        challenges);
+        challenges,
+        keys);
   }
 }
