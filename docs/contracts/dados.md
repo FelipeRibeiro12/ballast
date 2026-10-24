@@ -1103,6 +1103,29 @@ a compra feita em outubro, mesmo que a fatura caia em novembro. Soma a
 categoria e as filhas. Gasto é o realizado com competência até hoje; previsto é
 o previsto e o realizado com data depois de hoje.
 
+## Idempotência (V23, ADR-056)
+
+```
+idempotencia
+  usuario_id     uuid fk not null     -- ON DELETE CASCADE
+  chave          varchar(80) not null -- o Idempotency-Key; [A-Za-z0-9._:-]{1,80}
+  rota           varchar(200) not null
+  corpo_hash     char(64) not null    -- SHA-256 hex dos bytes do corpo da requisição
+  status         smallint             -- 200 a 299; nulo enquanto em andamento
+  corpo_resposta text                 -- nulo junto com status
+  criada_em      timestamptz not null default now()
+  pk (usuario_id, chave)
+  index (criada_em)
+```
+
+A chave primária é o índice único que serializa duas requisições iguais. A
+linha nasce em andamento (status e resposta nulos) e vira a resposta guardada
+quando a escrita termina em 2xx. Resposta de erro apaga a linha. Em andamento há
+mais de 60 s é requisição que morreu: a seguinte assume trocando `criada_em`, e
+só quem tem essa marca conclui a linha. O job diário de limpeza apaga as linhas
+com mais de 24 h. Nenhuma coluna de dinheiro: a resposta guardada é o JSON que a
+API já devolveu.
+
 ---
 
 ## Invariantes que o banco garante
@@ -1123,6 +1146,7 @@ apenas em código:
 11. `carteira_observada`: endereço único por usuário e rede
 12. `posicao_cripto` com `origem = 'sincronizada'` não aceita escrita manual (F24; a F13 não tem a tabela)
 13. Cripto (V13, ADR-035): conta `cripto` com `saldo_inicial` 0 e sem lançamento; ativo único por usuário, rede e contrato; contrato no formato da rede; movimento só em conta cripto e ativo do mesmo usuário, com quantidade e custo positivos; cotação só de ativo do mesmo usuário, com preço positivo e um valor por momento
+14. Idempotência (V23, ADR-056): uma linha por usuário e chave; chave só com letras, dígitos e `._:-` de 1 a 80 caracteres; status 2xx e resposta nulos ou preenchidos juntos
 
 ## Índices iniciais
 
@@ -1139,7 +1163,7 @@ create index on lancamento (usuario_id, hash_externo) where hash_externo is not 
 create index on importacao_linha (importacao_id, decisao);
 ```
 
-Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`. A `V12` não acrescenta nenhum (a PK de `conta_categoria_permitida` serve, conferido com `EXPLAIN`). A `V13` cria `movimento_cripto (usuario_id, conta_id, data)` e dispensa o índice descendente de `cotacao`, porque a PK serve (seção Cripto). A `V18` cria o de `(usuario_id, data_competencia, categoria_id)` para o orçamento.
+Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`. A `V12` não acrescenta nenhum (a PK de `conta_categoria_permitida` serve, conferido com `EXPLAIN`). A `V13` cria `movimento_cripto (usuario_id, conta_id, data)` e dispensa o índice descendente de `cotacao`, porque a PK serve (seção Cripto). A `V18` cria o de `(usuario_id, data_competencia, categoria_id)` para o orçamento. A `V23` cria `idempotencia (criada_em)` para a limpeza diária.
 O primeiro serve saldo e fluxo de caixa; o segundo, gráfico por categoria e
 orçamento. Antes de adicionar qualquer outro, rode `EXPLAIN ANALYZE` e mostre o
 antes e o depois.
