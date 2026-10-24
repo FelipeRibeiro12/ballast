@@ -608,8 +608,9 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   inclusive cartão e benefício). `criptoCentavos` soma o valor das posições com
   cotação; as sem cotação ficam em `semCotacao` e fora do total. Nunca falha por
   falta de cotação.
-- Qualquer valor fora de ±9007199254740991 dá 400 `patrimônio fora do limite`
-  em `/patrimonio` e `posição fora do limite` em `/posicoes-cripto`.
+- Valor de posição fora de ±9007199254740991 não dá mais 400: a posição vem sem
+  valor (ADR-058, abaixo). Só a soma do patrimônio fora da faixa dá 400
+  `patrimônio fora do limite`.
 
 #### Custo médio e valorização (ADR-042)
 
@@ -825,11 +826,11 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
 - O valor parte da última marcação até a data (ou da aplicação) e aplica o
   fator do indexador; os dias úteis são os dias com CDI publicado, e os dias de
   semana depois do último CDI guardado usam o último CDI. Arredondado uma vez
-  para centavos com `HALF_EVEN`. Fora de ±9007199254740991: 400 `renda fixa fora
-  do limite`.
-- Cadastrar ou editar com aplicação antes do primeiro índice guardado busca os
-  índices que faltam no Banco Central antes de responder; com o Banco Central
-  fora, o título é gravado do mesmo jeito.
+  para centavos com `HALF_EVEN`. Fora de ±9007199254740991 o título vem sem
+  valor (ADR-058, abaixo).
+- Cadastrar ou editar com aplicação antes do primeiro índice guardado pede os
+  índices que faltam ao Banco Central em segundo plano e responde na hora
+  (ADR-058); com o Banco Central fora, o título é gravado do mesmo jeito.
 
 ### Marcação e resgate
 
@@ -1002,3 +1003,58 @@ Cabeçalho opcional em `POST /contas`, `/lancamentos`, `/transferencias`,
   fora disso dá 400 `código inválido`.
 - Atraso por usuário: 3 códigos errados livres, depois 2^(n−3) s até 15 min,
   contando ativação, desativação e login. O código certo zera a contagem.
+
+## Renda fixa e cripto endurecidos (ADR-058)
+
+Nenhum formato consumido muda. Os campos novos são opcionais na spec.
+
+### Título
+
+- Cada `TituloRendaFixa` ganha `vencido` (boolean, `true` só na listagem, a
+  partir do dia do vencimento: o valor fica congelado nele), `avisoIndice`
+  (texto curto ou `null`: o CDI ou o IPCA guardado não cobre o período) e
+  `motivoSemValor` (`"fora do limite"` ou `null`).
+- Título com valor fora de ±9007199254740991 vem com `valorBrutoCentavos`,
+  `iofCentavos`, `irCentavos`, `valorLiquidoCentavos` e `rendimentoCentavos`
+  nulos e `motivoSemValor: "fora do limite"`. `GET /titulos-renda-fixa` não
+  responde mais 400 `renda fixa fora do limite`.
+- `DELETE /titulos-renda-fixa/{id}/resgate` desfaz o resgate: 204, idempotente
+  (sem resgate também dá 204); 404 `não encontrado` para título alheio,
+  inexistente ou id que não é UUID; 401 sem sessão.
+- Novos 400: `POST /resgate` com data antes de uma marcação gravada (`resgate
+  não pode ser antes de uma marcação`) e `PUT` com aplicação depois de uma
+  marcação (`dataAplicacao não pode ser depois de uma marcação`).
+- `ultimaMarcacao` e o cálculo só consideram marcação entre a aplicação e o
+  resgate, inclusive.
+- `POST` e `PUT` do título não esperam o Banco Central.
+
+### Patrimônio e posições
+
+- `GET /patrimonio` ganha `rendaFixaSemValor: [{tituloId, motivo}]` (títulos
+  fora de `rendaFixaCentavos`) e `semCotacao[].motivo` (`"sem cotação"` ou
+  `"fora do limite"`).
+- `GET /posicoes-cripto`: posição com valor fora da faixa vem com todo valor e
+  custo nulos, `quantidade` preenchida e `motivoSemValor: "fora do limite"`; fora
+  isso `motivoSemValor` é `null`. Não responde mais 400 `posição fora do limite`.
+- `POST /movimentos-cripto` em dólar antes da primeira PTAX guardada responde
+  com `custoCentavos` nulo; a PTAX chega em segundo plano e a leitura seguinte
+  já traz o valor em reais.
+
+### Ativo e cotação
+
+- `PUT /ativos-cripto/{id}` com `{simbolo, nome, decimais}` responde 200 com o
+  `AtivoCripto`. `rede` e `contrato` no corpo dão 400. 409 `há movimento com mais
+  casas decimais`. 404 `não encontrado` para ativo alheio, inexistente ou id mal
+  formado.
+- `DELETE /ativos-cripto/{id}` responde 204 e leva as cotações; 409 `ativo tem
+  movimentos`; 404 como acima.
+- `PUT /ativos-cripto/{id}/cotacoes/{momento}` com `{precoUsd}` responde 200 com
+  a `Cotacao`; `DELETE` no mesmo caminho responde 204. `momento` é o da resposta
+  da cotação (ISO-8601 com fuso). Cotação da CoinGecko: 409 `cotação automática
+  não se altera`. Ativo alheio, momento sem cotação ou fora do formato: 404.
+
+### Saldo projetado
+
+- `GET /saldo-projetado` sem `contaId` não inclui conta cripto. Com `contaId` de
+  conta cripto: 400 `conta cripto não tem saldo projetado`; de outro usuário,
+  404 `conta não encontrada` como antes.

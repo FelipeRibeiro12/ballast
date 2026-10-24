@@ -95,6 +95,114 @@ paths:
       summary: Cadastra um ativo de cripto do usuário
       tags:
       - cripto
+  /ativos-cripto/{id}:
+    delete:
+      description: "Ativo com movimentos não se apaga: apague os movimentos antes\
+        \ (409)."
+      operationId: deleteAtivosCriptoById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Apagado
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Ativo de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: O ativo tem movimentos
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Apaga o ativo e as cotações dele
+      tags:
+      - cripto
+    put:
+      description: Rede e contrato são a identidade e não mudam. Menos decimais que
+        algum movimento já usa é 409.
+      operationId: putAtivosCriptoById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AtivoCriptoEdicao"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AtivoCripto"
+          description: Ativo editado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado como rede\
+            \ e contrato"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Ativo de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Há movimento com mais casas decimais que o novo valor
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: "Edita símbolo, nome e decimais do ativo"
+      tags:
+      - cripto
   /ativos-cripto/{id}/cotacoes:
     post:
       description: "Preço em reais por unidade, em texto. Sem momento, vale o instante\
@@ -166,6 +274,122 @@ paths:
       security:
       - cookieAuth: []
       summary: Grava uma cotação manual do ativo
+      tags:
+      - cripto
+  /ativos-cripto/{id}/cotacoes/{momento}:
+    delete:
+      description: Só a cotação manual se apaga; a da CoinGecko é 409.
+      operationId: deleteAtivosCriptoByIdCotacoesByMomento
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: momento
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Apagada
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Ativo de outro usuário, inexistente, momento sem cotação ou\
+            \ fora do formato; mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Cotação automática
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Apaga uma cotação digitada
+      tags:
+      - cripto
+    put:
+      description: O momento no caminho é o da resposta da cotação (ISO-8601 com fuso).
+        Só a cotação manual muda; a da CoinGecko é 409.
+      operationId: putAtivosCriptoByIdCotacoesByMomento
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: momento
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CotacaoPrecoRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cotacao"
+          description: Cotação corrigida
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Preço fora do formato, campo não declarado"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Ativo de outro usuário, inexistente, momento sem cotação ou\
+            \ fora do formato; mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Cotação automática
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Corrige o preço de uma cotação digitada
       tags:
       - cripto
   /auth/cadastro:
@@ -2731,6 +2955,7 @@ paths:
     get:
       description: "Soma dos movimentos até a data nas contas ativas, com a última\
         \ cotação até o fim do dia em America/Sao_Paulo. Posição zerada não aparece.\
+        \ Posição com valor fora do inteiro seguro do JSON vem sem valor e com motivoSemValor.\
         \ Sem data, vale hoje."
       operationId: getPosicoesCripto
       parameters:
@@ -2752,7 +2977,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: data fora do formato ou "posição fora do limite"
+          description: data fora do formato
         "401":
           content:
             application/json:
@@ -3229,8 +3454,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: "dias que não é inteiro de 1 a 366 (ou repetido), contaId que\
-            \ não é UUID (ou repetido) ou \"projeção fora do limite\" (algum valor\
-            \ sairia de ±9007199254740991 centavos)"
+            \ não é UUID (ou repetido), contaId de conta cripto (\"conta cripto nã\
+            o tem saldo projetado\") ou \"projeção fora do limite\" (algum valor sairia\
+            \ de ±9007199254740991 centavos)"
         "401":
           content:
             application/json:
@@ -3280,7 +3506,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: data fora do formato ou "renda fixa fora do limite"
+          description: data fora do formato
         "401":
           content:
             application/json:
@@ -3416,8 +3642,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Como no POST, e aplicação depois do resgate (no mesmo dia\
-            \ vale)"
+          description: "Como no POST, aplicação depois do resgate (no mesmo dia vale)\
+            \ e aplicação depois de uma marcação já gravada"
         "401":
           content:
             application/json:
@@ -3510,6 +3736,41 @@ paths:
       tags:
       - renda-fixa
   /titulos-renda-fixa/{id}/resgate:
+    delete:
+      description: "O título volta a render e as marcações escondidas pelo resgate\
+        \ voltam a valer. Idempotente: título sem resgate também responde 204."
+      operationId: deleteTitulosRendaFixaByIdResgate
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Sem resgate
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Título de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Desfaz o resgate do título
+      tags:
+      - renda-fixa
     post:
       description: Data e valor recebido. Resgatar de novo troca os dois.
       operationId: postTitulosRendaFixaByIdResgate
@@ -3548,7 +3809,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Entrada inválida, data antes da aplicação ou no futuro"
+          description: "Entrada inválida, data antes da aplicação ou no futuro, ou\
+            \ antes de uma marcação já gravada (no mesmo dia vale)"
         "401":
           content:
             application/json:
@@ -3861,6 +4123,26 @@ components:
       - id
       - nome
       - rede
+      - simbolo
+    AtivoCriptoEdicao:
+      type: object
+      properties:
+        decimais:
+          type: integer
+          format: int32
+          maximum: 18
+          minimum: 0
+        nome:
+          type:
+          - string
+          - "null"
+          maxLength: 100
+        simbolo:
+          type: string
+          maxLength: 20
+          minLength: 1
+      required:
+      - decimais
       - simbolo
     AtivoCriptoRequest:
       type: object
@@ -4330,6 +4612,17 @@ components:
       required:
       - fonte
       - momento
+      - precoUsd
+    CotacaoPrecoRequest:
+      type: object
+      properties:
+        precoUsd:
+          type: string
+          description: "Dólares por unidade, em texto: até 12 dígitos inteiros e 8\
+            \ casas"
+          example: "350000.5"
+          pattern: "(?=.*[1-9])[0-9]{1,12}(\\.[0-9]{1,8})?"
+      required:
       - precoUsd
     CotacaoRequest:
       type: object
@@ -5258,9 +5551,16 @@ components:
           description: Soma do líquido estimado dos títulos de renda fixa na data
           maximum: 9007199254740991
           minimum: -9007199254740991
+        rendaFixaSemValor:
+          type: array
+          description: "Títulos de renda fixa com valor fora do limite, que ficam\
+            \ fora de rendaFixaCentavos"
+          items:
+            $ref: "#/components/schemas/TituloSemValor"
         semCotacao:
           type: array
-          description: "Posições sem cotação até a data, fora do total"
+          description: "Posições fora do total: sem cotação até a data, ou com o valor\
+            \ fora do limite"
           items:
             $ref: "#/components/schemas/PosicaoSemCotacao"
         totalCentavos:
@@ -5397,6 +5697,15 @@ components:
           format: int64
           description: "valorUsdCentavos menos custoDaPosicaoUsdCentavos: o que o\
             \ preço fez com o que restou; nulo quando falta um dos dois"
+        motivoSemValor:
+          type:
+          - string
+          - "null"
+          description: "Preenchido quando algum valor não cabe no inteiro seguro do\
+            \ JSON: todos os campos de valor e de custo vêm nulos e a posição fica\
+            \ fora do patrimônio"
+          enum:
+          - fora do limite
         quantidade:
           type: string
           description: "Tokens: compras menos vendas até a data, em texto, sem zero\
@@ -5451,6 +5760,11 @@ components:
         contaId:
           type: string
           format: uuid
+        motivo:
+          type: string
+          enum:
+          - sem cotação
+          - fora do limite
         quantidade:
           type: string
           description: Em texto
@@ -5910,6 +6224,12 @@ components:
     TituloRendaFixa:
       type: object
       properties:
+        avisoIndice:
+          type:
+          - string
+          - "null"
+          description: Texto curto quando o CDI ou o IPCA guardado não cobre o período
+            do título; o valor sai com o que há
         contaId:
           type: string
           format: uuid
@@ -5937,6 +6257,14 @@ components:
           - "null"
           format: int64
           description: Estimativa; zero em LCI e LCA
+        motivoSemValor:
+          type:
+          - string
+          - "null"
+          description: "Preenchido quando o valor não cabe no inteiro seguro do JSON:\
+            \ os campos de valor vêm nulos e o título fica fora do patrimônio"
+          enum:
+          - fora do limite
         nome:
           type: string
         rendimentoCentavos:
@@ -5975,6 +6303,10 @@ components:
           - "null"
           format: int64
           description: Bruto menos IOF e IR estimados
+        vencido:
+          type: boolean
+          description: "True a partir do vencimento: o valor fica congelado nele.\
+            \ Só a listagem traz true"
         vencimento:
           type:
           - string
@@ -6046,6 +6378,19 @@ components:
       - taxa
       - tipo
       - valorAplicadoCentavos
+    TituloSemValor:
+      type: object
+      properties:
+        motivo:
+          type: string
+          enum:
+          - fora do limite
+        tituloId:
+          type: string
+          format: uuid
+      required:
+      - motivo
+      - tituloId
     TitulosRendaFixa:
       type: object
       properties:
