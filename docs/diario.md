@@ -406,3 +406,12 @@ dos obrigatórios antes do push e `análise estática (api)` entrou depois do
 primeiro run.
 Em aberto: F1 reimplementada em Java é a próxima fatia. Quem tinha o Postgres
 local da versão Go precisa de `docker compose down -v`.
+
+## 2026-10-24 — Rodada de fechamento, onda 1: borda e segurança
+
+O que entrou: cabeçalhos no Vercel, cookie `__Host-`, nosniff, erros JSON do Tomcat, Jackson estrito, query desconhecida em 400, regra para Cf e "İ", filtro de Origin, 429 no web e Makefile sem o `.env` inteiro.
+Decisões: ADR-051, ADR-052
+Dívida registrada: nenhuma
+Achados do revisor: não rodou (decisão de economia; security fica para a onda 11)
+Pipeline: a preencher no PR
+Em aberto: `ORIGENS_PERMITIDAS` precisa estar no `api.env` da VM antes do deploy.
