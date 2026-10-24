@@ -608,6 +608,27 @@ describe('App: cadastro', () => {
     expect(screen.getByRole('button', { name: /criar conta/i })).toBeEnabled()
   })
 
+  it('403 diz que o cadastro está fechado por limite de usuários', async () => {
+    await abrirCadastro({
+      'POST /auth/cadastro': () => Promise.resolve(jsonResponse({ erro: 'cadastro fechado' }, 403)),
+    })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'O cadastro está fechado: o limite de usuários foi atingido.',
+    )
+  })
+
+  it('429 pede para tentar mais tarde, em minutos', async () => {
+    await abrirCadastro({
+      'POST /auth/cadastro': () =>
+        Promise.resolve(new Response('{"erro":"x"}', { status: 429, headers: { 'Retry-After': '1200' } })),
+    })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Muitos cadastros deste endereço. Tente de novo em 20 minutos.',
+    )
+  })
+
   it('400 mostra a mensagem do servidor', async () => {
     await abrirCadastro({
       'POST /auth/cadastro': () => Promise.resolve(jsonResponse({ erro: 'senha fraca demais' }, 400)),

@@ -2,6 +2,34 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-23 — F20.5: limite na borda
+
+O que entrou:
+- Limite por IP e por rota, antes de qualquer outro filtro: 600 por minuto em qualquer rota, 10 logins por minuto, 5 cadastros por hora. Login e cadastro somados, de todos os IPs, ficam em 60 por minuto.
+- Teto de usuários cadastrados (`CADASTRO_MAX_USUARIOS`, padrão 20), isolado para sair fácil.
+- Semáforo de dois hashes no argon2, com 503 e `Retry-After`.
+- `/healthz` com uma consulta por vez e um stack trace por minuto.
+- Job diário que apaga sessão vencida ou revogada e tentativa de login parada há um dia.
+- No web, mensagens para cadastro esgotado e para excesso de cadastros.
+
+Decisões: ADR-049. Tudo em memória e sem dependência nova, porque a API tem uma instância só. O teto somado só gasta depois que o limite do IP aceitou. IPv6 conta pelo `/64`. A tabela de IPs tem 20 mil posições: cheia, o IP novo leva 429. Cache do `/healthz` foi descartado, porque os testes de banco caindo mostram que ele esconderia a queda.
+
+Teste:
+- O 429 vem com `Retry-After` e sem tocar na tabela de tentativas.
+- IPs diferentes contam à parte, e o mesmo `/64` conta junto.
+- A janela seguinte libera.
+- O IP barrado não gasta o teto somado.
+- Oito cadastros simultâneos disputando a última vaga: entra um.
+- O argon2 sem vaga dá 503.
+- O `/healthz` recusa a segunda consulta em andamento.
+- A limpeza mantém a sessão ativa.
+
+Pipeline: local, 1576 testes da API e 895 do web verdes; CI no PR #36.
+
+Em aberto:
+- O PR #30 precisa desligar o job de limpeza no perfil `migracao` (senão a JVM do passo de migração não sai) e ganhar `CADASTRO_MAX_USUARIOS` no `api.env.example`.
+- O M2 da F1 (atraso por e-mail mantido por terceiro) segue para a F20.
+
 ## 2026-10-23 — F19: posso gastar
 
 O que entrou:

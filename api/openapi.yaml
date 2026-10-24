@@ -191,6 +191,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Entrada inválida
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Teto de usuários atingido (CADASTRO_MAX_USUARIOS, padrão 20);\
+            \ nada é gravado"
         "409":
           content:
             application/json:
@@ -209,12 +216,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Content-Type diferente de application/json
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Limite de cadastros por IP (5 por hora) ou de login e cadastro
+            somados
+          headers:
+            Retry-After:
+              description: Segundos inteiros até a janela do limite virar
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+              style: simple
         "500":
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Falha interna
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Argon2 sem vaga livre depois de 5 s de espera
+          headers:
+            Retry-After:
+              description: Sempre 5
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+              style: simple
       summary: Cria um usuário
       tags:
       - auth
@@ -302,8 +338,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Atraso progressivo em vigor para esse e-mail; resposta idêntica
-            para e-mail com e sem conta
+          description: "Atraso progressivo em vigor para esse e-mail, resposta idê\
+            ntica para e-mail com e sem conta; ou limite de login por IP (10 por minuto)\
+            \ ou de login e cadastro somados (60 por minuto)"
           headers:
             Retry-After:
               description: "Segundos inteiros, arredondados para cima, até a próxima\
@@ -319,6 +356,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Falha interna
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Argon2 sem vaga livre depois de 5 s de espera; a tentativa
+            já foi contada
+          headers:
+            Retry-After:
+              description: Sempre 5
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+              style: simple
       summary: Abre uma sessão
       tags:
       - auth

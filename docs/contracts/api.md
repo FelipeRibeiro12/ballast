@@ -12,6 +12,10 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
   de orquestrador precisa aceitar JSON ou `*/*`.
 - Em qualquer rota, banco fora responde 503 `{"erro":"serviço indisponível"}`, e
   corpo acima de 4 KiB responde 413 (ADR-023).
+- Em qualquer rota, passar do limite por IP responde 429
+  `{"erro":"muitas requisições, tente mais tarde"}` com `Retry-After` em
+  segundos (ADR-049). A spec só lista o 429 em login e cadastro. Os limites
+  estão em Limites, no fim deste arquivo.
 - Em `/contas/{id}`, conta de outro usuário, id inexistente e id que não é UUID
   respondem 404 com o mesmo corpo.
 - Dinheiro de fiat sai e entra como inteiro de centavos
@@ -852,3 +856,20 @@ Emenda "Cripto em dólar".
 - Ativo novo ganha, numa das rodadas seguintes do job, a cotação diária do
   último ano antes da primeira cotação dele (ADR-041). A posição e o
   patrimônio de uma data passada passam a ter preço sem mudar o formato.
+
+## Limites (ADR-049)
+
+- Por IP (IPv6 pelo `/64`): 600 requisições por minuto em qualquer rota, 10
+  `POST /auth/login` por minuto e 5 `POST /auth/cadastro` por hora.
+- Login e cadastro somados, de todos os IPs: 60 por minuto.
+- A recusa vem antes de qualquer outra checagem: um 429 não diz se a sessão,
+  o corpo ou a rota valiam.
+- O login com atraso por e-mail continua respondendo 429 com a mensagem
+  `muitas tentativas, tente mais tarde`. O limite por IP usa
+  `muitas requisições, tente mais tarde`. Os dois mandam `Retry-After`.
+- Argon2 sem vaga por 5 s: login e cadastro respondem 503
+  `serviço indisponível` com `Retry-After: 5`.
+- Cadastro com o teto de usuários atingido (`CADASTRO_MAX_USUARIOS`, padrão
+  20): 403 `cadastro fechado: limite de usuários atingido`, sem gravar nada.
+- `/healthz` com outra checagem em andamento: 503 `{"erro":"indisponível"}`,
+  sem tocar no banco.

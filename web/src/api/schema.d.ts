@@ -2285,6 +2285,15 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Teto de usuários atingido (CADASTRO_MAX_USUARIOS, padrão 20); nada é gravado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description E-mail já cadastrado */
             409: {
                 headers: {
@@ -2312,9 +2321,31 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Limite de cadastros por IP (5 por hora) ou de login e cadastro somados */
+            429: {
+                headers: {
+                    /** @description Segundos inteiros até a janela do limite virar */
+                    "Retry-After": number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Falha interna */
             500: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Argon2 sem vaga livre depois de 5 s de espera */
+            503: {
+                headers: {
+                    /** @description Sempre 5 */
+                    "Retry-After": number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2421,7 +2452,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Atraso progressivo em vigor para esse e-mail; resposta idêntica para e-mail com e sem conta */
+            /** @description Atraso progressivo em vigor para esse e-mail, resposta idêntica para e-mail com e sem conta; ou limite de login por IP (10 por minuto) ou de login e cadastro somados (60 por minuto) */
             429: {
                 headers: {
                     /** @description Segundos inteiros, arredondados para cima, até a próxima tentativa ser verificada */
@@ -2435,6 +2466,17 @@ export interface operations {
             /** @description Falha interna */
             500: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Argon2 sem vaga livre depois de 5 s de espera; a tentativa já foi contada */
+            503: {
+                headers: {
+                    /** @description Sempre 5 */
+                    "Retry-After": number;
                     [name: string]: unknown;
                 };
                 content: {

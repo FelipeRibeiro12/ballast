@@ -45,6 +45,9 @@ export class LimiteTentativasError extends ApiError {
 
 export class EmailJaCadastradoError extends ApiError {}
 
+// Teto de usuários do tier gratuito atingido (ADR-049).
+export class CadastroEsgotadoError extends ApiError {}
+
 export class EntradaInvalidaError extends ApiError {
   // null quando o corpo do 400 não segue o contrato ({ erro: string }).
   readonly mensagemServidor: string | null
@@ -136,6 +139,8 @@ export async function postCadastro(dados: CadastroRequest): Promise<Usuario> {
     body: JSON.stringify(dados),
   })
   if (resposta.status === 409) throw new EmailJaCadastradoError('e-mail já cadastrado')
+  if (resposta.status === 403) throw new CadastroEsgotadoError('limite de usuários atingido')
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
   if (resposta.status === 400) throw new EntradaInvalidaError(await lerMensagemDeErro(resposta))
   if (!resposta.ok) {
     throw new ApiError(`/auth/cadastro respondeu ${resposta.status}`)

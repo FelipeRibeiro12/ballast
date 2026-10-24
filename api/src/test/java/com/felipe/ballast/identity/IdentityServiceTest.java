@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 @IntegrationTest
 class IdentityServiceTest {
 
+  @Autowired RegistrationCap cap;
   @Autowired UserAccountRepository users;
   @Autowired LoginSessionRepository sessions;
   @Autowired SessionQueries sessionQueries;
@@ -57,7 +58,7 @@ class IdentityServiceTest {
     hasher = new CountingHasher();
     service =
         new IdentityService(
-            users, sessions, sessionQueries, attempts, hasher, clock, transaction, events);
+            users, sessions, sessionQueries, attempts, hasher, clock, transaction, events, cap);
   }
 
   @Test
@@ -106,7 +107,7 @@ class IdentityServiceTest {
         };
     IdentityService failing =
         new IdentityService(
-            users, sessions, sessionQueries, attempts, exploding, clock, transaction, events);
+            users, sessions, sessionQueries, attempts, exploding, clock, transaction, events, cap);
 
     assertThatThrownBy(() -> failing.authenticate(email, "qualquer-senha-123"))
         .isInstanceOf(IllegalStateException.class);

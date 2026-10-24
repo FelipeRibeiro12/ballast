@@ -45,6 +45,7 @@ public class IdentityService {
   private final Clock clock;
   private final TransactionTemplate transaction;
   private final ApplicationEventPublisher events;
+  private final RegistrationCap cap;
 
   IdentityService(
       UserAccountRepository users,
@@ -54,7 +55,8 @@ public class IdentityService {
       PasswordHasher hasher,
       Clock clock,
       TransactionTemplate transaction,
-      ApplicationEventPublisher events) {
+      ApplicationEventPublisher events,
+      RegistrationCap cap) {
     this.users = users;
     this.sessions = sessions;
     this.sessionQueries = sessionQueries;
@@ -63,6 +65,7 @@ public class IdentityService {
     this.clock = clock;
     this.transaction = transaction;
     this.events = events;
+    this.cap = cap;
   }
 
   // Vazio quando o e-mail já existe. O usuário e as sementes de categoria (evento síncrono)
@@ -71,12 +74,14 @@ public class IdentityService {
   // @Transactional ela marcaria a transação como rollback-only e o chamador veria
   // UnexpectedRollbackException em vez do Optional vazio.
   // O hash é calculado antes do INSERT para e-mail novo e e-mail repetido custarem o mesmo tempo.
+  // Com o teto atingido sai RegistrationFullException, antes de olhar o e-mail.
   public Optional<UserProfile> register(String email, String password, String name) {
     String hash = hasher.hash(password);
     try {
       UserAccount saved =
           transaction.execute(
               status -> {
+                cap.checkRoom();
                 UserAccount user = users.saveAndFlush(new UserAccount(email, hash, name));
                 events.publishEvent(new UserRegistered(user.getId()));
                 return user;
