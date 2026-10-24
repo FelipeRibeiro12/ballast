@@ -478,7 +478,8 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   lista inteira e responde 200 com a `Conta`. Lista vazia libera tudo. Mesmas
   recusas de lista do `POST` (campo ausente dá 400 `categoriaIds é
   obrigatório`). Conta do usuário que não é benefício dá 400 `só conta de
-  benefício tem categorias permitidas`; conta de outro usuário, inexistente ou
+  benefício tem categorias permitidas`; conta arquivada dá 400 `conta
+  arquivada`, como as outras escritas em conta; conta de outro usuário, inexistente ou
   id que não é UUID dá 404 `não encontrado`. Repetível. A conta fica travada até
   o commit, então escrita de lançamento nela espera a troca (até 2 s, depois 503).
 - A regra vale só para **despesa**. Receita em conta de benefício aceita

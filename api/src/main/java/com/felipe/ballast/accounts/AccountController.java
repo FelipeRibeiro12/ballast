@@ -67,6 +67,7 @@ class AccountController {
   private static final ErrorResponse PERMITTED_REPEATED =
       new ErrorResponse("categoriasPermitidas não pode repetir categoria");
 
+  private static final ErrorResponse ACCOUNT_ARCHIVED = new ErrorResponse("conta arquivada");
   private static final ErrorResponse NOT_BENEFIT =
       new ErrorResponse("só conta de benefício tem categorias permitidas");
 
@@ -495,8 +496,8 @@ class AccountController {
       responseCode = "400",
       description =
           "Entrada inválida, inclusive campo não declarado, mais de 50 itens, item repetido,"
-              + " categoria inexistente, de outro usuário, de receita ou id malformado, e conta"
-              + " que não é de benefício",
+              + " categoria inexistente, de outro usuário, de receita ou id malformado, conta"
+              + " que não é de benefício e conta arquivada",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -550,6 +551,7 @@ class AccountController {
           switch (rejected) {
             case ACCOUNT_NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
             case NOT_BENEFIT -> ResponseEntity.badRequest().body(NOT_BENEFIT);
+            case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
             case CATEGORY_NOT_FOUND -> ResponseEntity.badRequest().body(CATEGORY_NOT_FOUND);
           };
     };

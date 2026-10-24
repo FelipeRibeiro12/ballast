@@ -3685,7 +3685,7 @@ export interface operations {
                     "application/json": components["schemas"]["Conta"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado, mais de 50 itens, item repetido, categoria inexistente, de outro usuário, de receita ou id malformado, e conta que não é de benefício */
+            /** @description Entrada inválida, inclusive campo não declarado, mais de 50 itens, item repetido, categoria inexistente, de outro usuário, de receita ou id malformado, conta que não é de benefício e conta arquivada */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -131,6 +131,7 @@ class AccountService {
     enum Rejected implements ReplaceResult {
       ACCOUNT_NOT_FOUND,
       NOT_BENEFIT,
+      ACCOUNT_ARCHIVED,
       CATEGORY_NOT_FOUND
     }
   }
@@ -172,12 +173,15 @@ class AccountService {
   }
 
   private ReplaceResult replaceLocked(UUID userId, UUID id, List<UUID> ids) {
-    Optional<AccountType> type = queries.lockAccountType(userId, id);
-    if (type.isEmpty()) {
+    Optional<AccountQueries.LockedAccount> account = queries.lockAccount(userId, id);
+    if (account.isEmpty()) {
       return ReplaceResult.Rejected.ACCOUNT_NOT_FOUND;
     }
-    if (type.get() != AccountType.BENEFIT) {
+    if (account.get().type() != AccountType.BENEFIT) {
       return ReplaceResult.Rejected.NOT_BENEFIT;
+    }
+    if (account.get().archived()) {
+      return ReplaceResult.Rejected.ACCOUNT_ARCHIVED;
     }
     if (queries.countExpenseCategories(userId, ids) != ids.size()) {
       return ReplaceResult.Rejected.CATEGORY_NOT_FOUND;
@@ -248,7 +252,7 @@ class AccountService {
 
   private UpdateResult updateLocked(
       TransactionStatus status, UUID userId, UUID id, UpdateInput input) {
-    Optional<AccountType> type = queries.lockAccountType(userId, id);
+    Optional<AccountType> type = queries.lockAccount(userId, id).map(a -> a.type());
     if (type.isEmpty()) {
       return UpdateResult.Rejected.NOT_FOUND;
     }
