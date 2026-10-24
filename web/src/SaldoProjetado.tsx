@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import type { RefObject } from 'react'
 import {
   ContaNaoEncontradaError,
   ProjecaoInvalidaError,
@@ -12,6 +11,7 @@ import { formatarDiaMes } from './datas'
 import { formatarCentavos } from './dinheiro'
 import { IconeAlerta, IconeRelogio } from './icones'
 import { Carregando } from './ui'
+import { useLargura } from './useLargura'
 
 type EstadoProjecao =
   | { tipo: 'carregando' }
@@ -36,7 +36,6 @@ function mensagemDeLeitura(erro: unknown): string {
 
 // O gráfico usa a largura real do cartão como viewBox: texto e traço saem em pixels de verdade,
 // no celular e no desktop, sem esticar a fonte.
-const LARGURA_PADRAO = 320
 const ALTURA = 200
 const MARGEM_LATERAL = 12
 // Espaço em cima para o valor do menor saldo e embaixo para as datas.
@@ -65,22 +64,6 @@ function calcularPontos(dias: DiaProjetado[], minimo: number, maximo: number, la
     x: inicio + indice * passo,
     y: coordenadaY(fracaoDoIntervalo(dia.saldoCentavos, minimo, maximo)),
   }))
-}
-
-// ResizeObserver não existe no jsdom: lá vale a largura padrão.
-function useLargura(caixa: RefObject<HTMLDivElement | null>): number {
-  const [largura, setLargura] = useState(LARGURA_PADRAO)
-  useEffect(() => {
-    const elemento = caixa.current
-    if (elemento === null || typeof ResizeObserver === 'undefined') return
-    const observador = new ResizeObserver(([entrada]) => {
-      const nova = Math.round(entrada.contentRect.width)
-      if (nova > 0) setLargura(nova)
-    })
-    observador.observe(elemento)
-    return () => observador.disconnect()
-  }, [caixa])
-  return largura
 }
 
 function Grafico({ projecao, descricao }: { projecao: Projecao; descricao: string }) {

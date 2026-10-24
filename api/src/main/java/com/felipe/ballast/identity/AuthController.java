@@ -81,8 +81,9 @@ class AuthController {
   @ApiResponse(
       responseCode = "429",
       description =
-          "Atraso progressivo em vigor para esse e-mail; resposta idêntica para e-mail com e sem"
-              + " conta",
+          "Atraso progressivo em vigor para esse e-mail, resposta idêntica para e-mail com e sem"
+              + " conta; ou limite de login por IP (10 por minuto) ou de login e cadastro somados"
+              + " (60 por minuto)",
       headers =
           @Header(
               name = "Retry-After",
@@ -99,6 +100,16 @@ class AuthController {
   @ApiResponse(
       responseCode = "500",
       description = "Falha interna",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Argon2 sem vaga livre depois de 5 s de espera; a tentativa já foi contada",
+      headers =
+          @Header(
+              name = "Retry-After",
+              required = true,
+              description = "Sempre 5",
+              schema = @Schema(type = "integer", minimum = "1")),
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @PostMapping(
       path = "/auth/login",

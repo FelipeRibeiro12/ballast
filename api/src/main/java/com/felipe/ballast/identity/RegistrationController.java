@@ -2,6 +2,7 @@ package com.felipe.ballast.identity;
 
 import com.felipe.ballast.web.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -49,6 +50,10 @@ class RegistrationController {
       description = "Entrada inválida",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "403",
+      description = "Teto de usuários atingido (CADASTRO_MAX_USUARIOS, padrão 20); nada é gravado",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "409",
       description = "E-mail já cadastrado",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -61,16 +66,42 @@ class RegistrationController {
       description = "Content-Type diferente de application/json",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "429",
+      description = "Limite de cadastros por IP (5 por hora) ou de login e cadastro somados",
+      headers =
+          @Header(
+              name = "Retry-After",
+              required = true,
+              description = "Segundos inteiros até a janela do limite virar",
+              schema = @Schema(type = "integer", minimum = "1")),
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "500",
       description = "Falha interna",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Argon2 sem vaga livre depois de 5 s de espera",
+      headers =
+          @Header(
+              name = "Retry-After",
+              required = true,
+              description = "Sempre 5",
+              schema = @Schema(type = "integer", minimum = "1")),
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @PostMapping(
       path = "/auth/cadastro",
       consumes = MediaType.APPLICATION_JSON_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
-    Optional<UserProfile> created =
-        identity.register(request.email(), request.password(), request.name());
+    Optional<UserProfile> created;
+    try {
+      created = identity.register(request.email(), request.password(), request.name());
+    } catch (RegistrationFullException e) {
+      log.warn("cadastro recusado: limite de usuários atingido ip={}", ClientAddress.of(http));
+      return ResponseEntity.status(HttpStatus.FORBIDDEN)
+          .body(new ErrorResponse("cadastro fechado: limite de usuários atingido"));
+    }
     if (created.isEmpty()) {
       log.warn(
           "cadastro recusado: e-mail já cadastrado email={} ip={}",

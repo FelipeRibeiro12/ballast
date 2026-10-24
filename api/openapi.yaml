@@ -191,6 +191,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Entrada inválida
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Teto de usuários atingido (CADASTRO_MAX_USUARIOS, padrão 20);\
+            \ nada é gravado"
         "409":
           content:
             application/json:
@@ -209,12 +216,41 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Content-Type diferente de application/json
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Limite de cadastros por IP (5 por hora) ou de login e cadastro
+            somados
+          headers:
+            Retry-After:
+              description: Segundos inteiros até a janela do limite virar
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+              style: simple
         "500":
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Falha interna
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Argon2 sem vaga livre depois de 5 s de espera
+          headers:
+            Retry-After:
+              description: Sempre 5
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+              style: simple
       summary: Cria um usuário
       tags:
       - auth
@@ -302,8 +338,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Atraso progressivo em vigor para esse e-mail; resposta idêntica
-            para e-mail com e sem conta
+          description: "Atraso progressivo em vigor para esse e-mail, resposta idê\
+            ntica para e-mail com e sem conta; ou limite de login por IP (10 por minuto)\
+            \ ou de login e cadastro somados (60 por minuto)"
           headers:
             Retry-After:
               description: "Segundos inteiros, arredondados para cima, até a próxima\
@@ -319,6 +356,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: Falha interna
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Argon2 sem vaga livre depois de 5 s de espera; a tentativa
+            já foi contada
+          headers:
+            Retry-After:
+              description: Sempre 5
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+              style: simple
       summary: Abre uma sessão
       tags:
       - auth
@@ -2115,6 +2167,49 @@ paths:
       summary: Patrimônio em reais numa data
       tags:
       - cripto
+  /patrimonio/mensal:
+    get:
+      description: "O patrimônio de /patrimonio no último dia de cada um dos doze\
+        \ meses que terminam em mes, e hoje no mês corrente. Sem mes, vale o mês corrente\
+        \ em America/Sao_Paulo."
+      operationId: getPatrimonioMensal
+      parameters:
+      - in: query
+        name: mes
+        required: false
+        schema:
+          type: string
+          pattern: "(19[0-9]{2}|2[01][0-9]{2})-(0[1-9]|1[0-2])"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatrimonioMensal"
+          description: Patrimônio mês a mês
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: mes fora do formato ou "patrimônio fora do limite"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Patrimônio no fim de cada mês
+      tags:
+      - relatorios
   /posicoes-cripto:
     get:
       description: "Soma dos movimentos até a data nas contas ativas, com a última\
@@ -2158,6 +2253,42 @@ paths:
       summary: Lista as posições de cripto até uma data
       tags:
       - cripto
+  /posso-gastar:
+    get:
+      description: "O menor saldo projetado (ADR-029) das contas que não são de benefí\
+        cio, de hoje até a véspera do próximo salário, ou até o fim do mês sem salá\
+        rio previsto. Cada benefício vem à parte (ADR-048)."
+      operationId: getPossoGastar
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PossoGastar"
+          description: Quanto dá para gastar
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: '"projeção fora do limite"'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Quanto dá para gastar até o próximo salário
+      tags:
+      - saldo-projetado
   /recorrencias:
     get:
       description: "Ordem por título sem diferenciar maiúscula de minúscula, depois\
@@ -3116,6 +3247,24 @@ components:
           format: int64
           maximum: 9007199254740991
           minimum: -9007199254740991
+    BeneficioLivre:
+      type: object
+      properties:
+        contaId:
+          type: string
+          format: uuid
+        livreCentavos:
+          type: integer
+          format: int64
+          description: Menor saldo projetado da conta até ate
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        nome:
+          type: string
+      required:
+      - contaId
+      - livreCentavos
+      - nome
     CadastroRequest:
       type: object
       properties:
@@ -4371,6 +4520,64 @@ components:
       - rendaFixaCentavos
       - semCotacao
       - totalCentavos
+    PatrimonioDoMes:
+      type: object
+      properties:
+        contasCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        criptoCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        data:
+          type: string
+          format: date
+          description: "Último dia do mês, ou hoje no mês corrente"
+        mes:
+          type: string
+          description: AAAA-MM
+        posicoesSemCotacao:
+          type: integer
+          format: int32
+          description: "Posições sem cotação na data, fora do total"
+          minimum: 0
+        rendaFixaCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        totalCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - contasCentavos
+      - criptoCentavos
+      - data
+      - mes
+      - posicoesSemCotacao
+      - rendaFixaCentavos
+      - totalCentavos
+    PatrimonioMensal:
+      type: object
+      properties:
+        mes:
+          type: string
+          pattern: "(19[0-9]{2}|2[01][0-9]{2})-(0[1-9]|1[0-2])"
+        meses:
+          type: array
+          description: "Até doze meses terminando em mes, do mais antigo para o mais\
+            \ novo. Mês depois do corrente fica de fora"
+          items:
+            $ref: "#/components/schemas/PatrimonioDoMes"
+      required:
+      - mes
+      - meses
     PosicaoCripto:
       type: object
       properties:
@@ -4513,6 +4720,83 @@ components:
       - data
       - dolar
       - posicoes
+    PossoGastar:
+      type: object
+      properties:
+        ate:
+          type: string
+          format: date
+          description: "Véspera do próximo salário, ou o fim do mês sem salário previsto"
+        beneficios:
+          type: array
+          description: "Contas de benefício ativas, fora de livreCentavos, pelo nome"
+          items:
+            $ref: "#/components/schemas/BeneficioLivre"
+        dias:
+          type: integer
+          format: int32
+          description: "Dias de hoje até ate, contando os dois"
+          maximum: 366
+          minimum: 1
+        hoje:
+          type: string
+          format: date
+        livreCentavos:
+          type: integer
+          format: int64
+          description: "Menor saldo projetado das contas que não são de benefício,\
+            \ de hoje até ate. Negativo quando falta"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        menorSaldoEm:
+          type: string
+          format: date
+          description: Dia do menor saldo
+        porDiaCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "livreCentavos dividido por dias, para baixo; nulo quando nã\
+            o sobra nada"
+          maximum: 9007199254740991
+          minimum: 0
+        proximoSalario:
+          type: "null"
+          $ref: "#/components/schemas/ProximoSalario"
+          description: Próxima receita na categoria Salário depois de hoje; nulo sem
+            salário
+        vencidasCentavos:
+          type: integer
+          format: int64
+          description: "Soma com sinal das previstas vencidas, já dentro de livreCentavos\
+            \ (ADR-029)"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - ate
+      - beneficios
+      - dias
+      - hoje
+      - livreCentavos
+      - menorSaldoEm
+      - porDiaCentavos
+      - proximoSalario
+      - vencidasCentavos
+    ProximoSalario:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+        valorCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - data
+      - valorCentavos
     ReceitaEDespesaDoMes:
       type: object
       properties:

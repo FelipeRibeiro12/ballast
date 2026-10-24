@@ -1981,6 +1981,87 @@ button.relatorio-mes:hover:not(:disabled) {
   font-weight: 600;
 }
 
+.posso-gastar p {
+  margin: 0 0 var(--esp-2);
+}
+
+.posso-gastar .patrimonio-atual {
+  margin-bottom: var(--esp-3);
+}
+
+.posso-por-dia {
+  font-weight: 600;
+}
+
+.posso-nota {
+  color: var(--texto-suave);
+  font-size: 0.875rem;
+}
+
+.posso-beneficios {
+  margin-top: var(--esp-3);
+  padding-top: var(--esp-3);
+  border-top: 1px solid var(--borda);
+}
+
+.posso-beneficios ul {
+  display: grid;
+  gap: var(--esp-2);
+  margin: 0 0 var(--esp-2);
+  padding: 0;
+  list-style: none;
+}
+
+.posso-beneficios li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-3);
+}
+
+.relatorios-patrimonio {
+  margin-top: var(--esp-4);
+}
+
+/* Número de destaque: algarismos proporcionais, a mesma fonte do resto. */
+.patrimonio-atual {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-1);
+  margin: 0 0 var(--esp-2);
+}
+
+.patrimonio-atual strong {
+  font-size: 1.75rem;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.patrimonio-atual small {
+  color: var(--texto-suave);
+}
+
+.patrimonio-mira {
+  stroke: var(--borda-forte);
+  stroke-width: 1;
+}
+
+.patrimonio-ponto {
+  fill: var(--primaria);
+  stroke: var(--superficie);
+  stroke-width: 2;
+}
+
+.patrimonio-alvo {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.patrimonio-alvo:focus-visible {
+  outline: none;
+  fill: var(--primaria-fundo);
+  fill-opacity: 0.6;
+}
+
 .conta-categorias {
   font-size: 0.875rem;
   color: var(--texto-fraco);

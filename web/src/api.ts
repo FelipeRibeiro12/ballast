@@ -46,6 +46,9 @@ export class LimiteTentativasError extends ApiError {
 
 export class EmailJaCadastradoError extends ApiError {}
 
+// Teto de usuários do tier gratuito atingido (ADR-049).
+export class CadastroEsgotadoError extends ApiError {}
+
 export class EntradaInvalidaError extends ApiError {
   // null quando o corpo do 400 não segue o contrato ({ erro: string }).
   readonly mensagemServidor: string | null
@@ -137,6 +140,8 @@ export async function postCadastro(dados: CadastroRequest): Promise<Usuario> {
     body: JSON.stringify(dados),
   })
   if (resposta.status === 409) throw new EmailJaCadastradoError('e-mail já cadastrado')
+  if (resposta.status === 403) throw new CadastroEsgotadoError('limite de usuários atingido')
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
   if (resposta.status === 400) throw new EntradaInvalidaError(await lerMensagemDeErro(resposta))
   if (!resposta.ok) {
     throw new ApiError(`/auth/cadastro respondeu ${resposta.status}`)
@@ -1900,5 +1905,122 @@ export async function fetchRelatorio(mes: string): Promise<RelatorioDoMes> {
   }
   const corpo: unknown = await resposta.json()
   if (!isRelatorioDoMes(corpo)) throw new ApiError('/relatorios com formato inesperado')
+  return corpo
+}
+
+export type PatrimonioMensal = components['schemas']['PatrimonioMensal']
+export type PatrimonioDoMes = components['schemas']['PatrimonioDoMes']
+
+function centavosComSinal(valor: unknown): boolean {
+  return Number.isSafeInteger(valor)
+}
+
+function isPatrimonioDoMes(valor: unknown): valor is PatrimonioDoMes {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'mes' in valor &&
+    eMesIso(valor.mes) &&
+    'data' in valor &&
+    typeof valor.data === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(valor.data) &&
+    'contasCentavos' in valor &&
+    centavosComSinal(valor.contasCentavos) &&
+    'criptoCentavos' in valor &&
+    centavosComSinal(valor.criptoCentavos) &&
+    'rendaFixaCentavos' in valor &&
+    centavosComSinal(valor.rendaFixaCentavos) &&
+    'totalCentavos' in valor &&
+    centavosComSinal(valor.totalCentavos) &&
+    'posicoesSemCotacao' in valor &&
+    centavosNaoNegativos(valor.posicoesSemCotacao)
+  )
+}
+
+function isPatrimonioMensal(valor: unknown): valor is PatrimonioMensal {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'mes' in valor &&
+    eMesIso(valor.mes) &&
+    'meses' in valor &&
+    Array.isArray(valor.meses) &&
+    valor.meses.every(isPatrimonioDoMes)
+  )
+}
+
+// mes em AAAA-MM. O 400 reaproveita o erro do relatório: as duas leituras são da mesma tela.
+export async function fetchPatrimonioMensal(mes: string): Promise<PatrimonioMensal> {
+  const parametros = new URLSearchParams({ mes })
+  const resposta = await fetch(`${baseUrl}/patrimonio/mensal?${parametros.toString()}`, { credentials: 'same-origin' })
+  if (!resposta.ok) {
+    if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+    if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+    if (resposta.status === 400) throw new RelatorioInvalidoError(await lerMensagemDeErro(resposta))
+    throw new ApiError(`/patrimonio/mensal respondeu ${resposta.status}`)
+  }
+  const corpo: unknown = await resposta.json()
+  if (!isPatrimonioMensal(corpo)) throw new ApiError('/patrimonio/mensal com formato inesperado')
+  return corpo
+}
+
+export type PossoGastar = components['schemas']['PossoGastar']
+export type BeneficioLivre = components['schemas']['BeneficioLivre']
+
+function isBeneficioLivre(valor: unknown): valor is BeneficioLivre {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'nome' in valor &&
+    typeof valor.nome === 'string' &&
+    'livreCentavos' in valor &&
+    Number.isSafeInteger(valor.livreCentavos)
+  )
+}
+
+function isProximoSalario(valor: unknown): boolean {
+  return (
+    valor === null ||
+    (typeof valor === 'object' &&
+      'data' in valor &&
+      eDataIso(valor.data) &&
+      'valorCentavos' in valor &&
+      Number.isSafeInteger(valor.valorCentavos))
+  )
+}
+
+function isPossoGastar(valor: unknown): valor is PossoGastar {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'hoje' in valor &&
+    eDataIso(valor.hoje) &&
+    'ate' in valor &&
+    eDataIso(valor.ate) &&
+    'proximoSalario' in valor &&
+    isProximoSalario(valor.proximoSalario) &&
+    'livreCentavos' in valor &&
+    Number.isSafeInteger(valor.livreCentavos) &&
+    'menorSaldoEm' in valor &&
+    eDataIso(valor.menorSaldoEm) &&
+    'dias' in valor &&
+    Number.isSafeInteger(valor.dias) &&
+    'porDiaCentavos' in valor &&
+    (valor.porDiaCentavos === null || Number.isSafeInteger(valor.porDiaCentavos)) &&
+    'vencidasCentavos' in valor &&
+    Number.isSafeInteger(valor.vencidasCentavos) &&
+    'beneficios' in valor &&
+    Array.isArray(valor.beneficios) &&
+    valor.beneficios.every(isBeneficioLivre)
+  )
+}
+
+export async function fetchPossoGastar(): Promise<PossoGastar> {
+  const resposta = await fetch(`${baseUrl}/posso-gastar`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeProjecao(resposta, '/posso-gastar')
+  const corpo: unknown = await resposta.json()
+  if (!isPossoGastar(corpo)) throw new ApiError('/posso-gastar com formato inesperado')
   return corpo
 }

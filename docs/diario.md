@@ -2,6 +2,72 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-23 — F20.5: limite na borda
+
+O que entrou:
+- Limite por IP e por rota, antes de qualquer outro filtro: 600 por minuto em qualquer rota, 10 logins por minuto, 5 cadastros por hora. Login e cadastro somados, de todos os IPs, ficam em 60 por minuto.
+- Teto de usuários cadastrados (`CADASTRO_MAX_USUARIOS`, padrão 20), isolado para sair fácil.
+- Semáforo de dois hashes no argon2, com 503 e `Retry-After`.
+- `/healthz` com uma consulta por vez e um stack trace por minuto.
+- Job diário que apaga sessão vencida ou revogada e tentativa de login parada há um dia.
+- No web, mensagens para cadastro esgotado e para excesso de cadastros.
+
+Decisões: ADR-049. Tudo em memória e sem dependência nova, porque a API tem uma instância só. O teto somado só gasta depois que o limite do IP aceitou. IPv6 conta pelo `/64`. A tabela de IPs tem 20 mil posições: cheia, o IP novo leva 429. Cache do `/healthz` foi descartado, porque os testes de banco caindo mostram que ele esconderia a queda.
+
+Teste:
+- O 429 vem com `Retry-After` e sem tocar na tabela de tentativas.
+- IPs diferentes contam à parte, e o mesmo `/64` conta junto.
+- A janela seguinte libera.
+- O IP barrado não gasta o teto somado.
+- Oito cadastros simultâneos disputando a última vaga: entra um.
+- O argon2 sem vaga dá 503.
+- O `/healthz` recusa a segunda consulta em andamento.
+- A limpeza mantém a sessão ativa.
+
+Pipeline: local, 1576 testes da API e 895 do web verdes; CI no PR #36.
+
+Em aberto:
+- O PR #30 precisa desligar o job de limpeza no perfil `migracao` (senão a JVM do passo de migração não sai) e ganhar `CADASTRO_MAX_USUARIOS` no `api.env.example`.
+- O M2 da F1 (atraso por e-mail mantido por terceiro) segue para a F20.
+
+## 2026-10-23 — F19: posso gastar
+
+O que entrou:
+- `GET /posso-gastar`: o menor saldo projetado até a véspera do próximo salário, o valor por dia para baixo, as vencidas e cada benefício à parte.
+- No web, o cartão Posso gastar no topo do Início.
+
+Decisões: ADR-048. O menor saldo e não o saldo menos as despesas, porque uma receita no meio do caminho não paga a conta que vence antes dela. O salário é achado pela categoria Salário da semente; a dívida de marcar a categoria fica para o CRUD de categoria.
+
+Teste:
+- Receita no meio da janela não cobre despesa anterior.
+- O salário de hoje já conta.
+- Sem salário, a janela vai até o fim do mês.
+- Faltando, o livre fica negativo e não há valor por dia.
+- A recarga do VR não é salário.
+- A não vê B.
+
+O fixture do saldo projetado escolhia a primeira receita por id, que às vezes era Salário. O teste falhou numa rodada por isso, e agora escolhe a categoria pelo nome.
+
+Em aberto: marcar a categoria de salário quando houver CRUD de categoria.
+
+## 2026-10-23 — F18.1: patrimônio no tempo
+
+O que entrou:
+- `GET /patrimonio/mensal`: o `/patrimonio` do último dia de cada um dos doze meses que terminam no mês pedido. O mês corrente vale hoje.
+- No web, o cartão Patrimônio em Relatórios, com linha, número de destaque, mudança no período, detalhe por parte, aviso de cotação ausente e tabela.
+- `useLargura` saiu do saldo projetado para os dois gráficos usarem (commit de refator).
+
+Decisões: ADR-047. A série chama o mesmo cálculo de `/patrimonio`, sem regra nova. Mês futuro fica de fora.
+
+Teste:
+- O mês fechado vale no último dia e o corrente vale hoje, sem a receita agendada.
+- A cripto sem cotação no mês fica fora do total e é contada à parte.
+- Usuário A não vê o patrimônio de B.
+- Na tela, o teclado escolhe o mês como o toque.
+- Conferido em 360px no Chromium, claro e escuro.
+
+Em aberto: o peso de doze leituras do saldo, junto da dívida do histórico inteiro.
+
 ## 2026-10-23 — F18: relatórios
 
 O que entrou:

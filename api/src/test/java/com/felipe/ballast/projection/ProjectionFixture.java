@@ -84,6 +84,65 @@ final class ProjectionFixture {
         .update();
   }
 
+  // Receita na categoria Salário da semente, a que a F19 usa para achar o próximo salário.
+  void salary(Actor actor, UUID account, String status, long cents, LocalDate cashDate) {
+    incomeIn(actor, account, "Salário", status, cents, cashDate);
+  }
+
+  // Receita numa categoria escolhida pelo nome. income() pega a primeira por id, que pode ser
+  // Salário.
+  void incomeIn(
+      Actor actor, UUID account, String category, String status, long cents, LocalDate cashDate) {
+    jdbc.sql(
+            """
+            INSERT INTO lancamento (id, usuario_id, tipo, titulo, categoria_id, conta_id, valor,
+                                    data_competencia, data_caixa, status)
+            SELECT :id, :userId, 'receita', 'teste', c.id, :account, :amount, :date, :date,
+                   :status
+            FROM categoria c WHERE c.usuario_id = :userId AND c.nome = :category
+            """)
+        .param("id", UUID.randomUUID())
+        .param("userId", actor.user().id())
+        .param("category", category)
+        .param("account", account)
+        .param("amount", BigDecimal.valueOf(cents, 2))
+        .param("date", cashDate)
+        .param("status", status)
+        .update();
+  }
+
+  UUID benefitAccount(Actor actor, String name, long initialCents) {
+    UUID id = UUID.randomUUID();
+    jdbc.sql(
+            """
+            INSERT INTO conta (id, usuario_id, nome, tipo, saldo_inicial)
+            VALUES (:id, :userId, :name, 'beneficio', :initial)
+            """)
+        .param("id", id)
+        .param("userId", actor.user().id())
+        .param("name", name)
+        .param("initial", BigDecimal.valueOf(initialCents, 2))
+        .update();
+    return id;
+  }
+
+  MockHttpServletResponse spendable(Cookie session) throws Exception {
+    var request = get("/posso-gastar");
+    if (session != null) {
+      request.cookie(session);
+    }
+    return mvc.perform(request).andReturn().getResponse();
+  }
+
+  JsonNode spendableOk(Cookie session) throws Exception {
+    MockHttpServletResponse response = spendable(session);
+    if (response.getStatus() != 200) {
+      throw new IllegalStateException(
+          "posso gastar falhou: " + response.getStatus() + " " + text(response));
+    }
+    return body(response);
+  }
+
   void transfer(Actor actor, UUID from, UUID to, long cents, LocalDate cashDate) {
     UUID outId = UUID.randomUUID();
     UUID inId = UUID.randomUUID();

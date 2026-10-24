@@ -12,6 +12,10 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
   de orquestrador precisa aceitar JSON ou `*/*`.
 - Em qualquer rota, banco fora responde 503 `{"erro":"serviço indisponível"}`, e
   corpo acima de 4 KiB responde 413 (ADR-023).
+- Em qualquer rota, passar do limite por IP responde 429
+  `{"erro":"muitas requisições, tente mais tarde"}` com `Retry-After` em
+  segundos (ADR-049). A spec só lista o 429 em login e cadastro. Os limites
+  estão em Limites, no fim deste arquivo.
 - Em `/contas/{id}`, conta de outro usuário, id inexistente e id que não é UUID
   respondem 404 com o mesmo corpo.
 - Dinheiro de fiat sai e entra como inteiro de centavos
@@ -701,6 +705,24 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
 - Meta ou aporte de outro usuário, inexistente ou id que não é UUID: 404
   `meta não encontrada`.
 
+## Posso gastar (ADR-048)
+
+- `GET /posso-gastar` responde:
+  - `hoje` e `ate`: a véspera do próximo salário, ou o fim do mês sem salário;
+  - `proximoSalario`: `{data, valorCentavos}` ou nulo;
+  - `livreCentavos`: o menor saldo projetado das contas que não são de
+    benefício até `ate`, negativo quando falta;
+  - `menorSaldoEm`;
+  - `dias`, contando hoje e `ate`;
+  - `porDiaCentavos`: livre dividido por dias, para baixo, nulo se não sobra;
+  - `vencidasCentavos`: soma com sinal das previstas vencidas, já dentro do
+    livre;
+  - `beneficios`: `{contaId, nome, livreCentavos}` por conta de benefício
+    ativa.
+- O próximo salário é a primeira receita depois de hoje na categoria Salário,
+  ou numa filha dela, numa conta que não é de benefício.
+- 400 `projeção fora do limite`.
+
 ## Relatórios (ADR-046)
 
 - `GET /relatorios?mes=AAAA-MM`: sem `mes`, o mês corrente em
@@ -716,6 +738,17 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
     meses que terminam em `mes`, do mais antigo para o mais novo, com zero no
     mês sem lançamento.
 - 400 para `mes` fora do formato ou `relatório fora do limite`.
+
+## Patrimônio no tempo (ADR-047)
+
+- `GET /patrimonio/mensal?mes=AAAA-MM`: sem `mes`, o mês corrente em
+  `America/Sao_Paulo`. Responde `{mes, meses: [...]}` com até doze meses
+  terminando em `mes`, do mais antigo para o mais novo. Mês depois do
+  corrente fica de fora.
+- Cada ponto é o `/patrimonio` de `data`: o último dia do mês, ou hoje no mês
+  corrente. Traz `mes`, `data`, `contasCentavos`, `criptoCentavos`,
+  `rendaFixaCentavos`, `totalCentavos` e `posicoesSemCotacao` (fora do total).
+- 400 para `mes` fora do formato ou `patrimônio fora do limite`.
 
 ## Renda fixa (ADR-037)
 
@@ -823,3 +856,20 @@ Emenda "Cripto em dólar".
 - Ativo novo ganha, numa das rodadas seguintes do job, a cotação diária do
   último ano antes da primeira cotação dele (ADR-041). A posição e o
   patrimônio de uma data passada passam a ter preço sem mudar o formato.
+
+## Limites (ADR-049)
+
+- Por IP (IPv6 pelo `/64`): 600 requisições por minuto em qualquer rota, 10
+  `POST /auth/login` por minuto e 5 `POST /auth/cadastro` por hora.
+- Login e cadastro somados, de todos os IPs: 60 por minuto.
+- A recusa vem antes de qualquer outra checagem: um 429 não diz se a sessão,
+  o corpo ou a rota valiam.
+- O login com atraso por e-mail continua respondendo 429 com a mensagem
+  `muitas tentativas, tente mais tarde`. O limite por IP usa
+  `muitas requisições, tente mais tarde`. Os dois mandam `Retry-After`.
+- Argon2 sem vaga por 5 s: login e cadastro respondem 503
+  `serviço indisponível` com `Retry-After: 5`.
+- Cadastro com o teto de usuários atingido (`CADASTRO_MAX_USUARIOS`, padrão
+  20): 403 `cadastro fechado: limite de usuários atingido`, sem gravar nada.
+- `/healthz` com outra checagem em andamento: 503 `{"erro":"indisponível"}`,
+  sem tocar no banco.

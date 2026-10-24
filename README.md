@@ -49,7 +49,8 @@ Preencha no formato `CHAVE=valor`, sem aspas, `$` ou `#`. O modelo está em `.en
 | `HOST`, `PORT` | Onde a API escuta. Padrão `127.0.0.1` e `8080`. |
 | `APP_ENV` | Só `development` libera `COOKIE_SECURE=false`. Vazio ou ausente conta como produção. |
 | `COOKIE_SECURE` | Vazio vale `true`. `false` só com `APP_ENV=development`; com outro `APP_ENV` a API não sobe. |
-| `REGISTRO_ABERTO` | `false` por padrão. `true` libera `POST /auth/cadastro`. Deixe `false` enquanto não houver limite de requisições na borda. |
+| `REGISTRO_ABERTO` | `false` por padrão. `true` libera `POST /auth/cadastro`, com 5 cadastros por hora por IP (ADR-049). |
+| `CADASTRO_MAX_USUARIOS` | Teto de usuários cadastrados. Vazio vale 20. Cheio, o cadastro responde 403 (ADR-049). |
 | `VITE_REGISTRO_ABERTO` | Vazio por padrão. `true` mostra a tela de cadastro no web. Só funciona junto com `REGISTRO_ABERTO=true` (ADR-022). O `make dev` repassa a do `.env` da raiz; rodando `pnpm dev` direto, ponha em `web/.env`. |
 | `SEED_EMAIL`, `SEED_SENHA`, `SEED_NOME` | Usuário criado por `make seed`. Senha de 12 a 128 caracteres. Nome é opcional, até 100 caracteres. |
 | `API_DOCS_ENABLED` | `true` serve `/v3/api-docs`. Use só em desenvolvimento. Qualquer outro valor deixa desligado. |

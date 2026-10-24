@@ -116,6 +116,15 @@ Coisas que não são falha genérica de web, mas falha desta aplicação:
   sempre.
 - **Força bruta no login e no MFA.** Seis dígitos caem rápido sem limite de
   tentativa. Limite por conta, não só por IP.
+- **Flood que esgota a VM ou o tier gratuito.** Muitos logins ao mesmo tempo
+  alocam 64 MiB de argon2 cada, e o `/healthz` público toca o banco. A API
+  limita por IP e por rota, põe um teto somado em login e cadastro, segura o
+  argon2 em dois hashes e o health em uma consulta por vez (ADR-049). Ataque
+  de volume fica com o Vercel. No tier gratuito, a cota que acaba tira o app
+  do ar, sem cobrança.
+- **Cadastro em massa.** Com o cadastro aberto, um robô ocuparia o banco
+  gratuito. São 5 cadastros por hora por IP e no máximo 20 usuários
+  (`CADASTRO_MAX_USUARIOS`).
 - **Valor negativo ou gigante.** `valor` sempre positivo e com teto sensato. O
   sinal vem do tipo, não do número.
 - **Lançamento em conta de outro usuário** passando o `conta_id` dele. A conta

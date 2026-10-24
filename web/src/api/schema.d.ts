@@ -591,6 +591,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/patrimonio/mensal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Patrimônio no fim de cada mês
+         * @description O patrimônio de /patrimonio no último dia de cada um dos doze meses que terminam em mes, e hoje no mês corrente. Sem mes, vale o mês corrente em America/Sao_Paulo.
+         */
+        get: operations["getPatrimonioMensal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/posicoes-cripto": {
         parameters: {
             query?: never;
@@ -603,6 +623,26 @@ export interface paths {
          * @description Soma dos movimentos até a data nas contas ativas, com a última cotação até o fim do dia em America/Sao_Paulo. Posição zerada não aparece. Sem data, vale hoje.
          */
         get: operations["getPosicoesCripto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/posso-gastar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quanto dá para gastar até o próximo salário
+         * @description O menor saldo projetado (ADR-029) das contas que não são de benefício, de hoje até a véspera do próximo salário, ou até o fim do mês sem salário previsto. Cada benefício vem à parte (ADR-048).
+         */
+        get: operations["getPossoGastar"];
         put?: never;
         post?: never;
         delete?: never;
@@ -882,6 +922,16 @@ export interface components {
             nome?: string;
             /** Format: int64 */
             saldoInicialCentavos?: number;
+        };
+        BeneficioLivre: {
+            /** Format: uuid */
+            contaId: string;
+            /**
+             * Format: int64
+             * @description Menor saldo projetado da conta até ate
+             */
+            livreCentavos: number;
+            nome: string;
         };
         CadastroRequest: {
             email: string;
@@ -1524,6 +1574,33 @@ export interface components {
             /** Format: int64 */
             totalCentavos: number;
         };
+        PatrimonioDoMes: {
+            /** Format: int64 */
+            contasCentavos: number;
+            /** Format: int64 */
+            criptoCentavos: number;
+            /**
+             * Format: date
+             * @description Último dia do mês, ou hoje no mês corrente
+             */
+            data: string;
+            /** @description AAAA-MM */
+            mes: string;
+            /**
+             * Format: int32
+             * @description Posições sem cotação na data, fora do total
+             */
+            posicoesSemCotacao: number;
+            /** Format: int64 */
+            rendaFixaCentavos: number;
+            /** Format: int64 */
+            totalCentavos: number;
+        };
+        PatrimonioMensal: {
+            mes: string;
+            /** @description Até doze meses terminando em mes, do mais antigo para o mais novo. Mês depois do corrente fica de fora */
+            meses: components["schemas"]["PatrimonioDoMes"][];
+        };
         PosicaoCripto: {
             /** Format: uuid */
             ativoId: string;
@@ -1597,6 +1674,50 @@ export interface components {
             /** @description PTAX usada na conversão: a última até a data; nula se ainda não há */
             dolar: components["schemas"]["Dolar"];
             posicoes: components["schemas"]["PosicaoCripto"][];
+        };
+        PossoGastar: {
+            /**
+             * Format: date
+             * @description Véspera do próximo salário, ou o fim do mês sem salário previsto
+             */
+            ate: string;
+            /** @description Contas de benefício ativas, fora de livreCentavos, pelo nome */
+            beneficios: components["schemas"]["BeneficioLivre"][];
+            /**
+             * Format: int32
+             * @description Dias de hoje até ate, contando os dois
+             */
+            dias: number;
+            /** Format: date */
+            hoje: string;
+            /**
+             * Format: int64
+             * @description Menor saldo projetado das contas que não são de benefício, de hoje até ate. Negativo quando falta
+             */
+            livreCentavos: number;
+            /**
+             * Format: date
+             * @description Dia do menor saldo
+             */
+            menorSaldoEm: string;
+            /**
+             * Format: int64
+             * @description livreCentavos dividido por dias, para baixo; nulo quando não sobra nada
+             */
+            porDiaCentavos: number | null;
+            /** @description Próxima receita na categoria Salário depois de hoje; nulo sem salário */
+            proximoSalario: components["schemas"]["ProximoSalario"];
+            /**
+             * Format: int64
+             * @description Soma com sinal das previstas vencidas, já dentro de livreCentavos (ADR-029)
+             */
+            vencidasCentavos: number;
+        };
+        ProximoSalario: {
+            /** Format: date */
+            data: string;
+            /** Format: int64 */
+            valorCentavos: number;
         };
         ReceitaEDespesaDoMes: {
             /** Format: int64 */
@@ -2164,6 +2285,15 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Teto de usuários atingido (CADASTRO_MAX_USUARIOS, padrão 20); nada é gravado */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description E-mail já cadastrado */
             409: {
                 headers: {
@@ -2191,9 +2321,31 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Limite de cadastros por IP (5 por hora) ou de login e cadastro somados */
+            429: {
+                headers: {
+                    /** @description Segundos inteiros até a janela do limite virar */
+                    "Retry-After": number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Falha interna */
             500: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Argon2 sem vaga livre depois de 5 s de espera */
+            503: {
+                headers: {
+                    /** @description Sempre 5 */
+                    "Retry-After": number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -2300,7 +2452,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Atraso progressivo em vigor para esse e-mail; resposta idêntica para e-mail com e sem conta */
+            /** @description Atraso progressivo em vigor para esse e-mail, resposta idêntica para e-mail com e sem conta; ou limite de login por IP (10 por minuto) ou de login e cadastro somados (60 por minuto) */
             429: {
                 headers: {
                     /** @description Segundos inteiros, arredondados para cima, até a próxima tentativa ser verificada */
@@ -2314,6 +2466,17 @@ export interface operations {
             /** @description Falha interna */
             500: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Argon2 sem vaga livre depois de 5 s de espera; a tentativa já foi contada */
+            503: {
+                headers: {
+                    /** @description Sempre 5 */
+                    "Retry-After": number;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4365,6 +4528,55 @@ export interface operations {
             };
         };
     };
+    getPatrimonioMensal: {
+        parameters: {
+            query?: {
+                mes?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Patrimônio mês a mês */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatrimonioMensal"];
+                };
+            };
+            /** @description mes fora do formato ou "patrimônio fora do limite" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     getPosicoesCripto: {
         parameters: {
             query?: {
@@ -4386,6 +4598,53 @@ export interface operations {
                 };
             };
             /** @description data fora do formato ou "patrimônio fora do limite" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getPossoGastar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Quanto dá para gastar */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PossoGastar"];
+                };
+            };
+            /** @description "projeção fora do limite" */
             400: {
                 headers: {
                     [name: string]: unknown;

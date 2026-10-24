@@ -8,6 +8,7 @@ import { formatarCompacto, fracaoDoMaximo, percentualDoTotal, rotuloCurtoDoMes, 
 import { IconeSetaDireita, IconeSetaEsquerda } from './icones'
 import { carregar } from './leitura'
 import type { Estado } from './leitura'
+import PatrimonioNoTempo from './PatrimonioNoTempo'
 import AtalhosDePlanejamento from './Planejamento'
 import { Carregando, EstadoVazio } from './ui'
 
@@ -163,8 +164,9 @@ function ReceitasEDespesas({ meses }: { meses: ReceitaEDespesaDoMes[] }) {
   )
 }
 
-// Por competência e só o que já aconteceu (ADR-046). O consumo do orçamento continua na tela de
-// Orçamento, que já desenha a barra de cada teto.
+// Por competência e só o que já aconteceu (ADR-046), mais o patrimônio no fim de cada mês
+// (ADR-047). O consumo do orçamento continua na tela de Orçamento, que já desenha a barra de cada
+// teto.
 export default function Relatorios({ aoSessaoExpirar }: { aoSessaoExpirar: () => void }) {
   const [mes, setMes] = useState<Mes>(() => mesDeHoje())
   const [estado, setEstado] = useState<Estado<RelatorioDoMes>>({ tipo: 'carregando' })
@@ -222,6 +224,10 @@ export default function Relatorios({ aoSessaoExpirar }: { aoSessaoExpirar: () =>
           <ReceitasEDespesas key={estado.dados.mes} meses={estado.dados.receitasEDespesas} />
         </div>
       )}
+      {/* Leitura própria: o patrimônio aparece mesmo se o relatório do mês falhar. */}
+      <div className="relatorios-grade relatorios-patrimonio">
+        <PatrimonioNoTempo mes={mes} aoSessaoExpirar={aoSessaoExpirar} />
+      </div>
     </section>
   )
 }

@@ -48,6 +48,24 @@ function mockFetch(rotas: Rotas): void {
       }
       if (chave.startsWith('GET /orcamentos?')) return Promise.resolve(jsonResponse({ mes: url.slice(-7), orcamentos: [] }, 200))
       if (chave === 'GET /metas') return Promise.resolve(jsonResponse([], 200))
+      if (chave === 'GET /posso-gastar') {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              hoje: '2026-10-22',
+              ate: '2026-10-31',
+              proximoSalario: null,
+              livreCentavos: 0,
+              menorSaldoEm: '2026-10-22',
+              dias: 10,
+              porDiaCentavos: null,
+              vencidasCentavos: 0,
+              beneficios: [],
+            },
+            200,
+          ),
+        )
+      }
       if (chave.startsWith('GET /relatorios?')) {
         return Promise.resolve(
           jsonResponse({ mes: url.slice(-7), totalDespesasCentavos: 0, despesasPorCategoria: [], receitasEDespesas: [] }, 200),
@@ -588,6 +606,27 @@ describe('App: cadastro', () => {
     expect(screen.getByLabelText(/confirmar senha/i)).toHaveValue('')
     expect(screen.getByLabelText(/e-mail/i)).toHaveValue('ana@exemplo.com')
     expect(screen.getByRole('button', { name: /criar conta/i })).toBeEnabled()
+  })
+
+  it('403 diz que o cadastro está fechado por limite de usuários', async () => {
+    await abrirCadastro({
+      'POST /auth/cadastro': () => Promise.resolve(jsonResponse({ erro: 'cadastro fechado' }, 403)),
+    })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'O cadastro está fechado: o limite de usuários foi atingido.',
+    )
+  })
+
+  it('429 pede para tentar mais tarde, em minutos', async () => {
+    await abrirCadastro({
+      'POST /auth/cadastro': () =>
+        Promise.resolve(new Response('{"erro":"x"}', { status: 429, headers: { 'Retry-After': '1200' } })),
+    })
+    preencherCadastro('ana@exemplo.com', 'senha-bem-longa-1')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Muitos cadastros deste endereço. Tente de novo em 20 minutos.',
+    )
   })
 
   it('400 mostra a mensagem do servidor', async () => {

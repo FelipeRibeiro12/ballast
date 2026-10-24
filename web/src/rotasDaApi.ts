@@ -13,6 +13,7 @@ export const prefixosDaApi: readonly string[] = [
   'orcamentos',
   'patrimonio',
   'posicoes-cripto',
+  'posso-gastar',
   'recorrencias',
   'relatorios',
   'saldo-projetado',
