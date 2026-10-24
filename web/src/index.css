@@ -22,6 +22,10 @@
   --despesa: #b91c1c;
   --despesa-texto: #9f1c1c;
   --despesa-fundo: #fde8e8;
+  /* Séries de receitas e despesas em Relatórios: azul e laranja passam no teste de daltonismo,
+     verde e vermelho não (ADR-046). */
+  --serie-receita: #2a78d6;
+  --serie-despesa: #eb6834;
   --atencao: #b7791f;
   --atencao-texto: #8a3d0b;
   --atencao-fundo: #fdf0d0;
@@ -70,6 +74,8 @@
     --despesa: #ff8a8a;
     --despesa-texto: #ffa3a3;
     --despesa-fundo: #3a1c22;
+    --serie-receita: #3987e5;
+    --serie-despesa: #d95926;
     --atencao: #fbbf5c;
     --atencao-texto: #fbbf5c;
     --atencao-fundo: #3a2c12;
@@ -106,6 +112,8 @@
   --despesa: #ff8a8a;
   --despesa-texto: #ffa3a3;
   --despesa-fundo: #3a1c22;
+  --serie-receita: #3987e5;
+  --serie-despesa: #d95926;
   --atencao: #fbbf5c;
   --atencao-texto: #fbbf5c;
   --atencao-fundo: #3a2c12;
@@ -442,7 +450,7 @@ form > button + button {
   box-shadow: var(--sombra-1);
 }
 
-/* Os mesmos segmentos como links entre telas (Orçamento e Metas). */
+/* Os mesmos segmentos como links entre telas (Orçamento, Metas e Relatórios). */
 .segmentos a {
   display: inline-flex;
   align-items: center;
@@ -1715,6 +1723,262 @@ p[role='status'] {
 
 .barra.critica > div {
   background: var(--despesa);
+}
+
+/* Relatórios (ADR-046): barra fina com ponta de 4px que nasce da base, grade em linha fina e
+   texto sempre na cor do texto, nunca na cor da série. */
+.relatorios-grade {
+  display: grid;
+  /* minmax(0, 1fr) deixa a tabela rolar dentro do cartão em vez de alargar a página. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--esp-4);
+}
+
+@media (min-width: 64rem) {
+  .relatorios-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: var(--esp-6);
+  }
+}
+
+.relatorio-total {
+  margin: 0 0 var(--esp-3);
+  color: var(--texto-suave);
+}
+
+.relatorio-total strong {
+  color: var(--texto);
+}
+
+.relatorio-categorias {
+  display: grid;
+  gap: var(--esp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.relatorio-categoria-linha {
+  display: flex;
+  align-items: baseline;
+  gap: var(--esp-2);
+}
+
+.relatorio-categoria-nome {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.relatorio-categoria-valor {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.relatorio-categoria-parte {
+  min-width: 4ch;
+  color: var(--texto-fraco);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.relatorio-trilho {
+  height: 8px;
+  margin-top: var(--esp-1);
+}
+
+.relatorio-trilho > div {
+  height: 100%;
+  min-width: 2px;
+  border-radius: 0 4px 4px 0;
+  background: var(--primaria);
+}
+
+.relatorio-legenda {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  margin: 0 0 var(--esp-3);
+  color: var(--texto-suave);
+  font-size: 0.875rem;
+}
+
+.relatorio-chave {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.relatorio-chave-receita {
+  background: var(--serie-receita);
+}
+
+.relatorio-chave-despesa {
+  margin-left: var(--esp-2);
+  background: var(--serie-despesa);
+}
+
+/* O eixo fica à direita numa coluna própria, para o rótulo nunca cobrir a primeira coluna. */
+.relatorio-colunas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.75rem;
+  gap: var(--esp-2);
+}
+
+.relatorio-plot {
+  position: relative;
+}
+
+.relatorio-guias,
+.relatorio-eixo {
+  position: relative;
+  height: 160px;
+}
+
+.relatorio-guias {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+}
+
+.relatorio-guias span {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-top: 1px solid var(--borda);
+}
+
+.relatorio-eixo span {
+  position: absolute;
+  left: 0;
+  transform: translateY(50%);
+  color: var(--texto-fraco);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.relatorio-meses {
+  position: relative;
+  display: flex;
+}
+
+button.relatorio-mes {
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-color: transparent;
+  border-radius: var(--raio-sm);
+  background: transparent;
+  color: var(--texto-fraco);
+  font-weight: 400;
+}
+
+button.relatorio-mes:hover:not(:disabled) {
+  background: transparent;
+  color: var(--texto);
+}
+
+.relatorio-barras {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  height: 160px;
+}
+
+.relatorio-receita,
+.relatorio-despesa {
+  width: 14px;
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+}
+
+.relatorio-receita {
+  background: var(--serie-receita);
+}
+
+.relatorio-despesa {
+  background: var(--serie-despesa);
+}
+
+.relatorio-barras .relatorio-zero {
+  min-height: 0;
+}
+
+.relatorio-rotulo {
+  display: block;
+  margin-top: var(--esp-1);
+  padding: 2px 0;
+  border-radius: 999px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.relatorio-mes[aria-pressed='true'] .relatorio-rotulo {
+  background: var(--primaria-fundo);
+  color: var(--primaria-texto);
+  font-weight: 600;
+}
+
+.relatorio-detalhe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-1) var(--esp-3);
+  margin: var(--esp-3) 0 0;
+  color: var(--texto-suave);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.relatorio-detalhe strong {
+  flex-basis: 100%;
+  color: var(--texto);
+}
+
+.relatorio-tabela {
+  margin-top: var(--esp-3);
+  overflow-x: auto;
+  font-size: 0.8125rem;
+}
+
+.relatorio-tabela summary {
+  min-height: 24px;
+  color: var(--primaria-texto);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.relatorio-tabela table {
+  width: 100%;
+  margin-top: var(--esp-2);
+  border-collapse: collapse;
+}
+
+.relatorio-tabela th,
+.relatorio-tabela td {
+  padding: var(--esp-1) 0 var(--esp-1) var(--esp-2);
+  border-bottom: 1px solid var(--borda);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.relatorio-tabela th:first-child {
+  padding-left: 0;
+  font-weight: 400;
+  text-align: left;
+}
+
+.relatorio-tabela thead th {
+  color: var(--texto-fraco);
+  font-weight: 600;
 }
 
 .conta-categorias {

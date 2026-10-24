@@ -1,15 +1,23 @@
 import { hashDaSecao } from './rota'
 
-// Orçamento e Metas ficam fora da barra de navegação (ADR-043): estes links levam de uma à outra.
-export default function AtalhosDePlanejamento({ atual }: { atual: 'orcamento' | 'metas' }) {
+type SecaoDePlanejamento = 'orcamento' | 'metas' | 'relatorios'
+
+const ATALHOS: readonly { secao: SecaoDePlanejamento; rotulo: string }[] = [
+  { secao: 'orcamento', rotulo: 'Orçamento' },
+  { secao: 'metas', rotulo: 'Metas' },
+  { secao: 'relatorios', rotulo: 'Relatórios' },
+]
+
+// Orçamento, Metas e Relatórios ficam fora da barra de navegação (ADR-043): estes links levam de
+// uma à outra.
+export default function AtalhosDePlanejamento({ atual }: { atual: SecaoDePlanejamento }) {
   return (
     <nav className="segmentos" aria-label="Planejamento">
-      <a href={hashDaSecao('orcamento')} aria-current={atual === 'orcamento' ? 'page' : undefined}>
-        Orçamento
-      </a>
-      <a href={hashDaSecao('metas')} aria-current={atual === 'metas' ? 'page' : undefined}>
-        Metas
-      </a>
+      {ATALHOS.map(({ secao, rotulo }) => (
+        <a key={secao} href={hashDaSecao(secao)} aria-current={atual === secao ? 'page' : undefined}>
+          {rotulo}
+        </a>
+      ))}
     </nav>
   )
 }
