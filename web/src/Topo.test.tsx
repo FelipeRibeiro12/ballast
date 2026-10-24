@@ -78,3 +78,30 @@ describe('Topo: tema', () => {
     vi.restoreAllMocks()
   })
 })
+
+describe('Topo: segurança', () => {
+  beforeEach(() => {
+    window.location.hash = '#/inicio'
+    mockFetch()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    window.location.hash = ''
+  })
+
+  it('tem o link para a tela Segurança, fora da barra de seções', async () => {
+    render(<App />)
+    const link = await screen.findByRole('link', { name: 'Segurança' })
+    expect(link).toHaveAttribute('href', '#/seguranca')
+    const nav = screen.getByRole('navigation', { name: 'Seções' })
+    expect(within(nav).queryByRole('link', { name: 'Segurança' })).toBeNull()
+  })
+
+  it('marca o link na tela Segurança', async () => {
+    window.location.hash = '#/seguranca'
+    render(<App />)
+    expect(await screen.findByRole('link', { name: 'Segurança' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('heading', { level: 2, name: 'Segurança' })).toBeVisible()
+  })
+})

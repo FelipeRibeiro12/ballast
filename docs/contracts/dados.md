@@ -52,7 +52,6 @@ usuario
   email           text unique not null
   senha_hash      text not null          -- argon2id
   nome            text
-  mfa_segredo     text                   -- cifrado, nullable (F20)
   criado_em       timestamptz not null
 ```
 
@@ -73,10 +72,41 @@ tentativa_login                          -- atraso progressivo por conta
   ultima_falha_em timestamptz not null
 ```
 
+```
+mfa                                      -- ADR-050, uma linha por usuário que configurou
+  usuario_id      uuid pk fk             -- usuario, CASCADE
+  segredo_cifrado bytea not null         -- nonce 12 + segredo 20 cifrado AES-256-GCM + tag 16
+  ativado_em      timestamptz            -- nulo: segredo pendente, esperando o primeiro código
+  ultimo_passo    bigint                 -- passo de 30 s do último código aceito
+  falhas          int not null default 0 -- atraso progressivo por usuário
+  ultima_falha_em timestamptz
+  criado_em       timestamptz not null
+
+mfa_recuperacao
+  id              uuid pk
+  usuario_id      uuid fk not null       -- mfa (não usuario), CASCADE: desligar leva os códigos
+  codigo_hash     bytea not null         -- SHA-256 do código normalizado
+  usado_em        timestamptz
+  unique (usuario_id, codigo_hash)
+
+desafio_mfa                              -- entre a senha certa e o código
+  id              uuid pk
+  usuario_id      uuid fk not null       -- usuario, CASCADE
+  token_hash      bytea unique not null  -- SHA-256 do token do cookie ballast_mfa
+  expira_em       timestamptz not null   -- 5 minutos
+  criado_em       timestamptz not null
+```
+
+Migration `V20` (ADR-050): `segredo_cifrado` tem exatamente 48 bytes, `codigo_hash`
+e `token_hash` 32, `falhas >= 0`. A chave da cifra fica em `MFA_CHAVE`, fora do
+banco. `desafio_mfa` tem índice em `usuario_id`; o job diário de limpeza apaga
+os vencidos.
+
 `tentativa_login` não tem `usuario_id` de propósito: a chave é o e-mail
 digitado, para o app não revelar se a conta existe (`docs/ameacas.md`).
 
-Migration `V2`: `mfa_segredo` ainda não existe (entra na F20). No banco,
+Migration `V2`: o segredo do MFA não é coluna de `usuario`, ficou na tabela `mfa`
+da V20. No banco,
 `email` tem CHECK de minúsculas e no máximo 254 caracteres (nas duas tabelas
 que o guardam), `nome` no máximo 100, `token_hash` exatamente 32 bytes,
 `falhas >= 0`, e `criado_em`/`criada_em` têm `DEFAULT now()`. `sessao.usuario_id`

@@ -115,7 +115,9 @@ Coisas que não são falha genérica de web, mas falha desta aplicação:
   e "senha errada" entrega quais e-mails têm conta. A mensagem é a mesma,
   sempre.
 - **Força bruta no login e no MFA.** Seis dígitos caem rápido sem limite de
-  tentativa. Limite por conta, não só por IP.
+  tentativa. Limite por conta, não só por IP. Desde a F20, o código do MFA tem
+  atraso progressivo por usuário, e o mesmo código não entra duas vezes
+  (ADR-050).
 - **Flood que esgota a VM ou o tier gratuito.** Muitos logins ao mesmo tempo
   alocam 64 MiB de argon2 cada, e o `/healthz` público toca o banco. A API
   limita por IP e por rota, põe um teto somado em login e cadastro, segura o

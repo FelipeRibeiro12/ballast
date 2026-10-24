@@ -2,6 +2,40 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-24 — F20: MFA
+
+O que entrou:
+- TOTP da RFC 6238 feito com o JDK, com tolerância de um passo e sem aceitar o mesmo código duas vezes.
+- Segredo cifrado com AES-256-GCM e a chave de `MFA_CHAVE`, com o id do usuário como dado autenticado.
+- Dez códigos de recuperação de uso único, guardados como SHA-256.
+- Login em duas etapas: 202 com o cookie `ballast_mfa` e depois `POST /auth/login/mfa`.
+- Atraso progressivo por usuário no código.
+- Tela Segurança com QR code (`uqr`), e etapa do código no login.
+- Migration V20: tabelas `mfa`, `mfa_recuperacao` e `desafio_mfa`.
+
+Decisões: ADR-050. As três do dono: MFA opcional, chave em `MFA_CHAVE`, QR com `uqr` 0.1.3. Sem `MFA_CHAVE` a API sobe e só o MFA fica indisponível. Configurar pede a senha, para quem roubou só a sessão não trancar o dono. Desligar pede senha e código. O QR é desenhado em React a partir da matriz, sem `innerHTML`. Até 400px o Sair do topo fica só com o ícone, para o escudo caber.
+
+Teste:
+- Vetores da RFC 6238.
+- Chave de outro usuário, adulterada ou trocada não abre.
+- Código repetido recusado.
+- O código da ativação não abre login.
+- Código de recuperação entra uma vez, em qualquer caixa.
+- Desafio vence em 5 minutos e abre uma sessão só.
+- O atraso por usuário sobrevive a desafio novo.
+- O código de A não responde o desafio de B.
+- Sem chave, configurar dá 503.
+- `/auth/login/mfa` conta no limite de login.
+- Telas em 360px, claro e escuro, sem estouro.
+
+Pipeline: local verde (API e 936 testes do web); CI no PR.
+
+Em aberto:
+- Revogar as outras sessões ao ligar o MFA.
+- Gerar códigos novos sem desligar.
+- MFA em ação sensível.
+- e2e passando pelo MFA. Todos no backlog.
+
 ## 2026-10-23 — F20.5: limite na borda
 
 O que entrou:

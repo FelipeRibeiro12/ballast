@@ -138,6 +138,15 @@ export function IconeSair({ tamanho }: Props) {
   )
 }
 
+export function IconeEscudo({ tamanho }: Props) {
+  return (
+    <Base tamanho={tamanho}>
+      <path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z" />
+      <path d="m9 12 2 2 4-4" />
+    </Base>
+  )
+}
+
 export function IconeCartao({ tamanho }: Props) {
   return (
     <Base tamanho={tamanho}>

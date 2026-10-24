@@ -105,6 +105,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/login/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Responde o desafio do login com o código
+         * @description Lê o cookie ballast_mfa que o POST /auth/login deixou (5 minutos). Aceita o código do autenticador ou um de recuperação. Certo, abre a sessão como o login e expira o cookie do desafio.
+         */
+        post: operations["postAuthLoginMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/logout": {
         parameters: {
             query?: never;
@@ -119,6 +139,80 @@ export interface paths {
          * @description Marca a sessão como revogada no servidor e expira o cookie. Sem sessão válida também responde 204. Não lê corpo.
          */
         post: operations["postAuthLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Diz se o MFA está ligado */
+        get: operations["getAuthMfa"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/ativar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Liga o MFA com o primeiro código do autenticador */
+        post: operations["postAuthMfaAtivar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/configurar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gera o segredo do autenticador
+         * @description Pede a senha. O MFA só liga no POST /auth/mfa/ativar; chamar de novo antes disso troca o segredo.
+         */
+        post: operations["postAuthMfaConfigurar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/desativar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Desliga o MFA
+         * @description Pede a senha e um código, do autenticador ou de recuperação.
+         */
+        post: operations["postAuthMfaDesativar"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1357,6 +1451,9 @@ export interface components {
             /** @description True quando havia mais de 200 previstas vencidas e a lista foi cortada */
             maisAlgum: boolean;
         };
+        LoginMfaPendente: {
+            mfaPendente: boolean;
+        };
         LoginRequest: {
             email: string;
             senha: string;
@@ -1417,6 +1514,34 @@ export interface components {
             titulo: string;
             /** Format: int64 */
             valorAlvoCentavos: number;
+        };
+        MfaAtivacao: {
+            /** @description Dez códigos de uso único, só nesta resposta */
+            codigosDeRecuperacao: string[];
+        };
+        MfaCodigoRequest: {
+            codigo: string;
+        };
+        MfaConfiguracao: {
+            /** @description Segredo em base32, sem "=", para digitar no autenticador */
+            segredo: string;
+            /** @description otpauth://totp/... para o QR code */
+            uri: string;
+        };
+        MfaDesativarRequest: {
+            codigo: string;
+            senha: string;
+        };
+        MfaSenhaRequest: {
+            senha: string;
+        };
+        MfaStatus: {
+            ativo: boolean;
+            /**
+             * Format: int32
+             * @description Códigos de recuperação ainda não usados; 0 com o MFA desligado
+             */
+            codigosRestantes: number;
         };
         MovimentoCripto: {
             /** Format: uuid */
@@ -2416,6 +2541,17 @@ export interface operations {
                     "application/json": components["schemas"]["Usuario"];
                 };
             };
+            /** @description Senha certa com MFA ligado: sem sessão ainda. O código vai em POST /auth/login/mfa dentro de 5 minutos */
+            202: {
+                headers: {
+                    /** @description ballast_mfa=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=300 */
+                    "Set-Cookie": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginMfaPendente"];
+                };
+            };
             /** @description Entrada inválida */
             400: {
                 headers: {
@@ -2485,6 +2621,60 @@ export interface operations {
             };
         };
     };
+    postAuthLoginMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaCodigoRequest"];
+            };
+        };
+        responses: {
+            /** @description Sessão aberta */
+            200: {
+                headers: {
+                    /** @description ballast_sessao=<token>, e ballast_mfa expirado */
+                    "Set-Cookie": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Usuario"];
+                };
+            };
+            /** @description código inválido (corpo fora do formato) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description desafio expirado ou inválido, ou código inválido */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Atraso progressivo por usuário depois de 3 códigos errados */
+            429: {
+                headers: {
+                    "Retry-After": number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     postAuthLogout: {
         parameters: {
             query?: never;
@@ -2519,6 +2709,215 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getAuthMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Situação do MFA */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaStatus"];
+                };
+            };
+            /** @description Sem sessão */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postAuthMfaAtivar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaCodigoRequest"];
+            };
+        };
+        responses: {
+            /** @description MFA ligado; os códigos de recuperação não aparecem de novo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaAtivacao"];
+                };
+            };
+            /** @description código inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description configure o mfa antes, ou mfa já ativo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Atraso progressivo por usuário depois de 3 códigos errados */
+            429: {
+                headers: {
+                    "Retry-After": number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postAuthMfaConfigurar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaSenhaRequest"];
+            };
+        };
+        responses: {
+            /** @description Segredo novo, ainda não ativo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaConfiguracao"];
+                };
+            };
+            /** @description senha incorreta */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description mfa já ativo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description mfa indisponível: a API está sem MFA_CHAVE */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postAuthMfaDesativar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaDesativarRequest"];
+            };
+        };
+        responses: {
+            /** @description MFA desligado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description senha incorreta, ou código inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Erro"];
+                };
+            };
+            /** @description mfa não está ativo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Atraso progressivo por usuário depois de 3 códigos errados */
+            429: {
+                headers: {
+                    "Retry-After": number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Erro"];
                 };
             };
         };

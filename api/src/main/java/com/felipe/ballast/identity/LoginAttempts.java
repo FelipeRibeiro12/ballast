@@ -20,7 +20,7 @@ class LoginAttempts {
   static final Duration MAX_DELAY = Duration.ofMinutes(15);
 
   // 2^10 s já passa do teto de 15 min; limitar o expoente antes de calcular evita o estouro.
-  private static final int MAX_EXPONENT = 10;
+  static final int MAX_EXPONENT = 10;
 
   record Delay(Duration remaining, int failures) {}
 

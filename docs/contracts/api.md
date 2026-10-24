@@ -873,3 +873,33 @@ Emenda "Cripto em dólar".
   20): 403 `cadastro fechado: limite de usuários atingido`, sem gravar nada.
 - `/healthz` com outra checagem em andamento: 503 `{"erro":"indisponível"}`,
   sem tocar no banco.
+
+## MFA (ADR-050)
+
+- `GET /auth/mfa`: `{"ativo", "codigosRestantes"}`. Com o MFA desligado,
+  `codigosRestantes` é 0.
+- `POST /auth/mfa/configurar` `{"senha"}`: devolve `{"segredo", "uri"}`. O
+  segredo vem em base32 sem `=`, e a `uri` é `otpauth://totp/Ballast:<email>`.
+  Não liga nada; chamar de novo troca o segredo pendente. Erros: 400
+  `senha incorreta`, 409 `mfa já ativo` e 503 `mfa indisponível` (sem
+  `MFA_CHAVE`).
+- `POST /auth/mfa/ativar` `{"codigo"}`: só o código do app. Devolve
+  `{"codigosDeRecuperacao"}`, dez códigos `xxxxx-xxxxx`, mostrados só aqui.
+  Erros: 400 `código inválido`, 409 `configure o mfa antes` ou `mfa já ativo`,
+  429 com `Retry-After`.
+- `POST /auth/mfa/desativar` `{"senha", "codigo"}`: aceita o código do app ou
+  um de recuperação e responde 204. Erros: 400 `senha incorreta` ou
+  `código inválido`, 409 `mfa não está ativo`, 429.
+- `POST /auth/login` com MFA ligado e senha certa responde 202
+  `{"mfaPendente":true}`, sem sessão, e põe o cookie `ballast_mfa` (5 min).
+- `POST /auth/login/mfa` `{"codigo"}` é público e lê o cookie `ballast_mfa`.
+  Certo, responde 200 com o usuário, abre a sessão e expira o `ballast_mfa`.
+  Erros:
+  - 401 `desafio expirado ou inválido`: sem cookie, desafio vencido ou já usado;
+  - 401 `código inválido`: código errado, código repetido ou código de
+    recuperação já usado;
+  - 429 com `Retry-After`.
+- O código aceita espaço, hífen e maiúscula. O campo vai de 1 a 32 caracteres;
+  fora disso dá 400 `código inválido`.
+- Atraso por usuário: 3 códigos errados livres, depois 2^(n−3) s até 15 min,
+  contando ativação, desativação e login. O código certo zera a contagem.

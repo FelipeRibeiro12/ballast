@@ -6,6 +6,8 @@ import {
   EmailJaCadastradoError,
   EntradaInvalidaError,
   LimiteTentativasError,
+  MfaPendenteError,
+  MfaRecusadoError,
   NomeDeContaRepetidoError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
@@ -34,6 +36,12 @@ import {
   fetchResumoExclusao,
   putCategoriasPermitidas,
   postCadastro,
+  postLogin,
+  postLoginMfa,
+  fetchMfa,
+  postMfaConfigurar,
+  postMfaAtivar,
+  postMfaDesativar,
   postConta,
   RecorrenciaInvalidaError,
   RecorrenciaNaoEncontradaError,
@@ -1237,5 +1245,97 @@ describe('compras parceladas', () => {
   ])('recusa corpo fora do contrato: %s', async (_nome, corpo) => {
     responder(corpo, 200)
     await expect(fetchCompraParcelada('l1')).rejects.toThrow(/formato inesperado/)
+  })
+})
+
+describe('MFA', () => {
+  const usuario = { id: '7f1e2c9a-0b6d-4f43-9a52-1c8d3e5b6a70', email: 'ana@exemplo.com', nome: null }
+
+  function responder(corpo: unknown, status: number, headers: Record<string, string> = {}): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(corpo === null ? null : JSON.stringify(corpo), {
+            status,
+            headers: { 'Content-Type': 'application/json', ...headers },
+          }),
+        ),
+      ),
+    )
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('202 do login vira MfaPendenteError', async () => {
+    responder({ mfaPendente: true }, 202)
+    await expect(postLogin({ email: 'ana@exemplo.com', senha: 'x' })).rejects.toBeInstanceOf(MfaPendenteError)
+  })
+
+  it('postLoginMfa manda o código e devolve o usuário', async () => {
+    responder(usuario, 200)
+    await expect(postLoginMfa('123456')).resolves.toEqual(usuario)
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(url).toBe('/auth/login/mfa')
+    expect(init).toMatchObject({ method: 'POST', credentials: 'same-origin' })
+    expect(JSON.parse(String(init?.body))).toEqual({ codigo: '123456' })
+  })
+
+  it.each([[400], [401]])('postLoginMfa %i traz a mensagem do servidor', async (status) => {
+    responder({ erro: 'desafio expirado ou inválido' }, status)
+    const erro = await postLoginMfa('123456').catch((e: unknown) => e)
+    expect(erro).toBeInstanceOf(MfaRecusadoError)
+    expect(erro).toMatchObject({ mensagemServidor: 'desafio expirado ou inválido' })
+  })
+
+  it('postLoginMfa 429 traz o Retry-After', async () => {
+    responder({ erro: 'x' }, 429, { 'Retry-After': '16' })
+    const erro = await postLoginMfa('123456').catch((e: unknown) => e)
+    expect(erro).toBeInstanceOf(LimiteTentativasError)
+    expect(erro).toMatchObject({ segundos: 16 })
+  })
+
+  it('fetchMfa valida o formato', async () => {
+    responder({ ativo: true, codigosRestantes: 9 }, 200)
+    await expect(fetchMfa()).resolves.toEqual({ ativo: true, codigosRestantes: 9 })
+    responder({ ativo: 'sim', codigosRestantes: 9 }, 200)
+    await expect(fetchMfa()).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('rotas com sessão: 401 é sessão expirada e 503 é indisponível', async () => {
+    responder({ erro: 'x' }, 401)
+    await expect(fetchMfa()).rejects.toBeInstanceOf(SessaoExpiradaError)
+    responder({ erro: 'mfa indisponível' }, 503)
+    await expect(postMfaConfigurar('senha')).rejects.toBeInstanceOf(ServicoIndisponivelError)
+  })
+
+  it('configurar devolve segredo e uri e recusa formato estranho', async () => {
+    const configuracao = { segredo: 'GEZDGNBVGY3TQOJQ', uri: 'otpauth://totp/Ballast:ana?issuer=Ballast' }
+    responder(configuracao, 200)
+    await expect(postMfaConfigurar('senha')).resolves.toEqual(configuracao)
+    responder({ segredo: 'GEZ', uri: 'https://outro.exemplo' }, 200)
+    await expect(postMfaConfigurar('senha')).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it.each([[400], [409]])('configurar %i traz a mensagem do servidor', async (status) => {
+    responder({ erro: 'senha incorreta' }, status)
+    const erro = await postMfaConfigurar('errada').catch((e: unknown) => e)
+    expect(erro).toBeInstanceOf(MfaRecusadoError)
+    expect(erro).toMatchObject({ mensagemServidor: 'senha incorreta' })
+  })
+
+  it('ativar devolve os códigos de recuperação', async () => {
+    responder({ codigosDeRecuperacao: ['abcde-fghjk', 'mnpqr-stuvw'] }, 200)
+    await expect(postMfaAtivar('123456')).resolves.toEqual(['abcde-fghjk', 'mnpqr-stuvw'])
+    responder({ codigosDeRecuperacao: [1] }, 200)
+    await expect(postMfaAtivar('123456')).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('desativar manda senha e código e aceita 204', async () => {
+    responder(null, 204)
+    await expect(postMfaDesativar('senha', '123456')).resolves.toBeUndefined()
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({ senha: 'senha', codigo: '123456' })
   })
 })

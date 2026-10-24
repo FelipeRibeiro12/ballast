@@ -79,6 +79,8 @@ class SecurityConfig {
       routes.add(paths.matcher("/v3/api-docs/**"));
     }
     routes.add(paths.matcher(HttpMethod.POST, "/auth/login"));
+    // Segunda etapa do login com MFA: ainda não há sessão, só o cookie do desafio (ADR-050).
+    routes.add(paths.matcher(HttpMethod.POST, "/auth/login/mfa"));
     routes.add(paths.matcher(HttpMethod.POST, "/auth/logout"));
     if (properties.isRegistrationOpen()) {
       routes.add(paths.matcher(HttpMethod.POST, "/auth/cadastro"));

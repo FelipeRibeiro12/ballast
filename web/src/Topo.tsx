@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { postLogout } from './api'
 import {
   IconeContas,
+  IconeEscudo,
   IconeInvestimentos,
   IconeInicio,
   IconeLancamentos,
@@ -91,9 +92,18 @@ export default function Topo({ secao, aoSair }: { secao: Secao; aoSair: () => vo
         </nav>
         <div className="topo-acoes">
           <SeletorDeTema />
+          <a
+            className="topo-link-icone"
+            href={hashDaSecao('seguranca')}
+            aria-label="Segurança"
+            title="Segurança"
+            aria-current={secao === 'seguranca' ? 'page' : undefined}
+          >
+            <IconeEscudo tamanho={18} />
+          </a>
           <button type="button" className="pequeno" disabled={saindo} onClick={() => void sair()}>
             <IconeSair tamanho={16} />
-            Sair
+            <span className="topo-rotulo">Sair</span>
           </button>
         </div>
       </div>

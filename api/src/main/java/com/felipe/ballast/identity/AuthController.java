@@ -42,10 +42,12 @@ class AuthController {
 
   private final IdentityService identity;
   private final SessionCookies cookies;
+  private final MfaService mfa;
 
-  AuthController(IdentityService identity, SessionCookies cookies) {
+  AuthController(IdentityService identity, SessionCookies cookies, MfaService mfa) {
     this.identity = identity;
     this.cookies = cookies;
+    this.mfa = mfa;
   }
 
   @Operation(
@@ -66,6 +68,19 @@ class AuthController {
                   "ballast_sessao=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800",
               schema = @Schema(type = "string")),
       content = @Content(schema = @Schema(implementation = UserResponse.class)))
+  @ApiResponse(
+      responseCode = "202",
+      description =
+          "Senha certa com MFA ligado: sem sessão ainda. O código vai em POST /auth/login/mfa"
+              + " dentro de 5 minutos",
+      headers =
+          @Header(
+              name = "Set-Cookie",
+              required = true,
+              description =
+                  "ballast_mfa=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=300",
+              schema = @Schema(type = "string")),
+      content = @Content(schema = @Schema(implementation = MfaResponses.Pending.class)))
   @ApiResponse(
       responseCode = "400",
       description = "Entrada inválida",
@@ -139,6 +154,16 @@ class AuthController {
             ip,
             bad.failures());
         yield ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(BAD_CREDENTIALS);
+      }
+      case IdentityService.LoginResult.Success success when mfa.isActive(success.user().id()) -> {
+        // Senha certa ainda não abre sessão: o código vem em POST /auth/login/mfa (ADR-050).
+        String challenge = mfa.startChallenge(success.user().id());
+        log.info("login: senha ok, aguardando mfa usuario_id={} ip={}", success.user().id(), ip);
+        yield ResponseEntity.status(HttpStatus.ACCEPTED)
+            .header(
+                HttpHeaders.SET_COOKIE,
+                cookies.openChallenge(challenge, MfaService.CHALLENGE_LIFETIME))
+            .body(new MfaResponses.Pending(true));
       }
       case IdentityService.LoginResult.Success success -> {
         UserProfile user = success.user();

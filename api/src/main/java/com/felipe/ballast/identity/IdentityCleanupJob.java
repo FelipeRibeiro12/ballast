@@ -42,6 +42,14 @@ class IdentityCleanupJob {
         jdbc.sql("DELETE FROM tentativa_login WHERE ultima_falha_em <= :before")
             .param("before", now.minus(ATTEMPT_RETENTION).atOffset(ZoneOffset.UTC))
             .update();
-    log.info("limpeza de identidade: sessoes={} tentativas={}", sessions, attempts);
+    int challenges =
+        jdbc.sql("DELETE FROM desafio_mfa WHERE expira_em <= :now")
+            .param("now", now.atOffset(ZoneOffset.UTC))
+            .update();
+    log.info(
+        "limpeza de identidade: sessoes={} tentativas={} desafios_mfa={}",
+        sessions,
+        attempts,
+        challenges);
   }
 }

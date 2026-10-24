@@ -309,6 +309,21 @@ paths:
               schema:
                 type: string
               style: simple
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginMfaPendente"
+          description: "Senha certa com MFA ligado: sem sessão ainda. O código vai\
+            \ em POST /auth/login/mfa dentro de 5 minutos"
+          headers:
+            Set-Cookie:
+              description: ballast_mfa=<token>; HttpOnly; Secure; SameSite=Lax; Path=/;
+                Max-Age=300
+              required: true
+              schema:
+                type: string
+              style: simple
         "400":
           content:
             application/json:
@@ -374,6 +389,59 @@ paths:
       summary: Abre uma sessão
       tags:
       - auth
+  /auth/login/mfa:
+    post:
+      description: "Lê o cookie ballast_mfa que o POST /auth/login deixou (5 minutos).\
+        \ Aceita o código do autenticador ou um de recuperação. Certo, abre a sessã\
+        o como o login e expira o cookie do desafio."
+      operationId: postAuthLoginMfa
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaCodigoRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usuario"
+          description: Sessão aberta
+          headers:
+            Set-Cookie:
+              description: "ballast_sessao=<token>, e ballast_mfa expirado"
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: código inválido (corpo fora do formato)
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "desafio expirado ou inválido, ou código inválido"
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Atraso progressivo por usuário depois de 3 códigos errados
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+              style: simple
+      summary: Responde o desafio do login com o código
+      tags:
+      - auth
   /auth/logout:
     post:
       description: Marca a sessão como revogada no servidor e expira o cookie. Sem
@@ -403,6 +471,173 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: Falha interna; a sessão pode não ter sido revogada
       summary: Encerra a sessão
+      tags:
+      - auth
+  /auth/mfa:
+    get:
+      operationId: getAuthMfa
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaStatus"
+          description: Situação do MFA
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão
+      security:
+      - cookieAuth: []
+      summary: Diz se o MFA está ligado
+      tags:
+      - auth
+  /auth/mfa/ativar:
+    post:
+      operationId: postAuthMfaAtivar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaCodigoRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaAtivacao"
+          description: MFA ligado; os códigos de recuperação não aparecem de novo
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: código inválido
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "configure o mfa antes, ou mfa já ativo"
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Atraso progressivo por usuário depois de 3 códigos errados
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+              style: simple
+      security:
+      - cookieAuth: []
+      summary: Liga o MFA com o primeiro código do autenticador
+      tags:
+      - auth
+  /auth/mfa/configurar:
+    post:
+      description: Pede a senha. O MFA só liga no POST /auth/mfa/ativar; chamar de
+        novo antes disso troca o segredo.
+      operationId: postAuthMfaConfigurar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaSenhaRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MfaConfiguracao"
+          description: "Segredo novo, ainda não ativo"
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: senha incorreta
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: mfa já ativo
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "mfa indisponível: a API está sem MFA_CHAVE"
+      security:
+      - cookieAuth: []
+      summary: Gera o segredo do autenticador
+      tags:
+      - auth
+  /auth/mfa/desativar:
+    post:
+      description: "Pede a senha e um código, do autenticador ou de recuperação."
+      operationId: postAuthMfaDesativar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MfaDesativarRequest"
+        required: true
+      responses:
+        "204":
+          description: MFA desligado
+        "400":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "senha incorreta, ou código inválido"
+        "401":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão
+        "409":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: mfa não está ativo
+        "429":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Atraso progressivo por usuário depois de 3 códigos errados
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+              style: simple
+      security:
+      - cookieAuth: []
+      summary: Desliga o MFA
       tags:
       - auth
   /categorias:
@@ -4098,6 +4333,13 @@ components:
       required:
       - lancamentos
       - maisAlgum
+    LoginMfaPendente:
+      type: object
+      properties:
+        mfaPendente:
+          type: boolean
+      required:
+      - mfaPendente
     LoginRequest:
       type: object
       properties:
@@ -4237,6 +4479,73 @@ components:
       required:
       - titulo
       - valorAlvoCentavos
+    MfaAtivacao:
+      type: object
+      properties:
+        codigosDeRecuperacao:
+          type: array
+          description: "Dez códigos de uso único, só nesta resposta"
+          items:
+            type: string
+            pattern: "^[a-z2-9]{5}-[a-z2-9]{5}$"
+      required:
+      - codigosDeRecuperacao
+    MfaCodigoRequest:
+      type: object
+      properties:
+        codigo:
+          type: string
+          maxLength: 32
+          minLength: 1
+      required:
+      - codigo
+    MfaConfiguracao:
+      type: object
+      properties:
+        segredo:
+          type: string
+          description: "Segredo em base32, sem \"=\", para digitar no autenticador"
+        uri:
+          type: string
+          description: otpauth://totp/... para o QR code
+      required:
+      - segredo
+      - uri
+    MfaDesativarRequest:
+      type: object
+      properties:
+        codigo:
+          type: string
+          maxLength: 32
+          minLength: 1
+        senha:
+          type: string
+          maxLength: 128
+          minLength: 1
+      required:
+      - codigo
+      - senha
+    MfaSenhaRequest:
+      type: object
+      properties:
+        senha:
+          type: string
+          maxLength: 128
+          minLength: 1
+      required:
+      - senha
+    MfaStatus:
+      type: object
+      properties:
+        ativo:
+          type: boolean
+        codigosRestantes:
+          type: integer
+          format: int32
+          description: Códigos de recuperação ainda não usados; 0 com o MFA desligado
+      required:
+      - ativo
+      - codigosRestantes
     MovimentoCripto:
       type: object
       properties:

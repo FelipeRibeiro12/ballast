@@ -203,4 +203,25 @@ class RateLimitTest {
     assertThat(call(get("/auth/eu"), "2001:db8:5:6::ff").getStatus()).isEqualTo(429);
     assertThat(call(get("/auth/eu"), "2001:db8:5:7::1").getStatus()).isEqualTo(401);
   }
+
+  // O código do MFA tem só 6 dígitos: conta no limite de login do IP e no teto somado.
+  @Test
+  void mfaCodeCountsAsLogin() throws Exception {
+    for (int i = 0; i < 2; i++) {
+      call(
+          post("/auth/login/mfa")
+              .contentType(MediaType.APPLICATION_JSON)
+              .content("{\"codigo\":\"123456\"}"),
+          "198.51.100.30");
+    }
+
+    MockHttpServletResponse refused =
+        call(
+            post("/auth/login/mfa")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"codigo\":\"123456\"}"),
+            "198.51.100.30");
+
+    assertThat(refused.getStatus()).isEqualTo(429);
+  }
 }
