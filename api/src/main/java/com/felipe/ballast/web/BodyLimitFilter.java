@@ -25,7 +25,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 // Sem o cabeçalho Content-Length (chunked) o tamanho só aparece lendo, então a leitura é contada
 // e aborta no estouro, sem juntar o corpo na memória.
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+// Logo depois do RateLimitFilter: requisição já recusada por limite nem chega a ter o corpo medido.
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 class BodyLimitFilter extends OncePerRequestFilter {
 
   static final int BODY_LIMIT_BYTES = 4096;
