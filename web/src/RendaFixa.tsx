@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
-  CriptoNaoEncontradoError,
+  InvestimentoNaoEncontradoError,
   SessaoExpiradaError,
   deleteTituloRendaFixa,
   fetchTitulosRendaFixa,
@@ -113,7 +113,7 @@ function FormularioDeTitulo({
         aoSessaoExpirar()
         return
       }
-      if (erro instanceof CriptoNaoEncontradoError) {
+      if (erro instanceof InvestimentoNaoEncontradoError) {
         setMensagem('Esse título não existe mais.')
         return
       }
@@ -409,7 +409,7 @@ export default function RendaFixa({
       }
       setConfirmando(null)
       setFalhaDeAcao(mensagemDeEscrita(erro, 'Não foi possível apagar o título. Tente de novo.'))
-      if (erro instanceof CriptoNaoEncontradoError) setVersao((n) => n + 1)
+      if (erro instanceof InvestimentoNaoEncontradoError) setVersao((n) => n + 1)
     } finally {
       acaoEmVoo.current = false
       setOcupado(null)

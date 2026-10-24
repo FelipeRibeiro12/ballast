@@ -1215,7 +1215,7 @@ export type PosicaoCripto = components['schemas']['PosicaoCripto']
 export type PosicoesCripto = components['schemas']['PosicoesCripto']
 export type Patrimonio = components['schemas']['Patrimonio']
 
-export class CriptoNaoEncontradoError extends ApiError {}
+export class InvestimentoNaoEncontradoError extends ApiError {}
 
 export class CriptoRepetidoError extends ApiError {
   // null quando o corpo do 409 não segue o contrato ({ erro: string }).
@@ -1405,10 +1405,10 @@ function isPatrimonio(valor: unknown): valor is Patrimonio {
   )
 }
 
-async function recusarRespostaDeCripto(resposta: Response, origem: string): Promise<never> {
+async function recusarRespostaDeInvestimento(resposta: Response, origem: string): Promise<never> {
   if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
   if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
-  if (resposta.status === 404) throw new CriptoNaoEncontradoError('não encontrado')
+  if (resposta.status === 404) throw new InvestimentoNaoEncontradoError('não encontrado')
   if (resposta.status === 409) throw new CriptoRepetidoError(await lerMensagemDeErro(resposta))
   if (resposta.status === 400) throw new CriptoInvalidoError(await lerMensagemDeErro(resposta))
   if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
@@ -1426,7 +1426,7 @@ async function enviarJson(caminho: string, dados: unknown): Promise<Response> {
 
 export async function fetchAtivosCripto(): Promise<AtivoCripto[]> {
   const resposta = await fetch(`${baseUrl}/ativos-cripto`, { credentials: 'same-origin' })
-  if (!resposta.ok) return recusarRespostaDeCripto(resposta, '/ativos-cripto')
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, '/ativos-cripto')
   const corpo: unknown = await resposta.json()
   if (!Array.isArray(corpo) || !corpo.every(isAtivoCripto)) {
     throw new ApiError('/ativos-cripto com formato inesperado')
@@ -1436,7 +1436,7 @@ export async function fetchAtivosCripto(): Promise<AtivoCripto[]> {
 
 export async function postAtivoCripto(dados: AtivoCriptoRequest): Promise<AtivoCripto> {
   const resposta = await enviarJson('/ativos-cripto', dados)
-  if (!resposta.ok) return recusarRespostaDeCripto(resposta, 'POST /ativos-cripto')
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /ativos-cripto')
   const corpo: unknown = await resposta.json()
   if (!isAtivoCripto(corpo)) throw new ApiError('POST /ativos-cripto com formato inesperado')
   return corpo
@@ -1445,13 +1445,13 @@ export async function postAtivoCripto(dados: AtivoCriptoRequest): Promise<AtivoC
 export async function postCotacao(ativoId: string, dados: CotacaoRequest): Promise<void> {
   const resposta = await enviarJson(`/ativos-cripto/${encodeURIComponent(ativoId)}/cotacoes`, dados)
   if (resposta.status !== 201) {
-    return recusarRespostaDeCripto(resposta, 'POST /ativos-cripto/{id}/cotacoes')
+    return recusarRespostaDeInvestimento(resposta, 'POST /ativos-cripto/{id}/cotacoes')
   }
 }
 
 export async function fetchMovimentosCripto(): Promise<MovimentoCripto[]> {
   const resposta = await fetch(`${baseUrl}/movimentos-cripto`, { credentials: 'same-origin' })
-  if (!resposta.ok) return recusarRespostaDeCripto(resposta, '/movimentos-cripto')
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, '/movimentos-cripto')
   const corpo: unknown = await resposta.json()
   if (!Array.isArray(corpo) || !corpo.every(isMovimentoCripto)) {
     throw new ApiError('/movimentos-cripto com formato inesperado')
@@ -1461,7 +1461,7 @@ export async function fetchMovimentosCripto(): Promise<MovimentoCripto[]> {
 
 export async function postMovimentoCripto(dados: MovimentoCriptoRequest): Promise<MovimentoCripto> {
   const resposta = await enviarJson('/movimentos-cripto', dados)
-  if (!resposta.ok) return recusarRespostaDeCripto(resposta, 'POST /movimentos-cripto')
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /movimentos-cripto')
   const corpo: unknown = await resposta.json()
   if (!isMovimentoCripto(corpo)) throw new ApiError('POST /movimentos-cripto com formato inesperado')
   return corpo
@@ -1473,7 +1473,7 @@ export async function deleteMovimentoCripto(id: string): Promise<void> {
     credentials: 'same-origin',
   })
   if (resposta.status !== 204) {
-    return recusarRespostaDeCripto(resposta, 'DELETE /movimentos-cripto/{id}')
+    return recusarRespostaDeInvestimento(resposta, 'DELETE /movimentos-cripto/{id}')
   }
 }
 
@@ -1482,7 +1482,7 @@ export async function fetchPosicoesCripto(data: string): Promise<PosicoesCripto>
   const resposta = await fetch(`${baseUrl}/posicoes-cripto?${parametros.toString()}`, {
     credentials: 'same-origin',
   })
-  if (!resposta.ok) return recusarRespostaDeCripto(resposta, '/posicoes-cripto')
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, '/posicoes-cripto')
   const corpo: unknown = await resposta.json()
   if (!isPosicoesCripto(corpo)) throw new ApiError('/posicoes-cripto com formato inesperado')
   return corpo
@@ -1493,7 +1493,7 @@ export async function fetchPatrimonio(data: string): Promise<Patrimonio> {
   const resposta = await fetch(`${baseUrl}/patrimonio?${parametros.toString()}`, {
     credentials: 'same-origin',
   })
-  if (!resposta.ok) return recusarRespostaDeCripto(resposta, '/patrimonio')
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, '/patrimonio')
   const corpo: unknown = await resposta.json()
   if (!isPatrimonio(corpo)) throw new ApiError('/patrimonio com formato inesperado')
   return corpo
@@ -1600,7 +1600,7 @@ export async function fetchTitulosRendaFixa(data: string): Promise<TitulosRendaF
   const resposta = await fetch(`${baseUrl}/titulos-renda-fixa?${parametros.toString()}`, {
     credentials: 'same-origin',
   })
-  if (!resposta.ok) return recusarRespostaDeCripto(resposta, '/titulos-renda-fixa')
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, '/titulos-renda-fixa')
   const corpo: unknown = await resposta.json()
   if (!isTitulosRendaFixa(corpo)) throw new ApiError('/titulos-renda-fixa com formato inesperado')
   return corpo
@@ -1608,7 +1608,7 @@ export async function fetchTitulosRendaFixa(data: string): Promise<TitulosRendaF
 
 export async function postTituloRendaFixa(dados: TituloRendaFixaRequest): Promise<TituloRendaFixa> {
   const resposta = await enviarJson('/titulos-renda-fixa', dados)
-  if (!resposta.ok) return recusarRespostaDeCripto(resposta, 'POST /titulos-renda-fixa')
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /titulos-renda-fixa')
   return lerTitulo(resposta, 'POST /titulos-renda-fixa')
 }
 
@@ -1619,7 +1619,7 @@ export async function putTituloRendaFixa(id: string, dados: TituloRendaFixaReque
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(dados),
   })
-  if (!resposta.ok) return recusarRespostaDeCripto(resposta, 'PUT /titulos-renda-fixa/{id}')
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'PUT /titulos-renda-fixa/{id}')
   return lerTitulo(resposta, 'PUT /titulos-renda-fixa/{id}')
 }
 
@@ -1628,17 +1628,17 @@ export async function deleteTituloRendaFixa(id: string): Promise<void> {
     method: 'DELETE',
     credentials: 'same-origin',
   })
-  if (resposta.status !== 204) return recusarRespostaDeCripto(resposta, 'DELETE /titulos-renda-fixa/{id}')
+  if (resposta.status !== 204) return recusarRespostaDeInvestimento(resposta, 'DELETE /titulos-renda-fixa/{id}')
 }
 
 export async function postMarcacao(id: string, data: string, valorCentavos: number): Promise<void> {
   const resposta = await enviarJson(`/titulos-renda-fixa/${encodeURIComponent(id)}/marcacoes`, { data, valorCentavos })
-  if (resposta.status !== 201) return recusarRespostaDeCripto(resposta, 'POST /titulos-renda-fixa/{id}/marcacoes')
+  if (resposta.status !== 201) return recusarRespostaDeInvestimento(resposta, 'POST /titulos-renda-fixa/{id}/marcacoes')
 }
 
 export async function postResgate(id: string, data: string, valorCentavos: number): Promise<TituloRendaFixa> {
   const resposta = await enviarJson(`/titulos-renda-fixa/${encodeURIComponent(id)}/resgate`, { data, valorCentavos })
-  if (!resposta.ok) return recusarRespostaDeCripto(resposta, 'POST /titulos-renda-fixa/{id}/resgate')
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /titulos-renda-fixa/{id}/resgate')
   return lerTitulo(resposta, 'POST /titulos-renda-fixa/{id}/resgate')
 }
 
