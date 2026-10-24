@@ -4,9 +4,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.felipe.ballast.identity.CodePointSize;
 import com.felipe.ballast.identity.NoControlCharacters;
 import io.swagger.v3.oas.annotations.media.Schema;
+import tools.jackson.core.JsonParser;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.deser.std.StdDeserializer;
 
-// Só texto e categoria: valor, parcelas, data e conta não se editam (ADR-032). Campo ausente ou
-// nulo não muda; descrição em branco limpa a descrição.
+// Só texto e categoria: valor, parcelas, data e conta não se editam (ADR-032). Titulo e categoria
+// ausentes ou nulos não mudam. Descrição ausente mantém; nula, vazia ou em branco limpa.
 @Schema(name = "CompraParceladaAtualizarRequest")
 public record InstallmentUpdateRequest(
     @JsonProperty("titulo")
@@ -15,10 +19,12 @@ public record InstallmentUpdateRequest(
         @NoControlCharacters(message = EntryRequest.TITLE_MESSAGE)
         String title,
     @JsonProperty("descricao")
+        @JsonDeserialize(using = ClearableText.class)
         @Schema(
             requiredMode = Schema.RequiredMode.NOT_REQUIRED,
             maxLength = 500,
-            description = "Vazia ou em branco limpa a descrição")
+            nullable = true,
+            description = "Ausente mantém; nula, vazia ou em branco limpa a descrição")
         @CodePointSize(max = 500, message = EntryRequest.DESCRIPTION_MESSAGE)
         @NoControlCharacters(message = EntryRequest.DESCRIPTION_MESSAGE)
         String description,
@@ -33,5 +39,29 @@ public record InstallmentUpdateRequest(
 
   boolean isEmpty() {
     return title == null && description == null && categoryId == null;
+  }
+
+  // Nulo explícito vira "" para se distinguir do campo ausente, que o Jackson deixa nulo no
+  // record. O "" é o mesmo sinal de limpar que a descrição vazia já usa.
+  static final class ClearableText extends StdDeserializer<String> {
+    ClearableText() {
+      super(String.class);
+    }
+
+    @Override
+    public String deserialize(JsonParser parser, DeserializationContext context) {
+      return context.readValue(parser, String.class);
+    }
+
+    @Override
+    public String getNullValue(DeserializationContext context) {
+      return "";
+    }
+
+    // O padrão do Jackson usa o valor nulo também para campo ausente.
+    @Override
+    public String getAbsentValue(DeserializationContext context) {
+      return null;
+    }
   }
 }

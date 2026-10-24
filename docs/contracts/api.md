@@ -430,7 +430,8 @@ parcela entra na fatura do seu vencimento (`dataCaixa`).
 - `PATCH /compras-parceladas/{id}` com `{"titulo"?, "descricao"?,
   "categoriaId"?}`: pelo menos um (senão 400 `informe titulo, descricao ou
   categoriaId`), campo extra dá 400. Aplica em todas as parcelas numa transação.
-  `descricao` vazia ou em branco limpa a descrição. Responde 200 com a compra.
+  `descricao` ausente mantém; nula, vazia ou em branco limpa a descrição.
+  Responde 200 com a compra.
   Valor, parcelas, data e conta não se editam: apague e lance de novo.
 - `DELETE /compras-parceladas/{id}` apaga todas as parcelas que existem: 204. O
   saldo do cartão volta. 404 como no GET.

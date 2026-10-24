@@ -905,8 +905,9 @@ paths:
     patch:
       description: "Aplica titulo, descricao e categoriaId em todas as parcelas na\
         \ mesma transação. Pelo menos um dos três; campo ausente não muda, e descricao\
-        \ vazia limpa a descrição. Valor, número de parcelas, data e conta não se\
-        \ editam: apague a compra e lance de novo. Vale também com o cartão arquivado."
+        \ nula ou vazia limpa a descrição. Valor, número de parcelas, data e conta\
+        \ não se editam: apague a compra e lance de novo. Vale também com o cartã\
+        o arquivado."
       operationId: patchComprasParceladasById
       parameters:
       - in: path
@@ -3781,8 +3782,10 @@ components:
           type: string
           format: uuid
         descricao:
-          type: string
-          description: Vazia ou em branco limpa a descrição
+          type:
+          - string
+          - "null"
+          description: "Ausente mantém; nula, vazia ou em branco limpa a descrição"
           maxLength: 500
         titulo:
           type: string

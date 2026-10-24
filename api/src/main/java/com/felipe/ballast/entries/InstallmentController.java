@@ -180,7 +180,8 @@ class InstallmentController {
       summary = "Muda o texto e a categoria da compra inteira",
       description =
           "Aplica titulo, descricao e categoriaId em todas as parcelas na mesma transação. Pelo"
-              + " menos um dos três; campo ausente não muda, e descricao vazia limpa a descrição."
+              + " menos um dos três; campo ausente não muda, e descricao nula ou vazia limpa a"
+              + " descrição."
               + " Valor, número de parcelas, data e conta não se editam: apague a compra e lance de"
               + " novo. Vale também com o cartão arquivado.",
       security = @SecurityRequirement(name = "cookieAuth"))

@@ -116,6 +116,18 @@ class InstallmentManagementTest {
   }
 
   @Test
+  void aNullDescriptionClearsItAndAnAbsentOneKeepsIt() throws Exception {
+    java.util.Map<String, Object> body = new java.util.HashMap<>();
+    body.put("titulo", "Outro título");
+    body.put("descricao", null);
+
+    JsonNode cleared = EntriesApi.body(api.patch(shopper.session(), id, body));
+
+    assertThat(cleared.get("descricao").isNull()).isTrue();
+    assertThat(cleared.get("titulo").asString()).isEqualTo("Outro título");
+  }
+
+  @Test
   void aBlankDescriptionClearsIt() throws Exception {
     JsonNode body = EntriesApi.body(api.patch(shopper.session(), id, Map.of("descricao", "  ")));
 

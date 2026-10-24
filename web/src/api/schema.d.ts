@@ -305,7 +305,7 @@ export interface paths {
         head?: never;
         /**
          * Muda o texto e a categoria da compra inteira
-         * @description Aplica titulo, descricao e categoriaId em todas as parcelas na mesma transação. Pelo menos um dos três; campo ausente não muda, e descricao vazia limpa a descrição. Valor, número de parcelas, data e conta não se editam: apague a compra e lance de novo. Vale também com o cartão arquivado.
+         * @description Aplica titulo, descricao e categoriaId em todas as parcelas na mesma transação. Pelo menos um dos três; campo ausente não muda, e descricao nula ou vazia limpa a descrição. Valor, número de parcelas, data e conta não se editam: apague a compra e lance de novo. Vale também com o cartão arquivado.
          */
         patch: operations["patchComprasParceladasById"];
         trace?: never;
@@ -1143,8 +1143,8 @@ export interface components {
         CompraParceladaAtualizarRequest: {
             /** Format: uuid */
             categoriaId?: string;
-            /** @description Vazia ou em branco limpa a descrição */
-            descricao?: string;
+            /** @description Ausente mantém; nula, vazia ou em branco limpa a descrição */
+            descricao?: string | null;
             titulo?: string;
         };
         CompraParceladaItem: {
