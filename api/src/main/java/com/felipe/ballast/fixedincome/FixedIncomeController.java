@@ -79,6 +79,11 @@ class FixedIncomeController {
       description = "Sem sessão válida",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "409",
+      description =
+          "Teto de títulos do usuário atingido (limite de títulos de renda fixa atingido)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "503",
       description = "Banco indisponível",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))

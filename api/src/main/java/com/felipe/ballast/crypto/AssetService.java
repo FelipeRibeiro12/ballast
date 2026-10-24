@@ -1,5 +1,7 @@
 package com.felipe.ballast.crypto;
 
+import com.felipe.ballast.limits.UserLimit;
+import com.felipe.ballast.limits.UserLimits;
 import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
@@ -19,8 +21,10 @@ class AssetService {
 
   private final CryptoQueries queries;
   private final WriteTransaction transaction;
+  private final UserLimits limits;
 
-  AssetService(CryptoQueries queries, WriteTransaction transaction) {
+  AssetService(CryptoQueries queries, WriteTransaction transaction, UserLimits limits) {
+    this.limits = limits;
     this.queries = queries;
     this.transaction = transaction;
   }
@@ -59,7 +63,10 @@ class AssetService {
     try {
       return new CreateResult.Created(
           transaction.execute(
-              status -> queries.insertAsset(userId, network, stored, symbol, name, decimals)));
+              status -> {
+                limits.checkRoom(userId, UserLimit.CRYPTO_ASSETS);
+                return queries.insertAsset(userId, network, stored, symbol, name, decimals);
+              }));
     } catch (DataIntegrityViolationException e) {
       if (Constraints.isViolated(e, ASSET_UNIQUE)) {
         return CreateResult.Rejected.DUPLICATE;
@@ -80,6 +87,7 @@ class AssetService {
             if (queries.findAssetDecimals(userId, assetId).isEmpty()) {
               return QuoteResult.ASSET_NOT_FOUND;
             }
+            limits.checkRoom(userId, UserLimit.QUOTES);
             queries.insertQuote(userId, assetId, moment, price);
             return QuoteResult.SAVED;
           });

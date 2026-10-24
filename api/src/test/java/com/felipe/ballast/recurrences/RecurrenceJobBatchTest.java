@@ -22,7 +22,7 @@ class RecurrenceJobBatchTest {
     UUID failingTemplate;
 
     FakeService() {
-      super(null, null, null);
+      super(null, null, null, null);
     }
 
     @Override

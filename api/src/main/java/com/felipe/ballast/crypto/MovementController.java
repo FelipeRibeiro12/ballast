@@ -86,6 +86,11 @@ class MovementController {
       description = "Content-Type diferente de application/json",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "409",
+      description =
+          "Teto de movimentos do usuário atingido (limite de movimentos de cripto atingido)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "503",
       description = "Banco indisponível ou conta travada por mais de 2 s",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))

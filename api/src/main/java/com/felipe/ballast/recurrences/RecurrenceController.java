@@ -97,6 +97,11 @@ class RecurrenceController {
       description = "Content-Type diferente de application/json",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "409",
+      description =
+          "Teto de recorrências ativas do usuário atingido (limite de recorrências ativas atingido)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "503",
       description = "Banco indisponível",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -226,6 +231,11 @@ class RecurrenceController {
   @ApiResponse(
       responseCode = "415",
       description = "Content-Type diferente de application/json",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description =
+          "Reativar passaria do teto de recorrências ativas (limite de recorrências ativas atingido)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "503",

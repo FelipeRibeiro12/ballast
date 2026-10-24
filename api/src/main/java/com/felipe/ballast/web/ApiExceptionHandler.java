@@ -2,6 +2,7 @@ package com.felipe.ballast.web;
 
 import com.felipe.ballast.identity.MfaError;
 import com.felipe.ballast.identity.PasswordHasherBusyException;
+import com.felipe.ballast.limits.LimitReachedException;
 import java.util.Comparator;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -98,6 +99,12 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     return body(HttpStatus.SERVICE_UNAVAILABLE, new HttpHeaders(), "serviço indisponível");
   }
 
+  // O texto vem do enum dos tetos, fixo, sem dado do cliente.
+  @ExceptionHandler(LimitReachedException.class)
+  ResponseEntity<Object> handleLimitReached(LimitReachedException ex) {
+    return body(HttpStatus.CONFLICT, new HttpHeaders(), ex.getMessage());
+  }
+
   // Sem stack trace: num flood seria uma por requisição recusada. Os 5 s são a espera do semáforo.
   @ExceptionHandler(PasswordHasherBusyException.class)
   ResponseEntity<Object> handlePasswordHasherBusy(PasswordHasherBusyException ex) {
@@ -112,6 +119,11 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     // A trava ocupada por mais de 2 s não é falha da requisição: o cliente pode tentar de novo.
     if (LockTimeouts.isLockTimeout(ex)) {
       log.warn("espera por trava estourou", ex);
+      return body(HttpStatus.SERVICE_UNAVAILABLE, new HttpHeaders(), "serviço indisponível");
+    }
+    // O DELETE de conta tem prazo próprio (ADR-055); estourar desfaz a transação inteira.
+    if (LockTimeouts.isStatementTimeout(ex)) {
+      log.warn("consulta passou do statement_timeout", ex);
       return body(HttpStatus.SERVICE_UNAVAILABLE, new HttpHeaders(), "serviço indisponível");
     }
     if (LockTimeouts.isDeadlock(ex)) {

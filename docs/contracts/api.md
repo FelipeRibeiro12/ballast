@@ -899,6 +899,16 @@ Emenda "Cripto em dólar".
   `serviço indisponível` com `Retry-After: 5`.
 - Cadastro com o teto de usuários atingido (`CADASTRO_MAX_USUARIOS`, padrão
   20): 403 `cadastro fechado: limite de usuários atingido`, sem gravar nada.
+- Teto por usuário (ADR-055): criar conta, recorrência ativa (inclusive
+  reativar), compra parcelada, título de renda fixa, movimento de cripto, ativo
+  de cripto ou cotação manual além do teto responde 409
+  `{"erro":"limite de X atingido"}`, com X em `contas`, `recorrências ativas`,
+  `compras parceladas`, `títulos de renda fixa`, `movimentos de cripto`,
+  `ativos de cripto` ou `cotações`. Nada é gravado. O teto vale por usuário, e
+  os padrões e as variáveis estão no `.env.example`. Os 409 que já existiam
+  (nome repetido, ativo repetido, cotação repetida) mantêm a mensagem.
+- `DELETE /contas/{id}` que passa do prazo por instrução (`TIMEOUT_APAGAR_CONTA`,
+  padrão 15 s): 503 `serviço indisponível`, e nada é apagado.
 - `/healthz` com outra checagem em andamento: 503 `{"erro":"indisponível"}`,
   sem tocar no banco.
 

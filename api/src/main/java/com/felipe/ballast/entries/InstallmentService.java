@@ -1,5 +1,7 @@
 package com.felipe.ballast.entries;
 
+import com.felipe.ballast.limits.UserLimit;
+import com.felipe.ballast.limits.UserLimits;
 import com.felipe.ballast.web.WriteTransaction;
 import java.util.List;
 import java.util.Optional;
@@ -55,9 +57,14 @@ class InstallmentService {
   private final InstallmentQueries installments;
   private final EntryQueries entries;
   private final WriteTransaction transaction;
+  private final UserLimits limits;
 
   InstallmentService(
-      InstallmentQueries installments, EntryQueries entries, WriteTransaction transaction) {
+      InstallmentQueries installments,
+      EntryQueries entries,
+      WriteTransaction transaction,
+      UserLimits limits) {
+    this.limits = limits;
     this.installments = installments;
     this.entries = entries;
     this.transaction = transaction;
@@ -79,6 +86,7 @@ class InstallmentService {
   }
 
   private CreateResult createLocked(TransactionStatus status, UUID userId, InstallmentInput input) {
+    limits.checkRoom(userId, UserLimit.INSTALLMENT_PURCHASES);
     Optional<Boolean> archived = entries.lockAccount(userId, input.accountId());
     if (archived.isEmpty()) {
       return CreateResult.Rejected.ACCOUNT_NOT_FOUND;

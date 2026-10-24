@@ -2,6 +2,8 @@ package com.felipe.ballast.recurrences;
 
 import com.felipe.ballast.entries.CardBilling;
 import com.felipe.ballast.entries.EntryType;
+import com.felipe.ballast.limits.UserLimit;
+import com.felipe.ballast.limits.UserLimits;
 import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
@@ -89,8 +91,11 @@ class RecurrenceService {
   private final RecurrenceQueries queries;
   private final WriteTransaction transaction;
   private final Clock clock;
+  private final UserLimits limits;
 
-  RecurrenceService(RecurrenceQueries queries, WriteTransaction transaction, Clock clock) {
+  RecurrenceService(
+      RecurrenceQueries queries, WriteTransaction transaction, Clock clock, UserLimits limits) {
+    this.limits = limits;
     this.queries = queries;
     this.transaction = transaction;
     this.clock = clock;
@@ -131,6 +136,7 @@ class RecurrenceService {
   }
 
   private CreateResult createLocked(UUID userId, RecurrenceInput input) {
+    limits.checkRoom(userId, UserLimit.ACTIVE_RECURRENCES);
     Optional<Boolean> archived = queries.lockAccount(userId, input.accountId());
     if (archived.isEmpty()) {
       return CreateResult.Rejected.ACCOUNT_NOT_FOUND;
@@ -309,6 +315,11 @@ class RecurrenceService {
           Optional<RecurrenceQueries.LockedTemplate> template = queries.lockTemplate(userId, id);
           if (template.isEmpty()) {
             return ReactivateResult.NOT_FOUND;
+          }
+          // Reativar também soma uma ativa; sem esta conferência o teto se contornaria desativando
+          // e reativando. Quem já está ativa não ocupa vaga nova.
+          if (!template.get().active()) {
+            limits.checkRoom(userId, UserLimit.ACTIVE_RECURRENCES);
           }
           Optional<Boolean> archived =
               queries.isAccountArchived(userId, template.get().accountId());

@@ -59,6 +59,17 @@ ballast:
   # Teto de usuários do tier gratuito (ADR-049). Vazio vale 20.
   registration-max-users: ${CADASTRO_MAX_USUARIOS:}
   cookie-secure: ${COOKIE_SECURE:true}
+  # Tetos por usuário (ADR-055). Vazio vale o padrão de cada um; aceita de 1 a 1.000.000.
+  limits:
+    accounts: ${LIMITE_CONTAS:}
+    active-recurrences: ${LIMITE_RECORRENCIAS_ATIVAS:}
+    installment-purchases: ${LIMITE_COMPRAS_PARCELADAS:}
+    fixed-income-titles: ${LIMITE_TITULOS_RENDA_FIXA:}
+    crypto-movements: ${LIMITE_MOVIMENTOS_CRIPTO:}
+    crypto-assets: ${LIMITE_ATIVOS_CRIPTO:}
+    quotes: ${LIMITE_COTACOES:}
+    # Prazo por instrução do DELETE /contas/{id}, como 15s ou 500ms. Vazio vale 15s.
+    account-delete-timeout: ${TIMEOUT_APAGAR_CONTA:}
   origins:
     # Origens do navegador aceitas em POST, PUT, PATCH e DELETE além do próprio Host, separadas por
     # vírgula (ADR-051). Em produção, o domínio do app no Vercel.

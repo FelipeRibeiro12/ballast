@@ -90,6 +90,11 @@ class InstallmentController {
       description = "Content-Type diferente de application/json",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "409",
+      description =
+          "Teto de compras parceladas do usuário atingido (limite de compras parceladas atingido)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "503",
       description = "Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))

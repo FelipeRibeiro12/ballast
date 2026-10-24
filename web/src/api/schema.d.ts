@@ -2279,7 +2279,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description O usuário já tem um ativo com essa rede e esse contrato */
+            /** @description O usuário já tem um ativo com essa rede e esse contrato, ou atingiu o teto de ativos (limite de ativos de cripto atingido) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2368,7 +2368,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Já existe cotação do ativo nesse instante */
+            /** @description Já existe cotação do ativo nesse instante, ou o usuário atingiu o teto de cotações (limite de cotações atingido) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3099,6 +3099,15 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Teto de compras parceladas do usuário atingido (limite de compras parceladas atingido) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Corpo maior que 4 KiB */
             413: {
                 headers: {
@@ -3413,7 +3422,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Já existe uma conta do usuário com esse nome, sem diferenciar caixa */
+            /** @description Já existe uma conta do usuário com esse nome, sem diferenciar caixa, ou o usuário atingiu o teto de contas (limite de contas atingido) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3551,7 +3560,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            /** @description Banco indisponível, conta travada por mais de 2 s ou apagar passou do prazo por instrução (15 s por padrão); nada é apagado */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -4740,6 +4749,15 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Teto de movimentos do usuário atingido (limite de movimentos de cripto atingido) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Corpo maior que 4 KiB */
             413: {
                 headers: {
@@ -5252,6 +5270,15 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Teto de recorrências ativas do usuário atingido (limite de recorrências ativas atingido) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Corpo maior que 4 KiB */
             413: {
                 headers: {
@@ -5510,6 +5537,15 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description Reativar passaria do teto de recorrências ativas (limite de recorrências ativas atingido) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Corpo maior que 4 KiB */
             413: {
                 headers: {
@@ -5721,6 +5757,15 @@ export interface operations {
             };
             /** @description Sem sessão válida */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Teto de títulos do usuário atingido (limite de títulos de renda fixa atingido) */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

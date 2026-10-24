@@ -122,7 +122,9 @@ class AccountController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "409",
-      description = "Já existe uma conta do usuário com esse nome, sem diferenciar caixa",
+      description =
+          "Já existe uma conta do usuário com esse nome, sem diferenciar caixa, ou o usuário"
+              + " atingiu o teto de contas (limite de contas atingido)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "413",
@@ -426,7 +428,9 @@ class AccountController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "503",
-      description = "Banco indisponível ou conta travada por mais de 2 s",
+      description =
+          "Banco indisponível, conta travada por mais de 2 s ou apagar passou do prazo por"
+              + " instrução (15 s por padrão); nada é apagado",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @DeleteMapping(path = "/contas/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> delete(

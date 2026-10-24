@@ -14,7 +14,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Component
 public class WriteTransaction {
 
-  static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofSeconds(2);
+  public static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofSeconds(2);
 
   private final TransactionTemplate transaction;
   private final JdbcClient jdbc;
@@ -31,10 +31,21 @@ public class WriteTransaction {
   // Prazo menor que 2 s para quem não deve atrasar a escrita do usuário: a espera de quem chega
   // primeiro na fila de uma trava soma com a de quem chega depois (cada espera tem o prazo cheio).
   public <T> T execute(Duration lockTimeout, TransactionCallback<T> action) {
+    return execute(lockTimeout, null, action);
+  }
+
+  // statementTimeout vale para cada instrução da transação, não para a soma, e inclui a espera por
+  // trava. Nulo deixa sem prazo, que é o caso das outras escritas (o socketTimeout de 30 s cobre).
+  public <T> T execute(
+      Duration lockTimeout, Duration statementTimeout, TransactionCallback<T> action) {
     return transaction.execute(
         status -> {
-          // O valor é um número nosso, em milissegundos, nunca texto do cliente.
+          // Os valores são números nossos, em milissegundos, nunca texto do cliente.
           jdbc.sql("SET LOCAL lock_timeout = '" + lockTimeout.toMillis() + "ms'").update();
+          if (statementTimeout != null) {
+            jdbc.sql("SET LOCAL statement_timeout = '" + statementTimeout.toMillis() + "ms'")
+                .update();
+          }
           return action.doInTransaction(status);
         });
   }
