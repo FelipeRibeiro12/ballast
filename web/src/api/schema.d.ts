@@ -28,6 +28,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ativos-cripto/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edita símbolo, nome e decimais do ativo
+         * @description Rede e contrato são a identidade e não mudam. Menos decimais que algum movimento já usa é 409.
+         */
+        put: operations["putAtivosCriptoById"];
+        post?: never;
+        /**
+         * Apaga o ativo e as cotações dele
+         * @description Ativo com movimentos não se apaga: apague os movimentos antes (409).
+         */
+        delete: operations["deleteAtivosCriptoById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ativos-cripto/{id}/cotacoes": {
         parameters: {
             query?: never;
@@ -43,6 +67,30 @@ export interface paths {
          */
         post: operations["postAtivosCriptoByIdCotacoes"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ativos-cripto/{id}/cotacoes/{momento}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Corrige o preço de uma cotação digitada
+         * @description O momento no caminho é o da resposta da cotação (ISO-8601 com fuso). Só a cotação manual muda; a da CoinGecko é 409.
+         */
+        put: operations["putAtivosCriptoByIdCotacoesByMomento"];
+        post?: never;
+        /**
+         * Apaga uma cotação digitada
+         * @description Só a cotação manual se apaga; a da CoinGecko é 409.
+         */
+        delete: operations["deleteAtivosCriptoByIdCotacoesByMomento"];
         options?: never;
         head?: never;
         patch?: never;
@@ -737,7 +785,7 @@ export interface paths {
         };
         /**
          * Lista as posições de cripto até uma data
-         * @description Soma dos movimentos até a data nas contas ativas, com a última cotação até o fim do dia em America/Sao_Paulo. Posição zerada não aparece. Sem data, vale hoje.
+         * @description Soma dos movimentos até a data nas contas ativas, com a última cotação até o fim do dia em America/Sao_Paulo. Posição zerada não aparece. Posição com valor fora do inteiro seguro do JSON vem sem valor e com motivoSemValor. Sem data, vale hoje.
          */
         get: operations["getPosicoesCripto"];
         put?: never;
@@ -934,7 +982,11 @@ export interface paths {
          * @description Data e valor recebido. Resgatar de novo troca os dois.
          */
         post: operations["postTitulosRendaFixaByIdResgate"];
-        delete?: never;
+        /**
+         * Desfaz o resgate do título
+         * @description O título volta a render e as marcações escondidas pelo resgate voltam a valer. Idempotente: título sem resgate também responde 204.
+         */
+        delete: operations["deleteTitulosRendaFixaByIdResgate"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1028,6 +1080,12 @@ export interface components {
             nome: string | null;
             /** @enum {string} */
             rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "solana";
+            simbolo: string;
+        };
+        AtivoCriptoEdicao: {
+            /** Format: int32 */
+            decimais: number;
+            nome?: string | null;
             simbolo: string;
         };
         AtivoCriptoRequest: {
@@ -1246,6 +1304,13 @@ export interface components {
             momento: string;
             /** @description Dólares por unidade, em texto; nulo na cotação antiga em reais sem PTAX */
             precoUsd: string | null;
+        };
+        CotacaoPrecoRequest: {
+            /**
+             * @description Dólares por unidade, em texto: até 12 dígitos inteiros e 8 casas
+             * @example 350000.5
+             */
+            precoUsd: string;
         };
         CotacaoRequest: {
             /**
@@ -1731,7 +1796,9 @@ export interface components {
              * @description Soma do líquido estimado dos títulos de renda fixa na data
              */
             rendaFixaCentavos: number;
-            /** @description Posições sem cotação até a data, fora do total */
+            /** @description Títulos de renda fixa com valor fora do limite, que ficam fora de rendaFixaCentavos */
+            rendaFixaSemValor?: components["schemas"]["TituloSemValor"][];
+            /** @description Posições fora do total: sem cotação até a data, ou com o valor fora do limite */
             semCotacao: components["schemas"]["PosicaoSemCotacao"][];
             /** Format: int64 */
             totalCentavos: number;
@@ -1802,6 +1869,11 @@ export interface components {
              * @description valorUsdCentavos menos custoDaPosicaoUsdCentavos: o que o preço fez com o que restou; nulo quando falta um dos dois
              */
             ganhoUsdCentavos: number | null;
+            /**
+             * @description Preenchido quando algum valor não cabe no inteiro seguro do JSON: todos os campos de valor e de custo vêm nulos e a posição fica fora do patrimônio
+             * @enum {string|null}
+             */
+            motivoSemValor?: "fora do limite" | null;
             /** @description Tokens: compras menos vendas até a data, em texto, sem zero à direita */
             quantidade: string;
             /**
@@ -1827,6 +1899,8 @@ export interface components {
             ativoId: string;
             /** Format: uuid */
             contaId: string;
+            /** @enum {string} */
+            motivo?: "sem cotação" | "fora do limite";
             /** @description Em texto */
             quantidade: string;
         };
@@ -2063,6 +2137,8 @@ export interface components {
             vencidasCentavos: number;
         };
         TituloRendaFixa: {
+            /** @description Texto curto quando o CDI ou o IPCA guardado não cobre o período do título; o valor sai com o que há */
+            avisoIndice?: string | null;
             /** Format: uuid */
             contaId: string;
             /** Format: date */
@@ -2081,6 +2157,11 @@ export interface components {
              * @description Estimativa; zero em LCI e LCA
              */
             irCentavos: number | null;
+            /**
+             * @description Preenchido quando o valor não cabe no inteiro seguro do JSON: os campos de valor vêm nulos e o título fica fora do patrimônio
+             * @enum {string|null}
+             */
+            motivoSemValor?: "fora do limite" | null;
             nome: string;
             /**
              * Format: int64
@@ -2103,6 +2184,8 @@ export interface components {
              * @description Bruto menos IOF e IR estimados
              */
             valorLiquidoCentavos: number | null;
+            /** @description True a partir do vencimento: o valor fica congelado nele. Só a listagem traz true */
+            vencido?: boolean;
             /** Format: date */
             vencimento: string | null;
         };
@@ -2125,6 +2208,12 @@ export interface components {
             valorAplicadoCentavos: number;
             /** Format: date */
             vencimento?: string | null;
+        };
+        TituloSemValor: {
+            /** @enum {string} */
+            motivo: "fora do limite";
+            /** Format: uuid */
+            tituloId: string;
         };
         TitulosRendaFixa: {
             /** Format: date */
@@ -2327,6 +2416,135 @@ export interface operations {
             };
         };
     };
+    putAtivosCriptoById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AtivoCriptoEdicao"];
+            };
+        };
+        responses: {
+            /** @description Ativo editado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtivoCripto"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado como rede e contrato */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Ativo de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Há movimento com mais casas decimais que o novo valor */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteAtivosCriptoById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Apagado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Ativo de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description O ativo tem movimentos */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     postAtivosCriptoByIdCotacoes: {
         parameters: {
             query?: never;
@@ -2398,6 +2616,137 @@ export interface operations {
             };
             /** @description Content-Type diferente de application/json */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putAtivosCriptoByIdCotacoesByMomento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                momento: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CotacaoPrecoRequest"];
+            };
+        };
+        responses: {
+            /** @description Cotação corrigida */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cotacao"];
+                };
+            };
+            /** @description Preço fora do formato, campo não declarado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Ativo de outro usuário, inexistente, momento sem cotação ou fora do formato; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Cotação automática */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteAtivosCriptoByIdCotacoesByMomento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                momento: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Apagada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Ativo de outro usuário, inexistente, momento sem cotação ou fora do formato; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Cotação automática */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5242,7 +5591,7 @@ export interface operations {
                     "application/json": components["schemas"]["PosicoesCripto"];
                 };
             };
-            /** @description data fora do formato ou "posição fora do limite" */
+            /** @description data fora do formato */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5784,7 +6133,7 @@ export interface operations {
                     "application/json": components["schemas"]["SaldoProjetado"];
                 };
             };
-            /** @description dias que não é inteiro de 1 a 366 (ou repetido), contaId que não é UUID (ou repetido) ou "projeção fora do limite" (algum valor sairia de ±9007199254740991 centavos) */
+            /** @description dias que não é inteiro de 1 a 366 (ou repetido), contaId que não é UUID (ou repetido), contaId de conta cripto ("conta cripto não tem saldo projetado") ou "projeção fora do limite" (algum valor sairia de ±9007199254740991 centavos) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5842,7 +6191,7 @@ export interface operations {
                     "application/json": components["schemas"]["TitulosRendaFixa"];
                 };
             };
-            /** @description data fora do formato ou "renda fixa fora do limite" */
+            /** @description data fora do formato */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5958,7 +6307,7 @@ export interface operations {
                     "application/json": components["schemas"]["TituloRendaFixa"];
                 };
             };
-            /** @description Como no POST, e aplicação depois do resgate (no mesmo dia vale) */
+            /** @description Como no POST, aplicação depois do resgate (no mesmo dia vale) e aplicação depois de uma marcação já gravada */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6128,7 +6477,7 @@ export interface operations {
                     "application/json": components["schemas"]["TituloRendaFixa"];
                 };
             };
-            /** @description Entrada inválida, data antes da aplicação ou no futuro */
+            /** @description Entrada inválida, data antes da aplicação ou no futuro, ou antes de uma marcação já gravada (no mesmo dia vale) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6166,6 +6515,46 @@ export interface operations {
             };
             /** @description Idempotency-Key já usada com outra rota ou outro corpo */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteTitulosRendaFixaByIdResgate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sem resgate */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Título de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

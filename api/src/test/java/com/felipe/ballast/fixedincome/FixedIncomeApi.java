@@ -69,6 +69,10 @@ final class FixedIncomeApi {
         Map.of("data", date, "valorCentavos", cents));
   }
 
+  MockHttpServletResponse undoRedemption(Cookie session, String id) throws Exception {
+    return api.send(session, delete("/titulos-renda-fixa/" + id + "/resgate"), null);
+  }
+
   MockHttpServletResponse indices(Cookie session) throws Exception {
     return api.send(session, get("/indices"), null);
   }

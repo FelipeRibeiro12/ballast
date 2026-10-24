@@ -7,6 +7,7 @@ import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ class AssetService {
   private static final String ASSET_UNIQUE = "ativo_cripto_usuario_rede_contrato_unico";
   private static final String QUOTE_PK = "cotacao_pkey";
   private static final String QUOTE_ASSET_FK = "cotacao_ativo_do_usuario";
+  private static final String MOVEMENT_ASSET_FK = "movimento_cripto_ativo_do_usuario";
 
   private final CryptoQueries queries;
   private final WriteTransaction transaction;
@@ -42,6 +44,27 @@ class AssetService {
     SAVED,
     ASSET_NOT_FOUND,
     DUPLICATE
+  }
+
+  sealed interface UpdateResult {
+    record Updated(CryptoQueries.Asset asset) implements UpdateResult {}
+
+    enum Rejected implements UpdateResult {
+      NOT_FOUND,
+      DECIMALS_TOO_FEW
+    }
+  }
+
+  enum DeleteResult {
+    DELETED,
+    NOT_FOUND,
+    HAS_MOVEMENTS
+  }
+
+  enum QuoteChange {
+    DONE,
+    NOT_FOUND,
+    FROM_PROVIDER
   }
 
   // Sem SELECT antes: duas requisições iguais passariam juntas, só o unique da V13 segura.
@@ -100,5 +123,80 @@ class AssetService {
       }
       throw e;
     }
+  }
+
+  // Menos casas que um movimento já usa deixaria a quantidade dele impossível de digitar de novo.
+  UpdateResult update(UUID userId, UUID id, String symbol, String name, int decimals) {
+    return transaction.execute(
+        status -> {
+          if (queries.findAssetDecimals(userId, id).isEmpty()) {
+            return UpdateResult.Rejected.NOT_FOUND;
+          }
+          if (queries.hasMovementFinerThan(userId, id, decimals)) {
+            return UpdateResult.Rejected.DECIMALS_TOO_FEW;
+          }
+          return queries
+              .updateAsset(userId, id, symbol, name, decimals)
+              .<UpdateResult>map(UpdateResult.Updated::new)
+              .orElse(UpdateResult.Rejected.NOT_FOUND);
+        });
+  }
+
+  // As cotações vão junto, ativo com movimento não. A FK dos movimentos fica como rede de
+  // segurança para o movimento que entra entre a conferência e o DELETE.
+  DeleteResult delete(UUID userId, UUID id) {
+    try {
+      return transaction.execute(
+          status -> {
+            if (queries.findAssetDecimals(userId, id).isEmpty()) {
+              return DeleteResult.NOT_FOUND;
+            }
+            if (queries.hasMovements(userId, id)) {
+              return DeleteResult.HAS_MOVEMENTS;
+            }
+            queries.deleteQuotesOf(userId, id);
+            return queries.deleteAsset(userId, id) == 0
+                ? DeleteResult.NOT_FOUND
+                : DeleteResult.DELETED;
+          });
+    } catch (DataIntegrityViolationException e) {
+      if (Constraints.isViolated(e, MOVEMENT_ASSET_FK)) {
+        return DeleteResult.HAS_MOVEMENTS;
+      }
+      throw e;
+    }
+  }
+
+  // Só a cotação digitada muda: a do provedor é o que ele publicou naquele instante.
+  QuoteChange correctQuote(UUID userId, UUID assetId, Instant moment, BigDecimal price) {
+    return transaction.execute(
+        status -> {
+          Optional<String> source = queries.findQuoteSource(userId, assetId, moment);
+          if (source.isEmpty()) {
+            return QuoteChange.NOT_FOUND;
+          }
+          if (!"manual".equals(source.get())) {
+            return QuoteChange.FROM_PROVIDER;
+          }
+          return queries.updateQuotePrice(userId, assetId, moment, price) == 0
+              ? QuoteChange.NOT_FOUND
+              : QuoteChange.DONE;
+        });
+  }
+
+  QuoteChange deleteQuote(UUID userId, UUID assetId, Instant moment) {
+    return transaction.execute(
+        status -> {
+          Optional<String> source = queries.findQuoteSource(userId, assetId, moment);
+          if (source.isEmpty()) {
+            return QuoteChange.NOT_FOUND;
+          }
+          if (!"manual".equals(source.get())) {
+            return QuoteChange.FROM_PROVIDER;
+          }
+          return queries.deleteQuote(userId, assetId, moment) == 0
+              ? QuoteChange.NOT_FOUND
+              : QuoteChange.DONE;
+        });
   }
 }

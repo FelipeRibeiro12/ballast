@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -21,6 +23,7 @@ public class FakeIndexSource implements IndexSource {
   private final Map<IndexSeries, List<IndexPoint>> published = new ConcurrentHashMap<>();
   private final List<String> requests = new CopyOnWriteArrayList<>();
   private final AtomicBoolean down = new AtomicBoolean();
+  private volatile CountDownLatch gate = new CountDownLatch(0);
 
   public void publish(IndexSeries series, IndexPoint point) {
     published.computeIfAbsent(series, key -> new CopyOnWriteArrayList<>()).add(point);
@@ -30,11 +33,21 @@ public class FakeIndexSource implements IndexSource {
     down.set(true);
   }
 
+  // Faz fetch esperar até release: o Banco Central mudo, que não responde nem erra.
+  public void hold() {
+    gate = new CountDownLatch(1);
+  }
+
+  public void release() {
+    gate.countDown();
+  }
+
   public List<String> requests() {
     return List.copyOf(requests);
   }
 
   public void reset() {
+    release();
     published.clear();
     requests.clear();
     down.set(false);
@@ -43,6 +56,11 @@ public class FakeIndexSource implements IndexSource {
   @Override
   public List<IndexPoint> fetch(IndexSeries series, LocalDate from, LocalDate to) {
     requests.add(series.value() + " " + from + " " + to);
+    try {
+      gate.await(30, TimeUnit.SECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
     if (down.get()) {
       throw new IllegalStateException("banco central fora do ar no teste");
     }

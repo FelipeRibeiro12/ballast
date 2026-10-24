@@ -87,7 +87,15 @@ public record PositionResponse(
             description =
                 "Recebido nas vendas menos o custo médio do que foi vendido, em centavos de real;"
                     + " nulo sem a PTAX de algum movimento em dólar")
-        Long realizadoCentavos) {
+        Long realizadoCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+            nullable = true,
+            allowableValues = "fora do limite",
+            description =
+                "Preenchido quando algum valor não cabe no inteiro seguro do JSON: todos os campos"
+                    + " de valor e de custo vêm nulos e a posição fica fora do patrimônio")
+        String motivoSemValor) {
 
   @Schema(name = "CotacaoDaPosicao")
   public record QuoteValue(
@@ -135,7 +143,8 @@ public record PositionResponse(
         cents(valued.gainUsd()),
         cents(valued.gainBrl()),
         cents(valued.realizedUsd()),
-        cents(valued.realizedBrl()));
+        cents(valued.realizedBrl()),
+        valued.outOfRange() ? NetWorthService.OUT_OF_RANGE_REASON : null);
   }
 
   // O serviço já arredondou e conferiu a faixa; longValueExact falha alto se algum valor escapar.

@@ -1,11 +1,19 @@
 package com.felipe.ballast.fixedincome;
 
+import jakarta.annotation.PreDestroy;
 import java.time.Clock;
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +32,17 @@ public class IndexUpdater {
   private static final int CHUNK_YEARS = 5;
 
   private final ReentrantLock running = new ReentrantLock();
+  // A busca de quem grava título ou movimento roda numa thread só, fora da requisição. A data mais
+  // antiga pedida fica em pending: pedidos que chegam durante uma busca se juntam na seguinte.
+  private final ExecutorService background =
+      Executors.newSingleThreadExecutor(
+          runnable -> {
+            Thread thread = new Thread(runnable, "indices-em-segundo-plano");
+            thread.setDaemon(true);
+            return thread;
+          });
+  private final AtomicReference<LocalDate> pending = new AtomicReference<>();
+  private final AtomicInteger inFlight = new AtomicInteger();
   private final IndexSource source;
   private final IndexQueries queries;
   private final Clock clock;
@@ -39,8 +58,61 @@ public class IndexUpdater {
     LocalDate today = today();
     LocalDate yearAgo = today.minusYears(1);
     LocalDate from =
-        queries.earliestInvestment().filter(earliest -> earliest.isBefore(yearAgo)).orElse(yearAgo);
+        queries
+            .earliestApplicationOrMovement()
+            .filter(earliest -> earliest.isBefore(yearAgo))
+            .orElse(yearAgo);
     updateFrom(from);
+  }
+
+  // Pede a busca sem esperar: gravar título ou movimento nunca depende da rede (ADR-058).
+  public void requestFrom(LocalDate requested) {
+    pending.accumulateAndGet(
+        requested, (current, next) -> current == null || next.isBefore(current) ? next : current);
+    inFlight.incrementAndGet();
+    try {
+      background.execute(this::drainPending);
+    } catch (RejectedExecutionException e) {
+      // Desligando: o job diário pega o que faltou.
+      inFlight.decrementAndGet();
+    }
+  }
+
+  // Só para teste: espera as buscas pedidas por requestFrom terminarem.
+  public boolean awaitIdle(Duration timeout) {
+    long deadline = System.nanoTime() + timeout.toNanos();
+    while (inFlight.get() > 0) {
+      if (System.nanoTime() > deadline) {
+        return false;
+      }
+      LockSupport.parkNanos(Duration.ofMillis(10).toNanos());
+    }
+    return true;
+  }
+
+  @PreDestroy
+  void stopBackground() {
+    background.shutdownNow();
+  }
+
+  private void drainPending() {
+    try {
+      LocalDate from = pending.getAndSet(null);
+      if (from == null) {
+        return;
+      }
+      // Espera a rodada do job em vez de largar o pedido: quem pediu quer a data dele coberta.
+      running.lock();
+      try {
+        updateSeries(from);
+      } finally {
+        running.unlock();
+      }
+    } catch (RuntimeException e) {
+      log.warn("busca de índice em segundo plano falhou: erro={}", e.getClass().getSimpleName());
+    } finally {
+      inFlight.decrementAndGet();
+    }
   }
 
   // Preenche antes do primeiro valor guardado (aplicação antiga) e depois do último (dias novos).

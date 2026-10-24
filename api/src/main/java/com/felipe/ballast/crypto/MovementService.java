@@ -61,19 +61,14 @@ class MovementService {
     WOULD_GO_NEGATIVE
   }
 
-  // Fora da transação e só para movimento antes da primeira PTAX guardada (ADR-038): o resto o job
-  // diário traz, e chamar o Banco Central em todo POST seria latência e abuso (auditoria do PR
-  // #23).
+  // Só movimento antes da primeira PTAX guardada pede busca (ADR-038): o resto o job diário traz.
+  // A busca roda em segundo plano, então a resposta não traz o custo em reais nesse caso e a
+  // leitura seguinte traz (ADR-058).
   CreateResult create(UUID userId, Input input) {
     CreateResult result = transaction.execute(status -> createLocked(status, userId, input));
-    if (result instanceof CreateResult.Created created
+    if (result instanceof CreateResult.Created
         && queries.firstDollarDate().map(first -> input.date().isBefore(first)).orElse(true)) {
-      indices.updateFrom(input.date());
-      // Lido de novo para a resposta já trazer o custo em reais pela PTAX que acabou de chegar.
-      return queries
-          .findMovement(userId, created.movement().id())
-          .<CreateResult>map(CreateResult.Created::new)
-          .orElse(result);
+      indices.requestFrom(input.date());
     }
     return result;
   }

@@ -460,3 +460,12 @@ Dívida registrada: CRUD de categoria protegendo as sementes; V26 em banco com h
 Achados do revisor: 0 bloquearam, 3 viraram dívida ou já estavam no ADR
 Pipeline: a preencher no PR
 Em aberto: nada
+
+## 2026-10-24 — Rodada de fechamento, onda 6a: renda fixa e cripto na API
+
+O que entrou: busca do Banco Central em segundo plano com teto, vencido congelado, desfazer resgate, marcações validadas, valor ausente em vez de 400, aviso de índice, editar e apagar ativo e cotação, cache da raiz 252.
+Decisões: ADR-058
+Dívida registrada: o web ainda não usa os recursos novos; movimento em dólar sem PTAX volta com custo nulo até a busca terminar
+Achados do revisor: reviewer e security dispensados (sem borda de autenticação)
+Pipeline: a preencher no PR
+Em aberto: onda 6b, o web.

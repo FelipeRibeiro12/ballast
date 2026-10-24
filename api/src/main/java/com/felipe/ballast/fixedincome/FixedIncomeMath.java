@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 // Contas da renda fixa, sem banco nem relógio (ADR-037). Os fatores ficam com 34 dígitos e só o
 // valor final vira centavos, uma vez, em quem chama. Nada passa por double.
@@ -59,8 +60,37 @@ final class FixedIncomeMath {
     if (businessDays == 0) {
       return BigDecimal.ONE;
     }
+    return yearlyRoot(yearlyPercent).pow(businessDays, CONTEXT);
+  }
+
+  // A raiz 252 pelo Newton é a parte cara e só depende da taxa: cada título e cada leitura da lista
+  // a refaziam. Com taxa até 1000 e 4 casas há milhões de chaves possíveis, então o mapa tem teto:
+  // cheio, calcula sem guardar.
+  static final int ROOT_CACHE_LIMIT = 1000;
+
+  private static final ConcurrentHashMap<BigDecimal, BigDecimal> ROOTS = new ConcurrentHashMap<>();
+
+  private static BigDecimal yearlyRoot(BigDecimal yearlyPercent) {
+    // 12.5 e 12.50 são a mesma taxa; a chave sem zeros à direita evita duas entradas.
+    BigDecimal key = yearlyPercent.stripTrailingZeros();
+    BigDecimal cached = ROOTS.get(key);
+    if (cached != null) {
+      return cached;
+    }
     BigDecimal yearly = BigDecimal.ONE.add(yearlyPercent.divide(HUNDRED, CONTEXT), CONTEXT);
-    return root(yearly, BUSINESS_DAYS_PER_YEAR).pow(businessDays, CONTEXT);
+    BigDecimal root = root(yearly, BUSINESS_DAYS_PER_YEAR);
+    if (ROOTS.size() < ROOT_CACHE_LIMIT) {
+      ROOTS.putIfAbsent(key, root);
+    }
+    return root;
+  }
+
+  static int rootCacheSize() {
+    return ROOTS.size();
+  }
+
+  static void clearRootCache() {
+    ROOTS.clear();
   }
 
   // Π (1 + CDI_d x %CDI) nos dias úteis em [from, to). Dia útil sem CDI publicado ainda (depois do

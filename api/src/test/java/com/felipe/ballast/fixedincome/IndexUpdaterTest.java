@@ -144,4 +144,18 @@ class IndexUpdaterTest {
     assertThatCode(() -> updater.updateFrom(LocalDate.of(2041, 3, 1))).doesNotThrowAnyException();
     assertThat(stored(IndexSeries.CDI)).isEqualTo(1);
   }
+
+  @Test
+  void aFiveYearWindowGoesInAndRepeatingItDoesNotDuplicate() {
+    LocalDate day = LocalDate.of(2036, 1, 1);
+    for (int i = 0; i < 1300; i++) {
+      source.publish(IndexSeries.CDI, new IndexPoint(day.plusDays(i), new BigDecimal("0.04")));
+    }
+    clock.freeze(Instant.parse("2040-01-10T15:00:00Z"));
+
+    updater.updateFrom(LocalDate.of(2036, 1, 1));
+    updater.updateFrom(LocalDate.of(2036, 1, 1));
+
+    assertThat(stored(IndexSeries.CDI)).isEqualTo(1300);
+  }
 }

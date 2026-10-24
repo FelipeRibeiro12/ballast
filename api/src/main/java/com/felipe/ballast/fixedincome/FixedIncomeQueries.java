@@ -20,6 +20,8 @@ import org.springframework.stereotype.Repository;
 class FixedIncomeQueries {
 
   // A última marcação de cada título vem junto, para a tela mostrar o que o banco disse por último.
+  // Só vale a marcação entre a aplicação e o resgate: as de fora (gravadas antes de a escrita
+  // recusá-las, ou de um resgate que mudou depois) ficam escondidas (ADR-058).
   private static final String COLUMNS =
       """
       SELECT t.id, t.conta_id, t.tipo, t.nome, t.valor_aplicado, t.data_aplicacao, t.vencimento,
@@ -29,6 +31,7 @@ class FixedIncomeQueries {
       LEFT JOIN LATERAL (
         SELECT data, valor FROM marcacao_renda_fixa
         WHERE titulo_id = t.id AND usuario_id = t.usuario_id
+          AND data >= t.data_aplicacao AND (t.data_resgate IS NULL OR data <= t.data_resgate)
         ORDER BY data DESC LIMIT 1
       ) m ON true
       """;
@@ -166,15 +169,50 @@ class FixedIncomeQueries {
         .update();
   }
 
-  // A última marcação de cada título até a data, inclusive.
+  // Tira o resgate: o título volta a render. Zero linhas é título que não existe.
+  int unredeem(UUID userId, UUID id) {
+    return jdbc.sql(
+            "UPDATE titulo_renda_fixa SET data_resgate = NULL, valor_resgate = NULL"
+                + " WHERE usuario_id = :userId AND id = :id")
+        .param("userId", userId)
+        .param("id", id)
+        .update();
+  }
+
+  boolean hasMarkAfter(UUID userId, UUID id, LocalDate date) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM marcacao_renda_fixa"
+                + " WHERE usuario_id = :userId AND titulo_id = :id AND data > :date)")
+        .param("userId", userId)
+        .param("id", id)
+        .param("date", date)
+        .query(Boolean.class)
+        .single();
+  }
+
+  boolean hasMarkBefore(UUID userId, UUID id, LocalDate date) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM marcacao_renda_fixa"
+                + " WHERE usuario_id = :userId AND titulo_id = :id AND data < :date)")
+        .param("userId", userId)
+        .param("id", id)
+        .param("date", date)
+        .query(Boolean.class)
+        .single();
+  }
+
+  // A última marcação de cada título até a data, inclusive, entre a aplicação e o resgate.
   Map<UUID, Mark> marksUpTo(UUID userId, LocalDate date) {
     Map<UUID, Mark> marks = new HashMap<>();
     jdbc.sql(
             """
-            SELECT DISTINCT ON (titulo_id) titulo_id, data, valor
-            FROM marcacao_renda_fixa
-            WHERE usuario_id = :userId AND data <= :date
-            ORDER BY titulo_id, data DESC
+            SELECT DISTINCT ON (m.titulo_id) m.titulo_id, m.data, m.valor
+            FROM marcacao_renda_fixa m
+            JOIN titulo_renda_fixa t ON t.id = m.titulo_id AND t.usuario_id = m.usuario_id
+            WHERE m.usuario_id = :userId AND m.data <= :date
+              AND m.data >= t.data_aplicacao
+              AND (t.data_resgate IS NULL OR m.data <= t.data_resgate)
+            ORDER BY m.titulo_id, m.data DESC
             """)
         .param("userId", userId)
         .param("date", date)

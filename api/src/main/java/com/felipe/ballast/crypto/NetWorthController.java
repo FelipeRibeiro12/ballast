@@ -28,8 +28,6 @@ class NetWorthController {
   private static final ErrorResponse INVALID_DATE =
       new ErrorResponse("data deve ser uma data AAAA-MM-DD com ano entre 1900 e 2199");
   private static final ErrorResponse OUT_OF_RANGE = new ErrorResponse("patrimônio fora do limite");
-  private static final ErrorResponse POSITION_OUT_OF_RANGE =
-      new ErrorResponse("posição fora do limite");
 
   private final NetWorthService netWorth;
   private final Clock clock;
@@ -44,7 +42,8 @@ class NetWorthController {
       summary = "Lista as posições de cripto até uma data",
       description =
           "Soma dos movimentos até a data nas contas ativas, com a última cotação até o fim do"
-              + " dia em America/Sao_Paulo. Posição zerada não aparece. Sem data, vale hoje.",
+              + " dia em America/Sao_Paulo. Posição zerada não aparece. Posição com valor fora do"
+              + " inteiro seguro do JSON vem sem valor e com motivoSemValor. Sem data, vale hoje.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",
@@ -52,7 +51,7 @@ class NetWorthController {
       content = @Content(schema = @Schema(implementation = PositionListResponse.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "data fora do formato ou \"posição fora do limite\"",
+      description = "data fora do formato",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -71,11 +70,8 @@ class NetWorthController {
     if (day.isEmpty()) {
       return ResponseEntity.badRequest().body(INVALID_DATE);
     }
-    Optional<NetWorthService.Positions> positions = netWorth.positions(user.id(), day.get());
-    if (positions.isEmpty()) {
-      return ResponseEntity.badRequest().body(POSITION_OUT_OF_RANGE);
-    }
-    CryptoQueries.Dollar dollar = positions.get().dollar();
+    NetWorthService.Positions positions = netWorth.positions(user.id(), day.get());
+    CryptoQueries.Dollar dollar = positions.dollar();
     BigDecimal rate = dollar == null ? null : dollar.value();
     return ResponseEntity.ok(
         new PositionListResponse(
@@ -83,7 +79,7 @@ class NetWorthController {
             dollar == null
                 ? null
                 : new PositionListResponse.Dollar(Decimals.format(dollar.value()), dollar.date()),
-            positions.get().positions().stream()
+            positions.positions().stream()
                 .map(position -> PositionResponse.from(position, rate))
                 .toList()));
   }

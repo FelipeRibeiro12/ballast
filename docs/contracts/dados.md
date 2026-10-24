@@ -432,7 +432,14 @@ nela a partir do cliente. Só o job grava.
 
 **Valor não é coluna.** O valor de um título numa data é calculado da última
 marcação até a data (ou da aplicação) com o fator do indexador, como o saldo é a
-soma dos lançamentos. Os dias úteis são os dias com CDI publicado.
+soma dos lançamentos. Os dias úteis são os dias com CDI publicado. Depois do
+`vencimento` o valor fica congelado nele (ADR-058).
+
+**Marcação só vale entre a aplicação e o resgate (ADR-058).** O banco não impede
+uma linha de `marcacao_renda_fixa` fora desse período: a API recusa gravar, e as
+que já existem (ou que um resgate refeito deixou de fora) são ignoradas no
+cálculo e em `ultimaMarcacao`. Desfazer o resgate as faz valer de novo. Sem
+migration nesta onda.
 
 **Fonte automática (F14, ADR-040, migration `V16`).** `cotacao_fonte_valida`
 aceita `manual` e `coingecko`. O job grava uma linha por ativo `confiavel` de
