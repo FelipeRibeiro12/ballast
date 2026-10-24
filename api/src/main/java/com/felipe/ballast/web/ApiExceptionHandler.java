@@ -114,7 +114,7 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     return ResponseEntity.status(status).headers(out).body(new ErrorResponse(message));
   }
 
-  private static String messageFor(HttpStatusCode status) {
+  static String messageFor(HttpStatusCode status) {
     return switch (status.value()) {
       case 404 -> "não encontrado";
       case 405 -> "método não permitido";
