@@ -1,6 +1,7 @@
 import {
   CriptoInvalidoError,
   CriptoRepetidoError,
+  LimiteTentativasError,
   MetaInvalidaError,
   OrcamentoInvalidoError,
   RelatorioInvalidoError,
@@ -14,7 +15,10 @@ export type Estado<T> = { tipo: 'carregando' } | { tipo: 'erro'; mensagem: strin
 
 export const MENSAGEM_INDISPONIVEL = 'Serviço indisponível. Tente de novo em instantes.'
 
+export const MENSAGEM_LIMITE = 'Muitas requisições em pouco tempo. Espere um instante e tente de novo.'
+
 export function mensagemDeLeitura(erro: unknown, oQue: string): string {
+  if (erro instanceof LimiteTentativasError) return MENSAGEM_LIMITE
   if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
   if (
     (erro instanceof CriptoInvalidoError ||

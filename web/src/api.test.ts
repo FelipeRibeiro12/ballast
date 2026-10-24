@@ -387,6 +387,19 @@ describe('rotas de contas', () => {
   })
 })
 
+describe('429 nas leituras', () => {
+  it.each([
+    ['contas', () => fetchContas(false)],
+    ['categorias', () => fetchCategorias()],
+  ])('%s: 429 vira LimiteTentativasError', async (_nome, chamar) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('{}', { status: 429, headers: { 'Retry-After': '5' } }))),
+    )
+    await expect(chamar()).rejects.toBeInstanceOf(LimiteTentativasError)
+  })
+})
+
 describe('lançamentos e categorias', () => {
   const lancamento = {
     id: 'l1',
