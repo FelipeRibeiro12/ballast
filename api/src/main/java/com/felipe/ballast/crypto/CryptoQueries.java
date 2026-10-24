@@ -115,6 +115,94 @@ class CryptoQueries {
         .list();
   }
 
+  // Rede e contrato não mudam. Vazio para ativo de outro usuário ou inexistente.
+  Optional<Asset> updateAsset(UUID userId, UUID id, String symbol, String name, int decimals) {
+    return jdbc.sql(
+            """
+            UPDATE ativo_cripto SET simbolo = :symbol, nome = :name, decimais = :decimals
+            WHERE usuario_id = :userId AND id = :id
+            RETURNING id, rede, contrato, simbolo, nome, decimais, confiavel
+            """)
+        .param("userId", userId)
+        .param("id", id)
+        .param("symbol", symbol)
+        .param("name", name)
+        .param("decimals", decimals)
+        .query(CryptoQueries::mapAsset)
+        .optional();
+  }
+
+  // A quantidade é guardada com 18 casas; o que conta é o que o usuário digitou, sem zeros.
+  boolean hasMovementFinerThan(UUID userId, UUID assetId, int decimals) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM movimento_cripto WHERE usuario_id = :userId"
+                + " AND ativo_id = :assetId AND scale(trim_scale(quantidade)) > :decimals)")
+        .param("userId", userId)
+        .param("assetId", assetId)
+        .param("decimals", decimals)
+        .query(Boolean.class)
+        .single();
+  }
+
+  boolean hasMovements(UUID userId, UUID assetId) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM movimento_cripto"
+                + " WHERE usuario_id = :userId AND ativo_id = :assetId)")
+        .param("userId", userId)
+        .param("assetId", assetId)
+        .query(Boolean.class)
+        .single();
+  }
+
+  int deleteQuotesOf(UUID userId, UUID assetId) {
+    return jdbc.sql("DELETE FROM cotacao WHERE usuario_id = :userId AND ativo_id = :assetId")
+        .param("userId", userId)
+        .param("assetId", assetId)
+        .update();
+  }
+
+  int deleteAsset(UUID userId, UUID id) {
+    return jdbc.sql("DELETE FROM ativo_cripto WHERE usuario_id = :userId AND id = :id")
+        .param("userId", userId)
+        .param("id", id)
+        .update();
+  }
+
+  // A fonte da cotação naquele instante, ou vazio se não existe (ou é de outro dono).
+  Optional<String> findQuoteSource(UUID userId, UUID assetId, Instant moment) {
+    return jdbc.sql(
+            "SELECT fonte FROM cotacao"
+                + " WHERE usuario_id = :userId AND ativo_id = :assetId AND momento = :moment")
+        .param("userId", userId)
+        .param("assetId", assetId)
+        .param("moment", OffsetDateTime.ofInstant(moment, ZoneOffset.UTC))
+        .query(String.class)
+        .optional();
+  }
+
+  int updateQuotePrice(UUID userId, UUID assetId, Instant moment, BigDecimal price) {
+    return jdbc.sql(
+            "UPDATE cotacao SET preco = :price"
+                + " WHERE usuario_id = :userId AND ativo_id = :assetId AND momento = :moment"
+                + " AND fonte = 'manual'")
+        .param("userId", userId)
+        .param("assetId", assetId)
+        .param("moment", OffsetDateTime.ofInstant(moment, ZoneOffset.UTC))
+        .param("price", price)
+        .update();
+  }
+
+  int deleteQuote(UUID userId, UUID assetId, Instant moment) {
+    return jdbc.sql(
+            "DELETE FROM cotacao"
+                + " WHERE usuario_id = :userId AND ativo_id = :assetId AND momento = :moment"
+                + " AND fonte = 'manual'")
+        .param("userId", userId)
+        .param("assetId", assetId)
+        .param("moment", OffsetDateTime.ofInstant(moment, ZoneOffset.UTC))
+        .update();
+  }
+
   // Vazio para ativo de outro usuário ou inexistente.
   Optional<Integer> findAssetDecimals(UUID userId, UUID assetId) {
     return jdbc.sql("SELECT decimais FROM ativo_cripto WHERE usuario_id = :userId AND id = :id")

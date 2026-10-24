@@ -3,6 +3,7 @@ package com.felipe.ballast.crypto;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 import com.felipe.ballast.identity.TestUsers;
 import jakarta.servlet.http.Cookie;
@@ -61,6 +62,25 @@ public final class CryptoApi {
 
   public String createAssetOk(Cookie session, Object body) throws Exception {
     return idOf(createAsset(session, body));
+  }
+
+  public MockHttpServletResponse updateAsset(Cookie session, String id, Object body)
+      throws Exception {
+    return send(session, put("/ativos-cripto/" + id), body);
+  }
+
+  public MockHttpServletResponse deleteAsset(Cookie session, String id) throws Exception {
+    return send(session, delete("/ativos-cripto/" + id), null);
+  }
+
+  public MockHttpServletResponse updateQuote(
+      Cookie session, String assetId, String moment, Object body) throws Exception {
+    return send(session, put("/ativos-cripto/" + assetId + "/cotacoes/" + moment), body);
+  }
+
+  public MockHttpServletResponse deleteQuote(Cookie session, String assetId, String moment)
+      throws Exception {
+    return send(session, delete("/ativos-cripto/" + assetId + "/cotacoes/" + moment), null);
   }
 
   public MockHttpServletResponse listAssets(Cookie session) throws Exception {

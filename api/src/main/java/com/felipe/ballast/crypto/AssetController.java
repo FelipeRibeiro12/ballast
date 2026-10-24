@@ -27,9 +27,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -47,6 +49,11 @@ class AssetController {
   private static final ErrorResponse DUPLICATE_ASSET = new ErrorResponse("ativo já cadastrado");
   private static final ErrorResponse DUPLICATE_QUOTE =
       new ErrorResponse("já existe cotação nesse momento");
+  private static final ErrorResponse DECIMALS_TOO_FEW =
+      new ErrorResponse("há movimento com mais casas decimais");
+  private static final ErrorResponse HAS_MOVEMENTS = new ErrorResponse("ativo tem movimentos");
+  private static final ErrorResponse FROM_PROVIDER =
+      new ErrorResponse("cotação automática não se altera");
   private static final ErrorResponse INVALID_MOMENT =
       new ErrorResponse("momento deve ser data e hora ISO-8601 com fuso, ano entre 1900 e 2199");
 
@@ -227,6 +234,210 @@ class AssetController {
       }
       case ASSET_NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case DUPLICATE -> ResponseEntity.status(HttpStatus.CONFLICT).body(DUPLICATE_QUOTE);
+    };
+  }
+
+  @Operation(
+      operationId = "putAtivosCriptoById",
+      summary = "Edita símbolo, nome e decimais do ativo",
+      description =
+          "Rede e contrato são a identidade e não mudam. Menos decimais que algum movimento já"
+              + " usa é 409.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Ativo editado",
+      content = @Content(schema = @Schema(implementation = AssetResponse.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description = "Entrada inválida, inclusive campo não declarado como rede e contrato",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "Ativo de outro usuário, inexistente ou id que não é UUID; mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "Há movimento com mais casas decimais que o novo valor",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @PutMapping(
+      path = "/ativos-cripto/{id}",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> update(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable("id") String id,
+      @Valid @RequestBody AssetUpdateRequest request) {
+    Optional<UUID> assetId = CanonicalUuid.parse(id);
+    if (assetId.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    return switch (assets.update(
+        user.id(), assetId.get(), request.symbol(), request.name(), request.decimals())) {
+      case AssetService.UpdateResult.Updated updated -> {
+        log.info("ativo cripto editado usuario_id={} ativo_id={}", user.id(), assetId.get());
+        yield ResponseEntity.ok(AssetResponse.from(updated.asset()));
+      }
+      case AssetService.UpdateResult.Rejected rejected ->
+          switch (rejected) {
+            case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+            case DECIMALS_TOO_FEW ->
+                ResponseEntity.status(HttpStatus.CONFLICT).body(DECIMALS_TOO_FEW);
+          };
+    };
+  }
+
+  @Operation(
+      operationId = "deleteAtivosCriptoById",
+      summary = "Apaga o ativo e as cotações dele",
+      description = "Ativo com movimentos não se apaga: apague os movimentos antes (409).",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(responseCode = "204", description = "Apagado")
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "Ativo de outro usuário, inexistente ou id que não é UUID; mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "O ativo tem movimentos",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @DeleteMapping(path = "/ativos-cripto/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> delete(
+      @AuthenticationPrincipal AuthenticatedUser user, @PathVariable("id") String id) {
+    Optional<UUID> assetId = CanonicalUuid.parse(id);
+    if (assetId.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    return switch (assets.delete(user.id(), assetId.get())) {
+      case DELETED -> {
+        log.info("ativo cripto apagado usuario_id={} ativo_id={}", user.id(), assetId.get());
+        yield ResponseEntity.noContent().build();
+      }
+      case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+      case HAS_MOVEMENTS -> ResponseEntity.status(HttpStatus.CONFLICT).body(HAS_MOVEMENTS);
+    };
+  }
+
+  @Operation(
+      operationId = "putAtivosCriptoByIdCotacoesByMomento",
+      summary = "Corrige o preço de uma cotação digitada",
+      description =
+          "O momento no caminho é o da resposta da cotação (ISO-8601 com fuso). Só a cotação"
+              + " manual muda; a da CoinGecko é 409.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Cotação corrigida",
+      content = @Content(schema = @Schema(implementation = QuoteResponse.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description = "Preço fora do formato, campo não declarado",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description =
+          "Ativo de outro usuário, inexistente, momento sem cotação ou fora do formato; mesmo"
+              + " corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "Cotação automática",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @PutMapping(
+      path = "/ativos-cripto/{id}/cotacoes/{momento}",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> correctQuote(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable("id") String id,
+      @PathVariable("momento") String momentText,
+      @Valid @RequestBody QuotePriceRequest request) {
+    Optional<UUID> assetId = CanonicalUuid.parse(id);
+    Optional<Instant> moment = parseMoment(momentText);
+    if (assetId.isEmpty() || moment.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    Instant stored = moment.get().truncatedTo(ChronoUnit.MICROS);
+    return switch (assets.correctQuote(user.id(), assetId.get(), stored, request.parsedPrice())) {
+      case DONE -> {
+        log.info("cotação manual corrigida usuario_id={} ativo_id={}", user.id(), assetId.get());
+        yield ResponseEntity.ok(
+            new QuoteResponse(
+                assetId.get(), stored, Decimals.format(request.parsedPrice()), "manual"));
+      }
+      case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+      case FROM_PROVIDER -> ResponseEntity.status(HttpStatus.CONFLICT).body(FROM_PROVIDER);
+    };
+  }
+
+  @Operation(
+      operationId = "deleteAtivosCriptoByIdCotacoesByMomento",
+      summary = "Apaga uma cotação digitada",
+      description = "Só a cotação manual se apaga; a da CoinGecko é 409.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(responseCode = "204", description = "Apagada")
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description =
+          "Ativo de outro usuário, inexistente, momento sem cotação ou fora do formato; mesmo"
+              + " corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "Cotação automática",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @DeleteMapping(
+      path = "/ativos-cripto/{id}/cotacoes/{momento}",
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> deleteQuote(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable("id") String id,
+      @PathVariable("momento") String momentText) {
+    Optional<UUID> assetId = CanonicalUuid.parse(id);
+    Optional<Instant> moment = parseMoment(momentText);
+    if (assetId.isEmpty() || moment.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    Instant stored = moment.get().truncatedTo(ChronoUnit.MICROS);
+    return switch (assets.deleteQuote(user.id(), assetId.get(), stored)) {
+      case DONE -> {
+        log.info("cotação manual apagada usuario_id={} ativo_id={}", user.id(), assetId.get());
+        yield ResponseEntity.noContent().build();
+      }
+      case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+      case FROM_PROVIDER -> ResponseEntity.status(HttpStatus.CONFLICT).body(FROM_PROVIDER);
     };
   }
 
