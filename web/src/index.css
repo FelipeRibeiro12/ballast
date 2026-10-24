@@ -586,6 +586,23 @@ p[role='status'] {
   padding: 0 var(--esp-3);
 }
 
+/* Segurança (ADR-050): só o ícone, para caber ao lado do tema e do Sair em 360px. */
+.topo-link-icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--raio-md);
+  color: var(--texto-suave);
+}
+
+.topo-link-icone:hover,
+.topo-link-icone[aria-current='page'] {
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+
 @media (pointer: coarse) {
   .topo-acoes .segmentos button {
     width: 40px;
@@ -2538,4 +2555,42 @@ button.relatorio-mes:hover:not(:disabled) {
   flex-wrap: wrap;
   gap: var(--esp-2);
   margin-top: var(--esp-1);
+}
+
+/* Segurança (ADR-050). */
+.mfa-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-2);
+}
+
+/* O QR fica branco nos dois temas: leitor de QR invertido falha em muito celular. */
+.qr {
+  display: block;
+  width: min(208px, 100%);
+  height: auto;
+  margin: var(--esp-3) 0;
+  border-radius: var(--raio-md);
+}
+
+.mfa-segredo code,
+.mfa-codigos code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+
+.mfa-codigos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--esp-2);
+  margin: var(--esp-3) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mfa-codigos li {
+  padding: var(--esp-2);
+  border-radius: var(--raio-md);
+  background: var(--superficie-2);
+  text-align: center;
 }

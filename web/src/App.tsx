@@ -6,9 +6,12 @@ import {
   EmailJaCadastradoError,
   EntradaInvalidaError,
   LimiteTentativasError,
+  MfaPendenteError,
+  MfaRecusadoError,
   fetchHealthz,
   fetchUsuarioAtual,
   postLogin,
+  postLoginMfa,
   postCadastro,
 } from './api'
 import type { Conta, Usuario } from './api'
@@ -23,6 +26,7 @@ import Investimentos from './Investimentos'
 import Metas from './Metas'
 import Orcamento from './Orcamento'
 import Relatorios from './Relatorios'
+import Seguranca from './Seguranca'
 import Topo from './Topo'
 import { Carregando } from './ui'
 
@@ -70,6 +74,86 @@ function mensagemDeCadastro(erro: unknown): string {
   return 'Não foi possível criar a conta. Tente de novo.'
 }
 
+const DESAFIO_VENCIDO = 'desafio expirado ou inválido'
+
+// Segunda etapa do login com MFA (ADR-050). Aceita o código do autenticador ou um de recuperação,
+// por isso o campo não é só numérico.
+function CodigoDoLogin({
+  aoEntrar,
+  aoVoltar,
+}: {
+  aoEntrar: (usuario: Usuario) => void
+  aoVoltar: (aviso: string | null) => void
+}) {
+  const [codigo, setCodigo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [mensagem, setMensagem] = useState<string | null>(null)
+  const campo = useRef<HTMLInputElement>(null)
+  const emVoo = useRef(false)
+
+  useEffect(() => {
+    campo.current?.focus()
+  }, [])
+
+  async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
+    evento.preventDefault()
+    if (emVoo.current) return
+    emVoo.current = true
+    setEnviando(true)
+    setMensagem(null)
+    try {
+      aoEntrar(await postLoginMfa(codigo))
+    } catch (erro) {
+      if (erro instanceof MfaRecusadoError && erro.mensagemServidor === DESAFIO_VENCIDO) {
+        aoVoltar('O tempo para digitar o código acabou. Entre de novo.')
+        return
+      }
+      if (erro instanceof MfaRecusadoError) {
+        setMensagem('Código inválido. Confira o app autenticador ou use um código de recuperação.')
+      } else {
+        setMensagem(mensagemDeLogin(erro))
+      }
+      setCodigo('')
+      campo.current?.focus()
+    } finally {
+      emVoo.current = false
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <form onSubmit={(evento) => void enviar(evento)} aria-label="Código de verificação">
+      <p>Digite o código de 6 dígitos do app autenticador, ou um código de recuperação.</p>
+      <div className="campo">
+        <label htmlFor="codigo-mfa">Código</label>
+        <input
+          id="codigo-mfa"
+          ref={campo}
+          autoComplete="one-time-code"
+          autoCapitalize="none"
+          spellCheck={false}
+          maxLength={32}
+          required
+          value={codigo}
+          aria-describedby={mensagem === null ? undefined : 'erro-codigo'}
+          onChange={(evento) => setCodigo(evento.target.value)}
+        />
+      </div>
+      {mensagem !== null && (
+        <p id="erro-codigo" role="alert" className="erro">
+          {mensagem}
+        </p>
+      )}
+      <button type="submit" disabled={enviando}>
+        {enviando ? 'Confirmando...' : 'Confirmar'}
+      </button>
+      <button type="button" className="discreto" onClick={() => aoVoltar(null)}>
+        Voltar
+      </button>
+    </form>
+  )
+}
+
 function Login({
   aoEntrar,
   aoCriarConta,
@@ -83,6 +167,8 @@ function Login({
   const [senha, setSenha] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
+  const [pedindoCodigo, setPedindoCodigo] = useState(false)
+  const [avisoDoCodigo, setAvisoDoCodigo] = useState<string | null>(null)
   const campoSenha = useRef<HTMLInputElement>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
   const emVoo = useRef(false)
@@ -97,6 +183,12 @@ function Login({
       const usuario = await postLogin({ email, senha })
       aoEntrar(usuario)
     } catch (erro) {
+      if (erro instanceof MfaPendenteError) {
+        setSenha('')
+        setAvisoDoCodigo(null)
+        setPedindoCodigo(true)
+        return
+      }
       setMensagem(mensagemDeLogin(erro))
       setSenha('')
       campoSenha.current?.focus()
@@ -105,6 +197,20 @@ function Login({
       setEnviando(false)
     }
   }
+
+  if (pedindoCodigo) {
+    return (
+      <CodigoDoLogin
+        aoEntrar={aoEntrar}
+        aoVoltar={(avisoDaVolta) => {
+          setAvisoDoCodigo(avisoDaVolta)
+          setPedindoCodigo(false)
+        }}
+      />
+    )
+  }
+
+  const avisoVisivel = avisoDoCodigo ?? aviso
 
   return (
     <form onSubmit={(evento) => void enviar(evento)} aria-label="Entrar">
@@ -134,7 +240,7 @@ function Login({
           onChange={(evento) => setSenha(evento.target.value)}
         />
       </div>
-      {aviso !== null && <p role="status">{aviso}</p>}
+      {avisoVisivel !== null && <p role="status">{avisoVisivel}</p>}
       {mensagem !== null && (
         <p id="erro-login" role="alert" className="erro">
           {mensagem}
@@ -485,6 +591,7 @@ function App() {
         {rota === 'orcamento' && <Orcamento aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'metas' && <Metas aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'relatorios' && <Relatorios aoSessaoExpirar={aoSessaoExpirar} />}
+        {rota === 'seguranca' && <Seguranca aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'investimentos' && (
           <Investimentos
             contasDeInvestimento={contasDeInvestimento}

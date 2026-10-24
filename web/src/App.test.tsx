@@ -309,6 +309,71 @@ describe('App: login', () => {
     expect(JSON.parse(String(init?.body))).toEqual({ email: 'ana@exemplo.com', senha: 'senha-correta' })
   })
 
+  describe('com MFA ligado', () => {
+    const pendente = () => Promise.resolve(jsonResponse({ mfaPendente: true }, 202))
+
+    async function chegarNoCodigo(rotas: Rotas): Promise<void> {
+      mockFetch({ 'GET /auth/eu': eu401, 'POST /auth/login': pendente, ...rotas })
+      render(<App />)
+      await screen.findByLabelText(/e-mail/i)
+      preencherEEnviar('ana@exemplo.com', 'senha-correta')
+      await screen.findByRole('form', { name: 'Código de verificação' })
+    }
+
+    function enviarCodigo(codigo: string): void {
+      const form = screen.getByRole('form', { name: 'Código de verificação' })
+      fireEvent.change(within(form).getByLabelText('Código'), { target: { value: codigo } })
+      fireEvent.click(within(form).getByRole('button', { name: 'Confirmar' }))
+    }
+
+    it('pede o código e entra com ele', async () => {
+      await chegarNoCodigo({ 'POST /auth/login/mfa': () => Promise.resolve(jsonResponse(usuario, 200)) })
+      const campo = screen.getByLabelText('Código')
+      expect(campo).toHaveAttribute('autocomplete', 'one-time-code')
+      expect(campo).toHaveAttribute('maxlength', '32')
+      expect(campo).toHaveFocus()
+      enviarCodigo('123456')
+      expect(await screen.findByText(/ana@exemplo\.com/)).toBeVisible()
+      expect(JSON.parse(String(chamadasA('POST /auth/login/mfa')[0][1]?.body))).toEqual({ codigo: '123456' })
+    })
+
+    it('código errado avisa e deixa tentar de novo', async () => {
+      await chegarNoCodigo({
+        'POST /auth/login/mfa': () => Promise.resolve(jsonResponse({ erro: 'código inválido' }, 401)),
+      })
+      enviarCodigo('000000')
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Código inválido. Confira o app autenticador ou use um código de recuperação.',
+      )
+      expect(screen.getByLabelText('Código')).toHaveValue('')
+      expect(screen.getByRole('form', { name: 'Código de verificação' })).toBeVisible()
+    })
+
+    it('desafio vencido volta para a senha com aviso', async () => {
+      await chegarNoCodigo({
+        'POST /auth/login/mfa': () => Promise.resolve(jsonResponse({ erro: 'desafio expirado ou inválido' }, 401)),
+      })
+      enviarCodigo('123456')
+      expect(await screen.findByRole('form', { name: 'Entrar' })).toBeVisible()
+      expect(screen.getByText('O tempo para digitar o código acabou. Entre de novo.')).toBeVisible()
+    })
+
+    it('429 mostra quantos segundos esperar', async () => {
+      await chegarNoCodigo({
+        'POST /auth/login/mfa': () => Promise.resolve(jsonResponse({ erro: 'x' }, 429, { 'Retry-After': '16' })),
+      })
+      enviarCodigo('123456')
+      expect(await screen.findByRole('alert')).toHaveTextContent('Muitas tentativas. Tente de novo em 16 segundos.')
+    })
+
+    it('voltar leva para a senha sem chamar o servidor', async () => {
+      await chegarNoCodigo({})
+      fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+      expect(await screen.findByRole('form', { name: 'Entrar' })).toBeVisible()
+      expect(chamadasA('POST /auth/login/mfa')).toHaveLength(0)
+    })
+  })
+
   it('401 mostra uma mensagem única e limpa a senha', async () => {
     mockFetch({
       'GET /auth/eu': eu401,

@@ -46,6 +46,20 @@ export class LimiteTentativasError extends ApiError {
 
 export class EmailJaCadastradoError extends ApiError {}
 
+// Senha certa com MFA ligado: o login espera o código em postLoginMfa (ADR-050).
+export class MfaPendenteError extends ApiError {}
+
+// 400, 401 ou 409 das rotas de MFA, com a mensagem fixa do servidor ("código inválido", "senha
+// incorreta", "desafio expirado ou inválido"...).
+export class MfaRecusadoError extends ApiError {
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('mfa recusado')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
 // Teto de usuários do tier gratuito atingido (ADR-049).
 export class CadastroEsgotadoError extends ApiError {}
 
@@ -108,10 +122,29 @@ export async function postLogin(dados: LoginRequest): Promise<Usuario> {
   })
   if (resposta.status === 401) throw new CredenciaisInvalidasError('credenciais inválidas')
   if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
+  if (resposta.status === 202) throw new MfaPendenteError('código do mfa pendente')
   if (!resposta.ok) {
     throw new ApiError(`/auth/login respondeu ${resposta.status}`)
   }
   return lerUsuario(resposta, '/auth/login')
+}
+
+// O desafio vai no cookie HttpOnly que o 202 do login deixou; o JavaScript nunca o vê.
+export async function postLoginMfa(codigo: string): Promise<Usuario> {
+  const resposta = await fetch(`${baseUrl}/auth/login/mfa`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ codigo }),
+  })
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
+  if (resposta.status === 400 || resposta.status === 401) {
+    throw new MfaRecusadoError(await lerMensagemDeErro(resposta))
+  }
+  if (!resposta.ok) {
+    throw new ApiError(`/auth/login/mfa respondeu ${resposta.status}`)
+  }
+  return lerUsuario(resposta, '/auth/login/mfa')
 }
 
 async function lerMensagemDeErro(resposta: Response): Promise<string | null> {
@@ -2023,4 +2056,78 @@ export async function fetchPossoGastar(): Promise<PossoGastar> {
   const corpo: unknown = await resposta.json()
   if (!isPossoGastar(corpo)) throw new ApiError('/posso-gastar com formato inesperado')
   return corpo
+}
+
+export type MfaStatus = components['schemas']['MfaStatus']
+export type MfaConfiguracao = components['schemas']['MfaConfiguracao']
+
+async function chamarMfa(caminho: string, init?: RequestInit): Promise<Response> {
+  const resposta = await fetch(`${baseUrl}${caminho}`, {
+    credentials: 'same-origin',
+    ...init,
+    headers: init?.body === undefined ? undefined : { 'Content-Type': 'application/json' },
+  })
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
+  if (resposta.status === 400 || resposta.status === 409) {
+    throw new MfaRecusadoError(await lerMensagemDeErro(resposta))
+  }
+  if (!resposta.ok) throw new ApiError(`${caminho} respondeu ${resposta.status}`)
+  return resposta
+}
+
+function isMfaStatus(valor: unknown): valor is MfaStatus {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'ativo' in valor &&
+    typeof valor.ativo === 'boolean' &&
+    'codigosRestantes' in valor &&
+    Number.isInteger(valor.codigosRestantes) &&
+    Number(valor.codigosRestantes) >= 0
+  )
+}
+
+export async function fetchMfa(): Promise<MfaStatus> {
+  const corpo: unknown = await (await chamarMfa('/auth/mfa')).json()
+  if (!isMfaStatus(corpo)) throw new ApiError('/auth/mfa com formato inesperado')
+  return corpo
+}
+
+export async function postMfaConfigurar(senha: string): Promise<MfaConfiguracao> {
+  const resposta = await chamarMfa('/auth/mfa/configurar', { method: 'POST', body: JSON.stringify({ senha }) })
+  const corpo: unknown = await resposta.json()
+  if (
+    typeof corpo !== 'object' ||
+    corpo === null ||
+    !('segredo' in corpo) ||
+    typeof corpo.segredo !== 'string' ||
+    !/^[A-Z2-7]+$/.test(corpo.segredo) ||
+    !('uri' in corpo) ||
+    typeof corpo.uri !== 'string' ||
+    !corpo.uri.startsWith('otpauth://totp/')
+  ) {
+    throw new ApiError('/auth/mfa/configurar com formato inesperado')
+  }
+  return { segredo: corpo.segredo, uri: corpo.uri }
+}
+
+export async function postMfaAtivar(codigo: string): Promise<string[]> {
+  const resposta = await chamarMfa('/auth/mfa/ativar', { method: 'POST', body: JSON.stringify({ codigo }) })
+  const corpo: unknown = await resposta.json()
+  if (
+    typeof corpo !== 'object' ||
+    corpo === null ||
+    !('codigosDeRecuperacao' in corpo) ||
+    !Array.isArray(corpo.codigosDeRecuperacao) ||
+    !corpo.codigosDeRecuperacao.every((codigo: unknown) => typeof codigo === 'string')
+  ) {
+    throw new ApiError('/auth/mfa/ativar com formato inesperado')
+  }
+  return corpo.codigosDeRecuperacao.map(String)
+}
+
+export async function postMfaDesativar(senha: string, codigo: string): Promise<void> {
+  await chamarMfa('/auth/mfa/desativar', { method: 'POST', body: JSON.stringify({ senha, codigo }) })
 }
