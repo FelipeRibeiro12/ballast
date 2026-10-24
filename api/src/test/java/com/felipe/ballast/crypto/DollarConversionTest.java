@@ -210,4 +210,96 @@ class DollarConversionTest {
     // 1000 / 5,0383 = 198,47964591...
     assertThat(quote.get("precoUsd").asString()).isEqualTo("198.47964591");
   }
+
+  @Test
+  void aSaleConvertsByThePtaxOfItsOwnDateAndTheRealizedGainKeepsBothCurrencies() throws Exception {
+    // Compra de 1 BTC por US$ 1.000,00 em 02/03 (PTAX 5,0383), venda de 0,5 por US$ 800,00 em 10/03
+    // (PTAX 5,2).
+    api.moveOk(
+        actor.session(), movement(actor.cryptoId(), bitcoin, "compra", "1", "2036-03-02", 100_000));
+    JsonNode sale =
+        CryptoApi.expect(
+            api.move(
+                actor.session(),
+                movement(actor.cryptoId(), bitcoin, "venda", "0.5", "2036-03-10", 80_000)),
+            201);
+
+    JsonNode position =
+        CryptoApi.expect(api.positions(actor.session(), "?data=2036-03-10"), 200)
+            .get("posicoes")
+            .get(0);
+
+    assertThat(sale.get("custoUsdCentavos").asLong()).isEqualTo(80_000);
+    assertThat(sale.get("custoCentavos").asLong()).isEqualTo(416_000);
+    // Compras menos vendas: US$ 1.000 - 800 e R$ 5.038,30 - 4.160,00.
+    assertThat(position.get("custoUsdCentavos").asLong()).isEqualTo(20_000);
+    assertThat(position.get("custoCentavos").asLong()).isEqualTo(87_830);
+    // Custo médio: metade do que restou de cada moeda, e o realizado é venda menos o custo médio.
+    assertThat(position.get("custoDaPosicaoUsdCentavos").asLong()).isEqualTo(50_000);
+    assertThat(position.get("custoDaPosicaoCentavos").asLong()).isEqualTo(251_915);
+    assertThat(position.get("realizadoUsdCentavos").asLong()).isEqualTo(30_000);
+    assertThat(position.get("realizadoCentavos").asLong()).isEqualTo(164_085);
+  }
+
+  @Test
+  void aPositionMixingAMovementInReaisAndOneInDollarsSumsEachCurrencyFromTheFullValues()
+      throws Exception {
+    jdbc.sql(
+            "INSERT INTO movimento_cripto (id, usuario_id, conta_id, ativo_id, tipo, quantidade,"
+                + " data, custo, moeda) VALUES (:id, :u, CAST(:c AS uuid), CAST(:a AS uuid),"
+                + " 'compra', 1, DATE '2036-03-03', 1000.00, 'BRL')")
+        .param("id", UUID.randomUUID())
+        .param("u", actor.user().id())
+        .param("c", actor.cryptoId())
+        .param("a", bitcoin)
+        .update();
+    api.moveOk(
+        actor.session(), movement(actor.cryptoId(), bitcoin, "compra", "1", "2036-03-10", 20_000));
+
+    JsonNode position =
+        CryptoApi.expect(api.positions(actor.session(), "?data=2036-03-10"), 200)
+            .get("posicoes")
+            .get(0);
+
+    assertThat(position.get("quantidade").asString()).isEqualTo("2");
+    // R$ 1.000,00 + US$ 200,00 x 5,2 = R$ 2.040,00.
+    assertThat(position.get("custoCentavos").asLong()).isEqualTo(204_000);
+    // US$ 1.000,00 / 5,0383 = 198,47964... + US$ 200,00 = 398,47964, que dá 39.848 centavos.
+    assertThat(position.get("custoUsdCentavos").asLong()).isEqualTo(39_848);
+    assertThat(position.get("custoDaPosicaoUsdCentavos").asLong()).isEqualTo(39_848);
+    assertThat(position.get("custoDaPosicaoCentavos").asLong()).isEqualTo(204_000);
+  }
+
+  @Test
+  void halfACentInTheConversionRoundsToEven() throws Exception {
+    dollar("2036-03-12", "4.5");
+    // US$ 0,01 x 4,5 = 4,5 centavos de real: para o par mais próximo (4), não para cima.
+    JsonNode oneCent =
+        CryptoApi.expect(
+            api.move(
+                actor.session(),
+                movement(actor.cryptoId(), bitcoin, "compra", "1", "2036-03-12", 1)),
+            201);
+    // US$ 0,03 x 4,5 = 13,5 centavos: o par mais próximo é 14.
+    JsonNode threeCents =
+        CryptoApi.expect(
+            api.move(
+                actor.session(),
+                movement(actor.cryptoId(), bitcoin, "compra", "1", "2036-03-12", 3)),
+            201);
+    // Posição: 1 BTC cotado a US$ 0,01, que são 4,5 centavos de real pelo dólar da data.
+    api.quoteOk(actor.session(), bitcoin, "0.01", "2036-03-12T12:00:00Z");
+
+    JsonNode position =
+        CryptoApi.expect(api.positions(actor.session(), "?data=2036-03-12"), 200)
+            .get("posicoes")
+            .get(0);
+
+    assertThat(oneCent.get("custoCentavos").asLong()).isEqualTo(4);
+    assertThat(threeCents.get("custoCentavos").asLong()).isEqualTo(14);
+    // 2 BTC x US$ 0,01 = US$ 0,02, que são 9 centavos de real, e US$ 0,04 de custo, 18 centavos.
+    assertThat(position.get("valorUsdCentavos").asLong()).isEqualTo(2);
+    assertThat(position.get("valorCentavos").asLong()).isEqualTo(9);
+    assertThat(position.get("custoCentavos").asLong()).isEqualTo(18);
+  }
 }
