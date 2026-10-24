@@ -606,7 +606,8 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   inclusive cartão e benefício). `criptoCentavos` soma o valor das posições com
   cotação; as sem cotação ficam em `semCotacao` e fora do total. Nunca falha por
   falta de cotação.
-- Qualquer valor fora de ±9007199254740991 dá 400 `patrimônio fora do limite`.
+- Qualquer valor fora de ±9007199254740991 dá 400 `patrimônio fora do limite`
+  em `/patrimonio` e `posição fora do limite` em `/posicoes-cripto`.
 
 #### Custo médio e valorização (ADR-042)
 

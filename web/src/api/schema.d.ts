@@ -5098,7 +5098,7 @@ export interface operations {
                     "application/json": components["schemas"]["PosicoesCripto"];
                 };
             };
-            /** @description data fora do formato ou "patrimônio fora do limite" */
+            /** @description data fora do formato ou "posição fora do limite" */
             400: {
                 headers: {
                     [name: string]: unknown;

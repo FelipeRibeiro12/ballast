@@ -2548,7 +2548,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: data fora do formato ou "patrimônio fora do limite"
+          description: data fora do formato ou "posição fora do limite"
         "401":
           content:
             application/json:

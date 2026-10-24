@@ -28,6 +28,8 @@ class NetWorthController {
   private static final ErrorResponse INVALID_DATE =
       new ErrorResponse("data deve ser uma data AAAA-MM-DD com ano entre 1900 e 2199");
   private static final ErrorResponse OUT_OF_RANGE = new ErrorResponse("patrimônio fora do limite");
+  private static final ErrorResponse POSITION_OUT_OF_RANGE =
+      new ErrorResponse("posição fora do limite");
 
   private final NetWorthService netWorth;
   private final Clock clock;
@@ -50,7 +52,7 @@ class NetWorthController {
       content = @Content(schema = @Schema(implementation = PositionListResponse.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "data fora do formato ou \"patrimônio fora do limite\"",
+      description = "data fora do formato ou \"posição fora do limite\"",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -71,7 +73,7 @@ class NetWorthController {
     }
     Optional<NetWorthService.Positions> positions = netWorth.positions(user.id(), day.get());
     if (positions.isEmpty()) {
-      return ResponseEntity.badRequest().body(OUT_OF_RANGE);
+      return ResponseEntity.badRequest().body(POSITION_OUT_OF_RANGE);
     }
     CryptoQueries.Dollar dollar = positions.get().dollar();
     BigDecimal rate = dollar == null ? null : dollar.value();
