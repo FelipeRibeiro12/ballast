@@ -108,3 +108,23 @@ ADR-050 e a seguranca.md já pediam.
   avisar.
 - Linhas antigas de `tentativa_login` ficam com `ip` vazio e a limpeza diária
   apaga. Para quem estava sob atraso na hora da migração, o atraso zera.
+
+## Decisões do web e do e2e
+
+- **Apagar conta:** o diálogo busca `GET /auth/mfa` junto com o resumo da exclusão.
+  Se o MFA está ligado, aparece o campo "Código do app ou de recuperação", o
+  botão só libera com ele preenchido e o código vai em `{"codigo"}` no corpo do
+  `DELETE`. Sem MFA o `DELETE` sai sem corpo, como antes. Se o status do MFA
+  falhar, o diálogo mostra erro de leitura em vez de arriscar um `DELETE` sem
+  código.
+- **400 `código inválido` e 429** no `DELETE` mostram mensagem própria e limpam
+  o campo do código. O nome da conta digitado fica.
+- **Novos códigos de recuperação:** a tela Segurança pede só o código do app
+  (o servidor não aceita código de recuperação nesta rota), mostra os dez uma
+  vez e avisa que os antigos deixaram de valer.
+- **E2e do MFA** (`web/e2e/mfa.spec.ts`): gera o TOTP no teste com `node:crypto`.
+  Como o servidor recusa o mesmo passo duas vezes (ADR-050), cada código usa um
+  passo mais novo que o anterior, e o teste espera virar o passo (também quando
+  faltam menos de 2 s). Por isso o teste leva de 20 a 60 s.
+- **`MFA_CHAVE` no `scripts/e2e.sh`:** gerada na hora com `openssl rand -base64 32`
+  e passada só pelo ambiente da API, sem arquivo e sem log.
