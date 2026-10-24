@@ -59,6 +59,10 @@ ballast:
   # Teto de usuários do tier gratuito (ADR-049). Vazio vale 20.
   registration-max-users: ${CADASTRO_MAX_USUARIOS:}
   cookie-secure: ${COOKIE_SECURE:true}
+  origins:
+    # Origens do navegador aceitas em POST, PUT, PATCH e DELETE além do próprio Host, separadas por
+    # vírgula (ADR-051). Em produção, o domínio do app no Vercel.
+    allowed: ${ORIGENS_PERMITIDAS:}
   app-env: ${APP_ENV:}
   mfa:
     # Chave AES-256 do segredo do TOTP, em base64 (ADR-050). Vazia, configurar MFA dá 503 e o login

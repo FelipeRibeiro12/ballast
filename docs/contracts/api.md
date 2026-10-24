@@ -26,6 +26,11 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
   caracteres Cf (U+200B, U+202E, U+FEFF e outros) com 400. Só o e-mail recusa
   também ZWJ e ZWNJ. O e-mail passa por NFKC e minúsculas antes de valer, e o
   "İ" é recusado (ADR-051).
+- Em qualquer rota que muda estado (POST, PUT, PATCH, DELETE), `Origin` de
+  outra origem, `null` ou malformado responde 403
+  `{"erro":"origem não permitida"}`. Sem `Origin`, passa, salvo se
+  `Sec-Fetch-Site` for `cross-site`. São aceitos o próprio Host e as origens de
+  `ORIGENS_PERMITIDAS` (ADR-051).
 - Em `/contas/{id}`, conta de outro usuário, id inexistente e id que não é UUID
   respondem 404 com o mesmo corpo.
 - Dinheiro de fiat sai e entra como inteiro de centavos
