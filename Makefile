@@ -1,8 +1,13 @@
-# Em make, a atribuição do arquivo vence o ambiente; no CI não há .env, então o
-# ambiente do workflow segue valendo. Formato KEY=valor sem aspas, sem $ e sem #.
-# O mvnw usa o JAVA_HOME do ambiente (JDK 25); o Makefile não fixa caminho.
+# Só os alvos que sobem a aplicação leem o .env (dev, seed). Antes o arquivo inteiro ia para o
+# ambiente de todos os alvos, e make test herdava a senha do banco e a chave do MFA. Em make, a
+# atribuição do arquivo vence o ambiente; no CI não há .env, então o ambiente do workflow segue
+# valendo. Formato KEY=valor sem aspas, sem $ e sem #. O mvnw usa o JAVA_HOME do ambiente (JDK 25);
+# o Makefile não fixa caminho. O make dev chama a si mesmo com dev-api e dev-web, por isso eles
+# estão na lista.
+ifneq ($(filter dev dev-api dev-web seed,$(MAKECMDGOALS)),)
 -include .env
 export
+endif
 
 .PHONY: setup dev dev-api dev-web build build-api build-web test test-api test-web lint lint-api lint-web db-up db-down spec seed e2e
 
