@@ -60,7 +60,7 @@ class IndexQueries {
 
   // A primeira aplicação ou o primeiro movimento de cripto de todos os usuários: só a data sai
   // daqui, para o job saber de onde baixar. Nenhum dado de usuário vai para a fonte.
-  Optional<LocalDate> earliestInvestment() {
+  Optional<LocalDate> earliestApplicationOrMovement() {
     return jdbc.sql(
             "SELECT least((SELECT min(data_aplicacao) FROM titulo_renda_fixa),"
                 + " (SELECT min(data) FROM movimento_cripto))")

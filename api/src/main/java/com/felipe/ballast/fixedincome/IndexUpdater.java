@@ -39,7 +39,10 @@ public class IndexUpdater {
     LocalDate today = today();
     LocalDate yearAgo = today.minusYears(1);
     LocalDate from =
-        queries.earliestInvestment().filter(earliest -> earliest.isBefore(yearAgo)).orElse(yearAgo);
+        queries
+            .earliestApplicationOrMovement()
+            .filter(earliest -> earliest.isBefore(yearAgo))
+            .orElse(yearAgo);
     updateFrom(from);
   }
 
