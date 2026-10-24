@@ -114,6 +114,22 @@ class AccountDeletionQueries {
         .single();
   }
 
+  // Transferência da conta que um aporte de meta aponta (V27). Apagá-la quebraria a FK.
+  boolean hasLinkedDeposit(UUID userId, UUID accountId) {
+    return jdbc.sql(
+            """
+            SELECT EXISTS (
+              SELECT 1 FROM aporte_meta a
+              JOIN transferencia t ON t.id = a.transferencia_id AND t.usuario_id = a.usuario_id
+              WHERE a.usuario_id = :userId
+                AND (t.conta_saida_id = :id OR t.conta_entrada_id = :id))
+            """)
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(Boolean.class)
+        .single();
+  }
+
   // O cartão aponta para a conta de pagamento por FK; apagar a conta deixaria o cartão sem ela.
   boolean paysACard(UUID userId, UUID accountId) {
     return jdbc.sql(

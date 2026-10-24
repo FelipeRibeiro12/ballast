@@ -18,8 +18,8 @@ ALTER TABLE transferencia ADD CONSTRAINT transferencia_saida_nao_e_cartao
     FOREIGN KEY (conta_saida_id, usuario_id, saida_pode_ser_origem)
     REFERENCES conta (id, usuario_id, pode_ser_origem) ON DELETE NO ACTION;
 
--- Sem índice novo: a V7 já tem as FKs de conta sem índice próprio, e o único custo é a checagem
--- ao apagar ou mudar o tipo de uma conta, rara e sobre o índice por usuario_id.
+-- Sem índice novo: a checagem só roda ao apagar ou mudar o tipo de uma conta, que é rara, e as
+-- FKs de conta da V7 também não têm índice próprio.
 
 -- Para desfazer (o Flyway Community não tem down; rode à mão).
 -- ALTER TABLE transferencia DROP CONSTRAINT transferencia_saida_nao_e_cartao;

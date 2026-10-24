@@ -84,6 +84,9 @@ class AccountController {
       new ErrorResponse(
           "esta conta pagou fatura de cartão; apagar desmontaria a fatura. Arquive a conta");
 
+  private static final ErrorResponse LINKED_TO_DEPOSIT =
+      new ErrorResponse("transferência vinculada a aporte");
+
   private static final ErrorResponse NOTHING_TO_UPDATE =
       new ErrorResponse("informe ao menos um campo para alterar");
 
@@ -427,6 +430,12 @@ class AccountController {
           "Conta de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "409",
+      description =
+          "\"transferência vinculada a aporte\": uma transferência da conta está ligada a um"
+              + " aporte de meta; apague o aporte antes. Nada é apagado",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "503",
       description =
           "Banco indisponível, conta travada por mais de 2 s ou apagar passou do prazo por"
@@ -448,6 +457,7 @@ class AccountController {
       case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case PAYS_A_CARD -> ResponseEntity.badRequest().body(PAYS_A_CARD);
       case PAID_A_CARD_INVOICE -> ResponseEntity.badRequest().body(PAID_A_CARD_INVOICE);
+      case LINKED_TO_DEPOSIT -> ResponseEntity.status(HttpStatus.CONFLICT).body(LINKED_TO_DEPOSIT);
       case DELETED -> {
         log.info("conta apagada usuario_id={} conta_id={}", user.id(), accountId.get());
         yield ResponseEntity.noContent().build();

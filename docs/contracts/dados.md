@@ -993,6 +993,13 @@ Migration `V7` (ADR-025). O que o banco garante, e como:
   `conta_entrada_id` existem só para isso, com `CHECK` de diferentes
   (`transferencia_contas_diferentes`) e as FKs acima ligando-as às pernas.
   A aplicação grava as mesmas contas que gravou nas pernas.
+- **Cartão nunca é saída (V26, ADR-057).** `transferencia_saida_nao_e_cartao`: FK
+  `(conta_saida_id, usuario_id, saida_pode_ser_origem)` para `conta (id, usuario_id,
+  pode_ser_origem)`, com `saida_pode_ser_origem` gerada constante `true` e
+  `conta.pode_ser_origem` gerada (`tipo <> 'cartao_credito'`), a técnica da `V10`. O
+  cartão só entra como destino (pagamento de fatura). A mesma FK recusa mudar para
+  cartão o tipo de conta com transferência de saída. A aplicação não escreve nas
+  duas colunas.
 - **Perna diferente.** `transferencia_pernas_diferentes`: `saida_id <> entrada_id`.
 - **Cada lançamento em no máximo uma transferência.** `transferencia_saida_unica`
   e `transferencia_entrada_unica` cobrem o mesmo papel duas vezes. O caso do
@@ -1032,12 +1039,24 @@ aporte_meta
   valor       numeric(18,2) not null   -- positivo guarda, negativo retira; nunca zero
   data        date not null            -- 1900 a 2199; a API só aceita até hoje
   criado_em   timestamptz not null default now()
+  transferencia_id uuid null           -- V27: a transferência que moveu o dinheiro
   index (usuario_id, meta_id, data)
 ```
 
 Migration `V19` (F17, ADR-045). **Desvio do rascunho anterior:** sem
 `conta_id`, sem `regra_id`, sem `lancamento_id` e sem `concluida_em`. O aporte
 é registrado à mão, o aporte mensal é plano e "atingida" é calculada.
+
+Migration `V27` (ADR-057): `aporte_meta.transferencia_id` é opcional e só
+informa; o progresso não muda. `aporte_meta_transferencia_mesmo_usuario` é FK
+`(transferencia_id, usuario_id)` para `transferencia (id, usuario_id)`
+(`transferencia_id_usuario_unico`, criado na V27), `ON DELETE NO ACTION`: apagar a
+transferência vinculada é recusado, e a aplicação responde 409 `transferência
+vinculada a aporte` (também ao apagar a conta dela). Apagar o aporte, ou a meta no
+cascade, solta a transferência. `aporte_meta_transferencia_unica` é índice único
+parcial em `(transferencia_id) WHERE transferencia_id IS NOT NULL`: uma
+transferência liga no máximo um aporte. Transferência não tem edição (só
+`POST`, `GET`, `DELETE`), então não há o que sincronizar.
 
 Progresso é `soma(aporte_meta.valor)`, que a aplicação nunca deixa negativo
 (trava a meta com `FOR UPDATE`). A projeção ("necessário por mês", "chega pelo

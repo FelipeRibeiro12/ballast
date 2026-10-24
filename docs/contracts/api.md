@@ -68,7 +68,9 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
   saidaId, entradaId, criadaEm}`. Título ausente, nulo ou em branco vira
   `Transferência`. `GET /transferencias/{id}` devolve o mesmo corpo e
   `DELETE /transferencias/{id}` responde 204 e apaga a ligação e as duas pernas.
-  Não existe `PUT`: corrigir é apagar e criar de novo.
+  Não existe `PUT`: corrigir é apagar e criar de novo. Transferência ligada a um
+  aporte de meta (`transferenciaId` do aporte) não se apaga: `DELETE` dá 409
+  `transferência vinculada a aporte` e nada muda; apague o aporte antes (ADR-057).
 - Em `/transferencias/{id}`, outro usuário, inexistente e id que não é UUID
   dão 404 com o mesmo corpo.
 - Recusas do `POST`, todas 400 sem gravar nada: `conta não encontrada` (origem
@@ -653,7 +655,9 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
 - Conta que é conta de pagamento de um cartão dá 400 `esta conta paga um
   cartão; troque a conta de pagamento antes` e nada é apagado. Conta que já
   pagou fatura de cartão por transferência dá 400 `esta conta pagou fatura de
-  cartão; apagar desmontaria a fatura. Arquive a conta`.
+  cartão; apagar desmontaria a fatura. Arquive a conta`. Conta com transferência
+  ligada a um aporte de meta dá 409 `transferência vinculada a aporte` e nada é
+  apagado (ADR-057).
 - Conta de outro usuário, inexistente ou id que não é UUID: 404 `não
   encontrado`. Funciona com a conta arquivada.
 - Com o MFA ligado (ADR-053), o `DELETE` pede o código num corpo JSON
@@ -724,10 +728,16 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   - `chegadaPeloPlano`: AAAA-MM pelo aporte mensal;
   - `ritmoMensalCentavos`: média dos três meses fechados;
   - `chegadaPeloRitmo`: AAAA-MM nesse ritmo.
-- `GET /metas/{id}/aportes`: do mais novo ao mais antigo.
-- `POST /metas/{id}/aportes` com `{valorCentavos, data}`. Positivo guarda,
-  negativo retira, zero dá 400. Responde 201 com a meta atualizada. Data no
-  futuro e retirada maior que o acumulado dão 400.
+- `GET /metas/{id}/aportes`: do mais novo ao mais antigo, cada item
+  `{id, valorCentavos, data, transferenciaId}` (`transferenciaId` nulo sem vínculo).
+- `POST /metas/{id}/aportes` com `{valorCentavos, data, transferenciaId?}`.
+  Positivo guarda, negativo retira, zero dá 400. Responde 201 com a meta
+  atualizada. Data no futuro e retirada maior que o acumulado dão 400.
+  `transferenciaId` opcional liga o aporte à transferência que moveu o dinheiro
+  (ADR-057): de outro usuário, inexistente ou que não é UUID dá 400
+  `transferenciaId não encontrada`; transferência que já liga outro aporte dá
+  409 `transferência já vinculada a outro aporte`. O vínculo só informa, o
+  acumulado continua sendo a soma dos aportes.
 - `DELETE /metas/{id}/aportes/{aporteId}`: 204. Responde 400 quando o
   acumulado ficaria negativo.
 - Meta ou aporte de outro usuário, inexistente ou id que não é UUID: 404

@@ -65,7 +65,9 @@ class EntryService {
     BALANCE_OUT_OF_RANGE,
     TRANSFER_LEG,
     CANCEL_OCCURRENCE,
-    FIRST_INSTALLMENT
+    FIRST_INSTALLMENT,
+    // Só a rota de transferência devolve: o aporte de meta aponta para ela (V27).
+    LINKED_TO_DEPOSIT
   }
 
   private final EntryRepository entries;

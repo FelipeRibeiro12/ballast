@@ -992,6 +992,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
+             * Format: uuid
+             * @description Transferência ligada ao aporte; nulo quando não há
+             */
+            transferenciaId: string | null;
+            /**
              * Format: int64
              * @description Positivo guardou, negativo retirou
              */
@@ -1000,6 +1005,11 @@ export interface components {
         AporteMetaRequest: {
             /** Format: date */
             data: string;
+            /**
+             * Format: uuid
+             * @description Transferência que moveu o dinheiro. Opcional; uma transferência liga no máximo um aporte e, ligada, não pode ser apagada
+             */
+            transferenciaId?: string | null;
             /**
              * Format: int64
              * @description Positivo guarda, negativo retira. Zero não vale
@@ -3584,6 +3594,15 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
+            /** @description "transferência vinculada a aporte": uma transferência da conta está ligada a um aporte de meta; apague o aporte antes. Nada é apagado */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
             /** @description Banco indisponível, conta travada por mais de 2 s ou apagar passou do prazo por instrução (15 s por padrão); nada é apagado */
             503: {
                 headers: {
@@ -4644,7 +4663,7 @@ export interface operations {
                     "application/json": components["schemas"]["Meta"];
                 };
             };
-            /** @description Entrada inválida, data no futuro ou retirada maior que o acumulado */
+            /** @description Entrada inválida, data no futuro, retirada maior que o acumulado ou "transferenciaId não encontrada" (de outro usuário, inexistente ou que não é UUID) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4671,7 +4690,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Chave com outra requisição igual ainda em andamento; tentar de novo */
+            /** @description A transferência já está ligada a outro aporte */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6335,6 +6354,15 @@ export interface operations {
             };
             /** @description Transferência de outro usuário, inexistente ou id que não é UUID; todos com o mesmo corpo */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description "transferência vinculada a aporte": apague o aporte antes; nada é apagado */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
