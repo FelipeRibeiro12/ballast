@@ -56,6 +56,12 @@ ballast:
   registration-max-users: ${CADASTRO_MAX_USUARIOS:}
   cookie-secure: ${COOKIE_SECURE:true}
   app-env: ${APP_ENV:}
+  identity-cleanup:
+    # Apaga sessões vencidas ou revogadas e tentativas de login paradas há um dia. Para desligar,
+    # BALLAST_IDENTITY_CLEANUP_JOB_ENABLED=false.
+    job-enabled: true
+    # 04:00 em America/Sao_Paulo, uma hora depois do job de recorrência.
+    cron: "0 0 4 * * *"
   recurrence:
     # Liga o job diário que estende o horizonte das recorrências (ADR-026). Os testes de
     # integração desligam; para desligar fora deles, BALLAST_RECURRENCE_JOB_ENABLED=false.
