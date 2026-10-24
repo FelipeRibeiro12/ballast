@@ -8,6 +8,7 @@ import java.util.List;
 // só na saída (ProjectionResponse).
 record ProjectionRows(
     long accountCount,
+    long cryptoCount,
     BigDecimal initialBalance,
     BigDecimal balanceBeforeToday,
     BigDecimal overdue,

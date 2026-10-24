@@ -111,6 +111,20 @@ final class ProjectionFixture {
         .update();
   }
 
+  UUID cryptoAccount(Actor actor) {
+    UUID id = UUID.randomUUID();
+    jdbc.sql(
+            """
+            INSERT INTO conta (id, usuario_id, nome, tipo, saldo_inicial)
+            VALUES (:id, :userId, :name, 'cripto', 0)
+            """)
+        .param("id", id)
+        .param("userId", actor.user().id())
+        .param("name", "Exchange " + id)
+        .update();
+    return id;
+  }
+
   UUID benefitAccount(Actor actor, String name, long initialCents) {
     UUID id = UUID.randomUUID();
     jdbc.sql(

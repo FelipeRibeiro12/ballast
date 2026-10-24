@@ -15,15 +15,17 @@ import org.springframework.stereotype.Repository;
 class ProjectionQueries {
 
   // Sem contaId, só as contas ativas que não são de benefício: R$ 800 de VR não pagam o aluguel
-  // (ADR-034). Com contaId vale a conta pedida, arquivada ou não, benefício inclusive, e a
-  // contagem de contas do escopo é como o serviço percebe conta alheia ou inexistente.
-  private static final String ALL_ACTIVE = "NOT arquivada AND tipo <> 'beneficio'";
+  // (ADR-034). Conta cripto também fica de fora: não tem saldo em reais nem lançamento (ADR-058).
+  // Com contaId vale a conta pedida, arquivada ou não, benefício inclusive, e a contagem de contas
+  // do escopo é como o serviço percebe conta alheia ou inexistente.
+  private static final String ALL_ACTIVE =
+      "NOT arquivada AND tipo <> 'beneficio' AND tipo <> 'cripto'";
   private static final String ONE_ACCOUNT = "id = :accountId";
 
   private static final String QUERY_START =
       """
       WITH scope AS (
-        SELECT id, saldo_inicial FROM conta
+        SELECT id, saldo_inicial, tipo FROM conta
         WHERE usuario_id = :userId AND\s
       """;
 
@@ -69,7 +71,8 @@ class ProjectionQueries {
       SELECT g.day, COALESCE(d.inflow, 0) AS inflow, COALESCE(d.outflow, 0) AS outflow,
              t.before_today, t.overdue, t.realized,
              (SELECT COALESCE(SUM(saldo_inicial), 0) FROM scope) AS initial_balance,
-             (SELECT COUNT(*) FROM scope) AS account_count
+             (SELECT COUNT(*) FROM scope) AS account_count,
+             (SELECT COUNT(*) FROM scope WHERE tipo = 'cripto') AS crypto_count
       FROM (SELECT CAST(:today AS date) + n AS day FROM generate_series(0, :lastOffset) n) g
       LEFT JOIN daily d ON d.data_caixa = g.day
       CROSS JOIN totals t
@@ -98,7 +101,7 @@ class ProjectionQueries {
     List<ProjectionRows.DayRow> rows = new ArrayList<>(days);
     // Os totais vêm repetidos em toda linha; guardo os da primeira.
     BigDecimal[] totals = new BigDecimal[4];
-    long[] accountCount = new long[1];
+    long[] accountCount = new long[2];
     statement
         .query(
             (rs, row) -> {
@@ -108,6 +111,7 @@ class ProjectionQueries {
                 totals[2] = rs.getBigDecimal("overdue");
                 totals[3] = rs.getBigDecimal("realized");
                 accountCount[0] = rs.getLong("account_count");
+                accountCount[1] = rs.getLong("crypto_count");
               }
               rows.add(
                   new ProjectionRows.DayRow(
@@ -117,6 +121,7 @@ class ProjectionQueries {
               return null;
             })
         .list();
-    return new ProjectionRows(accountCount[0], totals[0], totals[1], totals[2], totals[3], rows);
+    return new ProjectionRows(
+        accountCount[0], accountCount[1], totals[0], totals[1], totals[2], totals[3], rows);
   }
 }

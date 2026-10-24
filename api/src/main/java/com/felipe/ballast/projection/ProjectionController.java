@@ -34,6 +34,8 @@ class ProjectionController {
       new ErrorResponse("contaId deve ser um UUID");
   // Mesmo corpo para conta de outro usuário e inexistente: diferenciar diria quais ids existem.
   private static final ErrorResponse ACCOUNT_NOT_FOUND = new ErrorResponse("conta não encontrada");
+  private static final ErrorResponse CRYPTO_ACCOUNT =
+      new ErrorResponse("conta cripto não tem saldo projetado");
   private static final ErrorResponse OUT_OF_RANGE = new ErrorResponse("projeção fora do limite");
 
   private static final int DEFAULT_DAYS = 90;
@@ -75,8 +77,8 @@ class ProjectionController {
       responseCode = "400",
       description =
           "dias que não é inteiro de 1 a 366 (ou repetido), contaId que não é UUID (ou repetido)"
-              + " ou \"projeção fora do limite\" (algum valor sairia de ±9007199254740991"
-              + " centavos)",
+              + ", contaId de conta cripto (\"conta cripto não tem saldo projetado\") ou \"projeção fora"
+              + " do limite\" (algum valor sairia de ±9007199254740991 centavos)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -128,6 +130,7 @@ class ProjectionController {
     }
     return switch ((ProjectionService.Result.Refused) result) {
       case ACCOUNT_NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(ACCOUNT_NOT_FOUND);
+      case CRYPTO_ACCOUNT -> ResponseEntity.badRequest().body(CRYPTO_ACCOUNT);
       case OUT_OF_RANGE -> ResponseEntity.badRequest().body(OUT_OF_RANGE);
     };
   }

@@ -65,6 +65,28 @@ class ProjectionAccessTest {
   }
 
   @Test
+  void aCryptoAccountHasNoBalanceToProjectAndTheFilterIsRefused() throws Exception {
+    UUID crypto = fixture.cryptoAccount(alice);
+
+    MockHttpServletResponse response = fixture.projection(alice.session(), "?contaId=" + crypto);
+
+    assertThat(response.getStatus()).isEqualTo(400);
+    assertThat(ProjectionFixture.text(response))
+        .isEqualTo("{\"erro\":\"conta cripto não tem saldo projetado\"}");
+    assertThat(fixture.projection(alice.session(), "").getStatus()).isEqualTo(200);
+  }
+
+  @Test
+  void anotherUsersCryptoAccountStillAnswers404() throws Exception {
+    UUID brunoCrypto = fixture.cryptoAccount(bruno);
+
+    MockHttpServletResponse response =
+        fixture.projection(alice.session(), "?contaId=" + brunoCrypto);
+
+    assertThat(response.getStatus()).isEqualTo(404);
+  }
+
+  @Test
   void anArchivedAccountOfTheUserIsValid() throws Exception {
     UUID archived = fixture.account(alice, 10_00, true);
 

@@ -19,6 +19,7 @@ class ProjectionService {
 
     enum Refused implements Result {
       ACCOUNT_NOT_FOUND,
+      CRYPTO_ACCOUNT,
       OUT_OF_RANGE
     }
   }
@@ -34,6 +35,9 @@ class ProjectionService {
     // Com contaId, escopo vazio quer dizer conta de outro usuário ou inexistente.
     if (accountId != null && rows.accountCount() == 0) {
       return Result.Refused.ACCOUNT_NOT_FOUND;
+    }
+    if (rows.cryptoCount() > 0) {
+      return Result.Refused.CRYPTO_ACCOUNT;
     }
 
     // O saldo do primeiro dia já traz tudo que tem data de caixa antes de hoje.
