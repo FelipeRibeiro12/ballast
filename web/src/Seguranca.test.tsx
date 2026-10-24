@@ -186,6 +186,49 @@ describe('Segurança', () => {
     expect(await within(form).findByRole('alert')).toHaveTextContent('Muitas tentativas. Tente de novo em 4 segundos.')
   })
 
+  it('gera novos códigos pedindo o código do app e mostra os dez uma vez', async () => {
+    let status = ligado
+    mockFetch({
+      'GET /auth/mfa': () => Promise.resolve(jsonResponse(status, 200)),
+      'POST /auth/mfa/codigos-de-recuperacao': () => {
+        status = { ativo: true, codigosRestantes: 10 }
+        return Promise.resolve(jsonResponse({ codigosDeRecuperacao: codigos }, 200))
+      },
+    })
+    renderizar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Gerar novos códigos' }))
+    const form = screen.getByRole('form', { name: 'Gerar novos códigos de recuperação' })
+    preencher(form, 'Código do app', '123456')
+    fireEvent.click(within(form).getByRole('button', { name: 'Gerar' }))
+
+    const lista = await screen.findByRole('list', { name: 'Códigos de recuperação' })
+    expect(within(lista).getAllByRole('listitem').map((item) => item.textContent)).toEqual(codigos)
+    expect(screen.getByText(/Os códigos antigos deixaram de valer/)).toBeVisible()
+    expect(corpoDe('POST /auth/mfa/codigos-de-recuperacao')).toEqual({ codigo: '123456' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Já guardei' }))
+    expect(await screen.findByText('10 códigos de recuperação restantes.')).toBeVisible()
+  })
+
+  it.each([
+    [400, { erro: 'código inválido' }, {}, 'Código inválido.'],
+    [409, { erro: 'mfa não está ativo' }, {}, 'A verificação em duas etapas já está desligada.'],
+    [429, { erro: 'x' }, { 'Retry-After': '8' }, 'Muitas tentativas. Tente de novo em 8 segundos.'],
+  ])('erro %i ao gerar códigos avisa e limpa o campo', async (status, corpo, headers, texto) => {
+    mockFetch({
+      'GET /auth/mfa': responde(ligado),
+      'POST /auth/mfa/codigos-de-recuperacao': responde(corpo, status, headers),
+    })
+    renderizar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Gerar novos códigos' }))
+    const form = screen.getByRole('form', { name: 'Gerar novos códigos de recuperação' })
+    preencher(form, 'Código do app', '000000')
+    fireEvent.click(within(form).getByRole('button', { name: 'Gerar' }))
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent(texto)
+    expect(within(form).getByLabelText('Código do app')).toHaveValue('')
+  })
+
   it('sessão expirada avisa quem chamou', async () => {
     mockFetch({ 'GET /auth/mfa': responde({ erro: 'x' }, 401) })
     const { aoSessaoExpirar } = renderizar()

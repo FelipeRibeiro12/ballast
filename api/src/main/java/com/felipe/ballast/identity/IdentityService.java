@@ -105,16 +105,17 @@ public class IdentityService {
     return false;
   }
 
+  // O ip é a chave normalizada do cliente (ClientKey), vinda do RemoteAddr e nunca de cabeçalho.
   // A tentativa é reservada (contada) antes do argon2, num único comando: é isso que faz
   // tentativas simultâneas contarem uma a uma. Se o banco falhar depois da reserva, o contador
   // já subiu e fica assim (fail-closed). No atraso a senha não é verificada nem contada, senão
   // quem digita o e-mail alheio manteria o dono trancado. No e-mail inexistente roda uma
   // verificação fictícia para o tempo de resposta não denunciar a conta. Sem @Transactional: o
   // argon2 leva centenas de ms e não deve segurar conexão do pool.
-  public LoginResult authenticate(String email, String password) {
-    OptionalInt reserved = attempts.reserve(email, clock.instant());
+  public LoginResult authenticate(String email, String password, String ip) {
+    OptionalInt reserved = attempts.reserve(email, ip, clock.instant());
     if (reserved.isEmpty()) {
-      return delayedResult(email);
+      return delayedResult(email, ip);
     }
     int failures = reserved.getAsInt();
 
@@ -126,12 +127,12 @@ public class IdentityService {
     if (!hasher.matches(password, account.get().getPasswordHash())) {
       return new LoginResult.BadCredentials(failures);
     }
-    attempts.clear(email);
+    attempts.clear(email, ip);
     return new LoginResult.Success(profileOf(account.get()));
   }
 
-  private LoginResult delayedResult(String email) {
-    Optional<LoginAttempts.Delay> delay = attempts.findDelay(email, clock.instant());
+  private LoginResult delayedResult(String email, String ip) {
+    Optional<LoginAttempts.Delay> delay = attempts.findDelay(email, ip, clock.instant());
     // O atraso pode vencer entre a recusa e a leitura (ou a linha sumir num login com sucesso);
     // recusado é recusado, com o mínimo de 1 ms.
     Duration remaining = delay.map(LoginAttempts.Delay::remaining).orElse(Duration.ZERO);

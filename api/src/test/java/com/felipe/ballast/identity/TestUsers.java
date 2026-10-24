@@ -61,6 +61,21 @@ public final class TestUsers {
         .getResponse();
   }
 
+  // Login visto de outro endereço: o RemoteAddr é o que o Tomcat entrega em produção.
+  public MockHttpServletResponse login(String email, String password, String ip) throws Exception {
+    return mvc.perform(
+            post("/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(JSON.writeValueAsString(Map.of("email", email, "senha", password)))
+                .with(
+                    request -> {
+                      request.setRemoteAddr(ip);
+                      return request;
+                    }))
+        .andReturn()
+        .getResponse();
+  }
+
   // Cadastra, faz login e devolve o cookie de sessão.
   public Cookie session(Registered user) throws Exception {
     MockHttpServletResponse response = login(user.email(), PASSWORD);

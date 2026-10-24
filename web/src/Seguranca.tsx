@@ -8,6 +8,7 @@ import {
   SessaoExpiradaError,
   fetchMfa,
   postMfaAtivar,
+  postMfaCodigosDeRecuperacao,
   postMfaConfigurar,
   postMfaDesativar,
 } from './api'
@@ -251,6 +252,93 @@ function Ligar({
   )
 }
 
+function GerarCodigos({
+  aoTerminar,
+  aoCancelar,
+  aoSessaoExpirar,
+}: {
+  aoTerminar: () => void
+  aoCancelar: () => void
+  aoSessaoExpirar: () => void
+}) {
+  const [codigo, setCodigo] = useState('')
+  const [novos, setNovos] = useState<string[] | null>(null)
+  const { enviando, mensagem, enviar } = useEnvio(aoSessaoExpirar)
+  const campo = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    campo.current?.focus()
+  }, [])
+
+  function gerar(evento: FormEvent<HTMLFormElement>): void {
+    evento.preventDefault()
+    void enviar(
+      async () => {
+        setNovos(await postMfaCodigosDeRecuperacao(codigo))
+        setCodigo('')
+      },
+      'Não foi possível gerar os códigos. Tente de novo.',
+      () => {
+        setCodigo('')
+        campo.current?.focus()
+      },
+    )
+  }
+
+  if (novos !== null) {
+    return (
+      <div className="cartao mfa-cartao">
+        <p role="status">Códigos novos gerados. Os códigos antigos deixaram de valer.</p>
+        <p>
+          <strong>Guarde estes códigos. Eles não aparecem de novo.</strong>
+        </p>
+        <ul className="mfa-codigos" aria-label="Códigos de recuperação">
+          {novos.map((recuperacao) => (
+            <li key={recuperacao}>
+              <code>{recuperacao}</code>
+            </li>
+          ))}
+        </ul>
+        <button type="button" className="primario" onClick={aoTerminar}>
+          Já guardei
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <form className="cartao mfa-cartao" onSubmit={gerar} aria-label="Gerar novos códigos de recuperação">
+      <p>Os códigos atuais deixam de valer. Digite o código de 6 dígitos do app para continuar.</p>
+      <div className="campo">
+        <label htmlFor="mfa-gerar-codigo">Código do app</label>
+        <input
+          id="mfa-gerar-codigo"
+          ref={campo}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={32}
+          required
+          value={codigo}
+          onChange={(evento) => setCodigo(evento.target.value)}
+        />
+      </div>
+      {mensagem !== null && (
+        <p role="alert" className="erro">
+          {mensagem}
+        </p>
+      )}
+      <div className="mfa-acoes">
+        <button type="submit" className="primario" disabled={enviando}>
+          Gerar
+        </button>
+        <button type="button" className="discreto" onClick={aoCancelar}>
+          Cancelar
+        </button>
+      </div>
+    </form>
+  )
+}
+
 function Desligar({
   aoTerminar,
   aoCancelar,
@@ -328,7 +416,7 @@ function Desligar({
 export default function Seguranca({ aoSessaoExpirar }: { aoSessaoExpirar: () => void }) {
   const [estado, setEstado] = useState<Estado<MfaStatus>>({ tipo: 'carregando' })
   const [versao, setVersao] = useState(0)
-  const [aberto, setAberto] = useState<'ligar' | 'desligar' | null>(null)
+  const [aberto, setAberto] = useState<'ligar' | 'desligar' | 'gerar' | null>(null)
 
   useEffect(() => {
     let vale = true
@@ -365,9 +453,14 @@ export default function Seguranca({ aoSessaoExpirar }: { aoSessaoExpirar: () => 
                   ? '1 código de recuperação restante.'
                   : `${estado.dados.codigosRestantes} códigos de recuperação restantes.`}
               </p>
-              <button type="button" onClick={() => setAberto('desligar')}>
-                Desligar
-              </button>
+              <div className="mfa-acoes">
+                <button type="button" onClick={() => setAberto('gerar')}>
+                  Gerar novos códigos
+                </button>
+                <button type="button" onClick={() => setAberto('desligar')}>
+                  Desligar
+                </button>
+              </div>
             </>
           ) : (
             <>
@@ -382,6 +475,9 @@ export default function Seguranca({ aoSessaoExpirar }: { aoSessaoExpirar: () => 
       )}
       {aberto === 'ligar' && (
         <Ligar aoTerminar={terminar} aoCancelar={terminar} aoSessaoExpirar={aoSessaoExpirar} />
+      )}
+      {aberto === 'gerar' && (
+        <GerarCodigos aoTerminar={terminar} aoCancelar={() => setAberto(null)} aoSessaoExpirar={aoSessaoExpirar} />
       )}
       {aberto === 'desligar' && (
         <Desligar aoTerminar={terminar} aoCancelar={() => setAberto(null)} aoSessaoExpirar={aoSessaoExpirar} />

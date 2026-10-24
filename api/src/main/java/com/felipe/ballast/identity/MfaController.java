@@ -19,7 +19,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -104,6 +103,9 @@ class MfaController {
   @Operation(
       operationId = "postAuthMfaAtivar",
       summary = "Liga o MFA com o primeiro código do autenticador",
+      description =
+          "Responde com os códigos de recuperação, que só aparecem aqui. Ligar revoga todas as"
+              + " outras sessões do usuário; a atual continua.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",
@@ -134,8 +136,59 @@ class MfaController {
       @AuthenticationPrincipal AuthenticatedUser user,
       @Valid @RequestBody MfaRequests.Code request,
       HttpServletRequest http) {
-    List<String> codes = mfa.activate(user.id(), request.code());
+    // A rota exige sessão, então o cookie existe; a sessão dele é a única que sobrevive.
+    byte[] currentSession =
+        SessionTokens.hash(
+            cookies
+                .tokenOf(http)
+                .orElseThrow(() -> MfaError.of(HttpStatus.UNAUTHORIZED, "não autenticado")));
+    List<String> codes = mfa.activate(user.id(), request.code(), currentSession);
     log.info("mfa ativado usuario_id={} ip={}", user.id(), ClientAddress.of(http));
+    return new MfaResponses.Activation(codes);
+  }
+
+  @Operation(
+      operationId = "postAuthMfaCodigosDeRecuperacao",
+      summary = "Gera dez códigos de recuperação novos e invalida os antigos",
+      description =
+          "Pede o código do autenticador de agora; código de recuperação não vale aqui. Os códigos"
+              + " novos só aparecem nesta resposta. Conta no mesmo atraso por usuário do restante do"
+              + " MFA.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Códigos novos; os antigos deixam de valer",
+      content = @Content(schema = @Schema(implementation = MfaResponses.Activation.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description = "código inválido",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "mfa não está ativo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "429",
+      description = "Atraso por usuário em vigor, ou limite por IP",
+      headers = @Header(name = "Retry-After", required = true, schema = @Schema(type = "integer")),
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @PostMapping(
+      path = "/auth/mfa/codigos-de-recuperacao",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  MfaResponses.Activation regenerateRecoveryCodes(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @Valid @RequestBody MfaRequests.Code request,
+      HttpServletRequest http) {
+    List<String> codes = mfa.regenerateRecoveryCodes(user.id(), request.code());
+    log.warn(
+        "mfa: códigos de recuperação renovados usuario_id={} ip={}",
+        user.id(),
+        ClientAddress.of(http));
     return new MfaResponses.Activation(codes);
   }
 
@@ -231,18 +284,5 @@ class MfaController {
             HttpHeaders.SET_COOKIE, cookies.open(session.token(), IdentityService.SESSION_LIFETIME))
         .header(HttpHeaders.SET_COOKIE, cookies.expireChallenge())
         .body(UserResponse.from(profile));
-  }
-
-  @ExceptionHandler(MfaError.class)
-  ResponseEntity<ErrorResponse> handle(MfaError error) {
-    ResponseEntity.BodyBuilder response = ResponseEntity.status(error.status());
-    if (error.retryAfter() != null) {
-      // Para cima: dizer 0 faria o cliente tentar de novo ainda dentro do atraso.
-      long seconds = Math.max(1, (error.retryAfter().toMillis() + 999) / 1000);
-      response.header(HttpHeaders.RETRY_AFTER, Long.toString(seconds));
-    }
-    return response
-        .contentType(MediaType.APPLICATION_JSON)
-        .body(new ErrorResponse(error.getMessage()));
   }
 }

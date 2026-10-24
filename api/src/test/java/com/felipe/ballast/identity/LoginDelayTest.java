@@ -64,8 +64,9 @@ class LoginDelayTest {
   }
 
   private void seedAttempts(String email, int failures) {
-    jdbc.sql("INSERT INTO tentativa_login (email, falhas, ultima_falha_em) VALUES (?, ?, ?)")
+    jdbc.sql("INSERT INTO tentativa_login (email, ip, falhas, ultima_falha_em) VALUES (?, ?, ?, ?)")
         .param(email)
+        .param("127.0.0.1")
         .param(failures)
         .param(clock.instant().atOffset(ZoneOffset.UTC))
         .update();

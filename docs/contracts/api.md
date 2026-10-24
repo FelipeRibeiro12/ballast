@@ -653,6 +653,14 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   cartão; apagar desmontaria a fatura. Arquive a conta`.
 - Conta de outro usuário, inexistente ou id que não é UUID: 404 `não
   encontrado`. Funciona com a conta arquivada.
+- Com o MFA ligado (ADR-053), o `DELETE` pede o código num corpo JSON
+  `{"codigo"}`, do app ou de recuperação (1 a 32 caracteres). O corpo é opcional
+  no contrato: sem MFA ele é ignorado e o `DELETE` sem corpo segue valendo. Com
+  MFA, corpo ausente ou código errado dá 400 `código inválido` e nada é
+  apagado; no atraso por usuário do MFA dá 429 com `Retry-After`. O código é
+  conferido antes de olhar a conta, e gasta mesmo quando a resposta depois é
+  404 ou 400 de regra. A conferência de `Origin` vale como em todo método que
+  muda estado.
 - `GET /contas/{id}/resumo-exclusao` responde `{lancamentos, transferencias,
   recorrencias, movimentosCripto}` com as contagens que o `DELETE` levaria, para
   o web pedir a confirmação. Mesmo 404.
@@ -879,7 +887,7 @@ Emenda "Cripto em dólar".
 - Login e cadastro somados, de todos os IPs: 60 por minuto.
 - A recusa vem antes de qualquer outra checagem: um 429 não diz se a sessão,
   o corpo ou a rota valiam.
-- O login com atraso por e-mail continua respondendo 429 com a mensagem
+- O login com atraso por e-mail e IP (ADR-053) responde 429 com a mensagem
   `muitas tentativas, tente mais tarde`. O limite por IP usa
   `muitas requisições, tente mais tarde`. Os dois mandam `Retry-After`.
 - Argon2 sem vaga por 5 s: login e cadastro respondem 503
@@ -901,10 +909,17 @@ Emenda "Cripto em dólar".
 - `POST /auth/mfa/ativar` `{"codigo"}`: só o código do app. Devolve
   `{"codigosDeRecuperacao"}`, dez códigos `xxxxx-xxxxx`, mostrados só aqui.
   Erros: 400 `código inválido`, 409 `configure o mfa antes` ou `mfa já ativo`,
-  429 com `Retry-After`.
+  429 com `Retry-After`. Ligar o MFA revoga todas as outras sessões do usuário
+  (ADR-053); a sessão que ativou continua, e as demais passam a dar 401.
 - `POST /auth/mfa/desativar` `{"senha", "codigo"}`: aceita o código do app ou
   um de recuperação e responde 204. Erros: 400 `senha incorreta` ou
   `código inválido`, 409 `mfa não está ativo`, 429.
+- `POST /auth/mfa/codigos-de-recuperacao` `{"codigo"}`: gera dez códigos novos e
+  invalida os antigos (ADR-053). Pede o código do app de agora; código de
+  recuperação e código já usado dão 400. Responde 200 com
+  `{"codigosDeRecuperacao"}`, como o `ativar`, mostrados só aqui. Erros: 400
+  `código inválido`, 409 `mfa não está ativo`, 429 com `Retry-After`. Entra no
+  mesmo atraso por usuário e no limite de login por IP.
 - `POST /auth/login` com MFA ligado e senha certa responde 202
   `{"mfaPendente":true}`, sem sessão, e põe o cookie `ballast_mfa` (5 min).
 - `POST /auth/login/mfa` `{"codigo"}` é público e lê o cookie `ballast_mfa`.

@@ -41,7 +41,8 @@ class UserSeederTest {
 
     assertThat(result.created()).isTrue();
     UserProfile user =
-        ((IdentityService.LoginResult.Success) identity.authenticate(email, PASSWORD)).user();
+        ((IdentityService.LoginResult.Success) identity.authenticate(email, PASSWORD, "127.0.0.1"))
+            .user();
     assertThat(user.id()).isEqualTo(result.userId());
     assertThat(user.name()).isEqualTo("Fulano");
   }
@@ -64,9 +65,9 @@ class UserSeederTest {
 
     assertThat(second.created()).isFalse();
     assertThat(countByEmail(email)).isEqualTo(1);
-    assertThat(identity.authenticate(email, PASSWORD))
+    assertThat(identity.authenticate(email, PASSWORD, "127.0.0.1"))
         .isInstanceOf(IdentityService.LoginResult.Success.class);
-    assertThat(identity.authenticate(email, "outra-senha-12345"))
+    assertThat(identity.authenticate(email, "outra-senha-12345", "127.0.0.1"))
         .isInstanceOf(IdentityService.LoginResult.BadCredentials.class);
   }
 

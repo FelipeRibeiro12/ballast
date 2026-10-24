@@ -51,6 +51,8 @@ esperar() {
 # Senhas só existem nesta execução e nunca são impressas.
 senha_dono="$(openssl rand -hex 16)"
 senha_app="$(openssl rand -hex 16)"
+# Chave do MFA (ADR-050) só desta execução: passa pelo ambiente do processo, sem arquivo.
+mfa_chave="$(openssl rand -base64 32)"
 porta_db="$(porta_livre)"
 porta_api="$(porta_livre)"
 porta_web="$(porta_livre)"
@@ -79,6 +81,7 @@ env -i PATH="$PATH" HOME="$HOME" ${JAVA_HOME:+JAVA_HOME="$JAVA_HOME"} \
   DATABASE_URL="jdbc:postgresql://127.0.0.1:$porta_db/ballast_e2e" \
   DB_USER=ballast_app DB_PASSWORD="$senha_app" \
   DB_MIGRATION_USER=ballast_dono DB_MIGRATION_PASSWORD="$senha_dono" \
+  MFA_CHAVE="$mfa_chave" \
   REGISTRO_ABERTO=true COOKIE_SECURE=false APP_ENV=development \
   BALLAST_RECURRENCE_JOB_ENABLED=false BALLAST_COTACOES_JOB_ENABLED=false \
   HOST=127.0.0.1 PORT="$porta_api" \

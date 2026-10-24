@@ -5,7 +5,9 @@ import {
   ContaNaoEncontradaError,
   atualizarConta,
   deleteConta,
+  fetchMfa,
   fetchResumoExclusao,
+  LimiteTentativasError,
   NomeDeContaRepetidoError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
@@ -406,7 +408,15 @@ function plural(quantidade: number, singular: string, varios: string): string {
   return `${quantidade} ${quantidade === 1 ? singular : varios}`
 }
 
-type EstadoResumo = { tipo: 'carregando' } | { tipo: 'erro'; mensagem: string } | { tipo: 'ok'; resumo: ResumoExclusaoConta }
+type EstadoResumo =
+  | { tipo: 'carregando' }
+  | { tipo: 'erro'; mensagem: string }
+  | { tipo: 'ok'; resumo: ResumoExclusaoConta; mfaAtivo: boolean }
+
+function mensagemDeLimite(erro: LimiteTentativasError): string {
+  if (erro.segundos === null) return 'Muitas tentativas. Tente de novo em instantes.'
+  return `Muitas tentativas. Tente de novo em ${erro.segundos} ${erro.segundos === 1 ? 'segundo' : 'segundos'}.`
+}
 
 // Apagar não tem volta: o resumo diz o que sai junto e o nome digitado confirma (ADR-036).
 function ApagarConta({
@@ -422,15 +432,17 @@ function ApagarConta({
 }) {
   const [resumo, setResumo] = useState<EstadoResumo>({ tipo: 'carregando' })
   const [confirmacao, setConfirmacao] = useState('')
+  const [codigo, setCodigo] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   const emVoo = useRef(false)
 
   useEffect(() => {
     let ativo = true
-    fetchResumoExclusao(conta.id).then(
-      (lido) => {
-        if (ativo) setResumo({ tipo: 'ok', resumo: lido })
+    // O status do MFA vem junto: sem saber se o código é exigido, o botão não pode liberar.
+    Promise.all([fetchResumoExclusao(conta.id), fetchMfa()]).then(
+      ([lido, mfa]) => {
+        if (ativo) setResumo({ tipo: 'ok', resumo: lido, mfaAtivo: mfa.ativo })
       },
       (erro: unknown) => {
         if (!ativo) return
@@ -450,7 +462,8 @@ function ApagarConta({
     }
   }, [conta.id, aoNaoExistir, aoSessaoExpirar])
 
-  const confirmado = confirmacao.trim() === conta.nome
+  const mfaAtivo = resumo.tipo === 'ok' && resumo.mfaAtivo
+  const confirmado = confirmacao.trim() === conta.nome && (!mfaAtivo || codigo.trim() !== '')
 
   async function apagar(evento: FormEvent<HTMLFormElement>): Promise<void> {
     evento.preventDefault()
@@ -459,7 +472,7 @@ function ApagarConta({
     setEnviando(true)
     setMensagem(null)
     try {
-      await deleteConta(conta.id)
+      await deleteConta(conta.id, mfaAtivo ? codigo.trim() : undefined)
       aoApagar()
     } catch (erro) {
       if (erro instanceof SessaoExpiradaError) {
@@ -470,7 +483,13 @@ function ApagarConta({
         aoNaoExistir()
         return
       }
-      if (erro instanceof ContaInvalidaError && erro.mensagemServidor !== null) {
+      if (erro instanceof ContaInvalidaError && erro.mensagemServidor === 'código inválido') {
+        setMensagem('Código inválido.')
+        setCodigo('')
+      } else if (erro instanceof LimiteTentativasError) {
+        setMensagem(mensagemDeLimite(erro))
+        setCodigo('')
+      } else if (erro instanceof ContaInvalidaError && erro.mensagemServidor !== null) {
         setMensagem(erro.mensagemServidor)
       } else if (erro instanceof ServicoIndisponivelError) {
         setMensagem(MENSAGEM_INDISPONIVEL)
@@ -523,6 +542,21 @@ function ApagarConta({
           onChange={(evento) => setConfirmacao(evento.target.value)}
         />
       </div>
+      {mfaAtivo && (
+        <div className="campo">
+          <label htmlFor="apagar-conta-codigo">Código do app ou de recuperação</label>
+          <input
+            id="apagar-conta-codigo"
+            type="text"
+            autoComplete="one-time-code"
+            autoCapitalize="none"
+            spellCheck={false}
+            maxLength={32}
+            value={codigo}
+            onChange={(evento) => setCodigo(evento.target.value)}
+          />
+        </div>
+      )}
       {mensagem !== null && (
         <p role="alert" className="erro">
           {mensagem}

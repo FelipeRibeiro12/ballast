@@ -380,10 +380,14 @@ export async function fetchResumoExclusao(id: string): Promise<ResumoExclusaoCon
   return corpo
 }
 
-export async function deleteConta(id: string): Promise<void> {
+// Com o MFA ligado o servidor exige o código no corpo; sem MFA ele ignora o corpo.
+export async function deleteConta(id: string, codigo?: string): Promise<void> {
   const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     credentials: 'same-origin',
+    ...(codigo === undefined
+      ? {}
+      : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codigo }) }),
   })
   if (resposta.status !== 204) return recusarResposta(resposta, 'DELETE /contas/{id}')
 }
@@ -2124,8 +2128,7 @@ export async function postMfaConfigurar(senha: string): Promise<MfaConfiguracao>
   return { segredo: corpo.segredo, uri: corpo.uri }
 }
 
-export async function postMfaAtivar(codigo: string): Promise<string[]> {
-  const resposta = await chamarMfa('/auth/mfa/ativar', { method: 'POST', body: JSON.stringify({ codigo }) })
+async function lerCodigosDeRecuperacao(resposta: Response, origem: string): Promise<string[]> {
   const corpo: unknown = await resposta.json()
   if (
     typeof corpo !== 'object' ||
@@ -2134,9 +2137,23 @@ export async function postMfaAtivar(codigo: string): Promise<string[]> {
     !Array.isArray(corpo.codigosDeRecuperacao) ||
     !corpo.codigosDeRecuperacao.every((codigo: unknown) => typeof codigo === 'string')
   ) {
-    throw new ApiError('/auth/mfa/ativar com formato inesperado')
+    throw new ApiError(`${origem} com formato inesperado`)
   }
   return corpo.codigosDeRecuperacao.map(String)
+}
+
+export async function postMfaAtivar(codigo: string): Promise<string[]> {
+  const resposta = await chamarMfa('/auth/mfa/ativar', { method: 'POST', body: JSON.stringify({ codigo }) })
+  return lerCodigosDeRecuperacao(resposta, '/auth/mfa/ativar')
+}
+
+// Os códigos antigos morrem na hora; só o TOTP vale aqui, código de recuperação não.
+export async function postMfaCodigosDeRecuperacao(codigo: string): Promise<string[]> {
+  const resposta = await chamarMfa('/auth/mfa/codigos-de-recuperacao', {
+    method: 'POST',
+    body: JSON.stringify({ codigo }),
+  })
+  return lerCodigosDeRecuperacao(resposta, '/auth/mfa/codigos-de-recuperacao')
 }
 
 export async function postMfaDesativar(senha: string, codigo: string): Promise<void> {

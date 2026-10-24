@@ -171,8 +171,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Liga o MFA com o primeiro código do autenticador */
+        /**
+         * Liga o MFA com o primeiro código do autenticador
+         * @description Responde com os códigos de recuperação, que só aparecem aqui. Ligar revoga todas as outras sessões do usuário; a atual continua.
+         */
         post: operations["postAuthMfaAtivar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mfa/codigos-de-recuperacao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gera dez códigos de recuperação novos e invalida os antigos
+         * @description Pede o código do autenticador de agora; código de recuperação não vale aqui. Os códigos novos só aparecem nesta resposta. Conta no mesmo atraso por usuário do restante do MFA.
+         */
+        post: operations["postAuthMfaCodigosDeRecuperacao"];
         delete?: never;
         options?: never;
         head?: never;
@@ -321,7 +344,7 @@ export interface paths {
         post?: never;
         /**
          * Apaga uma conta e tudo que é dela
-         * @description Lançamentos, recorrências, cartão, categorias permitidas e movimentos de cripto da conta saem juntos. Numa transferência com outra conta, a perna de lá vira despesa em Outros (saída) ou receita em Outras receitas (entrada), e o saldo dela não muda.
+         * @description Lançamentos, recorrências, cartão, categorias permitidas e movimentos de cripto da conta saem juntos. Numa transferência com outra conta, a perna de lá vira despesa em Outros (saída) ou receita em Outras receitas (entrada), e o saldo dela não muda. Com o MFA ligado, o corpo {"codigo"} é obrigatório (código do autenticador ou de recuperação); sem MFA, o corpo é ignorado e pode faltar.
          */
         delete: operations["deleteContasById"];
         options?: never;
@@ -959,6 +982,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ApagarContaRequest: {
+            /** @description Código do autenticador ou de recuperação, de 1 a 32 caracteres */
+            codigo: string;
+        };
         AporteMeta: {
             /** Format: date */
             data: string;
@@ -2588,7 +2615,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Atraso progressivo em vigor para esse e-mail, resposta idêntica para e-mail com e sem conta; ou limite de login por IP (10 por minuto) ou de login e cadastro somados (60 por minuto) */
+            /** @description Atraso progressivo em vigor para esse e-mail vindo desse IP, resposta idêntica para e-mail com e sem conta; ou limite de login por IP (10 por minuto) ou de login e cadastro somados (60 por minuto) */
             429: {
                 headers: {
                     /** @description Segundos inteiros, arredondados para cima, até a próxima tentativa ser verificada */
@@ -2792,6 +2819,67 @@ export interface operations {
                 };
             };
             /** @description Atraso progressivo por usuário depois de 3 códigos errados */
+            429: {
+                headers: {
+                    "Retry-After": number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postAuthMfaCodigosDeRecuperacao: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaCodigoRequest"];
+            };
+        };
+        responses: {
+            /** @description Códigos novos; os antigos deixam de valer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfaAtivacao"];
+                };
+            };
+            /** @description código inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description mfa não está ativo */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Atraso por usuário em vigor, ou limite por IP */
             429: {
                 headers: {
                     "Retry-After": number;
@@ -3421,7 +3509,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ApagarContaRequest"];
+            };
+        };
         responses: {
             /** @description Apagada */
             204: {
@@ -3432,7 +3524,7 @@ export interface operations {
                     "application/json": Record<string, never>;
                 };
             };
-            /** @description A conta é conta de pagamento de um cartão, ou pagou fatura de cartão por transferência; nada é apagado */
+            /** @description A conta é conta de pagamento de um cartão, ou pagou fatura de cartão por transferência; ou, com o MFA ligado, código ausente, inválido ou já usado (código inválido); nada é apagado */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3542,6 +3634,16 @@ export interface operations {
             /** @description Content-Type diferente de application/json */
             415: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Atraso por usuário do MFA em vigor, ou limite por IP */
+            429: {
+                headers: {
+                    "Retry-After": number;
                     [name: string]: unknown;
                 };
                 content: {

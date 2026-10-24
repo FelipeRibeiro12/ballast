@@ -224,4 +224,25 @@ class RateLimitTest {
 
     assertThat(refused.getStatus()).isEqualTo(429);
   }
+
+  // Renovar os códigos de recuperação também testa o código de 6 dígitos.
+  @Test
+  void recoveryCodesRouteCountsAsLogin() throws Exception {
+    for (int i = 0; i < 2; i++) {
+      call(
+          post("/auth/mfa/codigos-de-recuperacao")
+              .contentType(MediaType.APPLICATION_JSON)
+              .content("{\"codigo\":\"123456\"}"),
+          "198.51.100.31");
+    }
+
+    MockHttpServletResponse refused =
+        call(
+            post("/auth/mfa/codigos-de-recuperacao")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"codigo\":\"123456\"}"),
+            "198.51.100.31");
+
+    assertThat(refused.getStatus()).isEqualTo(429);
+  }
 }

@@ -85,7 +85,8 @@ class RateLimitFilter extends OncePerRequestFilter {
           "/auth/login/mfa",
           "/auth/mfa/configurar",
           "/auth/mfa/ativar",
-          "/auth/mfa/desativar" ->
+          "/auth/mfa/desativar",
+          "/auth/mfa/codigos-de-recuperacao" ->
           login;
       case "/auth/cadastro" -> registration;
       default -> null;

@@ -9,7 +9,8 @@ import java.util.OptionalInt;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
-// Atraso progressivo por e-mail digitado, exista conta ou não. A hora vem sempre do relógio da
+// Atraso progressivo por e-mail digitado e IP, exista conta ou não (ADR-053). O ip chega já
+// normalizado por ClientKey. A hora vem sempre do relógio da
 // aplicação (parâmetro), nunca de now() do banco: gravar e comparar usam a mesma fonte, e é ela
 // que o teste controla.
 @Repository
@@ -45,11 +46,11 @@ class LoginAttempts {
   // Um único UPSERT: ou a linha está fora do atraso e o incremento acontece (devolve a contagem
   // nova), ou está dentro e nada muda (vazio). É isso que faz tentativas simultâneas contarem uma
   // a uma. O WHERE repete delayAfter em SQL; os testes cobrem as duas pontas.
-  OptionalInt reserve(String email, Instant now) {
+  OptionalInt reserve(String email, String ip, Instant now) {
     return jdbc.sql(
             """
-            INSERT INTO tentativa_login (email, falhas, ultima_falha_em) VALUES (:email, 1, :now)
-            ON CONFLICT (email) DO UPDATE
+            INSERT INTO tentativa_login (email, ip, falhas, ultima_falha_em) VALUES (:email, :ip, 1, :now)
+            ON CONFLICT (email, ip) DO UPDATE
             SET falhas = tentativa_login.falhas + 1, ultima_falha_em = EXCLUDED.ultima_falha_em
             WHERE tentativa_login.falhas <= :free
                OR tentativa_login.ultima_falha_em
@@ -58,6 +59,7 @@ class LoginAttempts {
             RETURNING falhas
             """)
         .param("email", email)
+        .param("ip", ip)
         .param("now", utc(now))
         .param("free", FREE_FAILURES)
         .param("maxExponent", MAX_EXPONENT)
@@ -70,9 +72,11 @@ class LoginAttempts {
 
   // Lido só depois de uma reserva recusada. O atraso pode ter vencido entre a recusa e esta
   // leitura; quem chama trata recusado como recusado.
-  Optional<Delay> findDelay(String email, Instant now) {
-    return jdbc.sql("SELECT falhas, ultima_falha_em FROM tentativa_login WHERE email = :email")
+  Optional<Delay> findDelay(String email, String ip, Instant now) {
+    return jdbc.sql(
+            "SELECT falhas, ultima_falha_em FROM tentativa_login WHERE email = :email AND ip = :ip")
         .param("email", email)
+        .param("ip", ip)
         .query(
             (rs, row) -> {
               Instant lastFailure =
@@ -84,8 +88,12 @@ class LoginAttempts {
         .optional();
   }
 
-  void clear(String email) {
-    jdbc.sql("DELETE FROM tentativa_login WHERE email = :email").param("email", email).update();
+  // Só a linha do IP do login que deu certo: a de outro endereço é de outra pessoa.
+  void clear(String email, String ip) {
+    jdbc.sql("DELETE FROM tentativa_login WHERE email = :email AND ip = :ip")
+        .param("email", email)
+        .param("ip", ip)
+        .update();
   }
 
   private static OffsetDateTime utc(Instant instant) {

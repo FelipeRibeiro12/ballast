@@ -21,8 +21,8 @@ function conta(sobra: Partial<Record<string, unknown>> = {}): Record<string, unk
   }
 }
 
-function jsonResponse(corpo: unknown, status: number): Response {
-  return new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } })
+function jsonResponse(corpo: unknown, status: number, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json', ...headers } })
 }
 
 const responde = (corpo: unknown, status = 200) => () => Promise.resolve(jsonResponse(corpo, status))
@@ -836,6 +836,7 @@ describe('Conta de benefício', () => {
       ...sessaoViva,
       // Depois do DELETE a tela busca as contas de novo, e o servidor já não tem a conta.
       'GET /contas': () => Promise.resolve(jsonResponse(apagada ? [] : [conta()], 200)),
+      'GET /auth/mfa': responde({ ativo: false, codigosRestantes: 0 }),
       'GET /contas/c1/resumo-exclusao': responde({ lancamentos: 12, transferencias: 2, recorrencias: 1, movimentosCripto: 0, titulosRendaFixa: 0 }),
       'DELETE /contas/c1': () => {
         apagada = true
@@ -857,6 +858,8 @@ describe('Conta de benefício', () => {
     fireEvent.click(botao)
 
     await waitFor(() => expect(chamadasA('DELETE /contas/c1')).toHaveLength(1))
+    expect(chamadasA('DELETE /contas/c1')[0][1]?.body).toBeUndefined()
+    expect(within(form).queryByLabelText('Código do app ou de recuperação')).toBeNull()
     expect(await screen.findByText('Nenhuma conta ainda.')).toBeVisible()
   })
 
@@ -864,6 +867,7 @@ describe('Conta de benefício', () => {
     mockFetch({
       ...sessaoViva,
       'GET /contas': responde([conta()]),
+      'GET /auth/mfa': responde({ ativo: false, codigosRestantes: 0 }),
       'GET /contas/c1/resumo-exclusao': responde({ lancamentos: 0, transferencias: 0, recorrencias: 0, movimentosCripto: 0, titulosRendaFixa: 0 }),
       'DELETE /contas/c1': responde({ erro: 'esta conta paga um cartão; troque a conta de pagamento antes' }, 400),
     })
@@ -875,5 +879,51 @@ describe('Conta de benefício', () => {
     fireEvent.change(within(form).getByLabelText('Digite o nome da conta para confirmar'), { target: { value: 'Nubank' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Apagar de vez' }))
     expect(await within(form).findByRole('alert')).toHaveTextContent('esta conta paga um cartão')
+  })
+  async function abrirApagarComMfa(delet: () => Promise<Response>): Promise<HTMLElement> {
+    mockFetch({
+      ...sessaoViva,
+      'GET /contas': responde([conta()]),
+      'GET /auth/mfa': responde({ ativo: true, codigosRestantes: 5 }),
+      'GET /contas/c1/resumo-exclusao': responde({ lancamentos: 0, transferencias: 0, recorrencias: 0, movimentosCripto: 0, titulosRendaFixa: 0 }),
+      'DELETE /contas/c1': delet,
+    })
+    render(<App />)
+    await contasNubank()
+    fireEvent.click(within(secaoContas()).getByRole('button', { name: 'Apagar Nubank' }))
+    const form = await screen.findByRole('form', { name: 'Apagar Nubank' })
+    await within(form).findByText('0 lançamentos')
+    fireEvent.change(within(form).getByLabelText('Digite o nome da conta para confirmar'), { target: { value: 'Nubank' } })
+    return form
+  }
+
+  it('com MFA ligado pede o código e manda no corpo do DELETE', async () => {
+    const form = await abrirApagarComMfa(() => Promise.resolve(new Response(null, { status: 204 })))
+    const botao = within(form).getByRole('button', { name: 'Apagar de vez' })
+    expect(botao).toBeDisabled()
+    fireEvent.change(within(form).getByLabelText('Código do app ou de recuperação'), { target: { value: '123456' } })
+    fireEvent.click(botao)
+
+    await waitFor(() => expect(chamadasA('DELETE /contas/c1')).toHaveLength(1))
+    expect(JSON.parse(String(chamadasA('DELETE /contas/c1')[0][1]?.body))).toEqual({ codigo: '123456' })
+  })
+
+  it('com MFA ligado, código errado avisa e limpa o campo', async () => {
+    const form = await abrirApagarComMfa(() => Promise.resolve(jsonResponse({ erro: 'código inválido' }, 400)))
+    fireEvent.change(within(form).getByLabelText('Código do app ou de recuperação'), { target: { value: '000000' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Apagar de vez' }))
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('Código inválido.')
+    expect(within(form).getByLabelText('Código do app ou de recuperação')).toHaveValue('')
+  })
+
+  it('com MFA ligado, 429 mostra quanto esperar', async () => {
+    const form = await abrirApagarComMfa(() =>
+      Promise.resolve(jsonResponse({ erro: 'x' }, 429, { 'Retry-After': '6' })),
+    )
+    fireEvent.change(within(form).getByLabelText('Código do app ou de recuperação'), { target: { value: '000000' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Apagar de vez' }))
+
+    expect(await within(form).findByRole('alert')).toHaveTextContent('Muitas tentativas. Tente de novo em 6 segundos.')
   })
 })
