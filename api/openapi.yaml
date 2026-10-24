@@ -2115,6 +2115,49 @@ paths:
       summary: Patrimônio em reais numa data
       tags:
       - cripto
+  /patrimonio/mensal:
+    get:
+      description: "O patrimônio de /patrimonio no último dia de cada um dos doze\
+        \ meses que terminam em mes, e hoje no mês corrente. Sem mes, vale o mês corrente\
+        \ em America/Sao_Paulo."
+      operationId: getPatrimonioMensal
+      parameters:
+      - in: query
+        name: mes
+        required: false
+        schema:
+          type: string
+          pattern: "(19[0-9]{2}|2[01][0-9]{2})-(0[1-9]|1[0-2])"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatrimonioMensal"
+          description: Patrimônio mês a mês
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: mes fora do formato ou "patrimônio fora do limite"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Patrimônio no fim de cada mês
+      tags:
+      - relatorios
   /posicoes-cripto:
     get:
       description: "Soma dos movimentos até a data nas contas ativas, com a última\
@@ -4371,6 +4414,64 @@ components:
       - rendaFixaCentavos
       - semCotacao
       - totalCentavos
+    PatrimonioDoMes:
+      type: object
+      properties:
+        contasCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        criptoCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        data:
+          type: string
+          format: date
+          description: "Último dia do mês, ou hoje no mês corrente"
+        mes:
+          type: string
+          description: AAAA-MM
+        posicoesSemCotacao:
+          type: integer
+          format: int32
+          description: "Posições sem cotação na data, fora do total"
+          minimum: 0
+        rendaFixaCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        totalCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - contasCentavos
+      - criptoCentavos
+      - data
+      - mes
+      - posicoesSemCotacao
+      - rendaFixaCentavos
+      - totalCentavos
+    PatrimonioMensal:
+      type: object
+      properties:
+        mes:
+          type: string
+          pattern: "(19[0-9]{2}|2[01][0-9]{2})-(0[1-9]|1[0-2])"
+        meses:
+          type: array
+          description: "Até doze meses terminando em mes, do mais antigo para o mais\
+            \ novo. Mês depois do corrente fica de fora"
+          items:
+            $ref: "#/components/schemas/PatrimonioDoMes"
+      required:
+      - mes
+      - meses
     PosicaoCripto:
       type: object
       properties:

@@ -6,6 +6,7 @@ import java.math.MathContext;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -168,6 +169,25 @@ class NetWorthService {
     return Optional.of(
         new NetWorth(accounts, crypto, contribution, appreciation, titles.get(), total, unquoted));
   }
+
+  // Patrimônio no fim de cada mês, até hoje (ADR-047). O mês corrente vale hoje, e mês depois
+  // dele fica de fora: patrimônio futuro seria só o previsto. Vazio se algum mês sai da faixa.
+  Optional<List<MonthEnd>> monthly(UUID userId, YearMonth last, int count, LocalDate today) {
+    List<MonthEnd> months = new ArrayList<>();
+    for (YearMonth month = last.minusMonths(count - 1L);
+        !month.isAfter(last) && !month.isAfter(YearMonth.from(today));
+        month = month.plusMonths(1)) {
+      LocalDate end = month.atEndOfMonth().isAfter(today) ? today : month.atEndOfMonth();
+      Optional<NetWorth> found = netWorth(userId, end);
+      if (found.isEmpty()) {
+        return Optional.empty();
+      }
+      months.add(new MonthEnd(month, end, found.get()));
+    }
+    return Optional.of(months);
+  }
+
+  record MonthEnd(YearMonth month, LocalDate date, NetWorth netWorth) {}
 
   // Um custo médio por posição e moeda, com os movimentos já na ordem certa. O movimento em
   // reais sem a PTAX da data deixa o lado em dólar sem custo, e o contrário também.
