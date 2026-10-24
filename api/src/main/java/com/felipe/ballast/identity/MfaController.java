@@ -104,6 +104,9 @@ class MfaController {
   @Operation(
       operationId = "postAuthMfaAtivar",
       summary = "Liga o MFA com o primeiro código do autenticador",
+      description =
+          "Responde com os códigos de recuperação, que só aparecem aqui. Ligar revoga todas as"
+              + " outras sessões do usuário; a atual continua.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",
@@ -134,7 +137,13 @@ class MfaController {
       @AuthenticationPrincipal AuthenticatedUser user,
       @Valid @RequestBody MfaRequests.Code request,
       HttpServletRequest http) {
-    List<String> codes = mfa.activate(user.id(), request.code());
+    // A rota exige sessão, então o cookie existe; a sessão dele é a única que sobrevive.
+    byte[] currentSession =
+        SessionTokens.hash(
+            cookies
+                .tokenOf(http)
+                .orElseThrow(() -> MfaError.of(HttpStatus.UNAUTHORIZED, "não autenticado")));
+    List<String> codes = mfa.activate(user.id(), request.code(), currentSession);
     log.info("mfa ativado usuario_id={} ip={}", user.id(), ClientAddress.of(http));
     return new MfaResponses.Activation(codes);
   }

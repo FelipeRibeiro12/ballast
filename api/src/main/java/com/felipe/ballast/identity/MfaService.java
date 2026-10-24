@@ -38,6 +38,7 @@ class MfaService {
   record Setup(String secret, String uri) {}
 
   private final MfaQueries queries;
+  private final SessionQueries sessionQueries;
   private final MfaCipher cipher;
   private final UserAccountRepository users;
   private final PasswordHasher hasher;
@@ -46,12 +47,14 @@ class MfaService {
 
   MfaService(
       MfaQueries queries,
+      SessionQueries sessionQueries,
       MfaCipher cipher,
       UserAccountRepository users,
       PasswordHasher hasher,
       Clock clock,
       TransactionTemplate transaction) {
     this.queries = queries;
+    this.sessionQueries = sessionQueries;
     this.cipher = cipher;
     this.users = users;
     this.hasher = hasher;
@@ -92,7 +95,7 @@ class MfaService {
 
   // Só o código do autenticador ativa: é a prova de que o segredo foi lido certo. Os códigos de
   // recuperação só existem em claro nesta resposta.
-  List<String> activate(UUID userId, String code) {
+  List<String> activate(UUID userId, String code, byte[] currentSessionHash) {
     MfaQueries.Row row =
         queries
             .find(userId)
@@ -118,6 +121,12 @@ class MfaService {
                       queries.replaceRecoveryCodes(
                           userId, codes.stream().map(MfaService::hashOf).toList());
                       queries.clearFailures(userId);
+                      // Na mesma transação: ou liga e derruba as outras, ou nada muda.
+                      int revoked = sessionQueries.revokeOthers(userId, currentSessionHash, now);
+                      log.info(
+                          "mfa: sessões revogadas na ativação usuario_id={} total={}",
+                          userId,
+                          revoked);
                       return true;
                     }));
     if (!activated) {

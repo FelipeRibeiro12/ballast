@@ -901,7 +901,8 @@ Emenda "Cripto em dólar".
 - `POST /auth/mfa/ativar` `{"codigo"}`: só o código do app. Devolve
   `{"codigosDeRecuperacao"}`, dez códigos `xxxxx-xxxxx`, mostrados só aqui.
   Erros: 400 `código inválido`, 409 `configure o mfa antes` ou `mfa já ativo`,
-  429 com `Retry-After`.
+  429 com `Retry-After`. Ligar o MFA revoga todas as outras sessões do usuário
+  (ADR-053); a sessão que ativou continua, e as demais passam a dar 401.
 - `POST /auth/mfa/desativar` `{"senha", "codigo"}`: aceita o código do app ou
   um de recuperação e responde 204. Erros: 400 `senha incorreta` ou
   `código inválido`, 409 `mfa não está ativo`, 429.

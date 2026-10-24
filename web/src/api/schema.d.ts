@@ -171,7 +171,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Liga o MFA com o primeiro código do autenticador */
+        /**
+         * Liga o MFA com o primeiro código do autenticador
+         * @description Responde com os códigos de recuperação, que só aparecem aqui. Ligar revoga todas as outras sessões do usuário; a atual continua.
+         */
         post: operations["postAuthMfaAtivar"];
         delete?: never;
         options?: never;

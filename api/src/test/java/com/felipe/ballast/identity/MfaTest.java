@@ -179,6 +179,35 @@ class MfaTest {
     assertThat(status().toString()).isEqualTo("{\"ativo\":true,\"codigosRestantes\":10}");
   }
 
+  private int statusOf(String path, Cookie cookie) throws Exception {
+    return mvc.perform(get(path).cookie(cookie)).andReturn().getResponse().getStatus();
+  }
+
+  // Quem roubou a sessão antes do MFA não fica dentro depois dele (ADR-053).
+  @Test
+  void activatingRevokesTheOtherSessionsButNotTheCurrentOne() throws Exception {
+    Cookie stolen = users.session(user);
+    TestUsers.Registered other = users.register();
+    Cookie othersSession = users.session(other);
+
+    activate(configure());
+
+    assertThat(statusOf("/auth/eu", session)).isEqualTo(200);
+    assertThat(statusOf("/auth/eu", stolen)).isEqualTo(401);
+    assertThat(statusOf("/auth/eu", othersSession)).isEqualTo(200);
+  }
+
+  @Test
+  void aWrongActivationCodeRevokesNothing() throws Exception {
+    Cookie second = users.session(user);
+    byte[] secret = configure();
+    String wrong = codeNow(secret).equals("000000") ? "111111" : "000000";
+
+    send("/auth/mfa/ativar", Map.of("codigo", wrong), session);
+
+    assertThat(statusOf("/auth/eu", second)).isEqualTo(200);
+  }
+
   @Test
   void recoveryCodesAreStoredOnlyAsHash() throws Exception {
     List<String> codes = activate(configure());

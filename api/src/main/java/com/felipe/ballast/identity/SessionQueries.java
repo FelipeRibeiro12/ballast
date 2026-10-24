@@ -85,6 +85,19 @@ class SessionQueries {
         .optional();
   }
 
+  // Revoga as sessões ativas do usuário menos a do hash informado. Devolve quantas caíram.
+  int revokeOthers(UUID userId, byte[] keepTokenHash, Instant now) {
+    return jdbc.sql(
+            """
+            UPDATE sessao SET revogada_em = :now
+            WHERE usuario_id = :user AND token_hash <> :keep AND revogada_em IS NULL
+            """)
+        .param("user", userId)
+        .param("keep", keepTokenHash)
+        .param("now", utc(now))
+        .update();
+  }
+
   private static OffsetDateTime utc(Instant instant) {
     return instant.atOffset(ZoneOffset.UTC);
   }
