@@ -16,3 +16,5 @@ ballast:
     job-enabled: false
   cotacoes:
     job-enabled: false
+  identity-cleanup:
+    job-enabled: false
