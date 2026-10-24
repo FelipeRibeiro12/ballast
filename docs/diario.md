@@ -415,3 +415,12 @@ Dívida registrada: nenhuma
 Achados do revisor: não rodou (decisão de economia; security fica para a onda 11)
 Pipeline: a preencher no PR
 Em aberto: `ORIGENS_PERMITIDAS` precisa estar no `api.env` da VM antes do deploy.
+
+## 2026-10-24 — Rodada de fechamento, onda 2: MFA
+
+O que entrou: ativar o MFA revoga as outras sessões, códigos de recuperação novos, apagar conta pede o código, atraso de login por e-mail+IP (decisão do dono) e e2e do MFA com TOTP gerado no Playwright.
+Decisões: ADR-053
+Dívida registrada: gasto de código antes de validar a conta no DELETE, limpeza de `tentativa_login`, atraso do MFA compartilhado
+Achados do revisor: security 0 bloqueantes, 4 viraram dívida
+Pipeline: a preencher no PR
+Em aberto: conferir o IP confiável atrás do Caddy na produção.

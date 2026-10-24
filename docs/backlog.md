@@ -52,13 +52,12 @@ nenhuma extensão instalada.
 - **F27** — Previsão de gasto e detecção de anomalia (serviço Python, ADR-007)
 - **F28** — Classificação automática de categoria pela descrição
 - **F29** — Capacitor para publicar nas lojas
+- **DÍVIDA** — `DELETE /contas/{id}` confere o código do MFA antes de validar a conta: um 404 ou 400 de regra gasta um código de recuperação (auditoria da onda 2, M1). Validar o dono primeiro e responder 404 igual. Dono: backend.
+- **DÍVIDA** — O atraso por e-mail+IP cria uma linha em `tentativa_login` por par; confirmar que a limpeza diária cobre e que o e-mail tem limite de tamanho (auditoria da onda 2, M2). Em produção, conferir com o devops que o IP só vem do Caddy com o segredo do Vercel. Dono: backend e devops.
+- **DÍVIDA** — O atraso do MFA é por usuário e compartilhado entre login, apagar conta e renovar códigos: sessão roubada pode travar o login MFA do dono (auditoria da onda 2, B4). Aceito por ora. Dono: backend.
 - **DÍVIDA** — Imagens de produção por tag (`eclipse-temurin:25-jre-noble`, `caddy:2.10`, `postgres:17`): fixar por digest com atualização automática, junto com a dívida das actions abaixo. Dono: devops.
 - **DÍVIDA** — Navegação com seções fora da barra: Orçamento, Metas e Relatórios só abrem pelo Início e pelos atalhos de planejamento (ADR-043, ADR-045, ADR-046). A próxima seção pede outro desenho (menu "Mais" ou rótulos curtos), com teste em 360px. Dono: frontend.
 - **DÍVIDA** — O limite por IP vive na memória da única instância da API (ADR-049). Uma segunda instância contaria a própria janela. Estado compartilhado, com ADR, na fatia que escalar a API. Dono: backend.
-- **DÍVIDA** — Ligar o MFA não revoga as outras sessões abertas, que seguem até o prazo de 7 dias (ADR-050). Revogar todas menos a atual ao ativar. Dono: backend, na fatia de troca de senha, que também revoga sessões.
-- **DÍVIDA** — Gerar códigos de recuperação novos exige desligar e ligar o MFA (ADR-050). Rota própria quando houver pedido. Dono: backend e frontend.
-- **DÍVIDA** — Ação sensível sem segundo fator: apagar conta e trocar e-mail (quando existir) não pedem o código do MFA (`docs/seguranca.md`, item 8). Dono: backend.
-- **DÍVIDA** — O e2e não passa pelo MFA: ligar, sair e entrar com código. Precisa gerar o TOTP no Playwright a partir do segredo da tela. Dono: qa.
 - **DÍVIDA** — O próximo salário do Posso gastar é achado pelo nome da categoria Salário da semente (ADR-048). Quando houver CRUD de categoria, renomear quebra a busca: marcar a categoria de salário explicitamente nessa fatia. Dono: backend.
 - **DÍVIDA** — Aporte de meta ligado à transferência que moveu o dinheiro, para não registrar duas vezes (ADR-045). Precisa decidir o que acontece quando a transferência é editada ou apagada. Dono: backend.
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
@@ -69,7 +68,6 @@ nenhuma extensão instalada.
 - **DÍVIDA** — `pnpm build` do web lê `../api/openapi.yaml`; se a hospedagem do PWA usar `web/` como raiz, o build falha. Conferir ao escolher a hospedagem (ou deixar a geração só no CI).
 - **DÍVIDA** — `COOKIE_SECURE=false` em desenvolvimento (Safari recusa cookie `Secure` sobre HTTP). Servir o dev sobre HTTPS com certificado local (mkcert) e aposentar a flag. A API já recusa subir com a flag falsa fora de `APP_ENV=development`, antes de migrar o banco.
 - **DÍVIDA** — O job `e2e` do CI ainda não é obrigatório no ruleset (ADR-033). Torná-lo obrigatório depois de cinco execuções seguidas sem falha intermitente. Dono: devops.
-- **DÍVIDA** — Atraso de login chaveado só pelo e-mail permite a um terceiro que conheça o e-mail da vítima mantê-la sob atraso (até 15 min) com uma requisição por janela (auditoria F1, M2). Sem bloqueio de conta, mas é negação de serviço parcial. O limite por IP da F20.5 não resolve (ADR-049). Com o MFA da F20 ligado, a senha sozinha não entra e a dívida perde peso, mas o atraso por e-mail continua valendo (ADR-050). Decisão de produto pendente: atraso por e-mail+IP. Dono: tech-lead, com o dono do produto.
 - **DÍVIDA** — O check `análise estática (javascript-typescript)` tem nome de linguagem, não de módulo, e quebra na próxima troca de stack do web. Renomear para `análise estática (web)` com a mesma sequência do ruleset do ADR-016. Dono: devops, na próxima fatia que mexer no `seguranca.yml`.
 - **DÍVIDA** — `/healthz` público consulta o banco. Desde a F20.5 ele faz uma consulta por vez e loga um stack trace por minuto (ADR-049), mas liveness (sem banco) e readiness (com banco) seguem juntos (auditoria do PR da migração, B2). Separar quando houver orquestrador que use os dois. Dono: backend.
 - **DÍVIDA** — Dois cookies `ballast_sessao` na mesma requisição contam como sem sessão, mesmo os dois válidos e iguais (`20ac315`). Decisão deliberada contra cookie tossing; manter o teste que trava isso.
