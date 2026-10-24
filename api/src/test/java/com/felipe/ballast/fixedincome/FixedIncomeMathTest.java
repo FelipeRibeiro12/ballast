@@ -192,4 +192,30 @@ class FixedIncomeMathTest {
     assertThat(loss.incomeTax()).isEqualByComparingTo("0");
     assertThat(loss.net()).isEqualByComparingTo("990.00");
   }
+
+  @Test
+  void theYearlyRootIsComputedOncePerRateWhateverTheScale() {
+    FixedIncomeMath.clearRootCache();
+
+    BigDecimal first = FixedIncomeMath.prefixedFactor(new BigDecimal("12.5"), 10);
+    BigDecimal second = FixedIncomeMath.prefixedFactor(new BigDecimal("12.50"), 10);
+
+    assertThat(FixedIncomeMath.rootCacheSize()).isEqualTo(1);
+    assertThat(second).isEqualByComparingTo(first);
+  }
+
+  @Test
+  void theRootCacheStopsGrowingAtItsLimitAndStillAnswersRight() {
+    FixedIncomeMath.clearRootCache();
+
+    for (int i = 1; i <= FixedIncomeMath.ROOT_CACHE_LIMIT + 50; i++) {
+      FixedIncomeMath.prefixedFactor(BigDecimal.valueOf(i, 4), 1);
+    }
+
+    assertThat(FixedIncomeMath.rootCacheSize()).isEqualTo(FixedIncomeMath.ROOT_CACHE_LIMIT);
+    BigDecimal beyondTheLimit = FixedIncomeMath.prefixedFactor(new BigDecimal("999.9999"), 252);
+    assertThat(beyondTheLimit.subtract(new BigDecimal("10.999999")).abs())
+        .isLessThan(new BigDecimal("1E-20"));
+    FixedIncomeMath.clearRootCache();
+  }
 }

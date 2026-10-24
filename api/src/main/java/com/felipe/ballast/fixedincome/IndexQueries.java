@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.TreeMap;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -13,23 +14,29 @@ import org.springframework.stereotype.Repository;
 @Repository
 class IndexQueries {
 
-  private final JdbcClient jdbc;
+  private static final int BATCH_SIZE = 500;
 
-  IndexQueries(JdbcClient jdbc) {
+  private final JdbcClient jdbc;
+  private final JdbcTemplate template;
+
+  IndexQueries(JdbcClient jdbc, JdbcTemplate template) {
     this.jdbc = jdbc;
+    this.template = template;
   }
 
-  // Repetível: o valor que já existe fica, o Banco Central não reescreve índice publicado.
+  // Repetível: o valor que já existe fica, o Banco Central não reescreve índice publicado. Em lote:
+  // uma janela de 5 anos do CDI são mais de mil linhas, e um INSERT por ida ao banco pesava.
   void insert(IndexSeries series, List<IndexPoint> points) {
-    for (IndexPoint point : points) {
-      jdbc.sql(
-              "INSERT INTO indice (serie, data, valor) VALUES (:serie, :date, :value)"
-                  + " ON CONFLICT (serie, data) DO NOTHING")
-          .param("serie", series.value())
-          .param("date", point.date())
-          .param("value", point.value())
-          .update();
-    }
+    template.batchUpdate(
+        "INSERT INTO indice (serie, data, valor) VALUES (?, ?, ?)"
+            + " ON CONFLICT (serie, data) DO NOTHING",
+        points,
+        BATCH_SIZE,
+        (statement, point) -> {
+          statement.setString(1, series.value());
+          statement.setObject(2, point.date());
+          statement.setBigDecimal(3, point.value());
+        });
   }
 
   Optional<LocalDate> first(IndexSeries series) {
