@@ -66,9 +66,10 @@ sessao                                   -- ADR-015
 ```
 
 ```
-tentativa_login                          -- atraso progressivo por conta
+tentativa_login                          -- atraso progressivo por e-mail e IP (ADR-053, V21)
   email           text pk                -- normalizado (minúsculas); vale também para e-mail inexistente
-  falhas          int not null           -- consecutivas; zera no login com sucesso
+  ip              text pk                -- RemoteAddr, IPv6 pelo /64, até 64 caracteres
+  falhas          int not null           -- consecutivas; zera no login com sucesso desse IP
   ultima_falha_em timestamptz not null
 ```
 
@@ -103,7 +104,7 @@ banco. `desafio_mfa` tem índice em `usuario_id`; o job diário de limpeza apaga
 os vencidos.
 
 `tentativa_login` não tem `usuario_id` de propósito: a chave é o e-mail
-digitado, para o app não revelar se a conta existe (`docs/ameacas.md`).
+digitado mais o IP, para o app não revelar se a conta existe (`docs/ameacas.md`).
 
 Migration `V2`: o segredo do MFA não é coluna de `usuario`, ficou na tabela `mfa`
 da V20. No banco,

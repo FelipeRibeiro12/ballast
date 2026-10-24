@@ -354,9 +354,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Atraso progressivo em vigor para esse e-mail, resposta idê\
-            ntica para e-mail com e sem conta; ou limite de login por IP (10 por minuto)\
-            \ ou de login e cadastro somados (60 por minuto)"
+          description: "Atraso progressivo em vigor para esse e-mail vindo desse IP,\
+            \ resposta idêntica para e-mail com e sem conta; ou limite de login por\
+            \ IP (10 por minuto) ou de login e cadastro somados (60 por minuto)"
           headers:
             Retry-After:
               description: "Segundos inteiros, arredondados para cima, até a próxima\

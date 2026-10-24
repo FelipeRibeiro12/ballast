@@ -38,7 +38,7 @@ class LoginAttemptsTest {
           pool.submit(
               () -> {
                 start.await();
-                return attempts.reserve(email, now);
+                return attempts.reserve(email, "127.0.0.1", now);
               }));
     }
     start.countDown();

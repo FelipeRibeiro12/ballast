@@ -1,5 +1,6 @@
 package com.felipe.ballast.identity;
 
+import com.felipe.ballast.ratelimit.ClientKey;
 import com.felipe.ballast.web.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -97,8 +98,8 @@ class AuthController {
   @ApiResponse(
       responseCode = "429",
       description =
-          "Atraso progressivo em vigor para esse e-mail, resposta idêntica para e-mail com e sem"
-              + " conta; ou limite de login por IP (10 por minuto) ou de login e cadastro somados"
+          "Atraso progressivo em vigor para esse e-mail vindo desse IP, resposta idêntica para e-mail"
+              + " com e sem conta; ou limite de login por IP (10 por minuto) ou de login e cadastro somados"
               + " (60 por minuto)",
       headers =
           @Header(
@@ -133,7 +134,7 @@ class AuthController {
       produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletRequest http) {
     String ip = ClientAddress.of(http);
-    return switch (identity.authenticate(request.email(), request.password())) {
+    return switch (identity.authenticate(request.email(), request.password(), ClientKey.of(ip))) {
       case IdentityService.LoginResult.Delayed delayed -> {
         // Arredonda para cima: dizer 0 faria o cliente tentar de novo ainda dentro do atraso.
         long seconds =

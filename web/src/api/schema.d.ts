@@ -2615,7 +2615,7 @@ export interface operations {
                     "application/json": components["schemas"]["Erro"];
                 };
             };
-            /** @description Atraso progressivo em vigor para esse e-mail, resposta idêntica para e-mail com e sem conta; ou limite de login por IP (10 por minuto) ou de login e cadastro somados (60 por minuto) */
+            /** @description Atraso progressivo em vigor para esse e-mail vindo desse IP, resposta idêntica para e-mail com e sem conta; ou limite de login por IP (10 por minuto) ou de login e cadastro somados (60 por minuto) */
             429: {
                 headers: {
                     /** @description Segundos inteiros, arredondados para cima, até a próxima tentativa ser verificada */

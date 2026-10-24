@@ -3,15 +3,16 @@ package com.felipe.ballast.ratelimit;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 
-final class ClientKey {
+public final class ClientKey {
 
   private static final int MAX_LENGTH = 64;
 
   private ClientKey() {}
 
-  // Recebe o RemoteAddr, que em produção o Tomcat já trocou pelo IP do visitante (ADR-044). IPv6
+  // Chave do cliente no limite por IP e no atraso do login (ADR-053). Recebe o RemoteAddr, que em
+  // produção o Tomcat já trocou pelo IP do visitante (ADR-044). IPv6
   // conta pelo /64, que é o que um provedor entrega a um cliente só. ofLiteral nunca consulta DNS.
-  static String of(String remoteAddr) {
+  public static String of(String remoteAddr) {
     InetAddress address;
     try {
       address = InetAddress.ofLiteral(remoteAddr);

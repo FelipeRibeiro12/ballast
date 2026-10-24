@@ -887,7 +887,7 @@ Emenda "Cripto em dólar".
 - Login e cadastro somados, de todos os IPs: 60 por minuto.
 - A recusa vem antes de qualquer outra checagem: um 429 não diz se a sessão,
   o corpo ou a rota valiam.
-- O login com atraso por e-mail continua respondendo 429 com a mensagem
+- O login com atraso por e-mail e IP (ADR-053) responde 429 com a mensagem
   `muitas tentativas, tente mais tarde`. O limite por IP usa
   `muitas requisições, tente mais tarde`. Os dois mandam `Retry-After`.
 - Argon2 sem vaga por 5 s: login e cadastro respondem 503

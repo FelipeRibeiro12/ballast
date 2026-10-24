@@ -73,7 +73,7 @@ class IdentityServiceTest {
 
   @Test
   void unknownEmailRunsTheDummyVerificationSoTheTimingDoesNotGiveTheAccountAway() {
-    assertThat(service.authenticate(uniqueEmail(), "qualquer-senha-123"))
+    assertThat(service.authenticate(uniqueEmail(), "qualquer-senha-123", "127.0.0.1"))
         .isInstanceOf(IdentityService.LoginResult.BadCredentials.class);
 
     assertThat(hasher.dummyCalls).hasValue(1);
@@ -84,9 +84,9 @@ class IdentityServiceTest {
     String email = uniqueEmail();
     service.register(email, "senha-de-teste-12345", null);
 
-    assertThat(service.authenticate(email, "senha-errada-12345"))
+    assertThat(service.authenticate(email, "senha-errada-12345", "127.0.0.1"))
         .isInstanceOf(IdentityService.LoginResult.BadCredentials.class);
-    assertThat(service.authenticate(email, "senha-de-teste-12345"))
+    assertThat(service.authenticate(email, "senha-de-teste-12345", "127.0.0.1"))
         .isInstanceOf(IdentityService.LoginResult.Success.class);
 
     assertThat(hasher.dummyCalls).hasValue(0);
@@ -109,7 +109,7 @@ class IdentityServiceTest {
         new IdentityService(
             users, sessions, sessionQueries, attempts, exploding, clock, transaction, events, cap);
 
-    assertThatThrownBy(() -> failing.authenticate(email, "qualquer-senha-123"))
+    assertThatThrownBy(() -> failing.authenticate(email, "qualquer-senha-123", "127.0.0.1"))
         .isInstanceOf(IllegalStateException.class);
 
     assertThat(

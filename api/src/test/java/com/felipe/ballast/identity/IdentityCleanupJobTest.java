@@ -65,7 +65,9 @@ class IdentityCleanupJobTest {
 
   private String attempt(Instant lastFailure) {
     String email = TestUsers.uniqueEmail();
-    jdbc.sql("INSERT INTO tentativa_login (email, falhas, ultima_falha_em) VALUES (:email, 7, :at)")
+    jdbc.sql(
+            "INSERT INTO tentativa_login (email, ip, falhas, ultima_falha_em)"
+                + " VALUES (:email, '127.0.0.1', 7, :at)")
         .param("email", email)
         .param("at", lastFailure.atOffset(ZoneOffset.UTC))
         .update();
