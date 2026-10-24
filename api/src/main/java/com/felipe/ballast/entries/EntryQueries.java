@@ -133,6 +133,8 @@ class EntryQueries {
   // purchaseId é o parcela_de_id: nulo fora de compra parcelada, e igual ao próprio id na primeira
   // parcela. As duas datas servem à parcela, que não muda de conta nem de data pelo PUT.
   record LockedEntry(
+      String title,
+      UUID categoryId,
       UUID accountId,
       String status,
       UUID templateId,
@@ -145,7 +147,7 @@ class EntryQueries {
   // conta lida aqui não mudar antes de ela ser travada.
   Optional<LockedEntry> lockEntry(UUID userId, UUID entryId) {
     return jdbc.sql(
-            "SELECT conta_id, status, template_id, parcela_de_id, data_competencia, data_caixa"
+            "SELECT titulo, categoria_id, conta_id, status, template_id, parcela_de_id, data_competencia, data_caixa"
                 + " FROM lancamento"
                 + " WHERE usuario_id = :userId AND id = :id FOR UPDATE")
         .param("userId", userId)
@@ -153,6 +155,8 @@ class EntryQueries {
         .query(
             (rs, row) ->
                 new LockedEntry(
+                    rs.getString("titulo"),
+                    rs.getObject("categoria_id", UUID.class),
                     rs.getObject("conta_id", UUID.class),
                     rs.getString("status"),
                     rs.getObject("template_id", UUID.class),

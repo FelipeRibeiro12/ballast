@@ -63,6 +63,8 @@ class InstallmentForeignKeyTest {
                 .map(
                     e ->
                         new LockedEntry(
+                            e.title(),
+                            e.categoryId(),
                             e.accountId(),
                             e.status(),
                             e.templateId(),

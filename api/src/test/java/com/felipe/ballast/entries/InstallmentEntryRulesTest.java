@@ -40,10 +40,14 @@ class InstallmentEntryRulesTest {
     last = InstallmentsApi.lancamentoId(purchase, 2);
   }
 
-  // O corpo de um PUT de parcela: a data é a da compra e a conta é o cartão.
+  // O corpo de um PUT de parcela: título e categoria da compra, a data é a da compra e a conta é
+  // o cartão (ADR-054: título e categoria só se mudam na compra inteira).
   private Map<String, Object> putBody() {
     return with(
-        with(EntriesApi.expenseBody(shopper.actor()), "contaId", shopper.cardId()),
+        with(
+            with(EntriesApi.expenseBody(shopper.actor()), "contaId", shopper.cardId()),
+            "titulo",
+            "Notebook"),
         "valorCentavos",
         33_333);
   }
@@ -96,27 +100,46 @@ class InstallmentEntryRulesTest {
   }
 
   @Test
-  void putChangesTextCategoryAndValueOfOneInstallmentAndKeepsTheCashDate() throws Exception {
-    String category = entries.categoryId(shopper.session(), "Transporte");
-
+  void putChangesDescriptionAndValueOfOneInstallmentAndKeepsTheCashDate() throws Exception {
     MockHttpServletResponse response =
         entries.update(
             shopper.session(),
             middle,
-            with(
-                with(with(putBody(), "titulo", "Ajuste"), "categoriaId", category),
-                "valorCentavos",
-                40_000));
+            with(with(putBody(), "descricao", "Ajuste"), "valorCentavos", 40_000));
 
     assertThat(response.getStatus()).isEqualTo(200);
     JsonNode body = EntriesApi.body(response);
-    assertThat(body.get("titulo").asString()).isEqualTo("Ajuste");
-    assertThat(body.get("categoriaId").asString()).isEqualTo(category);
+    assertThat(body.get("descricao").asString()).isEqualTo("Ajuste");
     assertThat(body.get("valorCentavos").asLong()).isEqualTo(40_000);
     assertThat(body.get("dataCaixa").asString()).isEqualTo("2026-04-25");
     assertThat(body.get("dataCompetencia").asString()).isEqualTo("2026-03-10");
     assertThat(body.get("compraParceladaId").asString()).isEqualTo(first);
     assertThat(body.get("parcelaNum").asInt()).isEqualTo(2);
+  }
+
+  @Test
+  void putChangingTheTitleIs400AndChangesNothing() throws Exception {
+    JsonNode before = EntriesApi.body(entries.find(shopper.session(), middle));
+
+    MockHttpServletResponse response =
+        entries.update(shopper.session(), middle, with(putBody(), "titulo", "Ajuste"));
+
+    assertThat(response.getStatus()).isEqualTo(400);
+    assertThat(EntriesApi.text(response)).isEqualTo("{\"erro\":\"edite a compra inteira\"}");
+    assertThat(EntriesApi.body(entries.find(shopper.session(), middle))).isEqualTo(before);
+  }
+
+  @Test
+  void putChangingTheCategoryIs400AndChangesNothing() throws Exception {
+    String other = entries.categoryId(shopper.session(), "Transporte");
+    JsonNode before = EntriesApi.body(entries.find(shopper.session(), middle));
+
+    MockHttpServletResponse response =
+        entries.update(shopper.session(), middle, with(putBody(), "categoriaId", other));
+
+    assertThat(response.getStatus()).isEqualTo(400);
+    assertThat(EntriesApi.text(response)).isEqualTo("{\"erro\":\"edite a compra inteira\"}");
+    assertThat(EntriesApi.body(entries.find(shopper.session(), middle))).isEqualTo(before);
   }
 
   @Test
@@ -185,7 +208,10 @@ class InstallmentEntryRulesTest {
             big.session(),
             installment,
             with(
-                with(EntriesApi.expenseBody(big.actor()), "contaId", big.cardId()),
+                with(
+                    with(EntriesApi.expenseBody(big.actor()), "contaId", big.cardId()),
+                    "titulo",
+                    "Notebook"),
                 "valorCentavos",
                 CEILING));
 
@@ -212,7 +238,10 @@ class InstallmentEntryRulesTest {
             rich.session(),
             InstallmentsApi.lancamentoId(small, 0),
             with(
-                with(EntriesApi.expenseBody(rich.actor()), "contaId", rich.cardId()),
+                with(
+                    with(EntriesApi.expenseBody(rich.actor()), "contaId", rich.cardId()),
+                    "titulo",
+                    "Notebook"),
                 "valorCentavos",
                 CEILING));
 

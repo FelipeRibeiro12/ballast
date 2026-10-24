@@ -443,9 +443,10 @@ parcela entra na fatura do seu vencimento (`dataCaixa`).
   PATCH) ganham `compraParceladaId` (id da primeira parcela), `parcelaNum` e
   `parcelaTotal`, `null` nos lançamentos que não são parcela.
 - `POST /lancamentos` não aceita esses campos (campo extra dá 400).
-- `PUT` numa parcela muda título, descrição, categoria e valor. Trocar a conta
-  ou a data (a `data` do corpo é comparada com a `dataCompetencia` gravada, que é
-  a data da compra) dá 400 `edite a compra inteira`; `tipo` receita dá 400
+- `PUT` numa parcela muda descrição e valor. Trocar título, categoria, conta ou
+  data (a `data` do corpo é comparada com a `dataCompetencia` gravada, que é a
+  data da compra) dá 400 `edite a compra inteira`: título e categoria mudam pelo
+  `PATCH /compras-parceladas/{id}` (ADR-054); `tipo` receita dá 400
   `parcela de compra parcelada só pode ser despesa`. A `dataCaixa` não muda. O
   teto do saldo vale, e o `PUT` que levaria a soma das parcelas da compra para
   fora de ±9007199254740991 centavos dá 400 `compra fora do limite` e nada muda.
