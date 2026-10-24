@@ -89,6 +89,11 @@ function mockFetch(rotas: Rotas): void {
       if (chave.startsWith('GET /saldo-projetado?')) return Promise.resolve(jsonResponse(saldoProjetadoPadrao, 200))
       if (chave.startsWith('GET /orcamentos?')) return Promise.resolve(jsonResponse({ mes: url.slice(-7), orcamentos: [] }, 200))
       if (chave === 'GET /metas') return Promise.resolve(jsonResponse([], 200))
+      if (chave.startsWith('GET /relatorios?')) {
+        return Promise.resolve(
+          jsonResponse({ mes: url.slice(-7), totalDespesasCentavos: 0, despesasPorCategoria: [], receitasEDespesas: [] }, 200),
+        )
+      }
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),
   )
@@ -359,6 +364,46 @@ describe('Início', () => {
       const cartao = await screen.findByRole('region', { name: 'Metas' })
       expect(await within(cartao).findByText('Nenhuma meta ainda.')).toBeVisible()
       expect(within(cartao).getByRole('link', { name: 'Criar meta' })).toHaveAttribute('href', '#/metas')
+    })
+  })
+
+  describe('despesas do mês', () => {
+    it('mostra as três categorias com mais gasto e leva para os relatórios', async () => {
+      mockFetch({
+        'GET /relatorios?mes=2026-10': responde({
+          mes: '2026-10',
+          totalDespesasCentavos: 100_000,
+          despesasPorCategoria: [
+            { categoriaId: 'c1', categoriaNome: 'Mercado', gastoCentavos: 50_000 },
+            { categoriaId: 'c2', categoriaNome: 'Lazer', gastoCentavos: 30_000 },
+            { categoriaId: 'c3', categoriaNome: 'Transporte', gastoCentavos: 15_000 },
+            { categoriaId: 'c4', categoriaNome: 'Saúde', gastoCentavos: 5_000 },
+          ],
+          receitasEDespesas: [],
+        }),
+      })
+      render(<App />)
+
+      const cartao = await screen.findByRole('region', { name: 'Despesas de outubro de 2026' })
+      const itens = within(await within(cartao).findByRole('list', { name: 'Categorias com mais gasto' })).getAllByRole(
+        'listitem',
+      )
+      expect(itens).toHaveLength(3)
+      expect(itens[0]).toHaveTextContent('Mercado')
+      expect(itens[0]).toHaveTextContent(texto('R$ 500,00'))
+      expect(itens[0]).toHaveTextContent('50%')
+      expect(within(cartao).queryByText('Saúde')).toBeNull()
+      expect(within(cartao).getByText(texto('R$ 1.000,00'))).toBeVisible()
+      expect(within(cartao).getByRole('link', { name: 'Ver relatórios' })).toHaveAttribute('href', '#/relatorios')
+    })
+
+    it('sem despesa no mês, ainda leva para os relatórios', async () => {
+      mockFetch({})
+      render(<App />)
+
+      const cartao = await screen.findByRole('region', { name: 'Despesas de outubro de 2026' })
+      expect(await within(cartao).findByText('Nenhuma despesa neste mês.')).toBeVisible()
+      expect(within(cartao).getByRole('link', { name: 'Ver relatórios' })).toHaveAttribute('href', '#/relatorios')
     })
   })
 })

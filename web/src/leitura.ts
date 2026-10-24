@@ -3,11 +3,13 @@ import {
   CriptoRepetidoError,
   MetaInvalidaError,
   OrcamentoInvalidoError,
+  RelatorioInvalidoError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
 } from './api'
 
-// Leitura e mensagens comuns às telas de Investimentos (cripto e renda fixa), Orçamento e Metas.
+// Leitura e mensagens comuns às telas de Investimentos (cripto e renda fixa), Orçamento, Metas e
+// Relatórios.
 export type Estado<T> = { tipo: 'carregando' } | { tipo: 'erro'; mensagem: string } | { tipo: 'ok'; dados: T }
 
 export const MENSAGEM_INDISPONIVEL = 'Serviço indisponível. Tente de novo em instantes.'
@@ -17,7 +19,8 @@ export function mensagemDeLeitura(erro: unknown, oQue: string): string {
   if (
     (erro instanceof CriptoInvalidoError ||
       erro instanceof OrcamentoInvalidoError ||
-      erro instanceof MetaInvalidaError) &&
+      erro instanceof MetaInvalidaError ||
+      erro instanceof RelatorioInvalidoError) &&
     erro.mensagemServidor !== null
   ) {
     return erro.mensagemServidor

@@ -2,6 +2,26 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-23 — F18: relatórios
+
+O que entrou:
+- `GET /relatorios` com a despesa do mês por categoria de cima e as receitas contra despesas dos seis meses, por competência e só o realizado até hoje.
+- No web, a tela Relatórios com barras por categoria, colunas por mês com detalhe e tabela, o terceiro atalho de planejamento e o cartão de despesas no Início.
+- `Months` foi para o pacote `web`, para orçamento e relatórios usarem o mesmo formato de mês.
+
+Decisões: ADR-046. Patrimônio no tempo ficou para a F18.1. O consumo de orçamento já tinha barra na F16. Azul e laranja nas séries porque verde e vermelho falham no validador de daltonismo. Barras em CSS, sem biblioteca de gráfico.
+
+Teste:
+- Compra no cartão conta no mês da compra.
+- A filha soma na categoria de cima.
+- Agendado, recorrência sem confirmar e transferência ficam fora.
+- Os seis meses vêm com zero nos vazios.
+- Usuário A não vê nada de B.
+- Na tela, a fatia que arredonda para zero aparece como `<1%`.
+- Conferido em 360px no Chromium, claro e escuro, sem rolagem lateral. A tabela rola dentro do cartão.
+
+Em aberto: F18.1 e o desenho da navegação, no backlog.
+
 ## 2026-10-23 — F17: metas
 
 O que entrou:
