@@ -56,8 +56,8 @@ class EntryController {
       new ErrorResponse("categoria não permitida nesta conta");
   private static final ErrorResponse TRANSFER_LEG =
       new ErrorResponse("use a rota de transferência");
-  // Mesmo texto que o tipo desconhecido tinha antes de o enum conhecer transferencia.
-  private static final ErrorResponse INVALID_TYPE = new ErrorResponse("requisição inválida");
+  private static final ErrorResponse INVALID_TYPE =
+      new ErrorResponse("transferência só pela rota /transferencias");
   private static final ErrorResponse BALANCE_OUT_OF_RANGE =
       new ErrorResponse("saldo da conta fora do limite");
 
