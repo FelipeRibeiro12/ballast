@@ -112,7 +112,7 @@ async function lerTodasAsPaginas(
   const itens: unknown[] = []
   let cursor: string | null = null
   for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
-    const resposta = await fetch(montarUrl(cursor), { credentials: 'same-origin' })
+    const resposta: Response = await fetch(montarUrl(cursor), { credentials: 'same-origin' })
     if (!resposta.ok) return recusar(resposta, origem)
     const corpo: unknown = await resposta.json()
     if (!Array.isArray(corpo) || !corpo.every(valido)) {
