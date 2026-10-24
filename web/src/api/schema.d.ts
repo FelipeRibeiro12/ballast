@@ -631,6 +631,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/posso-gastar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quanto dá para gastar até o próximo salário
+         * @description O menor saldo projetado (ADR-029) das contas que não são de benefício, de hoje até a véspera do próximo salário, ou até o fim do mês sem salário previsto. Cada benefício vem à parte (ADR-048).
+         */
+        get: operations["getPossoGastar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recorrencias": {
         parameters: {
             query?: never;
@@ -902,6 +922,16 @@ export interface components {
             nome?: string;
             /** Format: int64 */
             saldoInicialCentavos?: number;
+        };
+        BeneficioLivre: {
+            /** Format: uuid */
+            contaId: string;
+            /**
+             * Format: int64
+             * @description Menor saldo projetado da conta até ate
+             */
+            livreCentavos: number;
+            nome: string;
         };
         CadastroRequest: {
             email: string;
@@ -1644,6 +1674,50 @@ export interface components {
             /** @description PTAX usada na conversão: a última até a data; nula se ainda não há */
             dolar: components["schemas"]["Dolar"];
             posicoes: components["schemas"]["PosicaoCripto"][];
+        };
+        PossoGastar: {
+            /**
+             * Format: date
+             * @description Véspera do próximo salário, ou o fim do mês sem salário previsto
+             */
+            ate: string;
+            /** @description Contas de benefício ativas, fora de livreCentavos, pelo nome */
+            beneficios: components["schemas"]["BeneficioLivre"][];
+            /**
+             * Format: int32
+             * @description Dias de hoje até ate, contando os dois
+             */
+            dias: number;
+            /** Format: date */
+            hoje: string;
+            /**
+             * Format: int64
+             * @description Menor saldo projetado das contas que não são de benefício, de hoje até ate. Negativo quando falta
+             */
+            livreCentavos: number;
+            /**
+             * Format: date
+             * @description Dia do menor saldo
+             */
+            menorSaldoEm: string;
+            /**
+             * Format: int64
+             * @description livreCentavos dividido por dias, para baixo; nulo quando não sobra nada
+             */
+            porDiaCentavos: number | null;
+            /** @description Próxima receita na categoria Salário depois de hoje; nulo sem salário */
+            proximoSalario: components["schemas"]["ProximoSalario"];
+            /**
+             * Format: int64
+             * @description Soma com sinal das previstas vencidas, já dentro de livreCentavos (ADR-029)
+             */
+            vencidasCentavos: number;
+        };
+        ProximoSalario: {
+            /** Format: date */
+            data: string;
+            /** Format: int64 */
+            valorCentavos: number;
         };
         ReceitaEDespesaDoMes: {
             /** Format: int64 */
@@ -4482,6 +4556,53 @@ export interface operations {
                 };
             };
             /** @description data fora do formato ou "patrimônio fora do limite" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getPossoGastar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Quanto dá para gastar */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PossoGastar"];
+                };
+            };
+            /** @description "projeção fora do limite" */
             400: {
                 headers: {
                     [name: string]: unknown;
