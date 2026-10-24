@@ -18,10 +18,11 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-// Primeiro filtro de todos (ADR-049): a requisição recusada aqui não lê corpo, não consulta sessão
+// Primeiro filtro de todos, logo depois do NosniffFilter que só põe um cabeçalho (ADR-049): a
+// requisição recusada aqui não lê corpo, não consulta sessão
 // e não toca no banco. Quem limita antes dele é o Vercel; ele protege a VM e o Neon.
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 1)
 class RateLimitFilter extends OncePerRequestFilter {
 
   private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);

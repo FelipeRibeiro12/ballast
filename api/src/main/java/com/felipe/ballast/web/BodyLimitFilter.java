@@ -26,7 +26,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 // e aborta no estouro, sem juntar o corpo na memória.
 @Component
 // Logo depois do RateLimitFilter: requisição já recusada por limite nem chega a ter o corpo medido.
-@Order(Ordered.HIGHEST_PRECEDENCE + 1)
+@Order(Ordered.HIGHEST_PRECEDENCE + 2)
 class BodyLimitFilter extends OncePerRequestFilter {
 
   static final int BODY_LIMIT_BYTES = 4096;
