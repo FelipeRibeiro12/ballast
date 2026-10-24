@@ -32,11 +32,12 @@ function jsonResponse(corpo: unknown, status: number): Response {
   return new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
-// Outubro tem dados; qualquer outro mês volta vazio.
+// Outubro tem dados; qualquer outro mês volta vazio. resposta troca só a do relatório do mês.
 function mockFetch(resposta?: () => Promise<Response>): void {
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string) => {
+      if (url.startsWith('/patrimonio/mensal?')) return Promise.resolve(jsonResponse({ mes: url.slice(-7), meses: [] }, 200))
       if (resposta) return resposta()
       if (url.startsWith('/relatorios?')) {
         const mes = url.slice(-7)
@@ -167,5 +168,15 @@ describe('Relatorios', () => {
     expect(within(atalhos).getByRole('link', { name: 'Orçamento' })).toHaveAttribute('href', '#/orcamento')
     expect(within(atalhos).getByRole('link', { name: 'Metas' })).toHaveAttribute('href', '#/metas')
     await screen.findByRole('list', { name: 'Despesas por categoria' })
+  })
+
+  it('mostra o patrimônio no tempo do mesmo mês da tela', async () => {
+    mockFetch()
+    renderizar()
+
+    expect(await screen.findByRole('region', { name: 'Patrimônio' })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Mês anterior' }))
+    await screen.findByText('Nenhuma despesa neste mês.')
+    expect(chamadas()).toEqual(expect.arrayContaining(['/patrimonio/mensal?mes=2026-10', '/patrimonio/mensal?mes=2026-09']))
   })
 })

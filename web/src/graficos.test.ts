@@ -1,4 +1,4 @@
-import { formatarCompacto, fracaoDoMaximo, percentualDoTotal, rotuloCurtoDoMes, topoDoEixo } from './graficos'
+import { faixaDoEixo, formatarCompacto, fracaoDoMaximo, percentualDoTotal, rotuloCurtoDoMes, topoDoEixo } from './graficos'
 
 // O Intl separa símbolo e número com espaço sem quebra; o teste compara com espaço comum.
 const semNbsp = (texto: string): string => texto.replace(/\u00a0/g, ' ')
@@ -62,5 +62,17 @@ describe('rotuloCurtoDoMes', () => {
     [{ ano: 2027, mes: 1 }, 'jan'],
   ])('%o vira %s', (mes, esperado) => {
     expect(rotuloCurtoDoMes(mes)).toBe(esperado)
+  })
+})
+
+describe('faixaDoEixo', () => {
+  it.each([
+    [0, 523_000, 0, 600_000],
+    [100_000, 523_000, 0, 600_000],
+    [-50_000, 523_000, -50_000, 600_000],
+    [-130_000, -40_000, -150_000, 0],
+    [0, 0, 0, 100],
+  ])('de %i a %i vira de %i a %i', (minimo, maximo, baixo, alto) => {
+    expect(faixaDoEixo(minimo, maximo)).toEqual({ baixo, alto })
   })
 })
