@@ -2,6 +2,7 @@ package com.felipe.ballast.identity;
 
 import com.felipe.ballast.web.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -65,8 +66,28 @@ class RegistrationController {
       description = "Content-Type diferente de application/json",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "429",
+      description = "Limite de cadastros por IP (5 por hora) ou de login e cadastro somados",
+      headers =
+          @Header(
+              name = "Retry-After",
+              required = true,
+              description = "Segundos inteiros até a janela do limite virar",
+              schema = @Schema(type = "integer", minimum = "1")),
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "500",
       description = "Falha interna",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Argon2 sem vaga livre depois de 5 s de espera",
+      headers =
+          @Header(
+              name = "Retry-After",
+              required = true,
+              description = "Sempre 5",
+              schema = @Schema(type = "integer", minimum = "1")),
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @PostMapping(
       path = "/auth/cadastro",
