@@ -16,6 +16,12 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
   `{"erro":"muitas requisições, tente mais tarde"}` com `Retry-After` em
   segundos (ADR-049). A spec só lista o 429 em login e cadastro. Os limites
   estão em Limites, no fim deste arquivo.
+- Em qualquer rota, parâmetro de query que a rota não declara responde 400
+  `{"erro":"requisição inválida"}` (ADR-051). O nome é exato: `?contaid=` não é
+  `?contaId=`. Rota sem parâmetro declarado recusa qualquer query.
+- Em qualquer rota, caminho que o servidor recusa antes do Spring (`%2F`, `{`,
+  `|`) responde 400 com o mesmo JSON, e toda resposta leva
+  `X-Content-Type-Options: nosniff` (ADR-051).
 - Em `/contas/{id}`, conta de outro usuário, id inexistente e id que não é UUID
   respondem 404 com o mesmo corpo.
 - Dinheiro de fiat sai e entra como inteiro de centavos

@@ -114,9 +114,9 @@ class ProjectionParametersTest {
   }
 
   @Test
-  void anUnknownParameterIsIgnoredLikeInTheOtherListings() throws Exception {
+  void anUnknownParameterIsBadRequestLikeInTheOtherListings() throws Exception {
     MockHttpServletResponse response = fixture.projection(actor.session(), "?dias=2&x=1");
 
-    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(response.getStatus()).isEqualTo(400);
   }
 }
