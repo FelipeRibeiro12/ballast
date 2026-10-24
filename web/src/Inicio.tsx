@@ -8,6 +8,7 @@ import { carregar } from './leitura'
 import type { Estado } from './leitura'
 import { ConsumoDoMes } from './Orcamento'
 import { hashDaSecao } from './rota'
+import PossoGastar from './PossoGastar'
 import SaldoProjetado from './SaldoProjetado'
 import { aindaNaoAconteceu } from './totaisDoMes'
 import { Carregando, EstadoVazio } from './ui'
@@ -416,6 +417,7 @@ export default function Inicio({
       </header>
       <div className="inicio-grade">
         <div className="coluna">
+          <PossoGastar versao={versaoDeSaldo} aoSessaoExpirar={aoSessaoExpirar} />
           <Destaque contas={contas} />
           <Beneficios contas={contas} />
           <SaldoProjetado aoSessaoExpirar={aoSessaoExpirar} contas={contas} versaoDeSaldo={versaoDeSaldo} />

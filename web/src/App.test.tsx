@@ -48,6 +48,24 @@ function mockFetch(rotas: Rotas): void {
       }
       if (chave.startsWith('GET /orcamentos?')) return Promise.resolve(jsonResponse({ mes: url.slice(-7), orcamentos: [] }, 200))
       if (chave === 'GET /metas') return Promise.resolve(jsonResponse([], 200))
+      if (chave === 'GET /posso-gastar') {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              hoje: '2026-10-22',
+              ate: '2026-10-31',
+              proximoSalario: null,
+              livreCentavos: 0,
+              menorSaldoEm: '2026-10-22',
+              dias: 10,
+              porDiaCentavos: null,
+              vencidasCentavos: 0,
+              beneficios: [],
+            },
+            200,
+          ),
+        )
+      }
       if (chave.startsWith('GET /relatorios?')) {
         return Promise.resolve(
           jsonResponse({ mes: url.slice(-7), totalDespesasCentavos: 0, despesasPorCategoria: [], receitasEDespesas: [] }, 200),
