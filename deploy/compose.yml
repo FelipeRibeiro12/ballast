@@ -1,0 +1,43 @@
+# Produção na VM ARM do Oracle Cloud (ADR-044). Fica em /opt/ballast junto com api.env, caddy.env
+# e o Caddyfile; o deploy.sh troca a tag da imagem e sobe de novo.
+services:
+  api:
+    # Imagem arm64 carregada pelo deploy (docker load), sem registry.
+    image: ballast-api:${API_TAG:?defina API_TAG}
+    restart: unless-stopped
+    env_file: api.env
+    environment:
+      SPRING_PROFILES_ACTIVE: producao
+      APP_ENV: production
+      # Escuta na rede do compose; quem fala com a internet é o Caddy.
+      HOST: 0.0.0.0
+      PORT: "8080"
+    expose:
+      - "8080"
+    mem_limit: 2g
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: caddy:2.10
+    restart: unless-stopped
+    # Só o segredo de origem e o host: a senha do banco não chega ao Caddy.
+    env_file: caddy.env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  caddy_data:
+  caddy_config:

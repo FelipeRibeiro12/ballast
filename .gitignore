@@ -4,6 +4,9 @@ bin/
 .env
 .env.*
 !.env.example
+# segredos da VM de produção (deploy/*.env.example ficam)
+deploy/api.env
+deploy/caddy.env
 coverage.out
 coverage/
 *.key

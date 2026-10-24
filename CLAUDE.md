@@ -193,6 +193,9 @@ cd web && pnpm test
 
 Não invente conteúdo para estes. Se precisar, pergunte.
 
-- Provedor de cotação de cripto, candidato CoinGecko (fatia 14)
-- Hospedagem de API, banco e PWA
-- RTO e RPO confirmados (primeira versão em `docs/ameacas.md`)
+- RTO e RPO confirmados (primeira versão em `docs/ameacas.md`; o backup de
+  produção é semanal, ADR-044)
+
+Decididos pelo dono: provedor de cotação (CoinGecko Demo, ADR-040) e
+hospedagem em tier gratuito (Oracle, Neon, Vercel, ADR-044, com o passo a
+passo em `docs/runbook-producao.md`).

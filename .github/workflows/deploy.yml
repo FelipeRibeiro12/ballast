@@ -1,0 +1,143 @@
+# Deploy de produção (ADR-044), só manual: Actions > deploy > Run workflow, a partir da main.
+# Ordem: confere o CI do commit, monta a imagem, migra o banco, troca a API na VM e só então
+# publica o front, para o front novo nunca chamar uma API velha.
+name: deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Dois deploys ao mesmo tempo disputariam a migração e a VM.
+concurrency:
+  group: producao
+  cancel-in-progress: false
+
+jobs:
+  imagem:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: só da main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::deploy só sai da main"
+          exit 1
+      - name: vercel.json aponta para o subdomínio de verdade
+        run: |
+          if grep -q 'trocar-pelo-subdominio' web/vercel.json; then
+            echo "::error::troque o destino de web/vercel.json pelo subdomínio do DuckDNS (runbook, passo 4)"
+            exit 1
+          fi
+      # Os testes já rodaram no CI deste commit; aqui só se confere que passaram.
+      - name: CI verde neste commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for job in api web e2e; do
+            conclusao="$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/check-runs?check_name=$job" \
+              --jq '[.check_runs[].conclusion] | first // "ausente"')"
+            if [ "$conclusao" != "success" ]; then
+              echo "::error::o job $job do CI está '$conclusao' em ${{ github.sha }}"
+              exit 1
+            fi
+          done
+      - id: tag
+        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: jar
+        working-directory: api
+        run: ./mvnw -B -q -DskipTests package
+      # A VM é arm64 e o runner é amd64. O jar compila aqui, no amd64, e o buildx só monta a imagem
+      # arm64 copiando o jar pronto: o api/Dockerfile não tem RUN, então nada da arquitetura alvo
+      # executa e não há QEMU. Não troque por build dentro da imagem nem por QEMU: compilar Java
+      # emulado leva muitas vezes mais e falha por tempo. Bytecode não depende de arquitetura.
+      - name: imagem arm64 sem emulação
+        run: |
+          mkdir contexto
+          cp api/target/ballast-*.jar contexto/
+          docker buildx create --name arm64 --driver docker-container --use
+          docker buildx build --platform linux/arm64 -f api/Dockerfile \
+            -t "ballast-api:${{ steps.tag.outputs.tag }}" \
+            -o "type=docker,dest=ballast-api.tar" contexto
+          gzip ballast-api.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: entrega
+          path: |
+            api/target/ballast-*.jar
+            ballast-api.tar.gz
+          retention-days: 1
+
+  migracao:
+    needs: imagem
+    runs-on: ubuntu-24.04
+    environment: producao
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: entrega
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+      # O mesmo jar que vai para a VM, com o perfil migracao: roda o Flyway como dono do schema,
+      # confere o schema com o JPA e sai (ADR-021, ADR-044). A credencial de dono só existe aqui.
+      - name: flyway como dono do schema
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_MIGRATION_USER: ${{ secrets.DB_MIGRATION_USER }}
+          DB_MIGRATION_PASSWORD: ${{ secrets.DB_MIGRATION_PASSWORD }}
+          DB_USER: ${{ secrets.DB_USER }}
+          APP_ENV: production
+        run: java -jar api/target/ballast-*.jar --spring.profiles.active=migracao
+
+  api:
+    needs: [imagem, migracao]
+    runs-on: ubuntu-24.04
+    environment: producao
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: entrega
+      # known_hosts fixo: sem ele o primeiro ssh aceitaria qualquer servidor no caminho.
+      - name: chave da VM
+        env:
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_KNOWN_HOSTS: ${{ secrets.VM_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VM_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VM_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: configuração e imagem na VM
+        env:
+          ALVO: ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}
+        run: |
+          scp deploy/compose.yml deploy/Caddyfile deploy/deploy.sh "$ALVO:/opt/ballast/"
+          ssh "$ALVO" "/opt/ballast/deploy.sh ${{ needs.imagem.outputs.tag }}" < ballast-api.tar.gz
+      - name: /api/healthz pelo Vercel
+        if: vars.PRODUCAO_URL != ''
+        run: curl -fsS --max-time 20 --retry 5 --retry-delay 5 --retry-all-errors "${{ vars.PRODUCAO_URL }}/api/healthz"
+
+  # O projeto do Vercel publica a branch producao. Ela só anda depois da API nova estar no ar.
+  front:
+    needs: api
+    runs-on: ubuntu-24.04
+    environment: producao
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: git push --force origin "${{ github.sha }}:refs/heads/producao"

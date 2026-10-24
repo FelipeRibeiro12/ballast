@@ -1,0 +1,15 @@
+# TLS automático do Let's Encrypt no subdomínio do DuckDNS (ADR-044).
+{$API_HOST} {
+	# Só o Vercel conhece o segredo: requisição direta na VM leva 403. O mesmo cabeçalho prova
+	# que x-real-ip foi posto pelo Vercel, então ele vira o X-Forwarded-For que a API usa no log.
+	@vercel header X-Origin-Secret {$ORIGIN_SECRET}
+	handle @vercel {
+		reverse_proxy {$API_UPSTREAM:api:8080} {
+			header_up X-Forwarded-For {http.request.header.X-Real-Ip}
+			header_up -X-Origin-Secret
+		}
+	}
+	handle {
+		respond 403
+	}
+}

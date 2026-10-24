@@ -93,6 +93,13 @@ make e2e
 
 Sobe Postgres, API e web descartáveis em portas altas, roda o fluxo de ponta a ponta no Chromium e derruba tudo. As capturas de tela (360×780 e 1280×800, claro e escuro) ficam em `web/e2e/capturas/`, fora do git. Precisa de Docker e não usa o `.env` nem as portas do `make dev`.
 
+## Produção
+
+Tier gratuito: API numa VM ARM do Oracle Cloud atrás do Caddy, banco no Neon e
+front no Vercel, que repassa `/api/*` para a VM na mesma origem (ADR-044). O
+deploy é o workflow `deploy`, manual; o backup e o `/healthz` rodam por cron
+no Actions. Conta, segredo e cada passo estão em `docs/runbook-producao.md`.
+
 ## Contrato da API
 
 `api/openapi.yaml` é gerado do código pelo springdoc e commitado (ADR-019). O teste `OpenApiSpecTest`, dentro do `make test`, falha se o arquivo commitado diverge do gerado.

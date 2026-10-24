@@ -1,0 +1,20 @@
+# Produção (ADR-044). A migração é um passo separado do deploy, com o perfil migracao; a API sobe
+# sem Flyway e sem a credencial de dono, e o ADR-021 vale também no servidor.
+spring:
+  flyway:
+    enabled: false
+  datasource:
+    hikari:
+      # O Neon Free dorme depois de 5 min sem uso e acordar leva de centenas de ms a alguns
+      # segundos: com os 2 s do padrão a primeira requisição depois da pausa daria 503.
+      connection-timeout: 10000
+      # Conexão ociosa fecha em 30 s, para o pool não segurar o Neon acordado e gastar a cota de
+      # horas de computação. A documentação do Neon não diz se conexão parada conta como uso.
+      minimum-idle: 0
+      idle-timeout: 30000
+      maximum-pool-size: 5
+
+server:
+  # Atrás do Caddy o par da conexão é o proxy. O Tomcat só aceita X-Forwarded-For de endereço
+  # interno (a rede do compose), e o Caddy só repassa o que veio do Vercel com o segredo.
+  forward-headers-strategy: native
