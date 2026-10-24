@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { ServicoIndisponivelError, SessaoExpiradaError, fetchLancamentos, fetchMetas, fetchOrcamentos } from './api'
-import type { Conta, Lancamento, Meta, Orcamento, OrcamentosDoMes, Usuario } from './api'
+import { ServicoIndisponivelError, SessaoExpiradaError, fetchLancamentos, fetchMetas, fetchOrcamentos, fetchRelatorio } from './api'
+import type { Conta, Lancamento, Meta, Orcamento, OrcamentosDoMes, RelatorioDoMes, Usuario } from './api'
 import { formatarDiaMes, hojeLocal, mesDeHoje, mesIso, rotuloDoMes, somarDias } from './datas'
 import { formatarCentavos } from './dinheiro'
+import { percentualDoTotal } from './graficos'
 import { carregar } from './leitura'
 import type { Estado } from './leitura'
 import { ConsumoDoMes } from './Orcamento'
@@ -330,6 +331,63 @@ function ResumoDasMetas({ aoSessaoExpirar }: { aoSessaoExpirar: () => void }) {
   )
 }
 
+const CATEGORIAS_NO_INICIO = 3
+
+// Porta de entrada de Relatórios, que também fica fora da barra (ADR-046).
+function ResumoDasDespesas({ aoSessaoExpirar }: { aoSessaoExpirar: () => void }) {
+  const [estado, setEstado] = useState<Estado<RelatorioDoMes>>({ tipo: 'carregando' })
+  const [mes] = useState(() => mesDeHoje())
+
+  useEffect(() => {
+    let vale = true
+    carregar(() => fetchRelatorio(mesIso(mes)), 'as despesas', aoSessaoExpirar, setEstado, () => vale)
+    return () => {
+      vale = false
+    }
+  }, [mes, aoSessaoExpirar])
+
+  const titulo = `Despesas de ${rotuloDoMes(mes)}`
+  return (
+    <section className="cartao" aria-label={titulo}>
+      <h3 className="titulo-cartao">{titulo}</h3>
+      {estado.tipo === 'carregando' && <Carregando texto="Carregando as despesas..." linhas={2} />}
+      {estado.tipo === 'erro' && (
+        <p role="alert" className="erro">
+          {estado.mensagem}
+        </p>
+      )}
+      {estado.tipo === 'ok' && estado.dados.despesasPorCategoria.length === 0 && (
+        <EstadoVazio titulo="Nenhuma despesa neste mês." dica="Os relatórios comparam receitas e despesas dos últimos meses." />
+      )}
+      {estado.tipo === 'ok' && estado.dados.despesasPorCategoria.length > 0 && (
+        <>
+          <p className="relatorio-total">
+            Total <strong>{formatarCentavos(estado.dados.totalDespesasCentavos)}</strong>
+          </p>
+          <ul className="lancamentos" aria-label="Categorias com mais gasto">
+            {estado.dados.despesasPorCategoria.slice(0, CATEGORIAS_NO_INICIO).map((categoria) => (
+              <li key={categoria.categoriaId}>
+                <div className="item-corpo">
+                  <strong className="item-titulo">{categoria.categoriaNome}</strong>
+                  <small>
+                    {formatarCentavos(categoria.gastoCentavos)} ·{' '}
+                    {percentualDoTotal(categoria.gastoCentavos, estado.dados.totalDespesasCentavos)}%
+                  </small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {estado.tipo !== 'carregando' && (
+        <p className="cartao-rodape">
+          <a href={hashDaSecao('relatorios')}>Ver relatórios</a>
+        </p>
+      )}
+    </section>
+  )
+}
+
 export default function Inicio({
   usuario,
   contas,
@@ -367,6 +425,7 @@ export default function Inicio({
           <ProximasPrevistas contas={contas} versao={versaoDaLista} aoSessaoExpirar={aoSessaoExpirar} />
           <ResumoDoOrcamento aoSessaoExpirar={aoSessaoExpirar} />
           <ResumoDasMetas aoSessaoExpirar={aoSessaoExpirar} />
+          <ResumoDasDespesas aoSessaoExpirar={aoSessaoExpirar} />
         </div>
       </div>
     </section>

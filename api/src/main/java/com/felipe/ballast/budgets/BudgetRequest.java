@@ -1,6 +1,7 @@
 package com.felipe.ballast.budgets;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.felipe.ballast.web.Months;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;

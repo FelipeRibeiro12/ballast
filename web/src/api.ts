@@ -1825,3 +1825,79 @@ export async function deleteAporte(metaId: string, aporteId: string): Promise<vo
   )
   if (resposta.status !== 204) return recusarRespostaDeMeta(resposta, 'DELETE /metas/{id}/aportes/{aporteId}')
 }
+
+export type RelatorioDoMes = components['schemas']['RelatorioDoMes']
+export type DespesaDaCategoria = components['schemas']['DespesaDaCategoria']
+export type ReceitaEDespesaDoMes = components['schemas']['ReceitaEDespesaDoMes']
+
+export class RelatorioInvalidoError extends ApiError {
+  // null quando o corpo do 400 não segue o contrato ({ erro: string }).
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('relatório recusado')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+function centavosNaoNegativos(valor: unknown): boolean {
+  return Number.isSafeInteger(valor) && (valor as number) >= 0
+}
+
+function isDespesaDaCategoria(valor: unknown): valor is DespesaDaCategoria {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'categoriaId' in valor &&
+    typeof valor.categoriaId === 'string' &&
+    'categoriaNome' in valor &&
+    typeof valor.categoriaNome === 'string' &&
+    'gastoCentavos' in valor &&
+    centavosNaoNegativos(valor.gastoCentavos)
+  )
+}
+
+function isReceitaEDespesaDoMes(valor: unknown): valor is ReceitaEDespesaDoMes {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'mes' in valor &&
+    eMesIso(valor.mes) &&
+    'receitaCentavos' in valor &&
+    centavosNaoNegativos(valor.receitaCentavos) &&
+    'despesaCentavos' in valor &&
+    centavosNaoNegativos(valor.despesaCentavos)
+  )
+}
+
+function isRelatorioDoMes(valor: unknown): valor is RelatorioDoMes {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'mes' in valor &&
+    eMesIso(valor.mes) &&
+    'totalDespesasCentavos' in valor &&
+    centavosNaoNegativos(valor.totalDespesasCentavos) &&
+    'despesasPorCategoria' in valor &&
+    Array.isArray(valor.despesasPorCategoria) &&
+    valor.despesasPorCategoria.every(isDespesaDaCategoria) &&
+    'receitasEDespesas' in valor &&
+    Array.isArray(valor.receitasEDespesas) &&
+    valor.receitasEDespesas.every(isReceitaEDespesaDoMes)
+  )
+}
+
+// mes em AAAA-MM.
+export async function fetchRelatorio(mes: string): Promise<RelatorioDoMes> {
+  const parametros = new URLSearchParams({ mes })
+  const resposta = await fetch(`${baseUrl}/relatorios?${parametros.toString()}`, { credentials: 'same-origin' })
+  if (!resposta.ok) {
+    if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+    if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+    if (resposta.status === 400) throw new RelatorioInvalidoError(await lerMensagemDeErro(resposta))
+    throw new ApiError(`/relatorios respondeu ${resposta.status}`)
+  }
+  const corpo: unknown = await resposta.json()
+  if (!isRelatorioDoMes(corpo)) throw new ApiError('/relatorios com formato inesperado')
+  return corpo
+}

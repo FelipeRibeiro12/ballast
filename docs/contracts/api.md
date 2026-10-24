@@ -701,6 +701,22 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
 - Meta ou aporte de outro usuário, inexistente ou id que não é UUID: 404
   `meta não encontrada`.
 
+## Relatórios (ADR-046)
+
+- `GET /relatorios?mes=AAAA-MM`: sem `mes`, o mês corrente em
+  `America/Sao_Paulo`. Conta só o realizado com competência até hoje.
+  Previsto, cancelado, data depois de hoje e transferência ficam fora.
+- Responde:
+  - `mes`;
+  - `totalDespesasCentavos`;
+  - `despesasPorCategoria`: `{categoriaId, categoriaNome, gastoCentavos}` da
+    maior para a menor, e pelo nome no empate. A filha soma na categoria de
+    cima;
+  - `receitasEDespesas`: `{mes, receitaCentavos, despesaCentavos}` dos seis
+    meses que terminam em `mes`, do mais antigo para o mais novo, com zero no
+    mês sem lançamento.
+- 400 para `mes` fora do formato ou `relatório fora do limite`.
+
 ## Renda fixa (ADR-037)
 
 ### Conta de investimento

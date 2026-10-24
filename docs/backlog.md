@@ -11,9 +11,12 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F18 — Gráficos
-Gasto por categoria, receita versus despesa no mês, patrimônio no tempo,
-consumo de orçamento. Mobile-first: tem que ser legível em 360px.
+### F18.1 — Patrimônio no tempo
+Gráfico do patrimônio mês a mês: saldo das contas por caixa, posição de cripto
+com a cotação da data (F14.1) e valor de cada título de renda fixa na data.
+Mobile-first, legível em 360px, no padrão da tela Relatórios (ADR-046).
+Teste obrigatório: mês sem cotação de um ativo mostra o patrimônio sem ele e
+avisa, sem zerar nem inventar preço.
 
 ### F19 — Posso gastar quanto
 Saldo menos contas a vencer até o próximo salário, respeitando a restrição dos
@@ -78,7 +81,7 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **F27** — Previsão de gasto e detecção de anomalia (serviço Python, ADR-007)
 - **F28** — Classificação automática de categoria pela descrição
 - **F29** — Capacitor para publicar nas lojas
-- **DÍVIDA** — Navegação com seções fora da barra: Orçamento e Metas só abrem pelo Início e pelos atalhos de planejamento (ADR-043, ADR-045). A próxima seção pede outro desenho (menu "Mais" ou rótulos curtos), com teste em 360px. Dono: frontend.
+- **DÍVIDA** — Navegação com seções fora da barra: Orçamento, Metas e Relatórios só abrem pelo Início e pelos atalhos de planejamento (ADR-043, ADR-045, ADR-046). A próxima seção pede outro desenho (menu "Mais" ou rótulos curtos), com teste em 360px. Dono: frontend.
 - **DÍVIDA** — Aporte de meta ligado à transferência que moveu o dinheiro, para não registrar duas vezes (ADR-045). Precisa decidir o que acontece quando a transferência é editada ou apagada. Dono: backend.
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
 - **DÍVIDA** — Remover a tabela `health_check` e o `/healthz` que lê dela por migration nova, quando a F1 trouxer uma tabela real para o endpoint tocar.
@@ -113,10 +116,10 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — Parâmetro de query não declarado é ignorado em silêncio em todas as listagens: `?contaid=` (caixa errada) devolve o resultado sem filtro, com 200 (QA da F8, S1). Recusar parâmetro desconhecido com 400, como já se faz com campo de corpo. Dono: backend, numa fatia de endurecimento ou na F20.5.
 - **DÍVIDA** — O saldo projetado e o saldo de `/contas` leem todo o histórico de lançamentos do usuário a cada chamada, porque o realizado vale em qualquer data (revisão e auditoria do PR #13). Hoje ~21 ms com 20 mil lançamentos. Medir com anos de histórico e, se doer, saldo base materializado com ADR (CLAUDE.md, "Saldo não é coluna") ou índice por `(usuario_id, conta_id, data_caixa)`. Dono: dba, quando o volume real passar de 100 mil lançamentos por usuário.
 - **DÍVIDA** — Na hospedagem do PWA, servir `/sw.js` com `Cache-Control: no-cache` (e HTTPS, sem o qual o service worker não registra); senão uma versão velha do worker demora a ser trocada (auditoria do PR #15). Dono: devops, na escolha da hospedagem.
-- **DÍVIDA** — `GET /lancamentos` filtra só por `data_caixa`, então a compra no cartão aparece no mês do vencimento (F10). Falta ver por competência ("o que comprei no mês"), com um parâmetro como `por=competencia` e o índice correspondente medido. Dono: backend e frontend, na fatia de gráfico por categoria, que usa competência.
+- **DÍVIDA** — `GET /lancamentos` filtra só por `data_caixa`, então a compra no cartão aparece no mês do vencimento (F10). Falta ver por competência ("o que comprei no mês"), com um parâmetro como `por=competencia` e o índice correspondente medido. Os Relatórios (ADR-046) já somam por competência, mas a lista ainda não filtra por ela. Dono: backend e frontend, quando houver pedido de ver a lista por competência.
 - **DÍVIDA** — "Cartão nunca é origem de transferência" é só regra da aplicação; o banco aceitaria uma perna de saída em cartão (auditoria do PR #16). Garantir por FK composta com o tipo, como a V10 fez para a conta de pagamento. Dono: dba, na próxima migration que mexer em transferência.
 - **DÍVIDA** — `PATCH /compras-parceladas/{id}` não distingue `descricao` nula de ausente; limpar a descrição só funciona mandando texto em branco (F11). Dono: backend, junto com a dívida acima.
-- **DÍVIDA** — PUT numa parcela muda título e categoria só dela, e a tela da compra mostra o título da primeira; a categoria divergente entra no gráfico por competência (QA da F11, S1; revisão do PR #17). Decidir: recusar título e categoria no PUT de parcela com `edite a compra inteira`, ou a compra mostrar a divergência. Dono: tech-lead e backend, na fatia de gráfico por categoria.
+- **DÍVIDA** — PUT numa parcela muda título e categoria só dela, e a tela da compra mostra o título da primeira; a categoria divergente entra no gráfico por competência (QA da F11, S1; revisão do PR #17). Decidir: recusar título e categoria no PUT de parcela com `edite a compra inteira`, ou a compra mostrar a divergência. Os Relatórios contam cada parcela na categoria dela (ADR-046); falta a tela da compra mostrar a divergência ou o PUT recusar. Dono: tech-lead e backend.
 - **DÍVIDA** — Os `isConstraint` antigos de `EntryService` e `InstallmentService` repetem o que `web/Constraints.isViolated` faz (F12). Trocar todos pelo helper num refator próprio. Dono: backend, na próxima fatia que mexer em `entries`.
 - **DÍVIDA** — As descrições de 400 em `/lancamentos`, `/recorrencias` e `/transferencias` no OpenAPI não listam as mensagens novas da F12; elas estão só em `api.md` (F12). Dono: backend, junto do refator acima.
 - **DÍVIDA** — Recorrência cuja categoria saiu da lista de um benefício é pulada pelo job em toda rodada, com warn, até a lista voltar (F12). Desde a F13.1 o usuário troca a categoria pelo editar; falta avisar na tela que a recorrência parou. Dono: frontend.
