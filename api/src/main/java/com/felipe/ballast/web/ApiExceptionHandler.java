@@ -1,5 +1,6 @@
 package com.felipe.ballast.web;
 
+import com.felipe.ballast.identity.PasswordHasherBusyException;
 import java.util.Comparator;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -79,6 +80,15 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
   ResponseEntity<Object> handleDatabaseUnavailable(Exception ex) {
     log.error("banco indisponível", ex);
     return body(HttpStatus.SERVICE_UNAVAILABLE, new HttpHeaders(), "serviço indisponível");
+  }
+
+  // Sem stack trace: num flood seria uma por requisição recusada. Os 5 s são a espera do semáforo.
+  @ExceptionHandler(PasswordHasherBusyException.class)
+  ResponseEntity<Object> handlePasswordHasherBusy(PasswordHasherBusyException ex) {
+    log.warn("argon2 sem vaga livre, requisição recusada");
+    HttpHeaders headers = new HttpHeaders();
+    headers.set(HttpHeaders.RETRY_AFTER, "5");
+    return body(HttpStatus.SERVICE_UNAVAILABLE, headers, "serviço indisponível");
   }
 
   @ExceptionHandler(Exception.class)

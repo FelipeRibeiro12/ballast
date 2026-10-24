@@ -1,8 +1,11 @@
 package com.felipe.ballast.identity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
 import java.util.Base64;
+import java.util.concurrent.Semaphore;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -61,6 +64,37 @@ class PasswordHasherTest {
   @Test
   void dummyVerificationAlwaysFails() {
     assertThat(hasher.matchesDummy("senha-correta-123")).isFalse();
+  }
+
+  // Cada hash aloca 64 MiB: sem teto, um flood de login esgota a memória da VM.
+  @Test
+  void waitsForAFreeSlotAndGivesUpWhenNoneFrees() {
+    Semaphore slots = new Semaphore(0);
+    PasswordHasher busy =
+        new PasswordHasher(
+            new IdentityProperties("false", "", "", CHEAP), slots, Duration.ofMillis(50));
+
+    assertThatThrownBy(() -> busy.hash("uma-senha-qualquer"))
+        .isInstanceOf(PasswordHasherBusyException.class);
+    assertThatThrownBy(() -> busy.matches("uma-senha-qualquer", "lixo"))
+        .isInstanceOf(PasswordHasherBusyException.class);
+    assertThatThrownBy(() -> busy.matchesDummy("uma-senha-qualquer"))
+        .isInstanceOf(PasswordHasherBusyException.class);
+  }
+
+  @Test
+  void givesTheSlotBackAfterEachUse() {
+    Semaphore slots = new Semaphore(1);
+    PasswordHasher single =
+        new PasswordHasher(
+            new IdentityProperties("false", "", "", CHEAP), slots, Duration.ofMillis(50));
+
+    String hash = single.hash("senha-correta-123");
+    single.matches("senha-correta-123", hash);
+    single.matches("qualquer", "lixo");
+    single.matchesDummy("qualquer");
+
+    assertThat(slots.availablePermits()).isEqualTo(1);
   }
 
   @Configuration
