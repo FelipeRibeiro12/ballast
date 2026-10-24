@@ -512,6 +512,8 @@ categoria
   cor         text
   icone       text
   pai_id      uuid fk null           -- "Alimentação > Restaurante"
+  semente     text null              -- salario | outros | outras_receitas (V24); nulo é categoria comum
+  pai_tipo    text gerada            -- tipo da linha quando tem pai, nulo na raiz (V25); a app não escreve
   unique (usuario_id, pai_id, lower(nome))
 ```
 
@@ -532,8 +534,7 @@ vem da aplicação.
   nivel)`. `nivel` (0 raiz, 1 filha) e `pai_nivel` (0 quando há pai, nulo sem pai)
   são colunas geradas: **a aplicação não escreve nelas** e o INSERT não as cita.
   Como a FK exige pai de `nivel` 0, uma filha não vira pai, e uma raiz com filhas
-  não vira filha. A categoria filha pode ter tipo diferente do pai; se isso
-  importar, é CHECK novo.
+  não vira filha. A filha tem o tipo do pai (V25, abaixo).
 - **Alvo da FK de `lancamento`:** `unique (id, usuario_id, tipo)`
   (`categoria_id_usuario_tipo_unico`). Não existe `unique (id, usuario_id)` sozinho
   porque nada aponta para ele; quem precisar cria.
@@ -553,6 +554,28 @@ lista nos dois lugares**; esta é a fonte):
 
 São 16. "Outros" é despesa e a receita genérica chama "Outras receitas" (ADR-024).
 A `V6` gera o id das sementes com `gen_random_uuid()` (v4), só no backfill.
+
+Migration `V24` (ADR-057): três sementes são **marcadas por coluna** porque o código
+as procura: Salário (`semente = 'salario'`, o próximo salário do Posso gastar e a
+raiz de que as filhas herdam), Outros (`'outros'`, a despesa em que a perna de
+transferência vira ao apagar conta) e Outras receitas (`'outras_receitas'`, a
+receita equivalente). O código acha pela marca, nunca pelo nome, então renomear
+não quebra a busca. O backfill por nome só existe na migration: raiz com o nome e o
+tipo da semente recebe a marca. A aplicação grava a marca no cadastro
+(`CategorySeeds`). Garantias do banco: `categoria_semente_valida` (só os três
+valores), `categoria_semente_tipo` (`outros` é despesa, as outras duas receita),
+`categoria_semente_so_na_raiz` e o índice único parcial `categoria_semente_unica
+(usuario_id, semente) WHERE semente IS NOT NULL`, uma marca de cada por usuário. O
+CRUD de categoria, quando vier, não pode apagar nem mudar o tipo de categoria
+marcada.
+
+Migration `V25` (ADR-057): categoria filha tem o mesmo tipo do pai.
+`categoria_pai_mesmo_tipo` é FK `(pai_id, usuario_id, pai_tipo)` para
+`categoria (id, usuario_id, tipo)` (o unique da V6), com `pai_tipo` gerada
+(`tipo` quando há pai, nulo na raiz, e a FK é `MATCH SIMPLE`). Mudar o tipo do pai
+que tem filha, ou o da filha, é recusado. Dado existente que violaria vira raiz,
+com o sufixo " (raiz)" no nome se já houver raiz de mesmo nome; nenhuma rota cria
+filha, então o esperado é não tocar linha nenhuma.
 
 ---
 

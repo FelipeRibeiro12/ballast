@@ -128,8 +128,8 @@ class AccountDeletionQueries {
   // Desfaz as transferências com outra conta e transforma a perna de lá em lançamento comum, num
   // comando só: a FK da perna (que inclui o tipo) é conferida no fim dele, quando a transferência
   // já saiu. Saída da outra conta vira despesa em "Outros", entrada vira receita em "Outras
-  // receitas" (ADR-036). A categoria vem da semente que todo usuário tem; ainda não há CRUD de
-  // categoria que a apague, e o CHECK da V7 exige categoria fora de transferência.
+  // receitas" (ADR-036). A categoria vem da semente marcada (V24, ADR-057), que sobrevive a
+  // renomear; o CHECK da V7 exige categoria fora de transferência.
   void turnForeignLegsIntoPlainEntries(UUID userId, UUID accountId) {
     jdbc.sql(
             """
@@ -142,9 +142,9 @@ class AccountDeletionQueries {
             UPDATE lancamento l
             SET tipo = d.vira,
                 categoria_id = (SELECT c.id FROM categoria c
-                                WHERE c.usuario_id = :userId AND c.tipo = d.vira
-                                  AND c.nome = CASE d.vira WHEN 'receita' THEN 'Outras receitas'
-                                                           ELSE 'Outros' END)
+                                WHERE c.usuario_id = :userId
+                                  AND c.semente = CASE d.vira WHEN 'receita' THEN 'outras_receitas'
+                                                              ELSE 'outros' END)
             FROM desfeita d
             WHERE l.usuario_id = :userId AND l.id = d.perna
             """)

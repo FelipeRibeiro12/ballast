@@ -82,6 +82,22 @@ class RegistrationSeedTest {
   }
 
   @Test
+  void aNewUserGetsTheThreeMarkedSeeds() {
+    UserProfile user = identity.register(uniqueEmail(), PASSWORD, null).orElseThrow();
+
+    List<String> marked =
+        jdbc.sql(
+                "SELECT semente || ':' || nome FROM categoria"
+                    + " WHERE usuario_id = :id AND semente IS NOT NULL ORDER BY semente")
+            .param("id", user.id())
+            .query(String.class)
+            .list();
+
+    assertThat(marked)
+        .containsExactly("outras_receitas:Outras receitas", "outros:Outros", "salario:Salário");
+  }
+
+  @Test
   void aDuplicateEmailStaysAConflictAndSeedsNothing() {
     String email = uniqueEmail();
     identity.register(email, PASSWORD, null).orElseThrow();

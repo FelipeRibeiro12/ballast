@@ -22,7 +22,8 @@ class SpendableQueries {
     this.jdbc = jdbc;
   }
 
-  // Salário é receita na categoria Salário da semente, ou numa filha dela, numa conta ativa que
+  // Salário é receita na categoria marcada como semente 'salario' (V24), ou numa filha dela, numa
+  // conta ativa que
   // não é de benefício (ADR-048). O do dia já é dinheiro de hoje: o próximo é o de depois.
   // Salário dividido (ADR-027) chega em partes; a próxima parte já é o próximo salário.
   Optional<Salary> nextSalary(UUID userId, LocalDate today, LocalDate until) {
@@ -37,7 +38,7 @@ class SpendableQueries {
             WHERE l.usuario_id = :userId AND l.tipo = 'receita'
               AND l.status IN ('previsto', 'realizado')
               AND l.data_caixa > :today AND l.data_caixa <= :until
-              AND (k.nome = 'Salário' OR p.nome = 'Salário')
+              AND (k.semente = 'salario' OR p.semente = 'salario')
             GROUP BY l.data_caixa
             ORDER BY l.data_caixa
             LIMIT 1

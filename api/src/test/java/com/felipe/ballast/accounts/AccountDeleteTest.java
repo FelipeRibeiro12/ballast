@@ -222,6 +222,35 @@ class AccountDeleteTest {
     assertThat(categoryName(out.get("categoriaId").asString())).isEqualTo("Outros");
   }
 
+  // A semente se acha pela marca (ADR-057), então renomear não quebra a conversão da perna.
+  @Test
+  void theLegConversionFindsTheSeedsByMarkEvenAfterTheyAreRenamed() throws Exception {
+    String savings = api.createAccountOk(session, "Poupança", "poupanca");
+    entry(checking, "receita", 100_000);
+    transfer(checking, savings, 30_000);
+    transfer(savings, checking, 10_000);
+    jdbc.sql("UPDATE categoria SET nome = 'Diversos' WHERE usuario_id = :u AND semente = 'outros'")
+        .param("u", actor.user().id())
+        .update();
+    jdbc.sql(
+            "UPDATE categoria SET nome = 'Entradas avulsas'"
+                + " WHERE usuario_id = :u AND semente = 'outras_receitas'")
+        .param("u", actor.user().id())
+        .update();
+
+    assertThat(remove(session, checking).getStatus()).isEqualTo(204);
+
+    List<String> names =
+        jdbc.sql(
+                "SELECT c.nome FROM lancamento l JOIN categoria c ON c.id = l.categoria_id"
+                    + " WHERE l.usuario_id = :u AND l.conta_id = :a ORDER BY c.nome")
+            .param("u", actor.user().id())
+            .param("a", java.util.UUID.fromString(savings))
+            .query(String.class)
+            .list();
+    assertThat(names).containsExactly("Diversos", "Entradas avulsas");
+  }
+
   @Test
   void deletingACardKeepsThePaymentsInTheCheckingAccount() throws Exception {
     entry(checking, "receita", 100_000);

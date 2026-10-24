@@ -33,13 +33,17 @@ class Category {
   @Column(name = "icone")
   private String icon;
 
+  @Column(name = "semente")
+  private String seed;
+
   @Column(name = "pai_id")
   private UUID parentId;
 
   protected Category() {}
 
-  Category(UUID userId, String name, CategoryType type) {
+  Category(UUID userId, String name, CategoryType type, String seed) {
     this.userId = userId;
+    this.seed = seed;
     this.name = name;
     this.type = type.value();
   }
