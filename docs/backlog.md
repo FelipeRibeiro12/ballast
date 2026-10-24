@@ -11,13 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F18.1 — Patrimônio no tempo
-Gráfico do patrimônio mês a mês: saldo das contas por caixa, posição de cripto
-com a cotação da data (F14.1) e valor de cada título de renda fixa na data.
-Mobile-first, legível em 360px, no padrão da tela Relatórios (ADR-046).
-Teste obrigatório: mês sem cotação de um ativo mostra o patrimônio sem ele e
-avisa, sem zerar nem inventar preço.
-
 ### F19 — Posso gastar quanto
 Saldo menos contas a vencer até o próximo salário, respeitando a restrição dos
 benefícios. A pergunta que faz o app ser aberto todo dia.
@@ -114,7 +107,7 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **DÍVIDA** — O job de recorrência não trava a conta (ADR-026): numa corrida com arquivar, pode sobrar prevista em conta arquivada. Não entra no saldo e não confirma, mas aparece na lista. Rever se arquivar passar a apagar as previstas da conta. Dono: backend, na fatia que mexer em arquivar conta.
 - **DÍVIDA** — `RecurrenceQueries.lockTemplate` monta o template com a divisão nula e completa com uma segunda consulta; um caminho novo que use o objeto antes disso materializaria a série sem divisão (revisão do PR #11). Juntar numa leitura só. Dono: backend, na próxima fatia que mexer em recorrência.
 - **DÍVIDA** — Parâmetro de query não declarado é ignorado em silêncio em todas as listagens: `?contaid=` (caixa errada) devolve o resultado sem filtro, com 200 (QA da F8, S1). Recusar parâmetro desconhecido com 400, como já se faz com campo de corpo. Dono: backend, numa fatia de endurecimento ou na F20.5.
-- **DÍVIDA** — O saldo projetado e o saldo de `/contas` leem todo o histórico de lançamentos do usuário a cada chamada, porque o realizado vale em qualquer data (revisão e auditoria do PR #13). Hoje ~21 ms com 20 mil lançamentos. Medir com anos de histórico e, se doer, saldo base materializado com ADR (CLAUDE.md, "Saldo não é coluna") ou índice por `(usuario_id, conta_id, data_caixa)`. Dono: dba, quando o volume real passar de 100 mil lançamentos por usuário.
+- **DÍVIDA** — O saldo projetado e o saldo de `/contas` leem todo o histórico de lançamentos do usuário a cada chamada, porque o realizado vale em qualquer data (revisão e auditoria do PR #13). Hoje ~21 ms com 20 mil lançamentos. Medir com anos de histórico e, se doer, saldo base materializado com ADR (CLAUDE.md, "Saldo não é coluna") ou índice por `(usuario_id, conta_id, data_caixa)`. O `GET /patrimonio/mensal` faz essa leitura doze vezes (ADR-047). Dono: dba, quando o volume real passar de 100 mil lançamentos por usuário.
 - **DÍVIDA** — Na hospedagem do PWA, servir `/sw.js` com `Cache-Control: no-cache` (e HTTPS, sem o qual o service worker não registra); senão uma versão velha do worker demora a ser trocada (auditoria do PR #15). Dono: devops, na escolha da hospedagem.
 - **DÍVIDA** — `GET /lancamentos` filtra só por `data_caixa`, então a compra no cartão aparece no mês do vencimento (F10). Falta ver por competência ("o que comprei no mês"), com um parâmetro como `por=competencia` e o índice correspondente medido. Os Relatórios (ADR-046) já somam por competência, mas a lista ainda não filtra por ela. Dono: backend e frontend, quando houver pedido de ver a lista por competência.
 - **DÍVIDA** — "Cartão nunca é origem de transferência" é só regra da aplicação; o banco aceitaria uma perna de saída em cartão (auditoria do PR #16). Garantir por FK composta com o tipo, como a V10 fez para a conta de pagamento. Dono: dba, na próxima migration que mexer em transferência.

@@ -717,6 +717,17 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
     mês sem lançamento.
 - 400 para `mes` fora do formato ou `relatório fora do limite`.
 
+## Patrimônio no tempo (ADR-047)
+
+- `GET /patrimonio/mensal?mes=AAAA-MM`: sem `mes`, o mês corrente em
+  `America/Sao_Paulo`. Responde `{mes, meses: [...]}` com até doze meses
+  terminando em `mes`, do mais antigo para o mais novo. Mês depois do
+  corrente fica de fora.
+- Cada ponto é o `/patrimonio` de `data`: o último dia do mês, ou hoje no mês
+  corrente. Traz `mes`, `data`, `contasCentavos`, `criptoCentavos`,
+  `rendaFixaCentavos`, `totalCentavos` e `posicoesSemCotacao` (fora do total).
+- 400 para `mes` fora do formato ou `patrimônio fora do limite`.
+
 ## Renda fixa (ADR-037)
 
 ### Conta de investimento
