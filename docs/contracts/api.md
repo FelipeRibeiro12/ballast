@@ -675,6 +675,8 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   em diante e não editadas à mão são apagadas e geradas de novo com os dados
   novos, se a recorrência estiver ativa. Realizadas, canceladas, editadas à mão e
   previstas de antes de hoje ficam.
+- Recorrência ativa com conta arquivada dá 400 `conta arquivada`. A inativa
+  passa: editar o template não gera nada, e ativar continua recusando.
 - Responde 200 com `{recorrencia, ocorrenciasMaterializadas}`, como o `POST`. 404 igual
   ao `GET`.
 
