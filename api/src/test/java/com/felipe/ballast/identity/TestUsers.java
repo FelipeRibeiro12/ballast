@@ -16,7 +16,9 @@ import tools.jackson.databind.json.JsonMapper;
 public final class TestUsers {
 
   public static final String PASSWORD = "senha-de-teste-12345";
-  static final String SESSION_COOKIE = "ballast_sessao";
+  // Com Secure ligado (padrão dos testes) o nome leva o prefixo __Host-; a variante de
+  // desenvolvimento é testada em InsecureCookieTest.
+  static final String SESSION_COOKIE = "__Host-ballast_sessao";
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
 

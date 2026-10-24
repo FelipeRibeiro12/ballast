@@ -30,7 +30,7 @@ import tools.jackson.databind.json.JsonMapper;
 class MfaTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
-  private static final String MFA_COOKIE = "ballast_mfa";
+  private static final String MFA_COOKIE = "__Host-ballast_mfa";
 
   @Autowired MockMvc mvc;
   @Autowired TestClock clock;

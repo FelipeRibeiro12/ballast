@@ -51,7 +51,8 @@ class SecurityConfig {
         .headers(Customizer.withDefaults())
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .addFilterBefore(
-            new SessionAuthenticationFilter(identity, publicRoutes), AuthorizationFilter.class)
+            new SessionAuthenticationFilter(identity, publicRoutes, properties.isCookieSecure()),
+            AuthorizationFilter.class)
         .authorizeHttpRequests(
             auth -> auth.requestMatchers(publicRoutes).permitAll().anyRequest().authenticated())
         .exceptionHandling(

@@ -176,7 +176,7 @@ class MfaController {
       operationId = "postAuthLoginMfa",
       summary = "Responde o desafio do login com o código",
       description =
-          "Lê o cookie ballast_mfa que o POST /auth/login deixou (5 minutos). Aceita o código do"
+          "Lê o cookie __Host-ballast_mfa que o POST /auth/login deixou (5 minutos). Aceita o código do"
               + " autenticador ou um de recuperação. Certo, abre a sessão como o login e expira o"
               + " cookie do desafio.")
   @ApiResponse(
@@ -186,7 +186,7 @@ class MfaController {
           @Header(
               name = "Set-Cookie",
               required = true,
-              description = "ballast_sessao=<token>, e ballast_mfa expirado",
+              description = "__Host-ballast_sessao=<token>, e __Host-ballast_mfa expirado",
               schema = @Schema(type = "string")),
       content = @Content(schema = @Schema(implementation = UserResponse.class)))
   @ApiResponse(
@@ -208,7 +208,8 @@ class MfaController {
       produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> answer(@Valid @RequestBody MfaRequests.Code request, HttpServletRequest http) {
     String token =
-        SessionCookies.challengeOf(http)
+        cookies
+            .challengeOf(http)
             .orElseThrow(
                 () -> MfaError.of(HttpStatus.UNAUTHORIZED, "desafio expirado ou inválido"));
     UUID userId;

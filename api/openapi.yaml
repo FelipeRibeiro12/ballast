@@ -284,9 +284,10 @@ paths:
       - auth
   /auth/login:
     post:
-      description: "A sessão vai no cookie ballast_sessao (HttpOnly, Secure, SameSite=Lax),\
-        \ válido por 7 dias absolutos, sem renovação. E-mail inexistente e senha errada\
-        \ dão a mesma resposta."
+      description: "A sessão vai no cookie __Host-ballast_sessao (HttpOnly, Secure,\
+        \ SameSite=Lax), válido por 7 dias absolutos, sem renovação. Em desenvolvimento,\
+        \ com COOKIE_SECURE=false, o nome é ballast_sessao, sem o prefixo. E-mail\
+        \ inexistente e senha errada dão a mesma resposta."
       operationId: postAuthLogin
       requestBody:
         content:
@@ -303,7 +304,7 @@ paths:
           description: Sessão aberta
           headers:
             Set-Cookie:
-              description: ballast_sessao=<token>; HttpOnly; Secure; SameSite=Lax;
+              description: __Host-ballast_sessao=<token>; HttpOnly; Secure; SameSite=Lax;
                 Path=/; Max-Age=604800
               required: true
               schema:
@@ -318,8 +319,8 @@ paths:
             \ em POST /auth/login/mfa dentro de 5 minutos"
           headers:
             Set-Cookie:
-              description: ballast_mfa=<token>; HttpOnly; Secure; SameSite=Lax; Path=/;
-                Max-Age=300
+              description: __Host-ballast_mfa=<token>; HttpOnly; Secure; SameSite=Lax;
+                Path=/; Max-Age=300
               required: true
               schema:
                 type: string
@@ -391,9 +392,9 @@ paths:
       - auth
   /auth/login/mfa:
     post:
-      description: "Lê o cookie ballast_mfa que o POST /auth/login deixou (5 minutos).\
-        \ Aceita o código do autenticador ou um de recuperação. Certo, abre a sessã\
-        o como o login e expira o cookie do desafio."
+      description: "Lê o cookie __Host-ballast_mfa que o POST /auth/login deixou (5\
+        \ minutos). Aceita o código do autenticador ou um de recuperação. Certo, abre\
+        \ a sessão como o login e expira o cookie do desafio."
       operationId: postAuthLoginMfa
       requestBody:
         content:
@@ -410,7 +411,7 @@ paths:
           description: Sessão aberta
           headers:
             Set-Cookie:
-              description: "ballast_sessao=<token>, e ballast_mfa expirado"
+              description: "__Host-ballast_sessao=<token>, e __Host-ballast_mfa expirado"
               required: true
               schema:
                 type: string
@@ -452,8 +453,8 @@ paths:
           description: "Sessão encerrada, ou não havia sessão"
           headers:
             Set-Cookie:
-              description: ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/;
-                Max-Age=0
+              description: __Host-ballast_sessao=; HttpOnly; Secure; SameSite=Lax;
+                Path=/; Max-Age=0
               required: true
               schema:
                 type: string
@@ -5752,5 +5753,5 @@ components:
   securitySchemes:
     cookieAuth:
       in: cookie
-      name: ballast_sessao
+      name: __Host-ballast_sessao
       type: apiKey
