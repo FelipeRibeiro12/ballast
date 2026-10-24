@@ -456,7 +456,7 @@ export interface paths {
         };
         /**
          * Lista os lançamentos do usuário num período
-         * @description Filtra por dataCaixa, com as duas pontas incluídas, do mais novo para o mais antigo (depois criadoEm e id, também decrescentes). de e ate são obrigatórios e o intervalo tem no máximo 366 dias contando os dois extremos. contaId, se vier, precisa ser um UUID; conta que não é do usuário ou não existe devolve lista vazia, sem distinguir.
+         * @description Filtra por dataCaixa, com as duas pontas incluídas, do mais novo para o mais antigo (depois criadoEm e id, também decrescentes). de e ate são obrigatórios e o intervalo tem no máximo 366 dias contando os dois extremos. contaId, se vier, precisa ser um UUID; conta que não é do usuário ou não existe devolve lista vazia, sem distinguir. limite (1 a 1000, padrão 1000) corta a página; se houver mais, o cabeçalho X-Next-Cursor traz o cursor para o parâmetro cursor da próxima chamada, com os mesmos filtros. Sem mais itens o cabeçalho não vem.
          */
         get: operations["getLancamentos"];
         put?: never;
@@ -612,7 +612,7 @@ export interface paths {
         };
         /**
          * Lista os movimentos de cripto do usuário
-         * @description Por data decrescente, o mais novo primeiro. contaId e ativoId de outro usuário dão lista vazia.
+         * @description Por data decrescente, depois criação e id, o mais novo primeiro. contaId e ativoId de outro usuário dão lista vazia. limite (1 a 1000, padrão 1000) corta a página; se houver mais, o cabeçalho X-Next-Cursor traz o cursor para o parâmetro cursor da próxima chamada, com os mesmos filtros. Sem mais itens o cabeçalho não vem.
          */
         get: operations["getMovimentosCripto"];
         put?: never;
@@ -3924,6 +3924,8 @@ export interface operations {
                 de: string;
                 ate: string;
                 contaId?: string;
+                limite?: number;
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -3934,13 +3936,15 @@ export interface operations {
             /** @description Lançamentos do período */
             200: {
                 headers: {
+                    /** @description Cursor da próxima página; ausente na última */
+                    "X-Next-Cursor"?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Lancamento"][];
                 };
             };
-            /** @description de ou ate ausente ou fora do formato AAAA-MM-DD (ano de 1900 a 2199), de depois de ate, intervalo maior que 366 dias ou contaId que não é UUID */
+            /** @description de ou ate ausente ou fora do formato AAAA-MM-DD (ano de 1900 a 2199), de depois de ate, intervalo maior que 366 dias, contaId que não é UUID, limite fora de 1 a 1000 ou cursor inválido */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4664,6 +4668,8 @@ export interface operations {
             query?: {
                 contaId?: string;
                 ativoId?: string;
+                limite?: number;
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -4674,13 +4680,15 @@ export interface operations {
             /** @description Movimentos */
             200: {
                 headers: {
+                    /** @description Cursor da próxima página; ausente na última */
+                    "X-Next-Cursor"?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["MovimentoCripto"][];
                 };
             };
-            /** @description contaId ou ativoId que não é UUID */
+            /** @description contaId ou ativoId que não é UUID, limite fora de 1 a 1000 ou cursor inválido */
             400: {
                 headers: {
                     [name: string]: unknown;

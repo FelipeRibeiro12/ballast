@@ -1494,7 +1494,10 @@ paths:
         \ para o mais antigo (depois criadoEm e id, também decrescentes). de e ate\
         \ são obrigatórios e o intervalo tem no máximo 366 dias contando os dois extremos.\
         \ contaId, se vier, precisa ser um UUID; conta que não é do usuário ou nã\
-        o existe devolve lista vazia, sem distinguir."
+        o existe devolve lista vazia, sem distinguir. limite (1 a 1000, padrão 1000)\
+        \ corta a página; se houver mais, o cabeçalho X-Next-Cursor traz o cursor\
+        \ para o parâmetro cursor da próxima chamada, com os mesmos filtros. Sem mais\
+        \ itens o cabeçalho não vem."
       operationId: getLancamentos
       parameters:
       - in: query
@@ -1515,6 +1518,19 @@ paths:
         schema:
           type: string
           format: uuid
+      - in: query
+        name: limite
+        required: false
+        schema:
+          type: integer
+          default: 1000
+          maximum: 1000
+          minimum: 1
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -1524,14 +1540,20 @@ paths:
                 items:
                   $ref: "#/components/schemas/Lancamento"
           description: Lançamentos do período
+          headers:
+            X-Next-Cursor:
+              description: Cursor da próxima página; ausente na última
+              schema:
+                type: string
+              style: simple
         "400":
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: "de ou ate ausente ou fora do formato AAAA-MM-DD (ano de 1900\
-            \ a 2199), de depois de ate, intervalo maior que 366 dias ou contaId que\
-            \ não é UUID"
+            \ a 2199), de depois de ate, intervalo maior que 366 dias, contaId que\
+            \ não é UUID, limite fora de 1 a 1000 ou cursor inválido"
         "401":
           content:
             application/json:
@@ -2166,8 +2188,11 @@ paths:
       - metas
   /movimentos-cripto:
     get:
-      description: "Por data decrescente, o mais novo primeiro. contaId e ativoId\
-        \ de outro usuário dão lista vazia."
+      description: "Por data decrescente, depois criação e id, o mais novo primeiro.\
+        \ contaId e ativoId de outro usuário dão lista vazia. limite (1 a 1000, padrã\
+        o 1000) corta a página; se houver mais, o cabeçalho X-Next-Cursor traz o cursor\
+        \ para o parâmetro cursor da próxima chamada, com os mesmos filtros. Sem mais\
+        \ itens o cabeçalho não vem."
       operationId: getMovimentosCripto
       parameters:
       - in: query
@@ -2182,6 +2207,19 @@ paths:
         schema:
           type: string
           format: uuid
+      - in: query
+        name: limite
+        required: false
+        schema:
+          type: integer
+          default: 1000
+          maximum: 1000
+          minimum: 1
+      - in: query
+        name: cursor
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -2191,12 +2229,19 @@ paths:
                 items:
                   $ref: "#/components/schemas/MovimentoCripto"
           description: Movimentos
+          headers:
+            X-Next-Cursor:
+              description: Cursor da próxima página; ausente na última
+              schema:
+                type: string
+              style: simple
         "400":
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: contaId ou ativoId que não é UUID
+          description: "contaId ou ativoId que não é UUID, limite fora de 1 a 1000\
+            \ ou cursor inválido"
         "401":
           content:
             application/json:

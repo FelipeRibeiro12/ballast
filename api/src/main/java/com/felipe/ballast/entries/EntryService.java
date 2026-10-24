@@ -298,8 +298,14 @@ class EntryService {
     return queries.find(userId, id);
   }
 
-  List<EntrySummary> list(UUID userId, LocalDate from, LocalDate to, UUID accountId) {
-    return queries.list(userId, from, to, accountId);
+  record Page(List<EntrySummary> items, boolean more) {}
+
+  // Busca um a mais que o limite só para saber se há próxima página.
+  Page list(
+      UUID userId, LocalDate from, LocalDate to, UUID accountId, EntryCursor after, int limit) {
+    List<EntrySummary> found = queries.list(userId, from, to, accountId, after, limit + 1);
+    boolean more = found.size() > limit;
+    return new Page(more ? found.subList(0, limit) : found, more);
   }
 
   // data_caixa do lançamento: a própria data fora de cartão, o vencimento da fatura em cartão.

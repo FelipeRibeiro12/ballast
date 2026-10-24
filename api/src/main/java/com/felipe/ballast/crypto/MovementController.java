@@ -3,7 +3,9 @@ package com.felipe.ballast.crypto;
 import com.felipe.ballast.identity.AuthenticatedUser;
 import com.felipe.ballast.web.CanonicalUuid;
 import com.felipe.ballast.web.ErrorResponse;
+import com.felipe.ballast.web.Paging;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -12,6 +14,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -138,17 +141,24 @@ class MovementController {
       operationId = "getMovimentosCripto",
       summary = "Lista os movimentos de cripto do usuário",
       description =
-          "Por data decrescente, o mais novo primeiro. contaId e ativoId de outro usuário dão"
-              + " lista vazia.",
+          "Por data decrescente, depois criação e id, o mais novo primeiro. contaId e ativoId de"
+              + " outro usuário dão lista vazia. limite (1 a 1000, padrão 1000) corta a página; se"
+              + " houver mais, o cabeçalho X-Next-Cursor traz o cursor para o parâmetro cursor da"
+              + " próxima chamada, com os mesmos filtros. Sem mais itens o cabeçalho não vem.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",
       description = "Movimentos",
+      headers =
+          @Header(
+              name = Paging.NEXT_CURSOR_HEADER,
+              description = "Cursor da próxima página; ausente na última",
+              schema = @Schema(type = "string")),
       content =
           @Content(array = @ArraySchema(schema = @Schema(implementation = MovementResponse.class))))
   @ApiResponse(
       responseCode = "400",
-      description = "contaId ou ativoId que não é UUID",
+      description = "contaId ou ativoId que não é UUID, limite fora de 1 a 1000 ou cursor inválido",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -164,7 +174,11 @@ class MovementController {
       @Schema(type = "string", format = "uuid") @RequestParam(name = "contaId", required = false)
           String accountId,
       @Schema(type = "string", format = "uuid") @RequestParam(name = "ativoId", required = false)
-          String assetId) {
+          String assetId,
+      @Schema(type = "integer", minimum = "1", maximum = "1000", defaultValue = "1000")
+          @RequestParam(name = "limite", required = false)
+          String limit,
+      @Schema(type = "string") @RequestParam(name = "cursor", required = false) String cursor) {
     Optional<UUID> account = CanonicalUuid.parse(accountId);
     if (accountId != null && account.isEmpty()) {
       return ResponseEntity.badRequest().body(INVALID_ACCOUNT_FILTER);
@@ -173,10 +187,29 @@ class MovementController {
     if (assetId != null && asset.isEmpty()) {
       return ResponseEntity.badRequest().body(INVALID_ASSET_FILTER);
     }
-    return ResponseEntity.ok(
-        movements.list(user.id(), account.orElse(null), asset.orElse(null)).stream()
-            .map(MovementResponse::from)
-            .toList());
+    OptionalInt pageSize = Paging.parseLimit(limit);
+    if (pageSize.isEmpty()) {
+      return ResponseEntity.badRequest().body(Paging.INVALID_LIMIT);
+    }
+    Optional<MovementCursor> after =
+        cursor == null ? Optional.empty() : MovementCursor.parse(cursor);
+    if (cursor != null && after.isEmpty()) {
+      return ResponseEntity.badRequest().body(Paging.INVALID_CURSOR);
+    }
+    MovementService.Page page =
+        movements.list(
+            user.id(),
+            account.orElse(null),
+            asset.orElse(null),
+            after.orElse(null),
+            pageSize.getAsInt());
+    ResponseEntity.BodyBuilder response = ResponseEntity.ok();
+    if (page.more()) {
+      response.header(
+          Paging.NEXT_CURSOR_HEADER,
+          MovementCursor.of(page.items().get(page.items().size() - 1)).encode());
+    }
+    return response.body(page.items().stream().map(MovementResponse::from).toList());
   }
 
   @Operation(
