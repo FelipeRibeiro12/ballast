@@ -62,17 +62,27 @@ class MeTest {
     Cookie sessionA = users.session(userA);
     users.session(userB);
 
-    // Identificador vindo do cliente por query, cabeçalho ou cookie extra não decide dono.
+    // Identificador vindo do cliente por cabeçalho ou cookie extra não decide dono.
     MockHttpServletResponse response =
         mvc.perform(
                 get("/auth/eu")
                     .cookie(sessionA)
                     .cookie(new Cookie("usuario_id", userB.id().toString()))
-                    .queryParam("id", userB.id().toString())
-                    .queryParam("usuario_id", userB.id().toString())
                     .header("X-Usuario-Id", userB.id().toString()))
             .andReturn()
             .getResponse();
+
+    // Na query a rota não declara parâmetro, então é 400 (ADR-051) e nada de B volta.
+    MockHttpServletResponse withQuery =
+        mvc.perform(
+                get("/auth/eu")
+                    .cookie(sessionA)
+                    .queryParam("id", userB.id().toString())
+                    .queryParam("usuario_id", userB.id().toString()))
+            .andReturn()
+            .getResponse();
+    assertThat(withQuery.getStatus()).isEqualTo(400);
+    assertThat(withQuery.getContentAsString()).doesNotContain(userB.email());
 
     JsonNode body = json.readTree(response.getContentAsString(StandardCharsets.UTF_8));
     assertThat(body.get("id").asString()).isEqualTo(userA.id().toString());

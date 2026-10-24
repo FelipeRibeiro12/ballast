@@ -115,13 +115,22 @@ class AccountAuthorizationTest {
         mvc.perform(
                 get("/contas")
                     .cookie(sessionA)
-                    .queryParam("usuarioId", UUID.randomUUID().toString())
                     .header("X-Usuario-Id", UUID.randomUUID().toString()))
             .andReturn()
             .getResponse();
 
     assertThat(response.getStatus()).isEqualTo(200);
     assertThat(AccountsApi.body(response).size()).isZero();
+
+    // Na query é parâmetro desconhecido: 400 (ADR-051), e também não decide o dono.
+    MockHttpServletResponse withQuery =
+        mvc.perform(
+                get("/contas")
+                    .cookie(sessionA)
+                    .queryParam("usuarioId", UUID.randomUUID().toString()))
+            .andReturn()
+            .getResponse();
+    assertThat(withQuery.getStatus()).isEqualTo(400);
   }
 
   @Test
