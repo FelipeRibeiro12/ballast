@@ -701,6 +701,24 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
 - Meta ou aporte de outro usuário, inexistente ou id que não é UUID: 404
   `meta não encontrada`.
 
+## Posso gastar (ADR-048)
+
+- `GET /posso-gastar` responde:
+  - `hoje` e `ate`: a véspera do próximo salário, ou o fim do mês sem salário;
+  - `proximoSalario`: `{data, valorCentavos}` ou nulo;
+  - `livreCentavos`: o menor saldo projetado das contas que não são de
+    benefício até `ate`, negativo quando falta;
+  - `menorSaldoEm`;
+  - `dias`, contando hoje e `ate`;
+  - `porDiaCentavos`: livre dividido por dias, para baixo, nulo se não sobra;
+  - `vencidasCentavos`: soma com sinal das previstas vencidas, já dentro do
+    livre;
+  - `beneficios`: `{contaId, nome, livreCentavos}` por conta de benefício
+    ativa.
+- O próximo salário é a primeira receita depois de hoje na categoria Salário,
+  ou numa filha dela, numa conta que não é de benefício.
+- 400 `projeção fora do limite`.
+
 ## Relatórios (ADR-046)
 
 - `GET /relatorios?mes=AAAA-MM`: sem `mes`, o mês corrente em

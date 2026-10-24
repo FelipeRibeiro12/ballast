@@ -1981,6 +1981,43 @@ button.relatorio-mes:hover:not(:disabled) {
   font-weight: 600;
 }
 
+.posso-gastar p {
+  margin: 0 0 var(--esp-2);
+}
+
+.posso-gastar .patrimonio-atual {
+  margin-bottom: var(--esp-3);
+}
+
+.posso-por-dia {
+  font-weight: 600;
+}
+
+.posso-nota {
+  color: var(--texto-suave);
+  font-size: 0.875rem;
+}
+
+.posso-beneficios {
+  margin-top: var(--esp-3);
+  padding-top: var(--esp-3);
+  border-top: 1px solid var(--borda);
+}
+
+.posso-beneficios ul {
+  display: grid;
+  gap: var(--esp-2);
+  margin: 0 0 var(--esp-2);
+  padding: 0;
+  list-style: none;
+}
+
+.posso-beneficios li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-3);
+}
+
 .relatorios-patrimonio {
   margin-top: var(--esp-4);
 }

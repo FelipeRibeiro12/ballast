@@ -2201,6 +2201,42 @@ paths:
       summary: Lista as posições de cripto até uma data
       tags:
       - cripto
+  /posso-gastar:
+    get:
+      description: "O menor saldo projetado (ADR-029) das contas que não são de benefí\
+        cio, de hoje até a véspera do próximo salário, ou até o fim do mês sem salá\
+        rio previsto. Cada benefício vem à parte (ADR-048)."
+      operationId: getPossoGastar
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PossoGastar"
+          description: Quanto dá para gastar
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: '"projeção fora do limite"'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Quanto dá para gastar até o próximo salário
+      tags:
+      - saldo-projetado
   /recorrencias:
     get:
       description: "Ordem por título sem diferenciar maiúscula de minúscula, depois\
@@ -3159,6 +3195,24 @@ components:
           format: int64
           maximum: 9007199254740991
           minimum: -9007199254740991
+    BeneficioLivre:
+      type: object
+      properties:
+        contaId:
+          type: string
+          format: uuid
+        livreCentavos:
+          type: integer
+          format: int64
+          description: Menor saldo projetado da conta até ate
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        nome:
+          type: string
+      required:
+      - contaId
+      - livreCentavos
+      - nome
     CadastroRequest:
       type: object
       properties:
@@ -4614,6 +4668,83 @@ components:
       - data
       - dolar
       - posicoes
+    PossoGastar:
+      type: object
+      properties:
+        ate:
+          type: string
+          format: date
+          description: "Véspera do próximo salário, ou o fim do mês sem salário previsto"
+        beneficios:
+          type: array
+          description: "Contas de benefício ativas, fora de livreCentavos, pelo nome"
+          items:
+            $ref: "#/components/schemas/BeneficioLivre"
+        dias:
+          type: integer
+          format: int32
+          description: "Dias de hoje até ate, contando os dois"
+          maximum: 366
+          minimum: 1
+        hoje:
+          type: string
+          format: date
+        livreCentavos:
+          type: integer
+          format: int64
+          description: "Menor saldo projetado das contas que não são de benefício,\
+            \ de hoje até ate. Negativo quando falta"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        menorSaldoEm:
+          type: string
+          format: date
+          description: Dia do menor saldo
+        porDiaCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "livreCentavos dividido por dias, para baixo; nulo quando nã\
+            o sobra nada"
+          maximum: 9007199254740991
+          minimum: 0
+        proximoSalario:
+          type: "null"
+          $ref: "#/components/schemas/ProximoSalario"
+          description: Próxima receita na categoria Salário depois de hoje; nulo sem
+            salário
+        vencidasCentavos:
+          type: integer
+          format: int64
+          description: "Soma com sinal das previstas vencidas, já dentro de livreCentavos\
+            \ (ADR-029)"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - ate
+      - beneficios
+      - dias
+      - hoje
+      - livreCentavos
+      - menorSaldoEm
+      - porDiaCentavos
+      - proximoSalario
+      - vencidasCentavos
+    ProximoSalario:
+      type: object
+      properties:
+        data:
+          type: string
+          format: date
+        valorCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - data
+      - valorCentavos
     ReceitaEDespesaDoMes:
       type: object
       properties:

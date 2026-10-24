@@ -11,10 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F19 — Posso gastar quanto
-Saldo menos contas a vencer até o próximo salário, respeitando a restrição dos
-benefícios. A pergunta que faz o app ser aberto todo dia.
-
 ### F20 — MFA
 TOTP, segredo cifrado, código de recuperação em hash, limite de tentativa.
 Antes de publicar para outras pessoas, isso deixa de ser opcional.
@@ -75,6 +71,7 @@ produção enquanto esta fatia não fechar: hoje só o comentário do
 - **F28** — Classificação automática de categoria pela descrição
 - **F29** — Capacitor para publicar nas lojas
 - **DÍVIDA** — Navegação com seções fora da barra: Orçamento, Metas e Relatórios só abrem pelo Início e pelos atalhos de planejamento (ADR-043, ADR-045, ADR-046). A próxima seção pede outro desenho (menu "Mais" ou rótulos curtos), com teste em 360px. Dono: frontend.
+- **DÍVIDA** — O próximo salário do Posso gastar é achado pelo nome da categoria Salário da semente (ADR-048). Quando houver CRUD de categoria, renomear quebra a busca: marcar a categoria de salário explicitamente nessa fatia. Dono: backend.
 - **DÍVIDA** — Aporte de meta ligado à transferência que moveu o dinheiro, para não registrar duas vezes (ADR-045). Precisa decidir o que acontece quando a transferência é editada ou apagada. Dono: backend.
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
 - **DÍVIDA** — Remover a tabela `health_check` e o `/healthz` que lê dela por migration nova, quando a F1 trouxer uma tabela real para o endpoint tocar.

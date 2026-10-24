@@ -2,6 +2,26 @@
 
 Uma entrada por fatia fechada, a mais recente no topo.
 
+## 2026-10-23 — F19: posso gastar
+
+O que entrou:
+- `GET /posso-gastar`: o menor saldo projetado até a véspera do próximo salário, o valor por dia para baixo, as vencidas e cada benefício à parte.
+- No web, o cartão Posso gastar no topo do Início.
+
+Decisões: ADR-048. O menor saldo e não o saldo menos as despesas, porque uma receita no meio do caminho não paga a conta que vence antes dela. O salário é achado pela categoria Salário da semente; a dívida de marcar a categoria fica para o CRUD de categoria.
+
+Teste:
+- Receita no meio da janela não cobre despesa anterior.
+- O salário de hoje já conta.
+- Sem salário, a janela vai até o fim do mês.
+- Faltando, o livre fica negativo e não há valor por dia.
+- A recarga do VR não é salário.
+- A não vê B.
+
+O fixture do saldo projetado escolhia a primeira receita por id, que às vezes era Salário. O teste falhou numa rodada por isso, e agora escolhe a categoria pelo nome.
+
+Em aberto: marcar a categoria de salário quando houver CRUD de categoria.
+
 ## 2026-10-23 — F18.1: patrimônio no tempo
 
 O que entrou:

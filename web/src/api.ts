@@ -1957,3 +1957,64 @@ export async function fetchPatrimonioMensal(mes: string): Promise<PatrimonioMens
   if (!isPatrimonioMensal(corpo)) throw new ApiError('/patrimonio/mensal com formato inesperado')
   return corpo
 }
+
+export type PossoGastar = components['schemas']['PossoGastar']
+export type BeneficioLivre = components['schemas']['BeneficioLivre']
+
+function isBeneficioLivre(valor: unknown): valor is BeneficioLivre {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'nome' in valor &&
+    typeof valor.nome === 'string' &&
+    'livreCentavos' in valor &&
+    Number.isSafeInteger(valor.livreCentavos)
+  )
+}
+
+function isProximoSalario(valor: unknown): boolean {
+  return (
+    valor === null ||
+    (typeof valor === 'object' &&
+      'data' in valor &&
+      eDataIso(valor.data) &&
+      'valorCentavos' in valor &&
+      Number.isSafeInteger(valor.valorCentavos))
+  )
+}
+
+function isPossoGastar(valor: unknown): valor is PossoGastar {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'hoje' in valor &&
+    eDataIso(valor.hoje) &&
+    'ate' in valor &&
+    eDataIso(valor.ate) &&
+    'proximoSalario' in valor &&
+    isProximoSalario(valor.proximoSalario) &&
+    'livreCentavos' in valor &&
+    Number.isSafeInteger(valor.livreCentavos) &&
+    'menorSaldoEm' in valor &&
+    eDataIso(valor.menorSaldoEm) &&
+    'dias' in valor &&
+    Number.isSafeInteger(valor.dias) &&
+    'porDiaCentavos' in valor &&
+    (valor.porDiaCentavos === null || Number.isSafeInteger(valor.porDiaCentavos)) &&
+    'vencidasCentavos' in valor &&
+    Number.isSafeInteger(valor.vencidasCentavos) &&
+    'beneficios' in valor &&
+    Array.isArray(valor.beneficios) &&
+    valor.beneficios.every(isBeneficioLivre)
+  )
+}
+
+export async function fetchPossoGastar(): Promise<PossoGastar> {
+  const resposta = await fetch(`${baseUrl}/posso-gastar`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeProjecao(resposta, '/posso-gastar')
+  const corpo: unknown = await resposta.json()
+  if (!isPossoGastar(corpo)) throw new ApiError('/posso-gastar com formato inesperado')
+  return corpo
+}
