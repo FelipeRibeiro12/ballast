@@ -424,3 +424,12 @@ Dívida registrada: gasto de código antes de validar a conta no DELETE, limpeza
 Achados do revisor: security 0 bloqueantes, 4 viraram dívida
 Pipeline: a preencher no PR
 Em aberto: conferir o IP confiável atrás do Caddy na produção.
+
+## 2026-10-24 — Rodada de fechamento, onda 3: contrato da API
+
+O que entrou: mensagens e contratos da API acertados, tombstone de ocorrência apagada (V22), PUT de parcela recusa título e categoria, erro do web renomeado para investimento.
+Decisões: ADR-054 (itens 7 e 8 são decisão do dono)
+Dívida registrada: apagar ocorrência realizada ainda libera a chave e ela volta como prevista
+Achados do revisor: reviewer e security dispensados (diff sem borda de autenticação)
+Pipeline: a preencher no PR
+Em aberto: nada
