@@ -93,6 +93,38 @@ function lerRetryAfter(resposta: Response): number | null {
   return segundos >= 1 ? segundos : null
 }
 
+// Sem chave informada, cada chamada vira uma tentativa nova do usuário. Quem faz retry da
+// mesma requisição gera a chave uma vez e repassa nas repetições (ADR-056).
+function cabecalhosDeEscrita(chave?: string): Record<string, string> {
+  return { 'Content-Type': 'application/json', 'Idempotency-Key': chave ?? crypto.randomUUID() }
+}
+
+// Teto de páginas: passar dele é bug ou dado fora do esperado, e uma lista cortada em silêncio
+// seria pior que o erro.
+const MAX_PAGINAS = 20
+
+async function lerTodasAsPaginas(
+  montarUrl: (cursor: string | null) => string,
+  origem: string,
+  recusar: (resposta: Response, origem: string) => Promise<never>,
+  valido: (item: unknown) => boolean,
+): Promise<unknown[]> {
+  const itens: unknown[] = []
+  let cursor: string | null = null
+  for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
+    const resposta = await fetch(montarUrl(cursor), { credentials: 'same-origin' })
+    if (!resposta.ok) return recusar(resposta, origem)
+    const corpo: unknown = await resposta.json()
+    if (!Array.isArray(corpo) || !corpo.every(valido)) {
+      throw new ApiError(`${origem} com formato inesperado`)
+    }
+    itens.push(...corpo)
+    cursor = resposta.headers.get('X-Next-Cursor')
+    if (cursor === null) return itens
+  }
+  throw new ApiError(`${origem} passou de ${MAX_PAGINAS} páginas`)
+}
+
 async function lerUsuario(resposta: Response, origem: string): Promise<Usuario> {
   const corpo: unknown = await resposta.json()
   if (!isUsuario(corpo)) {
@@ -316,11 +348,11 @@ export async function fetchContas(arquivadas: boolean): Promise<Conta[]> {
   return corpo
 }
 
-export async function postConta(dados: CriarContaRequest): Promise<Conta> {
+export async function postConta(dados: CriarContaRequest, chave?: string): Promise<Conta> {
   const resposta = await fetch(`${baseUrl}/contas`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosDeEscrita(chave),
     body: JSON.stringify(dados),
   })
   if (!resposta.ok) return recusarResposta(resposta, 'POST /contas')
@@ -605,24 +637,25 @@ export async function fetchLancamentos(
   ate: string,
   contaId?: string,
 ): Promise<Lancamento[]> {
-  const parametros = new URLSearchParams({ de, ate })
-  if (contaId !== undefined) parametros.set('contaId', contaId)
-  const resposta = await fetch(`${baseUrl}/lancamentos?${parametros.toString()}`, {
-    credentials: 'same-origin',
-  })
-  if (!resposta.ok) return recusarRespostaDeLancamento(resposta, '/lancamentos')
-  const corpo: unknown = await resposta.json()
-  if (!Array.isArray(corpo) || !corpo.every(isLancamento)) {
-    throw new ApiError('/lancamentos com formato inesperado')
-  }
-  return corpo
+  const itens = await lerTodasAsPaginas(
+    (cursor) => {
+      const parametros = new URLSearchParams({ de, ate })
+      if (contaId !== undefined) parametros.set('contaId', contaId)
+      if (cursor !== null) parametros.set('cursor', cursor)
+      return `${baseUrl}/lancamentos?${parametros.toString()}`
+    },
+    '/lancamentos',
+    recusarRespostaDeLancamento,
+    isLancamento,
+  )
+  return itens as Lancamento[]
 }
 
-export async function postLancamento(dados: LancamentoRequest): Promise<Lancamento> {
+export async function postLancamento(dados: LancamentoRequest, chave?: string): Promise<Lancamento> {
   const resposta = await fetch(`${baseUrl}/lancamentos`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosDeEscrita(chave),
     body: JSON.stringify(dados),
   })
   if (!resposta.ok) return recusarRespostaDeLancamento(resposta, 'POST /lancamentos')
@@ -729,11 +762,11 @@ async function recusarRespostaDeCompra(resposta: Response, origem: string): Prom
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
-export async function postCompraParcelada(dados: CompraParceladaRequest): Promise<CompraParcelada> {
+export async function postCompraParcelada(dados: CompraParceladaRequest, chave?: string): Promise<CompraParcelada> {
   const resposta = await fetch(`${baseUrl}/compras-parceladas`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosDeEscrita(chave),
     body: JSON.stringify(dados),
   })
   if (!resposta.ok) return recusarRespostaDeCompra(resposta, 'POST /compras-parceladas')
@@ -834,11 +867,11 @@ async function recusarRespostaDeTransferencia(resposta: Response, origem: string
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
-export async function postTransferencia(dados: TransferenciaRequest): Promise<Transferencia> {
+export async function postTransferencia(dados: TransferenciaRequest, chave?: string): Promise<Transferencia> {
   const resposta = await fetch(`${baseUrl}/transferencias`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosDeEscrita(chave),
     body: JSON.stringify(dados),
   })
   if (!resposta.ok) return recusarRespostaDeTransferencia(resposta, 'POST /transferencias')
@@ -1056,11 +1089,11 @@ export async function fetchRecorrencias(): Promise<Recorrencia[]> {
   return corpo
 }
 
-export async function postRecorrencia(dados: RecorrenciaRequest): Promise<RecorrenciaCriada> {
+export async function postRecorrencia(dados: RecorrenciaRequest, chave?: string): Promise<RecorrenciaCriada> {
   const resposta = await fetch(`${baseUrl}/recorrencias`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosDeEscrita(chave),
     body: JSON.stringify(dados),
   })
   if (!resposta.ok) return recusarRespostaDeRecorrencia(resposta, 'POST /recorrencias')
@@ -1415,11 +1448,11 @@ async function recusarRespostaDeInvestimento(resposta: Response, origem: string)
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
-async function enviarJson(caminho: string, dados: unknown): Promise<Response> {
+async function enviarJson(caminho: string, dados: unknown, chave?: string): Promise<Response> {
   return fetch(`${baseUrl}${caminho}`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosDeEscrita(chave),
     body: JSON.stringify(dados),
   })
 }
@@ -1434,33 +1467,33 @@ export async function fetchAtivosCripto(): Promise<AtivoCripto[]> {
   return corpo
 }
 
-export async function postAtivoCripto(dados: AtivoCriptoRequest): Promise<AtivoCripto> {
-  const resposta = await enviarJson('/ativos-cripto', dados)
+export async function postAtivoCripto(dados: AtivoCriptoRequest, chave?: string): Promise<AtivoCripto> {
+  const resposta = await enviarJson('/ativos-cripto', dados, chave)
   if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /ativos-cripto')
   const corpo: unknown = await resposta.json()
   if (!isAtivoCripto(corpo)) throw new ApiError('POST /ativos-cripto com formato inesperado')
   return corpo
 }
 
-export async function postCotacao(ativoId: string, dados: CotacaoRequest): Promise<void> {
-  const resposta = await enviarJson(`/ativos-cripto/${encodeURIComponent(ativoId)}/cotacoes`, dados)
+export async function postCotacao(ativoId: string, dados: CotacaoRequest, chave?: string): Promise<void> {
+  const resposta = await enviarJson(`/ativos-cripto/${encodeURIComponent(ativoId)}/cotacoes`, dados, chave)
   if (resposta.status !== 201) {
     return recusarRespostaDeInvestimento(resposta, 'POST /ativos-cripto/{id}/cotacoes')
   }
 }
 
 export async function fetchMovimentosCripto(): Promise<MovimentoCripto[]> {
-  const resposta = await fetch(`${baseUrl}/movimentos-cripto`, { credentials: 'same-origin' })
-  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, '/movimentos-cripto')
-  const corpo: unknown = await resposta.json()
-  if (!Array.isArray(corpo) || !corpo.every(isMovimentoCripto)) {
-    throw new ApiError('/movimentos-cripto com formato inesperado')
-  }
-  return corpo
+  const itens = await lerTodasAsPaginas(
+    (cursor) => `${baseUrl}/movimentos-cripto${cursor === null ? '' : `?cursor=${encodeURIComponent(cursor)}`}`,
+    '/movimentos-cripto',
+    recusarRespostaDeInvestimento,
+    isMovimentoCripto,
+  )
+  return itens as MovimentoCripto[]
 }
 
-export async function postMovimentoCripto(dados: MovimentoCriptoRequest): Promise<MovimentoCripto> {
-  const resposta = await enviarJson('/movimentos-cripto', dados)
+export async function postMovimentoCripto(dados: MovimentoCriptoRequest, chave?: string): Promise<MovimentoCripto> {
+  const resposta = await enviarJson('/movimentos-cripto', dados, chave)
   if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /movimentos-cripto')
   const corpo: unknown = await resposta.json()
   if (!isMovimentoCripto(corpo)) throw new ApiError('POST /movimentos-cripto com formato inesperado')
@@ -1606,8 +1639,8 @@ export async function fetchTitulosRendaFixa(data: string): Promise<TitulosRendaF
   return corpo
 }
 
-export async function postTituloRendaFixa(dados: TituloRendaFixaRequest): Promise<TituloRendaFixa> {
-  const resposta = await enviarJson('/titulos-renda-fixa', dados)
+export async function postTituloRendaFixa(dados: TituloRendaFixaRequest, chave?: string): Promise<TituloRendaFixa> {
+  const resposta = await enviarJson('/titulos-renda-fixa', dados, chave)
   if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /titulos-renda-fixa')
   return lerTitulo(resposta, 'POST /titulos-renda-fixa')
 }
@@ -1631,13 +1664,13 @@ export async function deleteTituloRendaFixa(id: string): Promise<void> {
   if (resposta.status !== 204) return recusarRespostaDeInvestimento(resposta, 'DELETE /titulos-renda-fixa/{id}')
 }
 
-export async function postMarcacao(id: string, data: string, valorCentavos: number): Promise<void> {
-  const resposta = await enviarJson(`/titulos-renda-fixa/${encodeURIComponent(id)}/marcacoes`, { data, valorCentavos })
+export async function postMarcacao(id: string, data: string, valorCentavos: number, chave?: string): Promise<void> {
+  const resposta = await enviarJson(`/titulos-renda-fixa/${encodeURIComponent(id)}/marcacoes`, { data, valorCentavos }, chave)
   if (resposta.status !== 201) return recusarRespostaDeInvestimento(resposta, 'POST /titulos-renda-fixa/{id}/marcacoes')
 }
 
-export async function postResgate(id: string, data: string, valorCentavos: number): Promise<TituloRendaFixa> {
-  const resposta = await enviarJson(`/titulos-renda-fixa/${encodeURIComponent(id)}/resgate`, { data, valorCentavos })
+export async function postResgate(id: string, data: string, valorCentavos: number, chave?: string): Promise<TituloRendaFixa> {
+  const resposta = await enviarJson(`/titulos-renda-fixa/${encodeURIComponent(id)}/resgate`, { data, valorCentavos }, chave)
   if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /titulos-renda-fixa/{id}/resgate')
   return lerTitulo(resposta, 'POST /titulos-renda-fixa/{id}/resgate')
 }
@@ -1808,11 +1841,11 @@ async function recusarRespostaDeMeta(resposta: Response, origem: string): Promis
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
-async function enviarMeta(caminho: string, metodo: 'POST' | 'PUT', dados: unknown): Promise<Response> {
+async function enviarMeta(caminho: string, metodo: 'POST' | 'PUT', dados: unknown, chave?: string): Promise<Response> {
   return fetch(`${baseUrl}${caminho}`, {
     method: metodo,
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+    headers: cabecalhosDeEscrita(chave),
     body: JSON.stringify(dados),
   })
 }
@@ -1825,8 +1858,8 @@ export async function fetchMetas(): Promise<Meta[]> {
   return corpo
 }
 
-export async function postMeta(dados: MetaRequest): Promise<Meta> {
-  const resposta = await enviarMeta('/metas', 'POST', dados)
+export async function postMeta(dados: MetaRequest, chave?: string): Promise<Meta> {
+  const resposta = await enviarMeta('/metas', 'POST', dados, chave)
   if (resposta.status !== 201) return recusarRespostaDeMeta(resposta, 'POST /metas')
   const corpo: unknown = await resposta.json()
   if (!isMeta(corpo)) throw new ApiError('POST /metas com formato inesperado')
@@ -1862,8 +1895,8 @@ export async function fetchAportes(metaId: string): Promise<AporteMeta[]> {
 }
 
 // valorCentavos positivo guarda, negativo retira.
-export async function postAporte(metaId: string, valorCentavos: number, data: string): Promise<Meta> {
-  const resposta = await enviarMeta(`/metas/${encodeURIComponent(metaId)}/aportes`, 'POST', { valorCentavos, data })
+export async function postAporte(metaId: string, valorCentavos: number, data: string, chave?: string): Promise<Meta> {
+  const resposta = await enviarMeta(`/metas/${encodeURIComponent(metaId)}/aportes`, 'POST', { valorCentavos, data }, chave)
   if (resposta.status !== 201) return recusarRespostaDeMeta(resposta, 'POST /metas/{id}/aportes')
   const corpo: unknown = await resposta.json()
   if (!isMeta(corpo)) throw new ApiError('POST /metas/{id}/aportes com formato inesperado')

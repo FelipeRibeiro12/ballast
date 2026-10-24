@@ -88,3 +88,9 @@ repetição: duplo clique, retry de rede ou da PWA offline gravam duas vezes.
   período a 366 dias, e o uso atual fica abaixo.
 - Fica de fora: guardar respostas de erro, TTL configurável, chave em rotas PUT,
   PATCH e DELETE (já são idempotentes por natureza, ou o 404 cobre).
+
+## Cliente web
+
+- `fetchLancamentos` e `fetchMovimentosCripto` seguem o `X-Next-Cursor` até acabar e devolvem a lista inteira. O teto é de 20 páginas; passar dele lança `ApiError`, para nunca mostrar lista cortada como se fosse completa.
+- Todo POST de dinheiro em `web/src/api.ts` manda `Idempotency-Key`. O wrapper aceita `chave` opcional no fim. Sem ela, gera `crypto.randomUUID()` por chamada: cada clique em salvar é uma tentativa nova, e reenviar depois de erro de validação já usa chave nova. Hoje nenhuma tela faz retry automático, então nenhuma tela precisou mudar. Quem passar a repetir a mesma requisição gera a chave uma vez e repassa nas repetições.
+- 422 (chave reusada com outro corpo) e 409 com `Retry-After` (primeira ainda rodando) caem hoje no erro genérico ou no erro de conflito de cada recurso. Mensagem própria para eles fica de fora desta fatia.

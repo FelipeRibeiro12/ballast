@@ -290,7 +290,7 @@ describe('rotas de contas', () => {
     expect(fetch).toHaveBeenCalledWith('/contas', {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': expect.any(String) },
       body: JSON.stringify(dados),
     })
   })
@@ -501,7 +501,7 @@ describe('lançamentos e categorias', () => {
     expect(fetch).toHaveBeenCalledWith('/lancamentos', {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': expect.any(String) },
       body: JSON.stringify(dados),
     })
     responder(lancamento, 200)
@@ -629,7 +629,7 @@ describe('transferências', () => {
     expect(fetch).toHaveBeenCalledWith('/transferencias', {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': expect.any(String) },
       body: JSON.stringify(dados),
     })
   })
@@ -812,7 +812,7 @@ describe('recorrências e ocorrências', () => {
     expect(fetch).toHaveBeenCalledWith('/recorrencias', {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': expect.any(String) },
       body: JSON.stringify(dados),
     })
   })
@@ -1186,7 +1186,7 @@ describe('compras parceladas', () => {
     expect(fetch).toHaveBeenCalledWith('/compras-parceladas', {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': expect.any(String) },
       body: JSON.stringify(dados),
     })
   })
