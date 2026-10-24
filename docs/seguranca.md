@@ -21,7 +21,7 @@ Legenda de status: `ok` · `parcial` · `falta` · `n/a` · `não verificado`
 | 5 | Senha com argon2 / bcrypt / scrypt e custo configurado | não verificado | | backend |
 | 6 | Sessão e token com expiração; logout invalida no servidor | não verificado | | backend |
 | 7 | Cookie `HttpOnly`, `Secure`, `SameSite` | não verificado | | backend |
-| 8 | MFA no login e em ação sensível, com limite de tentativa | não verificado | | backend |
+| 8 | MFA no login e em ação sensível, com limite de tentativa | parcial | `MfaTest` (login, ativar e desativar com atraso por usuário). Apagar conta ainda não pede código | backend |
 | 9 | Toda rota não pública verifica permissão **no recurso** | não verificado | | backend |
 | 10 | Menor privilégio: usuário do banco, chaves, tokens | não verificado | | backend, dba |
 | 11 | Criptografia com biblioteca padrão; chave no cofre | não verificado | | backend |
@@ -34,7 +34,7 @@ Legenda de status: `ok` · `parcial` · `falta` · `n/a` · `não verificado`
 |---|---|---|---|---|
 | 14 | HTTPS em todo tráfego, redirect, certificado renovando | não verificado | | devops |
 | 15 | CORS com lista fechada de origens | não verificado | | devops |
-| 16 | Rate limit na borda, mais rígido no login | não verificado | | devops |
+| 16 | Rate limit na borda, mais rígido no login | parcial | `RateLimitTest`, na API (ADR-049). A regra no Firewall do Vercel depende do dono | devops |
 | 17 | Secrets em cofre, por ambiente, com rotação prevista | não verificado | | devops |
 | 18 | Banco fora da internet; contêiner não root; portas mínimas | não verificado | | devops |
 | 19 | Backup automático, fora do servidor, cifrado | não verificado | | devops |

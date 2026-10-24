@@ -11,10 +11,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 
 ## Depois
 
-### F20 — MFA
-TOTP, segredo cifrado, código de recuperação em hash, limite de tentativa.
-Antes de publicar para outras pessoas, isso deixa de ser opcional.
-
 ### F21 — Alerta de conta a vencer
 Notificação no PWA. No iOS só funciona se instalado na tela inicial.
 
@@ -61,6 +57,10 @@ nenhuma extensão instalada.
 - **DÍVIDA** — Navegação com seções fora da barra: Orçamento, Metas e Relatórios só abrem pelo Início e pelos atalhos de planejamento (ADR-043, ADR-045, ADR-046). A próxima seção pede outro desenho (menu "Mais" ou rótulos curtos), com teste em 360px. Dono: frontend.
 - **DÍVIDA** — Fora do login e do cadastro, o 429 do limite por IP aparece no web como a mensagem genérica de cada tela ("Não foi possível carregar..."), sem dizer para esperar (ADR-049). Só quem passa de 600 requisições por minuto vê isso. Tratar o 429 no `carregar` de `leitura.ts` quando houver relato. Dono: frontend.
 - **DÍVIDA** — O limite por IP vive na memória da única instância da API (ADR-049). Uma segunda instância contaria a própria janela. Estado compartilhado, com ADR, na fatia que escalar a API. Dono: backend.
+- **DÍVIDA** — Ligar o MFA não revoga as outras sessões abertas, que seguem até o prazo de 7 dias (ADR-050). Revogar todas menos a atual ao ativar. Dono: backend, na fatia de troca de senha, que também revoga sessões.
+- **DÍVIDA** — Gerar códigos de recuperação novos exige desligar e ligar o MFA (ADR-050). Rota própria quando houver pedido. Dono: backend e frontend.
+- **DÍVIDA** — Ação sensível sem segundo fator: apagar conta e trocar e-mail (quando existir) não pedem o código do MFA (`docs/seguranca.md`, item 8). Dono: backend.
+- **DÍVIDA** — O e2e não passa pelo MFA: ligar, sair e entrar com código. Precisa gerar o TOTP no Playwright a partir do segredo da tela. Dono: qa.
 - **DÍVIDA** — O próximo salário do Posso gastar é achado pelo nome da categoria Salário da semente (ADR-048). Quando houver CRUD de categoria, renomear quebra a busca: marcar a categoria de salário explicitamente nessa fatia. Dono: backend.
 - **DÍVIDA** — Aporte de meta ligado à transferência que moveu o dinheiro, para não registrar duas vezes (ADR-045). Precisa decidir o que acontece quando a transferência é editada ou apagada. Dono: backend.
 - **DÍVIDA** — Fixar actions do GitHub por SHA, com Dependabot para atualizar. Tag é mutável: um comprometimento da action entraria no pipeline sem mudança de código nossa.
@@ -73,7 +73,7 @@ nenhuma extensão instalada.
 - **DÍVIDA** — `COOKIE_SECURE=false` em desenvolvimento (Safari recusa cookie `Secure` sobre HTTP). Servir o dev sobre HTTPS com certificado local (mkcert) e aposentar a flag. A API já recusa subir com a flag falsa fora de `APP_ENV=development`, antes de migrar o banco.
 - **DÍVIDA** — E-mail e nome aceitam caracteres invisíveis da categoria Cf (U+200B, U+202E de inversão bidi, U+FEFF): dois e-mails que parecem iguais na tela e são diferentes, ou nome que embaralha a exibição. Decidir a regra (rejeitar Cf ou normalizar) na fatia que primeiro exibir nome de outra pessoa. Vale também para nome de conta (QA da F2, S1): NBSP sozinho vira nome, U+200B não colide com a versão sem ele.
 - **DÍVIDA** — O job `e2e` do CI ainda não é obrigatório no ruleset (ADR-033). Torná-lo obrigatório depois de cinco execuções seguidas sem falha intermitente. Dono: devops.
-- **DÍVIDA** — Atraso de login chaveado só pelo e-mail permite a um terceiro que conheça o e-mail da vítima mantê-la sob atraso (até 15 min) com uma requisição por janela (auditoria F1, M2). Sem bloqueio de conta, mas é negação de serviço parcial. O limite por IP da F20.5 não resolve (ADR-049). Decisão de produto pendente: atraso por e-mail+IP, ou segundo fator/recuperação. Revisar na F20.
+- **DÍVIDA** — Atraso de login chaveado só pelo e-mail permite a um terceiro que conheça o e-mail da vítima mantê-la sob atraso (até 15 min) com uma requisição por janela (auditoria F1, M2). Sem bloqueio de conta, mas é negação de serviço parcial. O limite por IP da F20.5 não resolve (ADR-049). Com o MFA da F20 ligado, a senha sozinha não entra e a dívida perde peso, mas o atraso por e-mail continua valendo (ADR-050). Decisão de produto pendente: atraso por e-mail+IP. Dono: tech-lead, com o dono do produto.
 - **DÍVIDA** — Endurecimentos baixos da auditoria da F1 (B4): cookie com prefixo `__Host-` e cabeçalho `X-Content-Type-Options: nosniff`. A limpeza de sessões entrou na F20.5. Aceitos: B1 (409 do cadastro enumera e-mail só com `REGISTRO_ABERTO=true`) e B2 (`.env.example` de dev com `COOKIE_SECURE=false`; a guarda por `APP_ENV` cobre a cópia sem edição fora de dev).
 - **DÍVIDA** — O check `análise estática (javascript-typescript)` tem nome de linguagem, não de módulo, e quebra na próxima troca de stack do web. Renomear para `análise estática (web)` com a mesma sequência do ruleset do ADR-016. Dono: devops, na próxima fatia que mexer no `seguranca.yml`.
 - **DÍVIDA** — `/healthz` público consulta o banco. Desde a F20.5 ele faz uma consulta por vez e loga um stack trace por minuto (ADR-049), mas liveness (sem banco) e readiness (com banco) seguem juntos (auditoria do PR da migração, B2). Separar quando houver orquestrador que use os dois. Dono: backend.

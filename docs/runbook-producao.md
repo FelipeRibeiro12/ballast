@@ -72,6 +72,9 @@ backup ──pg_dump cifrado──> Object Storage do Oracle
    segredo `VM_SSH_KEY` (passo 7).
 6. Em `/opt/ballast`, crie `api.env` e `caddy.env` a partir de
    `deploy/api.env.example` e `deploy/caddy.env.example`, com `chmod 600`.
+   Gere `MFA_CHAVE` com `openssl rand -base64 32` e guarde uma cópia num
+   gerenciador de senhas. Sem ela, quem ligou o MFA só entra com código de
+   recuperação (ADR-050).
 7. A imagem do Ubuntu no Oracle vem com regras de `iptables` próprias. Se o
    teste de fora do passo 10 não chegar na 443, confira o `iptables -L` e
    persista a liberação com `netfilter-persistent`.
@@ -244,3 +247,6 @@ barra no fim.
 - **Senha do banco.** Troque no Neon e depois no `api.env` (`ballast_app`) ou
   nos segredos do GitHub (`neondb_owner`).
 - **PAR do backup.** Crie o novo, troque o segredo e apague o antigo.
+- **`MFA_CHAVE`.** Trocar invalida o segredo de todo MFA ligado. Antes,
+  cada usuário com MFA desliga na tela Segurança. Troque no `api.env`, rode
+  `docker compose up -d`, e cada um liga de novo (ADR-050).
