@@ -160,7 +160,7 @@ function Ligar({
 
   if (passo.tipo === 'senha') {
     return (
-      <form className="cartao" onSubmit={configurar} aria-label="Confirmar senha">
+      <form className="cartao mfa-cartao" onSubmit={configurar} aria-label="Confirmar senha">
         <p>Confirme sua senha para começar.</p>
         <div className="campo">
           <label htmlFor="mfa-senha">Senha</label>
@@ -194,7 +194,7 @@ function Ligar({
 
   if (passo.tipo === 'qr') {
     return (
-      <form className="cartao" onSubmit={ativar} aria-label="Ativar verificação">
+      <form className="cartao mfa-cartao" onSubmit={ativar} aria-label="Ativar verificação">
         <p>Leia o QR code no app autenticador (Google Authenticator, Aegis, 1Password...).</p>
         <QrCode texto={passo.configuracao.uri} />
         <p className="mfa-segredo">
@@ -231,7 +231,7 @@ function Ligar({
   }
 
   return (
-    <div className="cartao">
+    <div className="cartao mfa-cartao">
       <p role="status">Verificação ligada.</p>
       <p>
         <strong>Guarde estes códigos. Eles não aparecem de novo.</strong> Cada um entra uma vez no lugar do
@@ -280,7 +280,7 @@ function Desligar({
   }
 
   return (
-    <form className="cartao" onSubmit={desligar} aria-label="Desligar verificação">
+    <form className="cartao mfa-cartao" onSubmit={desligar} aria-label="Desligar verificação">
       <p>Para desligar, confirme a senha e um código do app ou de recuperação.</p>
       <div className="campo">
         <label htmlFor="mfa-desligar-senha">Senha</label>
@@ -355,7 +355,7 @@ export default function Seguranca({ aoSessaoExpirar }: { aoSessaoExpirar: () => 
         </p>
       )}
       {estado.tipo === 'ok' && aberto === null && (
-        <div className="cartao">
+        <div className="cartao mfa-cartao">
           <h3>Verificação em duas etapas</h3>
           {estado.dados.ativo ? (
             <>

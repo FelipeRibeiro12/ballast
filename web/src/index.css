@@ -586,7 +586,26 @@ p[role='status'] {
   padding: 0 var(--esp-3);
 }
 
-/* Segurança (ADR-050): só o ícone, para caber ao lado do tema e do Sair em 360px. */
+/* Até 400px o Sair fica só com o ícone, para o escudo da Segurança caber na linha. O texto
+   continua para o leitor de tela. */
+@media (max-width: 400px) {
+  .topo-acoes > button .topo-rotulo {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .topo-acoes > button {
+    width: 38px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+/* Segurança (ADR-050): só o ícone, ao lado do tema e do Sair. */
 .topo-link-icone {
   display: inline-flex;
   align-items: center;
@@ -2558,6 +2577,23 @@ button.relatorio-mes:hover:not(:disabled) {
 }
 
 /* Segurança (ADR-050). */
+.mfa-cartao {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-3);
+}
+
+.mfa-cartao > * {
+  margin: 0;
+}
+
+.mfa-cartao > .campo,
+.mfa-cartao > ul,
+.mfa-cartao > [role='status'] {
+  align-self: stretch;
+}
+
 .mfa-acoes {
   display: flex;
   flex-wrap: wrap;
@@ -2569,7 +2605,6 @@ button.relatorio-mes:hover:not(:disabled) {
   display: block;
   width: min(208px, 100%);
   height: auto;
-  margin: var(--esp-3) 0;
   border-radius: var(--raio-md);
 }
 
@@ -2583,7 +2618,6 @@ button.relatorio-mes:hover:not(:disabled) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--esp-2);
-  margin: var(--esp-3) 0;
   padding: 0;
   list-style: none;
 }

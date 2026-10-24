@@ -103,7 +103,7 @@ export default function Topo({ secao, aoSair }: { secao: Secao; aoSair: () => vo
           </a>
           <button type="button" className="pequeno" disabled={saindo} onClick={() => void sair()}>
             <IconeSair tamanho={16} />
-            Sair
+            <span className="topo-rotulo">Sair</span>
           </button>
         </div>
       </div>
