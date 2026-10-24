@@ -44,4 +44,20 @@ class NoControlCharactersTest {
   void acceptsNull() {
     assertThat(isValid(null)).isTrue();
   }
+
+  // Cf é invisível ou muda a direção do texto: "Conta\u200b" parece igual a "Conta", e U+202E
+  // inverte o que vem depois. Os tags U+E0000 a U+E007F escondem texto inteiro.
+  @ParameterizedTest
+  @ValueSource(ints = {0x200B, 0x200E, 0x202A, 0x202E, 0x2066, 0x2060, 0xFEFF, 0x00AD, 0xE0041})
+  void rejectsFormatCharacters(int codePoint) {
+    assertThat(isValid("a" + new String(Character.toChars(codePoint)) + "b")).isFalse();
+  }
+
+  // ZWJ e ZWNJ são Cf, mas sem eles o emoji de família quebra em pedaços e o persa perde a
+  // grafia correta. Ficam de fora da regra nos nomes (o e-mail recusa todos, em BasicEmail).
+  @Test
+  void acceptsJoinersNeededByEmojiSequencesAndPersian() {
+    assertThat(isValid("👨\u200d👩\u200d👧")).isTrue();
+    assertThat(isValid("می\u200cخواهم")).isTrue();
+  }
 }

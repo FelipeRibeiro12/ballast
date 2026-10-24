@@ -13,6 +13,10 @@ import java.lang.annotation.Target;
 // Cc cobre NUL, DEL e o NEL (U+0085). Os separadores U+2028 e U+2029 não são Cc, mas quebram
 // linha em log e em CSV como se fossem controle. O Postgres recusa NUL em text, o que viraria 500.
 // Surrogate solto também sai: não é UTF-8 válido, e o driver o troca por "?" em silêncio.
+// Cf (formato) também: U+200B e U+FEFF são invisíveis, então "Conta" e "Conta" com um deles parecem
+// o mesmo nome, e U+202E inverte a ordem de exibição do que vem depois. Os tags U+E0000 a U+E007F
+// escondem texto inteiro. ZWJ (U+200D) e ZWNJ (U+200C) ficam de fora porque o emoji de sequência e
+// a grafia persa dependem deles.
 @Documented
 @Constraint(validatedBy = NoControlCharacters.Validator.class)
 @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.RECORD_COMPONENT})
@@ -34,9 +38,14 @@ public @interface NoControlCharacters {
 
     private static boolean isControl(int codePoint) {
       return Character.getType(codePoint) == Character.CONTROL
+          || (Character.getType(codePoint) == Character.FORMAT && !isJoiner(codePoint))
           || isLoneSurrogate(codePoint)
           || codePoint == 0x2028
           || codePoint == 0x2029;
+    }
+
+    private static boolean isJoiner(int codePoint) {
+      return codePoint == 0x200C || codePoint == 0x200D;
     }
 
     // Um par válido já chega aqui como um code point só (acima de U+FFFF); sobra na faixa de

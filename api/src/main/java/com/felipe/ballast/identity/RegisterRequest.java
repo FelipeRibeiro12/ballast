@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import java.util.Locale;
 
 @Schema(name = "CadastroRequest")
 public record RegisterRequest(
@@ -29,10 +28,11 @@ public record RegisterRequest(
   static final String NAME_MESSAGE =
       "nome deve ter no máximo 100 caracteres e não pode ter caracteres de controle";
 
-  // A migration tem CHECK de minúsculas: normalizar aqui evita 500 e evita dois cadastros que
+  // A migration tem CHECK de minúsculas: normalizar aqui (NFKC e minúscula) evita 500 e evita dois
+  // cadastros que
   // diferem só pela caixa. Nome vazio vira nulo.
   public RegisterRequest {
-    email = email == null ? null : email.strip().toLowerCase(Locale.ROOT);
+    email = EmailNormalizer.normalize(email);
     name = name == null || name.isBlank() ? null : name.strip();
   }
 

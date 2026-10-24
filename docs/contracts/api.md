@@ -22,6 +22,10 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
 - Em qualquer rota, caminho que o servidor recusa antes do Spring (`%2F`, `{`,
   `|`) responde 400 com o mesmo JSON, e toda resposta leva
   `X-Content-Type-Options: nosniff` (ADR-051).
+- E-mail, nome de usuário, nome de conta e demais textos livres recusam
+  caracteres Cf (U+200B, U+202E, U+FEFF e outros) com 400. Só o e-mail recusa
+  também ZWJ e ZWNJ. O e-mail passa por NFKC e minúsculas antes de valer, e o
+  "İ" é recusado (ADR-051).
 - Em `/contas/{id}`, conta de outro usuário, id inexistente e id que não é UUID
   respondem 404 com o mesmo corpo.
 - Dinheiro de fiat sai e entra como inteiro de centavos

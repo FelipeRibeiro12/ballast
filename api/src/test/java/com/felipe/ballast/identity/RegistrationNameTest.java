@@ -46,4 +46,11 @@ class RegistrationNameTest {
   void rejectsALoneSurrogate() throws Exception {
     assertThat(registerNamed("a\\ud800b").getStatus()).isEqualTo(400);
   }
+
+  @Test
+  void rejectsFormatCharactersInTheName() throws Exception {
+    assertThat(registerNamed("Fulano\\u200b").getStatus()).isEqualTo(400);
+    assertThat(registerNamed("\\u202eFulano").getStatus()).isEqualTo(400);
+    assertThat(registerNamed("Ful\\ufeffano").getStatus()).isEqualTo(400);
+  }
 }
