@@ -276,12 +276,14 @@ class EntryService {
       return DeleteResult.FIRST_INSTALLMENT;
     }
     // Apagar uma prevista liberaria a chave (template, data) e a regra geraria a mesma ocorrência
-    // de novo. Cancelar guarda a linha e a chave. Realizada e cancelada podem sair.
+    // de novo. Cancelar guarda a linha e a chave. Realizada e cancelada podem sair; a cancelada
+    // deixa uma marca em ocorrencia_apagada e nunca mais volta (ADR-054).
     if (entry.get().templateId() != null && PLANNED.equals(entry.get().status())) {
       return DeleteResult.CANCEL_OCCURRENCE;
     }
     UUID account = entry.get().accountId();
     queries.lockAccount(userId, account);
+    queries.markCancelledOccurrenceDeleted(userId, id);
     if (entries.deleteOwned(userId, id) == 0) {
       return DeleteResult.NOT_FOUND;
     }
@@ -372,12 +374,15 @@ class EntryService {
     return Optional.empty();
   }
 
-  // A parcela não troca de conta nem de data (a data enviada é a da compra, a competência gravada)
-  // e continua despesa. A caixa dela é do cálculo da compra e não se recalcula aqui.
+  // A parcela não troca de conta, data, título nem categoria (a data enviada é a da compra, a
+  // competência gravada) e continua despesa. Título e categoria só mudam na compra inteira
+  // (ADR-054). A caixa dela é do cálculo da compra e não se recalcula aqui.
   private static Optional<SaveResult.Rejected> checkInstallmentEdit(
       EntryQueries.LockedEntry current, EntryInput input) {
     if (!current.accountId().equals(input.accountId())
-        || input.date().compareTo(current.competenceDate()) != 0) {
+        || input.date().compareTo(current.competenceDate()) != 0
+        || !current.title().equals(input.title())
+        || !current.categoryId().equals(input.categoryId())) {
       return Optional.of(SaveResult.Rejected.EDIT_WHOLE_PURCHASE);
     }
     if (input.type() != EntryType.EXPENSE) {

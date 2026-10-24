@@ -229,6 +229,18 @@ class BenefitAccountTest {
   }
 
   @Test
+  void putOnAnArchivedAccountIs400AndKeepsTheList() throws Exception {
+    String id = api.createOk(session, "VR", List.of(food));
+    accounts.archive(session, id, "{\"arquivada\":true}");
+
+    MockHttpServletResponse refused = api.putIds(session, id, List.of());
+
+    assertThat(refused.getStatus()).isEqualTo(400);
+    assertThat(BenefitApi.text(refused)).isEqualTo("{\"erro\":\"conta arquivada\"}");
+    assertThat(storedList(id)).containsExactly(food);
+  }
+
+  @Test
   void putOnAnotherAccountTypeOfTheUserIs400() throws Exception {
     String checking = accounts.createOk(session, "Corrente").get("id").asString();
 

@@ -697,6 +697,23 @@ em seguida.
   Flyway roda em transação (30 ms de varredura).
 - Desfazer: bloco comentado no fim da `V11`. Apaga as parcelas.
 
+### Ocorrência apagada (V22, ADR-054)
+
+```
+ocorrencia_apagada
+  template_id    uuid fk not null     -- FK composta (template_id, usuario_id), ON DELETE CASCADE
+  usuario_id     uuid fk not null
+  ocorrencia_data date not null
+  parcela_ordem  smallint not null    -- 0 sem divisão; 1..10 com divisão
+  apagada_em     timestamptz not null default now()
+  pk (template_id, ocorrencia_data, parcela_ordem)
+```
+
+Marca a chave da ocorrência cancelada que o usuário apagou. A materialização
+pula as chaves que estão aqui, então a ocorrência não volta como prevista
+(emenda ao ADR-026). Só apagar ocorrência `cancelado` grava a marca; apagar
+`realizado` continua liberando a chave. Apagar a recorrência leva as marcas.
+
 ### Divisão — o caso do salário em dois dias
 
 ```

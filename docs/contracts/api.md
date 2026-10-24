@@ -238,11 +238,10 @@ apagar uma ocorrência (seção no fim).
   na data original.
 - `DELETE /lancamentos/{id}` numa ocorrência `previsto` dá 400 `cancele a
   ocorrência` e nada muda: cancele. Ocorrência `realizado` ou `cancelado` pode ser
-  apagada (204). Apagar libera a data para a regra: se a data é de hoje em diante
-  e a recorrência segue ativa, o job a gera de novo como `previsto` na próxima
-  rodada; data de antes de hoje não volta.
-  Quem quer só tirar a ocorrência do saldo e da lista de previstas cancela, não
-  apaga.
+  apagada (204). Apagar `cancelado` some de vez: a data nunca volta como
+  `previsto` (ADR-054). Apagar `realizado` libera a data para a regra: se é de
+  hoje em diante e a recorrência segue ativa, o job a gera de novo como `previsto`
+  na próxima rodada; data de antes de hoje não volta.
 - A resposta do lançamento não traz `desgarrado`. Quem precisa saber se a
   linha saiu do controle da regra usa `status` (confirmada e cancelada já saíram).
 
@@ -430,7 +429,8 @@ parcela entra na fatura do seu vencimento (`dataCaixa`).
 - `PATCH /compras-parceladas/{id}` com `{"titulo"?, "descricao"?,
   "categoriaId"?}`: pelo menos um (senão 400 `informe titulo, descricao ou
   categoriaId`), campo extra dá 400. Aplica em todas as parcelas numa transação.
-  `descricao` vazia ou em branco limpa a descrição. Responde 200 com a compra.
+  `descricao` ausente mantém; nula, vazia ou em branco limpa a descrição.
+  Responde 200 com a compra.
   Valor, parcelas, data e conta não se editam: apague e lance de novo.
 - `DELETE /compras-parceladas/{id}` apaga todas as parcelas que existem: 204. O
   saldo do cartão volta. 404 como no GET.
@@ -442,9 +442,10 @@ parcela entra na fatura do seu vencimento (`dataCaixa`).
   PATCH) ganham `compraParceladaId` (id da primeira parcela), `parcelaNum` e
   `parcelaTotal`, `null` nos lançamentos que não são parcela.
 - `POST /lancamentos` não aceita esses campos (campo extra dá 400).
-- `PUT` numa parcela muda título, descrição, categoria e valor. Trocar a conta
-  ou a data (a `data` do corpo é comparada com a `dataCompetencia` gravada, que é
-  a data da compra) dá 400 `edite a compra inteira`; `tipo` receita dá 400
+- `PUT` numa parcela muda descrição e valor. Trocar título, categoria, conta ou
+  data (a `data` do corpo é comparada com a `dataCompetencia` gravada, que é a
+  data da compra) dá 400 `edite a compra inteira`: título e categoria mudam pelo
+  `PATCH /compras-parceladas/{id}` (ADR-054); `tipo` receita dá 400
   `parcela de compra parcelada só pode ser despesa`. A `dataCaixa` não muda. O
   teto do saldo vale, e o `PUT` que levaria a soma das parcelas da compra para
   fora de ±9007199254740991 centavos dá 400 `compra fora do limite` e nada muda.
@@ -477,7 +478,8 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   lista inteira e responde 200 com a `Conta`. Lista vazia libera tudo. Mesmas
   recusas de lista do `POST` (campo ausente dá 400 `categoriaIds é
   obrigatório`). Conta do usuário que não é benefício dá 400 `só conta de
-  benefício tem categorias permitidas`; conta de outro usuário, inexistente ou
+  benefício tem categorias permitidas`; conta arquivada dá 400 `conta
+  arquivada`, como as outras escritas em conta; conta de outro usuário, inexistente ou
   id que não é UUID dá 404 `não encontrado`. Repetível. A conta fica travada até
   o commit, então escrita de lançamento nela espera a troca (até 2 s, depois 503).
 - A regra vale só para **despesa**. Receita em conta de benefício aceita
@@ -604,7 +606,8 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   inclusive cartão e benefício). `criptoCentavos` soma o valor das posições com
   cotação; as sem cotação ficam em `semCotacao` e fora do total. Nunca falha por
   falta de cotação.
-- Qualquer valor fora de ±9007199254740991 dá 400 `patrimônio fora do limite`.
+- Qualquer valor fora de ±9007199254740991 dá 400 `patrimônio fora do limite`
+  em `/patrimonio` e `posição fora do limite` em `/posicoes-cripto`.
 
 #### Custo médio e valorização (ADR-042)
 
@@ -673,6 +676,8 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   em diante e não editadas à mão são apagadas e geradas de novo com os dados
   novos, se a recorrência estiver ativa. Realizadas, canceladas, editadas à mão e
   previstas de antes de hoje ficam.
+- Recorrência ativa com conta arquivada dá 400 `conta arquivada`. A inativa
+  passa: editar o template não gera nada, e ativar continua recusando.
 - Responde 200 com `{recorrencia, ocorrenciasMaterializadas}`, como o `POST`. 404 igual
   ao `GET`.
 

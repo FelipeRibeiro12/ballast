@@ -105,13 +105,19 @@ class AccountQueries {
   // Trava a linha da conta até o fim da transação e devolve o tipo. Vazio para conta alheia ou
   // inexistente. É a trava que a V12 exige de quem troca a lista: o gatilho dos lançamentos espera
   // este commit e já enxerga a lista nova.
-  Optional<AccountType> lockAccountType(UUID userId, UUID id) {
-    return jdbc.sql("SELECT tipo FROM conta WHERE usuario_id = :userId AND id = :id FOR UPDATE")
+  Optional<LockedAccount> lockAccount(UUID userId, UUID id) {
+    return jdbc.sql(
+            "SELECT tipo, arquivada FROM conta WHERE usuario_id = :userId AND id = :id FOR UPDATE")
         .param("userId", userId)
         .param("id", id)
-        .query((rs, row) -> AccountType.fromValue(rs.getString("tipo")))
+        .query(
+            (rs, row) ->
+                new LockedAccount(
+                    AccountType.fromValue(rs.getString("tipo")), rs.getBoolean("arquivada")))
         .optional();
   }
+
+  record LockedAccount(AccountType type, boolean archived) {}
 
   // Quantas das categorias são despesa do dono. Só dá a mensagem certa: a FK composta da V12 é
   // quem segura a corrida.

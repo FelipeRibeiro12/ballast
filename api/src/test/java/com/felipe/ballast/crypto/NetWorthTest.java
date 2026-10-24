@@ -256,7 +256,7 @@ class NetWorthTest {
 
     assertThat(netWorth.getStatus()).isEqualTo(400);
     assertThat(CryptoApi.text(netWorth)).isEqualTo("{\"erro\":\"patrimônio fora do limite\"}");
-    assertThat(CryptoApi.text(positions)).isEqualTo("{\"erro\":\"patrimônio fora do limite\"}");
+    assertThat(CryptoApi.text(positions)).isEqualTo("{\"erro\":\"posição fora do limite\"}");
   }
 
   @Test

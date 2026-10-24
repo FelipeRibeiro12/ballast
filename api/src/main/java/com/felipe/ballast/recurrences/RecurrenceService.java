@@ -235,7 +235,8 @@ class RecurrenceService {
     }
     LocalDate today = today();
     queries.deleteFuturePlanned(userId, id, today);
-    Optional<UpdateResult.Rejected> refused = checkReferences(userId, input);
+    Optional<UpdateResult.Rejected> refused =
+        checkReferences(userId, input, template.get().active());
     if (refused.isPresent()) {
       status.setRollbackOnly();
       return refused.get();
@@ -260,8 +261,10 @@ class RecurrenceService {
     return new UpdateResult.Updated(queries.find(userId, id, today).orElseThrow(), materialized);
   }
 
-  // As mesmas conferências da criação, com a conta travada.
-  private Optional<UpdateResult.Rejected> checkReferences(UUID userId, RecurrenceInput input) {
+  // As mesmas conferências da criação, com a conta travada. Template inativo não gera nada, então
+  // editar o texto dele não olha conta arquivada; ativar recusa depois.
+  private Optional<UpdateResult.Rejected> checkReferences(
+      UUID userId, RecurrenceInput input, boolean templateActive) {
     Optional<Boolean> archived = queries.lockAccount(userId, input.accountId());
     if (archived.isEmpty()) {
       return Optional.of(UpdateResult.Rejected.ACCOUNT_NOT_FOUND);
@@ -272,7 +275,7 @@ class RecurrenceService {
     if (queries.isInvestmentAccount(userId, input.accountId())) {
       return Optional.of(UpdateResult.Rejected.INVESTMENT_ACCOUNT);
     }
-    if (archived.get()) {
+    if (archived.get() && templateActive) {
       return Optional.of(UpdateResult.Rejected.ACCOUNT_ARCHIVED);
     }
     if (input.categoryId() == null

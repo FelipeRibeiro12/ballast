@@ -222,6 +222,36 @@ class RecurrenceEditTest {
   }
 
   @Test
+  void editingAnInactiveRecurrenceOfAnArchivedAccountIsAllowed() throws Exception {
+    String id = createId(monthlyBody(actor));
+    api.deactivate(actor.session(), id);
+    api.setAccountArchived(actor.session(), actor.accountId(), true);
+
+    MockHttpServletResponse edited =
+        api.update(actor.session(), id, with(monthlyBody(actor), "titulo", "Novo nome"));
+
+    assertThat(edited.getStatus()).isEqualTo(200);
+    assertThat(RecurrencesApi.body(edited).get("recorrencia").get("titulo").asString())
+        .isEqualTo("Novo nome");
+    assertThat(db.countOccurrences(id)).isZero();
+    assertThat(api.setActive(actor.session(), id, "{\"ativo\":true}").getStatus())
+        .as("ativar continua recusando")
+        .isEqualTo(400);
+  }
+
+  @Test
+  void editingAnActiveRecurrenceOfAnArchivedAccountIsStillRefused() throws Exception {
+    String id = createId(monthlyBody(actor));
+    api.setAccountArchived(actor.session(), actor.accountId(), true);
+
+    MockHttpServletResponse refused =
+        api.update(actor.session(), id, with(monthlyBody(actor), "titulo", "Novo nome"));
+
+    assertThat(refused.getStatus()).isEqualTo(400);
+    assertThat(RecurrencesApi.text(refused)).isEqualTo("{\"erro\":\"conta arquivada\"}");
+  }
+
+  @Test
   void deletingRemovesThePlannedOnesAndKeepsTheRealizedAsPlainEntries() throws Exception {
     String id = createId(monthlyBody(actor));
     db.insertOccurrence(id, d("2026-09-05"), "realizado", true);

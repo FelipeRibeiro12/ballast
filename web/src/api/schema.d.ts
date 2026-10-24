@@ -305,7 +305,7 @@ export interface paths {
         head?: never;
         /**
          * Muda o texto e a categoria da compra inteira
-         * @description Aplica titulo, descricao e categoriaId em todas as parcelas na mesma transação. Pelo menos um dos três; campo ausente não muda, e descricao vazia limpa a descrição. Valor, número de parcelas, data e conta não se editam: apague a compra e lance de novo. Vale também com o cartão arquivado.
+         * @description Aplica titulo, descricao e categoriaId em todas as parcelas na mesma transação. Pelo menos um dos três; campo ausente não muda, e descricao nula ou vazia limpa a descrição. Valor, número de parcelas, data e conta não se editam: apague a compra e lance de novo. Vale também com o cartão arquivado.
          */
         patch: operations["patchComprasParceladasById"];
         trace?: never;
@@ -1143,8 +1143,8 @@ export interface components {
         CompraParceladaAtualizarRequest: {
             /** Format: uuid */
             categoriaId?: string;
-            /** @description Vazia ou em branco limpa a descrição */
-            descricao?: string;
+            /** @description Ausente mantém; nula, vazia ou em branco limpa a descrição */
+            descricao?: string | null;
             titulo?: string;
         };
         CompraParceladaItem: {
@@ -3685,7 +3685,7 @@ export interface operations {
                     "application/json": components["schemas"]["Conta"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado, mais de 50 itens, item repetido, categoria inexistente, de outro usuário, de receita ou id malformado, e conta que não é de benefício */
+            /** @description Entrada inválida, inclusive campo não declarado, mais de 50 itens, item repetido, categoria inexistente, de outro usuário, de receita ou id malformado, conta que não é de benefício e conta arquivada */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3982,7 +3982,7 @@ export interface operations {
                     "application/json": components["schemas"]["Lancamento"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada", "categoria não encontrada" ou "saldo da conta fora do limite" (o saldo passaria de 9007199254740991 centavos, para mais ou para menos) */
+            /** @description Entrada inválida, inclusive campo não declarado; "transferência só pela rota /transferencias" (tipo transferencia); "conta não encontrada", "conta arquivada", "categoria não encontrada", "categoria não permitida nesta conta" (despesa em conta de benefício, fora da lista da conta) ou "saldo da conta fora do limite" (o saldo passaria de 9007199254740991 centavos, para mais ou para menos) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4140,7 +4140,7 @@ export interface operations {
                     "application/json": components["schemas"]["Lancamento"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado e tipo transferencia; "conta não encontrada", "conta arquivada" (só ao trocar de conta), "categoria não encontrada", "saldo da conta fora do limite" (em qualquer das contas afetadas), "compra fora do limite" (parcela cuja soma da compra passaria do teto) ou "use a rota de transferência" (o lançamento é perna de transferência) */
+            /** @description Entrada inválida, inclusive campo não declarado; "transferência só pela rota /transferencias" (tipo transferencia); "conta não encontrada", "conta arquivada" (só ao trocar de conta), "categoria não encontrada", "categoria não permitida nesta conta" (despesa em conta de benefício, fora da lista da conta), "edite a compra inteira" (parcela com título, categoria, conta ou data diferentes), "saldo da conta fora do limite" (em qualquer das contas afetadas), "compra fora do limite" (parcela cuja soma da compra passaria do teto) ou "use a rota de transferência" (o lançamento é perna de transferência) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5098,7 +5098,7 @@ export interface operations {
                     "application/json": components["schemas"]["PosicoesCripto"];
                 };
             };
-            /** @description data fora do formato ou "patrimônio fora do limite" */
+            /** @description data fora do formato ou "posição fora do limite" */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5234,7 +5234,7 @@ export interface operations {
                     "application/json": components["schemas"]["RecorrenciaCriada"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado e combinação de campos que a frequência não aceita; "conta não encontrada", "conta arquivada" ou "categoria não encontrada" */
+            /** @description Entrada inválida, inclusive campo não declarado e combinação de campos que a frequência não aceita; "conta não encontrada", "conta arquivada", "categoria não encontrada" ou "categoria não permitida nesta conta" (despesa em conta de benefício, fora da lista da conta) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5354,7 +5354,7 @@ export interface operations {
                     "application/json": components["schemas"]["RecorrenciaCriada"];
                 };
             };
-            /** @description Entrada inválida como no POST, tipo diferente do atual, conta ou categoria que não serve */
+            /** @description Entrada inválida como no POST, tipo diferente do atual, conta ou categoria que não serve, inclusive "categoria não permitida nesta conta" e "conta arquivada" (só em recorrência ativa) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5483,7 +5483,7 @@ export interface operations {
                     "application/json": components["schemas"]["Recorrencia"];
                 };
             };
-            /** @description Corpo inválido, inclusive campo não declarado; "conta arquivada" ao reativar */
+            /** @description Corpo inválido, inclusive campo não declarado; "conta arquivada" ou "categoria não permitida nesta conta" ao reativar */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5960,7 +5960,7 @@ export interface operations {
                     "application/json": components["schemas"]["Transferencia"];
                 };
             };
-            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada" (origem ou destino), "contas devem ser diferentes", "cartão não pode ser origem de transferência" ou "saldo da conta fora do limite" (em qualquer das duas contas) */
+            /** @description Entrada inválida, inclusive campo não declarado; "conta não encontrada", "conta arquivada" (origem ou destino), "conta de benefício não participa de transferência" (origem ou destino), "contas devem ser diferentes", "cartão não pode ser origem de transferência" ou "saldo da conta fora do limite" (em qualquer das duas contas) */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -37,6 +37,7 @@ class EntryCreationTest {
   private static final String DATE_ERROR =
       "data deve estar no formato AAAA-MM-DD, com ano entre 1900 e 2199";
   private static final String BAD_REQUEST = "requisição inválida";
+  private static final String TRANSFER_TYPE_ERROR = "transferência só pela rota /transferencias";
 
   @Autowired MockMvc mvc;
   @Autowired JdbcClient jdbc;
@@ -213,7 +214,7 @@ class EntryCreationTest {
         Arguments.of(
             "descricao com 501 code points", "descricao", "a".repeat(501), DESCRIPTION_ERROR),
         Arguments.of("descricao com controle", "descricao", "a\tb", DESCRIPTION_ERROR),
-        Arguments.of("tipo transferencia", "tipo", "transferencia", BAD_REQUEST),
+        Arguments.of("tipo transferencia", "tipo", "transferencia", TRANSFER_TYPE_ERROR),
         Arguments.of("tipo em maiúsculas", "tipo", "RECEITA", BAD_REQUEST),
         Arguments.of("tipo nulo", "tipo", null, TYPE_ERROR),
         Arguments.of("tipo numérico", "tipo", 0, BAD_REQUEST),

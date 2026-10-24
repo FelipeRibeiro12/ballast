@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
-  CriptoNaoEncontradoError,
+  InvestimentoNaoEncontradoError,
   SessaoExpiradaError,
   deleteMovimentoCripto,
   fetchAtivosCripto,
@@ -365,7 +365,7 @@ function NovaCotacao({
         aoSessaoExpirar()
         return
       }
-      if (erro instanceof CriptoNaoEncontradoError) {
+      if (erro instanceof InvestimentoNaoEncontradoError) {
         setMensagem('Esse ativo não existe mais.')
         return
       }
@@ -472,7 +472,7 @@ export default function Cripto({
         return
       }
       setConfirmando(null)
-      if (erro instanceof CriptoNaoEncontradoError) {
+      if (erro instanceof InvestimentoNaoEncontradoError) {
         setFalhaDeAcao('Esse movimento não existe mais.')
         setVersao((n) => n + 1)
         return
