@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.felipe.ballast.IntegrationTest;
 import com.felipe.ballast.entries.EntryType;
+import com.felipe.ballast.limits.LimitsProperties;
+import com.felipe.ballast.limits.UserLimits;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -52,7 +54,9 @@ class RecurrenceForeignKeyTest {
             return true;
           }
         };
-    service = new RecurrenceService(alwaysFound, transaction, clock);
+    service =
+        new RecurrenceService(
+            alwaysFound, transaction, clock, new UserLimits(jdbc, LimitsProperties.defaults()));
   }
 
   private RecurrenceInput input(EntryType type, String categoryId, String accountId) {

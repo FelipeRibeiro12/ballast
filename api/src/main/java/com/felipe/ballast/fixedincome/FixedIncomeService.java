@@ -1,5 +1,7 @@
 package com.felipe.ballast.fixedincome;
 
+import com.felipe.ballast.limits.UserLimit;
+import com.felipe.ballast.limits.UserLimits;
 import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
@@ -37,13 +39,16 @@ public class FixedIncomeService {
   private final IndexUpdater updater;
   private final WriteTransaction transaction;
   private final Clock clock;
+  private final UserLimits limits;
 
   FixedIncomeService(
       FixedIncomeQueries queries,
       IndexQueries indices,
       IndexUpdater updater,
       WriteTransaction transaction,
-      Clock clock) {
+      Clock clock,
+      UserLimits limits) {
+    this.limits = limits;
     this.queries = queries;
     this.indices = indices;
     this.updater = updater;
@@ -105,6 +110,9 @@ public class FixedIncomeService {
     try {
       return transaction.execute(
           status -> {
+            if (id == null) {
+              limits.checkRoom(userId, UserLimit.FIXED_INCOME_TITLES);
+            }
             if (id != null && queries.find(userId, id).isEmpty()) {
               return SaveResult.Rejected.NOT_FOUND;
             }

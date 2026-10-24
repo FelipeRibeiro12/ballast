@@ -1,5 +1,7 @@
 package com.felipe.ballast.accounts;
 
+import com.felipe.ballast.limits.UserLimit;
+import com.felipe.ballast.limits.UserLimits;
 import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
@@ -27,16 +29,19 @@ class AccountService {
   private final AccountQueries queries;
   private final AccountDeletionQueries deletion;
   private final WriteTransaction transaction;
+  private final UserLimits limits;
 
   AccountService(
       AccountRepository accounts,
       AccountQueries queries,
       AccountDeletionQueries deletion,
-      WriteTransaction transaction) {
+      WriteTransaction transaction,
+      UserLimits limits) {
     this.accounts = accounts;
     this.queries = queries;
     this.deletion = deletion;
     this.transaction = transaction;
+    this.limits = limits;
   }
 
   enum DeleteResult {
@@ -55,8 +60,13 @@ class AccountService {
   // Tudo numa transação: ou a conta some com o que é dela, ou nada muda (ADR-036). As contas do
   // outro lado das transferências são travadas junto, em ordem de id, porque o saldo delas passa
   // a depender de lançamento comum no lugar da perna.
+  // Com prazo por instrução (ADR-055): a conta com muito lançamento não prende a conexão até o
+  // socketTimeout de 30 s. Estourar desfaz tudo e vira 503.
   DeleteResult delete(UUID userId, UUID id) {
-    return transaction.execute(status -> deleteLocked(userId, id));
+    return transaction.execute(
+        WriteTransaction.DEFAULT_LOCK_TIMEOUT,
+        limits.accountDeleteTimeout(),
+        status -> deleteLocked(userId, id));
   }
 
   private DeleteResult deleteLocked(UUID userId, UUID id) {
@@ -198,6 +208,7 @@ class AccountService {
       BigDecimal initialBalance,
       CardInput card,
       List<UUID> permitted) {
+    limits.checkRoom(userId, UserLimit.ACCOUNTS);
     if (permitted != null
         && queries.countExpenseCategories(userId, permitted) != permitted.size()) {
       return CreateResult.Rejected.CATEGORY_NOT_FOUND;

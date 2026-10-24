@@ -433,3 +433,12 @@ Dívida registrada: apagar ocorrência realizada ainda libera a chave e ela volt
 Achados do revisor: reviewer e security dispensados (diff sem borda de autenticação)
 Pipeline: a preencher no PR
 Em aberto: nada
+
+## 2026-10-24 — Rodada de fechamento, onda 4a: tetos por usuário
+
+O que entrou: tetos por usuário em sete recursos e `statement_timeout` no apagar conta.
+Decisões: ADR-055
+Dívida registrada: lançamentos, metas e orçamentos seguem sem teto
+Achados do revisor: reviewer e security dispensados
+Pipeline: a preencher no PR
+Em aberto: paginação e idempotência (onda 4b).

@@ -1,6 +1,8 @@
 package com.felipe.ballast.crypto;
 
 import com.felipe.ballast.fixedincome.IndexUpdater;
+import com.felipe.ballast.limits.UserLimit;
+import com.felipe.ballast.limits.UserLimits;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -18,8 +20,14 @@ class MovementService {
   private final CryptoQueries queries;
   private final WriteTransaction transaction;
   private final IndexUpdater indices;
+  private final UserLimits limits;
 
-  MovementService(CryptoQueries queries, WriteTransaction transaction, IndexUpdater indices) {
+  MovementService(
+      CryptoQueries queries,
+      WriteTransaction transaction,
+      IndexUpdater indices,
+      UserLimits limits) {
+    this.limits = limits;
     this.queries = queries;
     this.transaction = transaction;
     this.indices = indices;
@@ -79,6 +87,7 @@ class MovementService {
   }
 
   private CreateResult createLocked(TransactionStatus status, UUID userId, Input input) {
+    limits.checkRoom(userId, UserLimit.CRYPTO_MOVEMENTS);
     if (input.accountId() == null) {
       return CreateResult.Rejected.ACCOUNT_NOT_FOUND;
     }

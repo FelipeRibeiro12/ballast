@@ -85,7 +85,9 @@ class AssetController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "409",
-      description = "O usuário já tem um ativo com essa rede e esse contrato",
+      description =
+          "O usuário já tem um ativo com essa rede e esse contrato, ou atingiu o teto de ativos"
+              + " (limite de ativos de cripto atingido)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "413",
@@ -175,7 +177,9 @@ class AssetController {
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "409",
-      description = "Já existe cotação do ativo nesse instante",
+      description =
+          "Já existe cotação do ativo nesse instante, ou o usuário atingiu o teto de cotações"
+              + " (limite de cotações atingido)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "413",

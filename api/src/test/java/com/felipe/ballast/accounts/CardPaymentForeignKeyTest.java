@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.felipe.ballast.IntegrationTest;
 import com.felipe.ballast.identity.TestUsers;
+import com.felipe.ballast.limits.LimitsProperties;
+import com.felipe.ballast.limits.UserLimits;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -32,7 +34,11 @@ class CardPaymentForeignKeyTest {
           }
         };
     return new AccountService(
-        repository, alwaysEligible, new AccountDeletionQueries(jdbc), transaction);
+        repository,
+        alwaysEligible,
+        new AccountDeletionQueries(jdbc),
+        transaction,
+        new UserLimits(jdbc, LimitsProperties.defaults()));
   }
 
   private long countAccounts(UUID userId) {

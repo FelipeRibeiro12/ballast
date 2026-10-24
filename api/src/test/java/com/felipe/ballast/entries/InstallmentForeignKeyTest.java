@@ -3,6 +3,8 @@ package com.felipe.ballast.entries;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.felipe.ballast.IntegrationTest;
+import com.felipe.ballast.limits.LimitsProperties;
+import com.felipe.ballast.limits.UserLimits;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -73,7 +75,12 @@ class InstallmentForeignKeyTest {
                             e.cashDate()));
           }
         };
-    service = new InstallmentService(new InstallmentQueries(jdbc), alwaysFound, transaction);
+    service =
+        new InstallmentService(
+            new InstallmentQueries(jdbc),
+            alwaysFound,
+            transaction,
+            new UserLimits(jdbc, LimitsProperties.defaults()));
     entryService = new EntryService(entryRepository, alwaysFound, transaction);
   }
 
