@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   CredenciaisInvalidasError,
+  CadastroEsgotadoError,
   EmailJaCadastradoError,
   EntradaInvalidaError,
   LimiteTentativasError,
@@ -53,6 +54,16 @@ function registroAberto(): boolean {
 
 function mensagemDeCadastro(erro: unknown): string {
   if (erro instanceof EmailJaCadastradoError) return 'Este e-mail já tem conta.'
+  if (erro instanceof CadastroEsgotadoError) {
+    return 'O cadastro está fechado: o limite de usuários foi atingido.'
+  }
+  // A janela do cadastro é de uma hora, então o prazo sai em minutos.
+  if (erro instanceof LimiteTentativasError) {
+    if (erro.segundos === null) return 'Muitos cadastros deste endereço. Tente de novo mais tarde.'
+    const minutos = Math.ceil(erro.segundos / 60)
+    const unidade = minutos === 1 ? 'minuto' : 'minutos'
+    return `Muitos cadastros deste endereço. Tente de novo em ${minutos} ${unidade}.`
+  }
   if (erro instanceof EntradaInvalidaError && erro.mensagemServidor !== null) {
     return erro.mensagemServidor
   }

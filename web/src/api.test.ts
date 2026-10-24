@@ -2,8 +2,10 @@ import {
   ApiError,
   ContaInvalidaError,
   ContaNaoEncontradaError,
+  CadastroEsgotadoError,
   EmailJaCadastradoError,
   EntradaInvalidaError,
+  LimiteTentativasError,
   NomeDeContaRepetidoError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
@@ -121,6 +123,23 @@ describe('postCadastro', () => {
   it('409 vira EmailJaCadastradoError', async () => {
     responder({ erro: 'e-mail já cadastrado' }, 409)
     await expect(postCadastro(dados)).rejects.toBeInstanceOf(EmailJaCadastradoError)
+  })
+
+  it('403 vira CadastroEsgotadoError', async () => {
+    responder({ erro: 'cadastro fechado: limite de usuários atingido' }, 403)
+    await expect(postCadastro(dados)).rejects.toBeInstanceOf(CadastroEsgotadoError)
+  })
+
+  it('429 vira LimiteTentativasError com o Retry-After', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(new Response('{"erro":"x"}', { status: 429, headers: { 'Retry-After': '1200' } })),
+      ),
+    )
+    const erro = await postCadastro(dados).catch((e: unknown) => e)
+    expect(erro).toBeInstanceOf(LimiteTentativasError)
+    expect(erro).toMatchObject({ segundos: 1200 })
   })
 
   it('400 carrega a mensagem do corpo no formato do contrato', async () => {
