@@ -1171,6 +1171,14 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "Conta de outro usuário, inexistente ou id que não é UUID;\
             \ todos com o mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "\"transferência vinculada a aporte\": uma transferência da\
+            \ conta está ligada a um aporte de meta; apague o aporte antes. Nada é\
+            \ apagado"
         "503":
           content:
             application/json:
@@ -2212,7 +2220,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Entrada inválida, data no futuro ou retirada maior que o acumulado"
+          description: "Entrada inválida, data no futuro, retirada maior que o acumulado\
+            \ ou \"transferenciaId não encontrada\" (de outro usuário, inexistente\
+            \ ou que não é UUID)"
         "401":
           content:
             application/json:
@@ -2231,8 +2241,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: Chave com outra requisição igual ainda em andamento; tentar
-            de novo
+          description: A transferência já está ligada a outro aporte
         "422":
           content:
             application/json:
@@ -3691,6 +3700,13 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "Transferência de outro usuário, inexistente ou id que não\
             \ é UUID; todos com o mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "\"transferência vinculada a aporte\": apague o aporte antes;\
+            \ nada é apagado"
         "503":
           content:
             application/json:
@@ -3762,6 +3778,12 @@ components:
         id:
           type: string
           format: uuid
+        transferenciaId:
+          type:
+          - string
+          - "null"
+          format: uuid
+          description: Transferência ligada ao aporte; nulo quando não há
         valorCentavos:
           type: integer
           format: int64
@@ -3771,6 +3793,7 @@ components:
       required:
       - data
       - id
+      - transferenciaId
       - valorCentavos
     AporteMetaRequest:
       type: object
@@ -3778,6 +3801,13 @@ components:
         data:
           type: string
           format: date
+        transferenciaId:
+          type:
+          - string
+          - "null"
+          format: uuid
+          description: "Transferência que moveu o dinheiro. Opcional; uma transferê\
+            ncia liga no máximo um aporte e, ligada, não pode ser apagada"
         valorCentavos:
           type: integer
           format: int64

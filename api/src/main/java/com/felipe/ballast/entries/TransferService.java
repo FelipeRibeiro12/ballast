@@ -1,9 +1,11 @@
 package com.felipe.ballast.entries;
 
+import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.TransactionStatus;
 
@@ -16,6 +18,8 @@ import org.springframework.transaction.TransactionStatus;
 // sem chegar às contas, então nunca esperam por quem espera pela perna.
 @Service
 class TransferService {
+
+  private static final String DEPOSIT_FK = "aporte_meta_transferencia_mesmo_usuario";
 
   static final String DEFAULT_TITLE = "Transferência";
 
@@ -70,8 +74,17 @@ class TransferService {
   // NOT_FOUND para transferência de outro usuário ou inexistente, sem distinguir. Apagar a
   // entrada de uma conta também pode tirar o saldo dela da faixa, por isso confere como as
   // outras escritas.
+  // O aporte de meta ligado à transferência faz o banco recusar o DELETE (V27, ADR-057). A
+  // violação sai da transação já com rollback e é capturada aqui fora.
   EntryService.DeleteResult delete(UUID userId, UUID id) {
-    return transaction.execute(status -> deleteLocked(status, userId, id));
+    try {
+      return transaction.execute(status -> deleteLocked(status, userId, id));
+    } catch (DataIntegrityViolationException e) {
+      if (Constraints.isViolated(e, DEPOSIT_FK)) {
+        return EntryService.DeleteResult.LINKED_TO_DEPOSIT;
+      }
+      throw e;
+    }
   }
 
   private CreateResult createLocked(TransactionStatus status, UUID userId, TransferInput input) {

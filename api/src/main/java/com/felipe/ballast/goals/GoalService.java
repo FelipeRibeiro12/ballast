@@ -1,5 +1,6 @@
 package com.felipe.ballast.goals;
 
+import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -8,6 +9,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -26,8 +28,15 @@ class GoalService {
     NOT_FOUND,
     FUTURE,
     WITHDRAWAL_TOO_BIG,
-    OUT_OF_RANGE
+    OUT_OF_RANGE,
+    TRANSFER_NOT_FOUND,
+    TRANSFER_LINKED
   }
+
+  // Violações que escapam da conferência quando outra requisição chega no meio: a transferência
+  // foi apagada, ou ligada a outro aporte, entre a leitura e o INSERT.
+  private static final String TRANSFER_FK = "aporte_meta_transferencia_mesmo_usuario";
+  private static final String TRANSFER_UNIQUE = "aporte_meta_transferencia_unica";
 
   private final GoalQueries queries;
   private final WriteTransaction transaction;
@@ -74,23 +83,45 @@ class GoalService {
     return Optional.of(queries.deposits(userId, goalId));
   }
 
-  // Retirada não deixa o acumulado negativo, e nada passa do teto do JSON.
-  DepositResult deposit(UUID userId, UUID goalId, BigDecimal value, LocalDate date) {
+  // Retirada não deixa o acumulado negativo, e nada passa do teto do JSON. transferId nulo é
+  // aporte sem vínculo; com ele, a transferência tem de ser do usuário e estar livre (ADR-057).
+  DepositResult deposit(
+      UUID userId, UUID goalId, BigDecimal value, LocalDate date, UUID transferId) {
     if (date.isAfter(today())) {
       return DepositResult.FUTURE;
     }
-    return transaction.execute(
-        status -> {
-          Optional<BigDecimal> saved = queries.lockAndSum(userId, goalId);
-          if (saved.isEmpty()) {
-            return DepositResult.NOT_FOUND;
-          }
-          DepositResult check = checkTotal(saved.get().add(value));
-          if (check == DepositResult.SAVED) {
-            queries.insertDeposit(userId, goalId, value, date);
-          }
-          return check;
-        });
+    try {
+      return transaction.execute(status -> depositLocked(userId, goalId, value, date, transferId));
+    } catch (DataIntegrityViolationException e) {
+      if (Constraints.isViolated(e, TRANSFER_UNIQUE)) {
+        return DepositResult.TRANSFER_LINKED;
+      }
+      if (Constraints.isViolated(e, TRANSFER_FK)) {
+        return DepositResult.TRANSFER_NOT_FOUND;
+      }
+      throw e;
+    }
+  }
+
+  private DepositResult depositLocked(
+      UUID userId, UUID goalId, BigDecimal value, LocalDate date, UUID transferId) {
+    Optional<BigDecimal> saved = queries.lockAndSum(userId, goalId);
+    if (saved.isEmpty()) {
+      return DepositResult.NOT_FOUND;
+    }
+    if (transferId != null) {
+      if (!queries.transferExists(userId, transferId)) {
+        return DepositResult.TRANSFER_NOT_FOUND;
+      }
+      if (queries.transferIsLinked(userId, transferId)) {
+        return DepositResult.TRANSFER_LINKED;
+      }
+    }
+    DepositResult check = checkTotal(saved.get().add(value));
+    if (check == DepositResult.SAVED) {
+      queries.insertDeposit(userId, goalId, value, date, transferId);
+    }
+    return check;
   }
 
   // Apagar um depósito do qual uma retirada depende deixaria o acumulado negativo.

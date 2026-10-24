@@ -33,6 +33,8 @@ class TransferController {
 
   // Mesmo corpo para transferência de outro usuário, inexistente e id que não é UUID.
   private static final ErrorResponse NOT_FOUND = new ErrorResponse("não encontrado");
+  private static final ErrorResponse LINKED_TO_DEPOSIT =
+      new ErrorResponse("transferência vinculada a aporte");
   private static final ErrorResponse ACCOUNT_NOT_FOUND = new ErrorResponse("conta não encontrada");
   private static final ErrorResponse ACCOUNT_ARCHIVED = new ErrorResponse("conta arquivada");
   private static final ErrorResponse SAME_ACCOUNT =
@@ -180,6 +182,10 @@ class TransferController {
               + " corpo",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "409",
+      description = "\"transferência vinculada a aporte\": apague o aporte antes; nada é apagado",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "503",
       description = "Banco indisponível",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -193,6 +199,7 @@ class TransferController {
     return switch (transfers.delete(user.id(), transferId.get())) {
       case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case BALANCE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(BALANCE_OUT_OF_RANGE);
+      case LINKED_TO_DEPOSIT -> ResponseEntity.status(HttpStatus.CONFLICT).body(LINKED_TO_DEPOSIT);
       // Resultado do DELETE de lançamento; a transferência nunca o devolve.
       case TRANSFER_LEG, CANCEL_OCCURRENCE, FIRST_INSTALLMENT ->
           throw new IllegalStateException("resultado impossível");

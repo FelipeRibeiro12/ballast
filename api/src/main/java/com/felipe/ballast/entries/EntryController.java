@@ -515,6 +515,7 @@ class EntryController {
       case TRANSFER_LEG -> ResponseEntity.badRequest().body(TRANSFER_LEG);
       case CANCEL_OCCURRENCE -> ResponseEntity.badRequest().body(CANCEL_OCCURRENCE);
       case FIRST_INSTALLMENT -> ResponseEntity.badRequest().body(DELETE_WHOLE_PURCHASE);
+      case LINKED_TO_DEPOSIT -> throw new IllegalStateException("resultado impossível");
       case DELETED -> {
         log.info("lançamento apagado usuario_id={} lancamento_id={}", user.id(), entryId.get());
         yield ResponseEntity.noContent().build();

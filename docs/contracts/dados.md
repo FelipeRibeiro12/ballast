@@ -512,6 +512,8 @@ categoria
   cor         text
   icone       text
   pai_id      uuid fk null           -- "Alimentação > Restaurante"
+  semente     text null              -- salario | outros | outras_receitas (V24); nulo é categoria comum
+  pai_tipo    text gerada            -- tipo da linha quando tem pai, nulo na raiz (V25); a app não escreve
   unique (usuario_id, pai_id, lower(nome))
 ```
 
@@ -532,8 +534,7 @@ vem da aplicação.
   nivel)`. `nivel` (0 raiz, 1 filha) e `pai_nivel` (0 quando há pai, nulo sem pai)
   são colunas geradas: **a aplicação não escreve nelas** e o INSERT não as cita.
   Como a FK exige pai de `nivel` 0, uma filha não vira pai, e uma raiz com filhas
-  não vira filha. A categoria filha pode ter tipo diferente do pai; se isso
-  importar, é CHECK novo.
+  não vira filha. A filha tem o tipo do pai (V25, abaixo).
 - **Alvo da FK de `lancamento`:** `unique (id, usuario_id, tipo)`
   (`categoria_id_usuario_tipo_unico`). Não existe `unique (id, usuario_id)` sozinho
   porque nada aponta para ele; quem precisar cria.
@@ -553,6 +554,28 @@ lista nos dois lugares**; esta é a fonte):
 
 São 16. "Outros" é despesa e a receita genérica chama "Outras receitas" (ADR-024).
 A `V6` gera o id das sementes com `gen_random_uuid()` (v4), só no backfill.
+
+Migration `V24` (ADR-057): três sementes são **marcadas por coluna** porque o código
+as procura: Salário (`semente = 'salario'`, o próximo salário do Posso gastar e a
+raiz de que as filhas herdam), Outros (`'outros'`, a despesa em que a perna de
+transferência vira ao apagar conta) e Outras receitas (`'outras_receitas'`, a
+receita equivalente). O código acha pela marca, nunca pelo nome, então renomear
+não quebra a busca. O backfill por nome só existe na migration: raiz com o nome e o
+tipo da semente recebe a marca. A aplicação grava a marca no cadastro
+(`CategorySeeds`). Garantias do banco: `categoria_semente_valida` (só os três
+valores), `categoria_semente_tipo` (`outros` é despesa, as outras duas receita),
+`categoria_semente_so_na_raiz` e o índice único parcial `categoria_semente_unica
+(usuario_id, semente) WHERE semente IS NOT NULL`, uma marca de cada por usuário. O
+CRUD de categoria, quando vier, não pode apagar nem mudar o tipo de categoria
+marcada.
+
+Migration `V25` (ADR-057): categoria filha tem o mesmo tipo do pai.
+`categoria_pai_mesmo_tipo` é FK `(pai_id, usuario_id, pai_tipo)` para
+`categoria (id, usuario_id, tipo)` (o unique da V6), com `pai_tipo` gerada
+(`tipo` quando há pai, nulo na raiz, e a FK é `MATCH SIMPLE`). Mudar o tipo do pai
+que tem filha, ou o da filha, é recusado. Dado existente que violaria vira raiz,
+com o sufixo " (raiz)" no nome se já houver raiz de mesmo nome; nenhuma rota cria
+filha, então o esperado é não tocar linha nenhuma.
 
 ---
 
@@ -970,6 +993,13 @@ Migration `V7` (ADR-025). O que o banco garante, e como:
   `conta_entrada_id` existem só para isso, com `CHECK` de diferentes
   (`transferencia_contas_diferentes`) e as FKs acima ligando-as às pernas.
   A aplicação grava as mesmas contas que gravou nas pernas.
+- **Cartão nunca é saída (V26, ADR-057).** `transferencia_saida_nao_e_cartao`: FK
+  `(conta_saida_id, usuario_id, saida_pode_ser_origem)` para `conta (id, usuario_id,
+  pode_ser_origem)`, com `saida_pode_ser_origem` gerada constante `true` e
+  `conta.pode_ser_origem` gerada (`tipo <> 'cartao_credito'`), a técnica da `V10`. O
+  cartão só entra como destino (pagamento de fatura). A mesma FK recusa mudar para
+  cartão o tipo de conta com transferência de saída. A aplicação não escreve nas
+  duas colunas.
 - **Perna diferente.** `transferencia_pernas_diferentes`: `saida_id <> entrada_id`.
 - **Cada lançamento em no máximo uma transferência.** `transferencia_saida_unica`
   e `transferencia_entrada_unica` cobrem o mesmo papel duas vezes. O caso do
@@ -1009,12 +1039,24 @@ aporte_meta
   valor       numeric(18,2) not null   -- positivo guarda, negativo retira; nunca zero
   data        date not null            -- 1900 a 2199; a API só aceita até hoje
   criado_em   timestamptz not null default now()
+  transferencia_id uuid null           -- V27: a transferência que moveu o dinheiro
   index (usuario_id, meta_id, data)
 ```
 
 Migration `V19` (F17, ADR-045). **Desvio do rascunho anterior:** sem
 `conta_id`, sem `regra_id`, sem `lancamento_id` e sem `concluida_em`. O aporte
 é registrado à mão, o aporte mensal é plano e "atingida" é calculada.
+
+Migration `V27` (ADR-057): `aporte_meta.transferencia_id` é opcional e só
+informa; o progresso não muda. `aporte_meta_transferencia_mesmo_usuario` é FK
+`(transferencia_id, usuario_id)` para `transferencia (id, usuario_id)`
+(`transferencia_id_usuario_unico`, criado na V27), `ON DELETE NO ACTION`: apagar a
+transferência vinculada é recusado, e a aplicação responde 409 `transferência
+vinculada a aporte` (também ao apagar a conta dela). Apagar o aporte, ou a meta no
+cascade, solta a transferência. `aporte_meta_transferencia_unica` é índice único
+parcial em `(transferencia_id) WHERE transferencia_id IS NOT NULL`: uma
+transferência liga no máximo um aporte. Transferência não tem edição (só
+`POST`, `GET`, `DELETE`), então não há o que sincronizar.
 
 Progresso é `soma(aporte_meta.valor)`, que a aplicação nunca deixa negativo
 (trava a meta com `FOR UPDATE`). A projeção ("necessário por mês", "chega pelo

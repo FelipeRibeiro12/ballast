@@ -19,7 +19,7 @@ class CategorySeeder {
   void seed(UserRegistered event) {
     categories.saveAllAndFlush(
         CategorySeeds.ALL.stream()
-            .map(seed -> new Category(event.userId(), seed.name(), seed.type()))
+            .map(seed -> new Category(event.userId(), seed.name(), seed.type(), seed.marker()))
             .toList());
   }
 }

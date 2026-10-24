@@ -22,16 +22,14 @@ import org.springframework.transaction.TransactionStatus;
 // Assume entrada já validada e normalizada na borda. Todo método recebe o dono vindo da sessão,
 // menos os do job, que recebem o dono lido do próprio template.
 //
-// Ordem de travas: template, só ele, no job. Desativar trava só o template; arquivar trava só a
-// conta. O job trava o template, confere que continua ativo, lê "arquivada" sem travar a conta e
-// insere. Travar a conta aqui fechava ciclo com PUT e confirmar (lançamento, depois conta) quando o
-// INSERT esperava a linha deles. Custo aceito: numa corrida com arquivar pode sobrar prevista na
-// conta arquivada, que fica fora do saldo, não confirma e pode ser cancelada (ADR-026). Criar trava
-// só a conta, porque o template ainda não existe e o INSERT não colide com linha de ninguém.
-// Confirmar, cancelar, editar e apagar ocorrência (EntryService) travam o lançamento e depois a
-// conta, nunca o template, então não fecham ciclo com este serviço. Editar template trava o
-// template, depois as previstas e só então a conta (ADR-036); reativar e apagar travam só o
-// template.
+// Ordem de travas, a mesma em todo o app (ADR-057): template, lançamentos por id, conta. Quem
+// precisa de duas trava na ordem e nunca volta atrás. O job trava o template, depois a conta, e
+// confere "arquivada" com a conta travada: arquivar faz UPDATE na mesma linha, então nenhuma
+// prevista nasce depois de arquivar responder 200. Editar template trava o template, as previstas
+// que vai apagar (em ordem de id) e só então a conta; desativar e apagar travam o template e as
+// linhas dele. Criar trava só a conta, porque o template ainda não existe. Confirmar, cancelar,
+// editar e apagar ocorrência (EntryService) travam o template em modo compartilhado, depois o
+// lançamento e depois a conta.
 @Service
 class RecurrenceService {
 
@@ -41,9 +39,8 @@ class RecurrenceService {
   // Até onde a materialização enxerga à frente, em meses contados de hoje, ponta incluída.
   static final int HORIZON_MONTHS = 12;
 
-  // O INSERT do job ainda espera a conta no fim (a FK pede KEY SHARE, que a trava FOR UPDATE das
-  // escritas bloqueia). Com 2 s, o job na frente da fila dobrava a espera da escrita do usuário.
-  // O que o job pula hoje ele pega na rodada de amanhã, o horizonte tem 12 meses.
+  // O job espera a conta como as escritas do usuário. Com 2 s, o job na frente da fila dobrava a
+  // espera delas. O que o job pula hoje ele pega na rodada de amanhã, o horizonte tem 12 meses.
   private static final Duration JOB_LOCK_TIMEOUT = Duration.ofMillis(200);
 
   private static final String ACCOUNT_FK = "template_conta_mesmo_usuario";
@@ -199,15 +196,15 @@ class RecurrenceService {
                     return false;
                   }
                   queries.deactivate(userId, id);
+                  queries.lockFuturePlanned(userId, id, today);
                   queries.deleteFuturePlanned(userId, id, today);
                   return true;
                 }));
     return found ? queries.find(userId, id, today) : Optional.empty();
   }
 
-  // Ordem de travas: template, previstas (o DELETE), conta. Apagar as previstas antes de travar a
-  // conta evita o ciclo com editar ocorrência, que trava o lançamento e depois a conta. Recusa que
-  // aparece depois do DELETE desfaz tudo com setRollbackOnly.
+  // Ordem de travas: template, previstas (por id, depois o DELETE), conta. Recusa que aparece
+  // depois do DELETE desfaz tudo com setRollbackOnly.
   UpdateResult update(UUID userId, UUID id, RecurrenceInput input) {
     if (input.accountId() == null) {
       return queries.templateType(userId, id).isEmpty()
@@ -240,6 +237,7 @@ class RecurrenceService {
       return UpdateResult.Rejected.TYPE_CHANGED;
     }
     LocalDate today = today();
+    queries.lockFuturePlanned(userId, id, today);
     queries.deleteFuturePlanned(userId, id, today);
     Optional<UpdateResult.Rejected> refused =
         checkReferences(userId, input, template.get().active());
@@ -295,8 +293,7 @@ class RecurrenceService {
     return Optional.empty();
   }
 
-  // Como o job: trava só o template e lê "arquivada" sem travar a conta. Repetível, porque a
-  // geração pula a data que já existe.
+  // Como o job: template, depois a conta. Repetível, porque a geração pula a data que já existe.
   ReactivateResult reactivate(UUID userId, UUID id) {
     try {
       return reactivateLocked(userId, id);
@@ -321,8 +318,7 @@ class RecurrenceService {
           if (!template.get().active()) {
             limits.checkRoom(userId, UserLimit.ACTIVE_RECURRENCES);
           }
-          Optional<Boolean> archived =
-              queries.isAccountArchived(userId, template.get().accountId());
+          Optional<Boolean> archived = queries.lockAccount(userId, template.get().accountId());
           if (archived.isEmpty() || archived.get()) {
             return ReactivateResult.ACCOUNT_ARCHIVED;
           }
@@ -339,7 +335,7 @@ class RecurrenceService {
         });
   }
 
-  // Trava só o template, como desativar. Falso para template alheio ou inexistente.
+  // Trava o template e as linhas dele, como desativar. Falso para template alheio ou inexistente.
   boolean delete(UUID userId, UUID id) {
     return Boolean.TRUE.equals(
         transaction.execute(
@@ -347,6 +343,7 @@ class RecurrenceService {
               if (queries.lockTemplate(userId, id).isEmpty()) {
                 return false;
               }
+              queries.lockOccurrences(userId, id);
               queries.deleteTemplateKeepingHistory(userId, id);
               return true;
             }));
@@ -369,9 +366,7 @@ class RecurrenceService {
               if (template.isEmpty() || !template.get().active()) {
                 return 0;
               }
-              // Sem trava de conta: ver a ordem de travas no topo da classe.
-              Optional<Boolean> archived =
-                  queries.isAccountArchived(userId, template.get().accountId());
+              Optional<Boolean> archived = queries.lockAccount(userId, template.get().accountId());
               if (archived.isEmpty() || archived.get()) {
                 return 0;
               }

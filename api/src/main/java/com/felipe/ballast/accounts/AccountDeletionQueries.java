@@ -114,6 +114,22 @@ class AccountDeletionQueries {
         .single();
   }
 
+  // Transferência da conta que um aporte de meta aponta (V27). Apagá-la quebraria a FK.
+  boolean hasLinkedDeposit(UUID userId, UUID accountId) {
+    return jdbc.sql(
+            """
+            SELECT EXISTS (
+              SELECT 1 FROM aporte_meta a
+              JOIN transferencia t ON t.id = a.transferencia_id AND t.usuario_id = a.usuario_id
+              WHERE a.usuario_id = :userId
+                AND (t.conta_saida_id = :id OR t.conta_entrada_id = :id))
+            """)
+        .param("userId", userId)
+        .param("id", accountId)
+        .query(Boolean.class)
+        .single();
+  }
+
   // O cartão aponta para a conta de pagamento por FK; apagar a conta deixaria o cartão sem ela.
   boolean paysACard(UUID userId, UUID accountId) {
     return jdbc.sql(
@@ -128,8 +144,8 @@ class AccountDeletionQueries {
   // Desfaz as transferências com outra conta e transforma a perna de lá em lançamento comum, num
   // comando só: a FK da perna (que inclui o tipo) é conferida no fim dele, quando a transferência
   // já saiu. Saída da outra conta vira despesa em "Outros", entrada vira receita em "Outras
-  // receitas" (ADR-036). A categoria vem da semente que todo usuário tem; ainda não há CRUD de
-  // categoria que a apague, e o CHECK da V7 exige categoria fora de transferência.
+  // receitas" (ADR-036). A categoria vem da semente marcada (V24, ADR-057), que sobrevive a
+  // renomear; o CHECK da V7 exige categoria fora de transferência.
   void turnForeignLegsIntoPlainEntries(UUID userId, UUID accountId) {
     jdbc.sql(
             """
@@ -142,9 +158,9 @@ class AccountDeletionQueries {
             UPDATE lancamento l
             SET tipo = d.vira,
                 categoria_id = (SELECT c.id FROM categoria c
-                                WHERE c.usuario_id = :userId AND c.tipo = d.vira
-                                  AND c.nome = CASE d.vira WHEN 'receita' THEN 'Outras receitas'
-                                                           ELSE 'Outros' END)
+                                WHERE c.usuario_id = :userId
+                                  AND c.semente = CASE d.vira WHEN 'receita' THEN 'outras_receitas'
+                                                              ELSE 'outros' END)
             FROM desfeita d
             WHERE l.usuario_id = :userId AND l.id = d.perna
             """)

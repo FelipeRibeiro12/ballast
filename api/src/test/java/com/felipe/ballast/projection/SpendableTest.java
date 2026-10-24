@@ -65,6 +65,31 @@ class SpendableTest {
     assertThat(body.get("porDiaCentavos").asLong()).isEqualTo(28_57);
   }
 
+  // O salário se acha pela marca da semente (ADR-057), não pelo nome.
+  @Test
+  void theSalaryIsFoundByTheSeedMarkEvenAfterARename() throws Exception {
+    jdbc.sql("UPDATE categoria SET nome = 'Ordenado' WHERE usuario_id = :u AND semente = 'salario'")
+        .param("u", actor.user().id())
+        .update();
+    fixture.incomeIn(actor, checking, "Ordenado", "previsto", 5_000_00, LocalDate.of(2026, 4, 5));
+
+    JsonNode body = fixture.spendableOk(actor.session());
+
+    assertThat(body.get("proximoSalario").get("data").asString()).isEqualTo("2026-04-05");
+  }
+
+  @Test
+  void aCategoryNamedSalarioWithoutTheMarkIsNotTheSalary() throws Exception {
+    jdbc.sql("UPDATE categoria SET semente = NULL WHERE usuario_id = :u AND semente = 'salario'")
+        .param("u", actor.user().id())
+        .update();
+    fixture.salary(actor, checking, "previsto", 5_000_00, LocalDate.of(2026, 4, 5));
+
+    JsonNode body = fixture.spendableOk(actor.session());
+
+    assertThat(body.get("proximoSalario").isNull()).isTrue();
+  }
+
   @Test
   void aLaterIncomeDoesNotCoverAnEarlierExpense() throws Exception {
     fixture.salary(actor, checking, "previsto", 5_000_00, LocalDate.of(2026, 4, 5));

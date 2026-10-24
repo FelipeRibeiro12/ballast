@@ -14,10 +14,19 @@ record DepositResponse(
             maximum = "9007199254740991")
         long valorCentavos,
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED, type = "string", format = "date")
-        LocalDate data) {
+        LocalDate data,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            format = "uuid",
+            description = "Transferência ligada ao aporte; nulo quando não há")
+        UUID transferenciaId) {
 
   static DepositResponse from(GoalQueries.Deposit deposit) {
     return new DepositResponse(
-        deposit.id(), deposit.value().movePointRight(2).longValueExact(), deposit.date());
+        deposit.id(),
+        deposit.value().movePointRight(2).longValueExact(),
+        deposit.date(),
+        deposit.transferId());
   }
 }

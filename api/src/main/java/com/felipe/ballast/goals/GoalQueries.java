@@ -28,7 +28,7 @@ class GoalQueries {
       BigDecimal saved,
       BigDecimal recent) {}
 
-  record Deposit(UUID id, BigDecimal value, LocalDate date) {}
+  record Deposit(UUID id, BigDecimal value, LocalDate date, UUID transferId) {}
 
   private static final String GOAL_COLUMNS =
       """
@@ -131,12 +131,15 @@ class GoalQueries {
         .update();
   }
 
-  void insertDeposit(UUID userId, UUID goalId, BigDecimal value, LocalDate date) {
+  // transferId nulo é aporte sem vínculo. A FK composta da V27 recusa transferência de outro
+  // usuário; a conferência do serviço só dá a mensagem.
+  void insertDeposit(UUID userId, UUID goalId, BigDecimal value, LocalDate date, UUID transferId) {
     jdbc.sql(
             """
-            INSERT INTO aporte_meta (id, usuario_id, meta_id, valor, data)
-            VALUES (:id, :userId, :goalId, :value, :date)
+            INSERT INTO aporte_meta (id, usuario_id, meta_id, valor, data, transferencia_id)
+            VALUES (:id, :userId, :goalId, :value, :date, :transferId)
             """)
+        .param("transferId", transferId, java.sql.Types.OTHER)
         .param("id", newId())
         .param("userId", userId)
         .param("goalId", goalId)
@@ -148,7 +151,7 @@ class GoalQueries {
   // Do mais novo ao mais antigo; no mesmo dia, o último gravado primeiro.
   List<Deposit> deposits(UUID userId, UUID goalId) {
     return jdbc.sql(
-            "SELECT id, valor, data FROM aporte_meta WHERE usuario_id = :userId"
+            "SELECT id, valor, data, transferencia_id FROM aporte_meta WHERE usuario_id = :userId"
                 + " AND meta_id = :goalId ORDER BY data DESC, criado_em DESC, id DESC")
         .param("userId", userId)
         .param("goalId", goalId)
@@ -157,8 +160,28 @@ class GoalQueries {
                 new Deposit(
                     rs.getObject("id", UUID.class),
                     rs.getBigDecimal("valor"),
-                    rs.getObject("data", LocalDate.class)))
+                    rs.getObject("data", LocalDate.class),
+                    rs.getObject("transferencia_id", UUID.class)))
         .list();
+  }
+
+  boolean transferExists(UUID userId, UUID transferId) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM transferencia WHERE usuario_id = :userId AND id = :id)")
+        .param("userId", userId)
+        .param("id", transferId)
+        .query(Boolean.class)
+        .single();
+  }
+
+  boolean transferIsLinked(UUID userId, UUID transferId) {
+    return jdbc.sql(
+            "SELECT EXISTS (SELECT 1 FROM aporte_meta WHERE usuario_id = :userId"
+                + " AND transferencia_id = :id)")
+        .param("userId", userId)
+        .param("id", transferId)
+        .query(Boolean.class)
+        .single();
   }
 
   Optional<BigDecimal> depositValue(UUID userId, UUID goalId, UUID id) {

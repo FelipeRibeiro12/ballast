@@ -41,6 +41,10 @@ class GoalController {
       new ErrorResponse("data do aporte não pode ser no futuro");
   private static final ErrorResponse WITHDRAWAL_TOO_BIG =
       new ErrorResponse("retirada maior que o acumulado da meta");
+  private static final ErrorResponse TRANSFER_NOT_FOUND =
+      new ErrorResponse("transferenciaId não encontrada");
+  private static final ErrorResponse TRANSFER_LINKED =
+      new ErrorResponse("transferência já vinculada a outro aporte");
   private static final ErrorResponse OUT_OF_RANGE =
       new ErrorResponse("acumulado da meta fora do limite");
 
@@ -199,11 +203,17 @@ class GoalController {
       content = @Content(schema = @Schema(implementation = GoalResponse.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "Entrada inválida, data no futuro ou retirada maior que o acumulado",
+      description =
+          "Entrada inválida, data no futuro, retirada maior que o acumulado ou \"transferenciaId"
+              + " não encontrada\" (de outro usuário, inexistente ou que não é UUID)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
       description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "A transferência já está ligada a outro aporte",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "404",
@@ -228,7 +238,15 @@ class GoalController {
     if (request.cents() == 0) {
       return ResponseEntity.badRequest().body(ZERO);
     }
-    return switch (goals.deposit(user.id(), goalId.get(), request.value(), request.parsedDate())) {
+    UUID transferId = null;
+    if (request.transferId() != null) {
+      transferId = request.parsedTransferId().orElse(null);
+      if (transferId == null) {
+        return ResponseEntity.badRequest().body(TRANSFER_NOT_FOUND);
+      }
+    }
+    return switch (goals.deposit(
+        user.id(), goalId.get(), request.value(), request.parsedDate(), transferId)) {
       case SAVED -> {
         log.info("aporte gravado usuario_id={} meta_id={}", user.id(), goalId.get());
         yield goals
@@ -241,6 +259,8 @@ class GoalController {
       case FUTURE -> ResponseEntity.badRequest().body(FUTURE);
       case WITHDRAWAL_TOO_BIG -> ResponseEntity.badRequest().body(WITHDRAWAL_TOO_BIG);
       case OUT_OF_RANGE -> ResponseEntity.badRequest().body(OUT_OF_RANGE);
+      case TRANSFER_NOT_FOUND -> ResponseEntity.badRequest().body(TRANSFER_NOT_FOUND);
+      case TRANSFER_LINKED -> ResponseEntity.status(HttpStatus.CONFLICT).body(TRANSFER_LINKED);
     };
   }
 
@@ -282,6 +302,8 @@ class GoalController {
       case NOT_FOUND, FUTURE -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case WITHDRAWAL_TOO_BIG -> ResponseEntity.badRequest().body(WITHDRAWAL_TOO_BIG);
       case OUT_OF_RANGE -> ResponseEntity.badRequest().body(OUT_OF_RANGE);
+      case TRANSFER_NOT_FOUND, TRANSFER_LINKED ->
+          throw new IllegalStateException("resultado impossível");
     };
   }
 }

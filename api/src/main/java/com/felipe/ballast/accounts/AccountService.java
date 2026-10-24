@@ -19,6 +19,7 @@ class AccountService {
 
   private static final String NAME_UNIQUE_INDEX = "conta_usuario_nome_unico";
   private static final String PAYMENT_FK = "cartao_pagamento_mesmo_usuario_e_tipo";
+  private static final String DEPOSIT_FK = "aporte_meta_transferencia_mesmo_usuario";
   private static final String PERMITTED_CATEGORY_FK =
       "conta_categoria_permitida_categoria_despesa_do_usuario";
 
@@ -48,7 +49,8 @@ class AccountService {
     DELETED,
     NOT_FOUND,
     PAYS_A_CARD,
-    PAID_A_CARD_INVOICE
+    PAID_A_CARD_INVOICE,
+    LINKED_TO_DEPOSIT
   }
 
   Optional<AccountDeletionQueries.Summary> deletionSummary(UUID userId, UUID id) {
@@ -63,10 +65,18 @@ class AccountService {
   // Com prazo por instrução (ADR-055): a conta com muito lançamento não prende a conexão até o
   // socketTimeout de 30 s. Estourar desfaz tudo e vira 503.
   DeleteResult delete(UUID userId, UUID id) {
-    return transaction.execute(
-        WriteTransaction.DEFAULT_LOCK_TIMEOUT,
-        limits.accountDeleteTimeout(),
-        status -> deleteLocked(userId, id));
+    try {
+      return transaction.execute(
+          WriteTransaction.DEFAULT_LOCK_TIMEOUT,
+          limits.accountDeleteTimeout(),
+          status -> deleteLocked(userId, id));
+    } catch (DataIntegrityViolationException e) {
+      // Um aporte ligou a transferência depois da conferência de deleteLocked (V27).
+      if (Constraints.isViolated(e, DEPOSIT_FK)) {
+        return DeleteResult.LINKED_TO_DEPOSIT;
+      }
+      throw e;
+    }
   }
 
   private DeleteResult deleteLocked(UUID userId, UUID id) {
@@ -88,6 +98,10 @@ class AccountService {
     }
     if (deletion.paidACardInvoice(userId, id)) {
       return DeleteResult.PAID_A_CARD_INVOICE;
+    }
+    // Apagar a conta desfaz as transferências dela, e a de um aporte não pode sumir (ADR-057).
+    if (deletion.hasLinkedDeposit(userId, id)) {
+      return DeleteResult.LINKED_TO_DEPOSIT;
     }
     deletion.turnForeignLegsIntoPlainEntries(userId, id);
     deletion.deleteEntries(userId, id);
