@@ -52,6 +52,8 @@ spring:
 ballast:
   # Vazio vale como o padrão: o .env.example deixa as chaves em branco.
   registration-open: ${REGISTRO_ABERTO:false}
+  # Teto de usuários do tier gratuito (ADR-049). Vazio vale 20.
+  registration-max-users: ${CADASTRO_MAX_USUARIOS:}
   cookie-secure: ${COOKIE_SECURE:true}
   app-env: ${APP_ENV:}
   recurrence:

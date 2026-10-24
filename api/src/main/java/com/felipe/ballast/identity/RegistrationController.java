@@ -49,6 +49,10 @@ class RegistrationController {
       description = "Entrada inválida",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "403",
+      description = "Teto de usuários atingido (CADASTRO_MAX_USUARIOS, padrão 20); nada é gravado",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "409",
       description = "E-mail já cadastrado",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -69,8 +73,14 @@ class RegistrationController {
       consumes = MediaType.APPLICATION_JSON_VALUE,
       produces = MediaType.APPLICATION_JSON_VALUE)
   ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
-    Optional<UserProfile> created =
-        identity.register(request.email(), request.password(), request.name());
+    Optional<UserProfile> created;
+    try {
+      created = identity.register(request.email(), request.password(), request.name());
+    } catch (RegistrationFullException e) {
+      log.warn("cadastro recusado: limite de usuários atingido ip={}", ClientAddress.of(http));
+      return ResponseEntity.status(HttpStatus.FORBIDDEN)
+          .body(new ErrorResponse("cadastro fechado: limite de usuários atingido"));
+    }
     if (created.isEmpty()) {
       log.warn(
           "cadastro recusado: e-mail já cadastrado email={} ip={}",
