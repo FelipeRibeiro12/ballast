@@ -29,7 +29,7 @@ class OpenApiConfig {
                     new SecurityScheme()
                         .type(SecurityScheme.Type.APIKEY)
                         .in(SecurityScheme.In.COOKIE)
-                        .name("ballast_sessao")));
+                        .name("__Host-ballast_sessao")));
   }
 
   // O springdoc gera "type: null" junto do $ref para referência anulável, e em 3.1 isso nega o

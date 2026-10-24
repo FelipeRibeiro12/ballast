@@ -54,8 +54,9 @@ class AuthController {
       operationId = "postAuthLogin",
       summary = "Abre uma sessão",
       description =
-          "A sessão vai no cookie ballast_sessao (HttpOnly, Secure, SameSite=Lax), válido por 7"
-              + " dias absolutos, sem renovação. E-mail inexistente e senha errada dão a mesma"
+          "A sessão vai no cookie __Host-ballast_sessao (HttpOnly, Secure, SameSite=Lax), válido por 7"
+              + " dias absolutos, sem renovação. Em desenvolvimento, com COOKIE_SECURE=false, o nome"
+              + " é ballast_sessao, sem o prefixo. E-mail inexistente e senha errada dão a mesma"
               + " resposta.")
   @ApiResponse(
       responseCode = "200",
@@ -65,7 +66,7 @@ class AuthController {
               name = "Set-Cookie",
               required = true,
               description =
-                  "ballast_sessao=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800",
+                  "__Host-ballast_sessao=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800",
               schema = @Schema(type = "string")),
       content = @Content(schema = @Schema(implementation = UserResponse.class)))
   @ApiResponse(
@@ -78,7 +79,7 @@ class AuthController {
               name = "Set-Cookie",
               required = true,
               description =
-                  "ballast_mfa=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=300",
+                  "__Host-ballast_mfa=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=300",
               schema = @Schema(type = "string")),
       content = @Content(schema = @Schema(implementation = MfaResponses.Pending.class)))
   @ApiResponse(
@@ -219,7 +220,8 @@ class AuthController {
           @Header(
               name = "Set-Cookie",
               required = true,
-              description = "ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0",
+              description =
+                  "__Host-ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0",
               schema = @Schema(type = "string")))
   @ApiResponse(
       responseCode = "413",
@@ -234,7 +236,7 @@ class AuthController {
               schema = @Schema(implementation = ErrorResponse.class)))
   @PostMapping("/auth/logout")
   ResponseEntity<Void> logout(HttpServletRequest http) {
-    Optional<UUID> revokedOwner = SessionCookies.tokenOf(http).flatMap(identity::revokeSession);
+    Optional<UUID> revokedOwner = cookies.tokenOf(http).flatMap(identity::revokeSession);
     log.info(
         "logout usuario_id={} sessao_revogada={} ip={}",
         revokedOwner.map(UUID::toString).orElse("-"),

@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import java.util.Locale;
 
 @Schema(name = "LoginRequest")
 public record LoginRequest(
@@ -21,7 +20,7 @@ public record LoginRequest(
   static final String MESSAGE = "e-mail ou senha inválidos";
 
   public LoginRequest {
-    email = email == null ? null : email.strip().toLowerCase(Locale.ROOT);
+    email = EmailNormalizer.normalize(email);
   }
 
   @Override

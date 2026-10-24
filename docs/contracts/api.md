@@ -16,6 +16,21 @@ corpo ou status no código, a spec regenerada entra no mesmo commit.
   `{"erro":"muitas requisições, tente mais tarde"}` com `Retry-After` em
   segundos (ADR-049). A spec só lista o 429 em login e cadastro. Os limites
   estão em Limites, no fim deste arquivo.
+- Em qualquer rota, parâmetro de query que a rota não declara responde 400
+  `{"erro":"requisição inválida"}` (ADR-051). O nome é exato: `?contaid=` não é
+  `?contaId=`. Rota sem parâmetro declarado recusa qualquer query.
+- Em qualquer rota, caminho que o servidor recusa antes do Spring (`%2F`, `{`,
+  `|`) responde 400 com o mesmo JSON, e toda resposta leva
+  `X-Content-Type-Options: nosniff` (ADR-051).
+- E-mail, nome de usuário, nome de conta e demais textos livres recusam
+  caracteres Cf (U+200B, U+202E, U+FEFF e outros) com 400. Só o e-mail recusa
+  também ZWJ e ZWNJ. O e-mail passa por NFKC e minúsculas antes de valer, e o
+  "İ" é recusado (ADR-051).
+- Em qualquer rota que muda estado (POST, PUT, PATCH, DELETE), `Origin` de
+  outra origem, `null` ou malformado responde 403
+  `{"erro":"origem não permitida"}`. Sem `Origin`, passa, salvo se
+  `Sec-Fetch-Site` for `cross-site`. São aceitos o próprio Host e as origens de
+  `ORIGENS_PERMITIDAS` (ADR-051).
 - Em `/contas/{id}`, conta de outro usuário, id inexistente e id que não é UUID
   respondem 404 com o mesmo corpo.
 - Dinheiro de fiat sai e entra como inteiro de centavos

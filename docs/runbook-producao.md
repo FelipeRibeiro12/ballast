@@ -72,6 +72,8 @@ backup ──pg_dump cifrado──> Object Storage do Oracle
    segredo `VM_SSH_KEY` (passo 7).
 6. Em `/opt/ballast`, crie `api.env` e `caddy.env` a partir de
    `deploy/api.env.example` e `deploy/caddy.env.example`, com `chmod 600`.
+   Preencha `ORIGENS_PERMITIDAS` com `https://<dominio-do-app>` (ADR-051); sem isso
+   toda escrita do PWA recebe 403.
    Gere `MFA_CHAVE` com `openssl rand -base64 32` e guarde uma cópia num
    gerenciador de senhas. Sem ela, quem ligou o MFA só entra com código de
    recuperação (ADR-050).

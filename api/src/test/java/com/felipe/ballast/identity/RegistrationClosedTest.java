@@ -88,7 +88,7 @@ class RegistrationClosedTest {
                   request(method, "/auth/cadastro")
                       .content("{}")
                       .contentType("application/json")
-                      .cookie(new Cookie("ballast_sessao", token)))
+                      .cookie(new Cookie(TestUsers.SESSION_COOKIE, token)))
               .andReturn()
               .getResponse();
       MockHttpServletResponse unknown =
@@ -96,7 +96,7 @@ class RegistrationClosedTest {
                   request(method, "/auth/nao-existe")
                       .content("{}")
                       .contentType("application/json")
-                      .cookie(new Cookie("ballast_sessao", token)))
+                      .cookie(new Cookie(TestUsers.SESSION_COOKIE, token)))
               .andReturn()
               .getResponse();
 

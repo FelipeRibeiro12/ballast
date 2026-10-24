@@ -96,7 +96,7 @@ export interface paths {
         put?: never;
         /**
          * Abre uma sessão
-         * @description A sessão vai no cookie ballast_sessao (HttpOnly, Secure, SameSite=Lax), válido por 7 dias absolutos, sem renovação. E-mail inexistente e senha errada dão a mesma resposta.
+         * @description A sessão vai no cookie __Host-ballast_sessao (HttpOnly, Secure, SameSite=Lax), válido por 7 dias absolutos, sem renovação. Em desenvolvimento, com COOKIE_SECURE=false, o nome é ballast_sessao, sem o prefixo. E-mail inexistente e senha errada dão a mesma resposta.
          */
         post: operations["postAuthLogin"];
         delete?: never;
@@ -116,7 +116,7 @@ export interface paths {
         put?: never;
         /**
          * Responde o desafio do login com o código
-         * @description Lê o cookie ballast_mfa que o POST /auth/login deixou (5 minutos). Aceita o código do autenticador ou um de recuperação. Certo, abre a sessão como o login e expira o cookie do desafio.
+         * @description Lê o cookie __Host-ballast_mfa que o POST /auth/login deixou (5 minutos). Aceita o código do autenticador ou um de recuperação. Certo, abre a sessão como o login e expira o cookie do desafio.
          */
         post: operations["postAuthLoginMfa"];
         delete?: never;
@@ -2533,7 +2533,7 @@ export interface operations {
             /** @description Sessão aberta */
             200: {
                 headers: {
-                    /** @description ballast_sessao=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800 */
+                    /** @description __Host-ballast_sessao=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800 */
                     "Set-Cookie": string;
                     [name: string]: unknown;
                 };
@@ -2544,7 +2544,7 @@ export interface operations {
             /** @description Senha certa com MFA ligado: sem sessão ainda. O código vai em POST /auth/login/mfa dentro de 5 minutos */
             202: {
                 headers: {
-                    /** @description ballast_mfa=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=300 */
+                    /** @description __Host-ballast_mfa=<token>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=300 */
                     "Set-Cookie": string;
                     [name: string]: unknown;
                 };
@@ -2637,7 +2637,7 @@ export interface operations {
             /** @description Sessão aberta */
             200: {
                 headers: {
-                    /** @description ballast_sessao=<token>, e ballast_mfa expirado */
+                    /** @description __Host-ballast_sessao=<token>, e __Host-ballast_mfa expirado */
                     "Set-Cookie": string;
                     [name: string]: unknown;
                 };
@@ -2687,7 +2687,7 @@ export interface operations {
             /** @description Sessão encerrada, ou não havia sessão */
             204: {
                 headers: {
-                    /** @description ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0 */
+                    /** @description __Host-ballast_sessao=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0 */
                     "Set-Cookie": string;
                     [name: string]: unknown;
                 };

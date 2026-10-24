@@ -16,7 +16,7 @@ type Rota = {
 
 const vercel = JSON.parse(readFileSync(resolve(process.cwd(), 'vercel.json'), 'utf8')) as { routes?: Rota[] }
 const rotas = vercel.routes ?? []
-const indiceDaApi = rotas.findIndex((rota) => rota.src !== undefined && new RegExp(rota.src).test(`${PREFIXO_DA_API}/auth/eu`))
+const indiceDaApi = rotas.findIndex((rota) => rota.dest !== undefined && rota.src !== undefined && new RegExp(rota.src).test(`${PREFIXO_DA_API}/auth/eu`))
 const rotaDaApi = rotas[indiceDaApi]
 
 describe('produção na mesma origem', () => {
@@ -59,5 +59,52 @@ describe('produção na mesma origem', () => {
       args: '$ORIGIN_SECRET',
       env: ['ORIGIN_SECRET'],
     })
+  })
+})
+
+// Cabeçalhos de segurança do front (ADR-052). A CSP é a única defesa contra script injetado, então
+// o teste quebra se ela perder uma diretiva ou ganhar 'unsafe-eval' ou curinga.
+describe('cabeçalhos de segurança', () => {
+  const rotaDeCabecalhos = rotas.find((rota) => (rota as { headers?: unknown }).headers !== undefined && rota.src === '^/(.*)$')
+  const cabecalhos = (rotaDeCabecalhos as { headers?: Record<string, string> } | undefined)?.headers ?? {}
+  const csp = cabecalhos['Content-Security-Policy'] ?? ''
+
+  it('vale para todas as rotas e deixa as seguintes rodarem', () => {
+    expect(rotaDeCabecalhos).toBeDefined()
+    expect((rotaDeCabecalhos as { continue?: boolean }).continue).toBe(true)
+    expect(rotas.indexOf(rotaDeCabecalhos as Rota)).toBeLessThan(indiceDaApi)
+  })
+
+  it.each([
+    "default-src 'self'",
+    "script-src 'self'",
+    "connect-src 'self'",
+    "img-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ])('a CSP tem a diretiva %s', (diretiva) => {
+    expect(csp.split(';').map((parte) => parte.trim())).toContain(diretiva)
+  })
+
+  it("a CSP não tem 'unsafe-eval', 'unsafe-inline' em script, nem curinga", () => {
+    expect(csp).not.toContain('unsafe-eval')
+    expect(csp).not.toMatch(/(^|\s)\*(\s|;|$)/)
+    expect(csp).not.toMatch(/https?:\/?\/?\*/)
+    const script = csp.split(';').map((parte) => parte.trim()).find((parte) => parte.startsWith('script-src')) ?? ''
+    expect(script).not.toContain('unsafe-inline')
+  })
+
+  it('manda HSTS de dois anos, nosniff, Referrer-Policy e Permissions-Policy', () => {
+    expect(cabecalhos['Strict-Transport-Security']).toBe('max-age=63072000; includeSubDomains')
+    expect(cabecalhos['X-Content-Type-Options']).toBe('nosniff')
+    expect(cabecalhos['Referrer-Policy']).toBe('strict-origin-when-cross-origin')
+    expect(cabecalhos['Permissions-Policy']).toMatch(/camera=\(\).*microphone=\(\).*geolocation=\(\)/)
+  })
+
+  it('o service worker não fica em cache, para a atualização chegar', () => {
+    const rotaDoSw = rotas.find((rota) => rota.src === '^/sw\\.js$') as { headers?: Record<string, string> } | undefined
+    expect(rotaDoSw?.headers).toEqual({ 'Cache-Control': 'no-cache' })
   })
 })

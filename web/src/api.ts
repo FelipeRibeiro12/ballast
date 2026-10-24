@@ -300,6 +300,7 @@ async function recusarResposta(resposta: Response, origem: string): Promise<neve
   if (resposta.status === 404) throw new ContaNaoEncontradaError('conta não encontrada')
   if (resposta.status === 409) throw new NomeDeContaRepetidoError('nome de conta repetido')
   if (resposta.status === 400) throw new ContaInvalidaError(await lerMensagemDeErro(resposta))
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
@@ -581,6 +582,7 @@ async function recusarRespostaDeLancamento(resposta: Response, origem: string): 
   if (resposta.status === 400) {
     throw new LancamentoInvalidoError(await lerMensagemDeErro(resposta))
   }
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
@@ -719,6 +721,7 @@ async function recusarRespostaDeCompra(resposta: Response, origem: string): Prom
   if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
   if (resposta.status === 404) throw new CompraParceladaNaoEncontradaError('compra parcelada não encontrada')
   if (resposta.status === 400) throw new CompraParceladaInvalidaError(await lerMensagemDeErro(resposta))
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
@@ -823,6 +826,7 @@ async function recusarRespostaDeTransferencia(resposta: Response, origem: string
   if (resposta.status === 400) {
     throw new TransferenciaInvalidaError(await lerMensagemDeErro(resposta))
   }
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
@@ -1034,6 +1038,7 @@ async function recusarRespostaDeRecorrencia(resposta: Response, origem: string):
   if (resposta.status === 400) {
     throw new RecorrenciaInvalidaError(await lerMensagemDeErro(resposta))
   }
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
@@ -1181,6 +1186,7 @@ async function recusarRespostaDeProjecao(resposta: Response, origem: string): Pr
   if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
   if (resposta.status === 404) throw new ContaNaoEncontradaError('conta não encontrada')
   if (resposta.status === 400) throw new ProjecaoInvalidaError(await lerMensagemDeErro(resposta))
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
@@ -1401,6 +1407,7 @@ async function recusarRespostaDeCripto(resposta: Response, origem: string): Prom
   if (resposta.status === 404) throw new CriptoNaoEncontradoError('não encontrado')
   if (resposta.status === 409) throw new CriptoRepetidoError(await lerMensagemDeErro(resposta))
   if (resposta.status === 400) throw new CriptoInvalidoError(await lerMensagemDeErro(resposta))
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
@@ -1689,6 +1696,7 @@ async function recusarRespostaDeOrcamento(resposta: Response, origem: string): P
   if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
   if (resposta.status === 404) throw new OrcamentoNaoEncontradoError('categoria não encontrada')
   if (resposta.status === 400) throw new OrcamentoInvalidoError(await lerMensagemDeErro(resposta))
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
@@ -1792,6 +1800,7 @@ async function recusarRespostaDeMeta(resposta: Response, origem: string): Promis
   if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
   if (resposta.status === 404) throw new MetaNaoEncontradaError('meta não encontrada')
   if (resposta.status === 400) throw new MetaInvalidaError(await lerMensagemDeErro(resposta))
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
@@ -1934,6 +1943,7 @@ export async function fetchRelatorio(mes: string): Promise<RelatorioDoMes> {
     if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
     if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
     if (resposta.status === 400) throw new RelatorioInvalidoError(await lerMensagemDeErro(resposta))
+    if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
     throw new ApiError(`/relatorios respondeu ${resposta.status}`)
   }
   const corpo: unknown = await resposta.json()
@@ -1990,6 +2000,7 @@ export async function fetchPatrimonioMensal(mes: string): Promise<PatrimonioMens
     if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
     if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
     if (resposta.status === 400) throw new RelatorioInvalidoError(await lerMensagemDeErro(resposta))
+    if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
     throw new ApiError(`/patrimonio/mensal respondeu ${resposta.status}`)
   }
   const corpo: unknown = await resposta.json()

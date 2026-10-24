@@ -23,6 +23,7 @@ import org.springframework.context.annotation.Import;
 @SpringBootTest(
     properties = {
       "ballast.registration-open=true",
+      "ballast.origins.allowed=https://app.exemplo.test, http://localhost:5173",
       "springdoc.api-docs.enabled=true",
       "ballast.recurrence.job-enabled=false",
       "ballast.indices.job-enabled=false",

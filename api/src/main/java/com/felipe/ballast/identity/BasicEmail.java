@@ -9,9 +9,13 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
-// Uma arroba, sem espaço, domínio com ponto. Confirmar que o endereço existe, se um dia vier,
+// Uma arroba, sem espaço, domínio com ponto, sem nenhum caractere Cf (nem ZWJ e ZWNJ, que os nomes
+// aceitam) e já em minúsculas estáveis: EmailNormalizer deixa o e-mail em maiúscula quando o Java
+// e o Postgres discordam do minúsculo (o "İ" turco), e aqui ele vira 400. Confirmar que o endereço
+// existe, se um dia vier,
 // é por e-mail e não por regex.
 @Documented
 @Constraint(validatedBy = BasicEmail.Validator.class)
@@ -31,7 +35,10 @@ import java.util.regex.Pattern;
 
     @Override
     public boolean isValid(String value, ConstraintValidatorContext context) {
-      return value == null || FORMAT.matcher(value).matches();
+      return value == null
+          || (FORMAT.matcher(value).matches()
+              && value.codePoints().noneMatch(cp -> Character.getType(cp) == Character.FORMAT)
+              && value.equals(value.toLowerCase(Locale.ROOT)));
     }
   }
 }

@@ -35,10 +35,23 @@ class InsecureCookieTest {
     MockHttpServletResponse response = users.login(user.email(), TestUsers.PASSWORD);
 
     assertThat(response.getHeader("Set-Cookie"))
+        .startsWith("ballast_sessao=")
         .doesNotContain("Secure")
         .contains("HttpOnly")
         .contains("SameSite=Lax")
         .contains("Path=/")
         .contains("Max-Age=604800");
+  }
+
+  // __Host- exige Secure; sem ele o navegador descarta o cookie, então o nome simples fica.
+  @Test
+  void loginCookieKeepsThePlainNameWithoutHostPrefix() throws Exception {
+    TestUsers users = new TestUsers(mvc);
+    TestUsers.Registered user = users.register();
+
+    MockHttpServletResponse response = users.login(user.email(), TestUsers.PASSWORD);
+
+    assertThat(response.getCookie("ballast_sessao")).isNotNull();
+    assertThat(response.getCookie("__Host-ballast_sessao")).isNull();
   }
 }

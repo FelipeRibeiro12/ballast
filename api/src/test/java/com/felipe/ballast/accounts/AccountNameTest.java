@@ -75,4 +75,16 @@ class AccountNameTest {
     assertThat(response.getStatus()).isEqualTo(201);
     assertThat(AccountsApi.body(response).get("nome").asString()).isEqualTo(letter + "a");
   }
+
+  @Test
+  void rejectsFormatCharactersInTheName() throws Exception {
+    assertThat(createNamed("Nubank\\u200b").getStatus()).isEqualTo(400);
+    assertThat(createNamed("\\u202enaibuN").getStatus()).isEqualTo(400);
+    assertThat(createNamed("Nu\\ufeffbank").getStatus()).isEqualTo(400);
+  }
+
+  @Test
+  void acceptsAnEmojiSequenceJoinedByZwj() throws Exception {
+    assertThat(createNamed("Familia 👨\\u200d👩\\u200d👧").getStatus()).isEqualTo(201);
+  }
 }

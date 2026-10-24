@@ -2,18 +2,42 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "routes": [
     {
+      "src": "^/(.*)$",
+      "headers": {
+        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+        "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+      },
+      "continue": true
+    },
+    {
+      "src": "^/sw\\.js$",
+      "headers": {
+        "Cache-Control": "no-cache"
+      },
+      "continue": true
+    },
+    {
       "src": "^/api/(.*)$",
       "dest": "https://trocar-pelo-subdominio.duckdns.org/$1",
       "transforms": [
         {
           "type": "request.headers",
           "op": "set",
-          "target": { "key": "x-origin-secret" },
+          "target": {
+            "key": "x-origin-secret"
+          },
           "args": "$ORIGIN_SECRET",
-          "env": ["ORIGIN_SECRET"]
+          "env": [
+            "ORIGIN_SECRET"
+          ]
         }
       ]
     },
-    { "handle": "filesystem" }
+    {
+      "handle": "filesystem"
+    }
   ]
 }

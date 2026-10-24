@@ -31,10 +31,13 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
   private final IdentityService identity;
   private final RequestMatcher publicRoutes;
+  private final boolean secureCookie;
 
-  public SessionAuthenticationFilter(IdentityService identity, RequestMatcher publicRoutes) {
+  public SessionAuthenticationFilter(
+      IdentityService identity, RequestMatcher publicRoutes, boolean secureCookie) {
     this.identity = identity;
     this.publicRoutes = publicRoutes;
+    this.secureCookie = secureCookie;
   }
 
   // Rota pública não precisa de sessão; consultar o banco ali só faria o /healthz cair junto
@@ -48,7 +51,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
-    Optional<String> token = SessionCookies.tokenOf(request);
+    Optional<String> token = SessionCookies.tokenOf(request, secureCookie);
     if (token.isPresent()) {
       Optional<UUID> userId;
       try {

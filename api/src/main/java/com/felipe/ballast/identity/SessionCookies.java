@@ -10,9 +10,12 @@ import org.springframework.stereotype.Component;
 @Component
 class SessionCookies {
 
-  static final String NAME = "ballast_sessao";
+  private static final String NAME = "ballast_sessao";
   // Desafio do segundo fator, entre a senha certa e o código (ADR-050).
-  static final String CHALLENGE_NAME = "ballast_mfa";
+  private static final String CHALLENGE_NAME = "ballast_mfa";
+  // __Host- só vale com Secure, Path=/ e sem Domain, que é o que base() monta. Sem Secure (só em
+  // desenvolvimento) o navegador descartaria o cookie, então o nome simples fica.
+  private static final String HOST_PREFIX = "__Host-";
 
   private final boolean secure;
 
@@ -20,14 +23,26 @@ class SessionCookies {
     this.secure = properties.isCookieSecure();
   }
 
-  // Cookie repetido é tratado como sem sessão, qualquer que seja a ordem: escolher um dos valores
-  // deixaria quem injeta um cookie no host derrubar a sessão da vítima ou escolher a que vale.
-  static Optional<String> tokenOf(HttpServletRequest request) {
-    return valueOf(request, NAME);
+  static String sessionName(boolean secure) {
+    return secure ? HOST_PREFIX + NAME : NAME;
   }
 
-  static Optional<String> challengeOf(HttpServletRequest request) {
-    return valueOf(request, CHALLENGE_NAME);
+  private static String challengeName(boolean secure) {
+    return secure ? HOST_PREFIX + CHALLENGE_NAME : CHALLENGE_NAME;
+  }
+
+  // Cookie repetido é tratado como sem sessão, qualquer que seja a ordem: escolher um dos valores
+  // deixaria quem injeta um cookie no host derrubar a sessão da vítima ou escolher a que vale.
+  static Optional<String> tokenOf(HttpServletRequest request, boolean secure) {
+    return valueOf(request, sessionName(secure));
+  }
+
+  Optional<String> tokenOf(HttpServletRequest request) {
+    return tokenOf(request, secure);
+  }
+
+  Optional<String> challengeOf(HttpServletRequest request) {
+    return valueOf(request, challengeName(secure));
   }
 
   private static Optional<String> valueOf(HttpServletRequest request, String name) {
@@ -49,19 +64,19 @@ class SessionCookies {
   }
 
   String open(String token, Duration lifetime) {
-    return base(NAME, token).maxAge(lifetime).build().toString();
+    return base(sessionName(secure), token).maxAge(lifetime).build().toString();
   }
 
   String expire() {
-    return base(NAME, "").maxAge(Duration.ZERO).build().toString();
+    return base(sessionName(secure), "").maxAge(Duration.ZERO).build().toString();
   }
 
   String openChallenge(String token, Duration lifetime) {
-    return base(CHALLENGE_NAME, token).maxAge(lifetime).build().toString();
+    return base(challengeName(secure), token).maxAge(lifetime).build().toString();
   }
 
   String expireChallenge() {
-    return base(CHALLENGE_NAME, "").maxAge(Duration.ZERO).build().toString();
+    return base(challengeName(secure), "").maxAge(Duration.ZERO).build().toString();
   }
 
   // Secure só é desligado em desenvolvimento; IdentityProperties recusa false fora dele.
