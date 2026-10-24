@@ -56,6 +56,10 @@ ballast:
   registration-max-users: ${CADASTRO_MAX_USUARIOS:}
   cookie-secure: ${COOKIE_SECURE:true}
   app-env: ${APP_ENV:}
+  mfa:
+    # Chave AES-256 do segredo do TOTP, em base64 (ADR-050). Vazia, configurar MFA dá 503 e o login
+    # de quem já tem MFA só aceita código de recuperação. Gere com openssl rand -base64 32.
+    key: ${MFA_CHAVE:}
   identity-cleanup:
     # Apaga sessões vencidas ou revogadas e tentativas de login paradas há um dia. Para desligar,
     # BALLAST_IDENTITY_CLEANUP_JOB_ENABLED=false.

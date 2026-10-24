@@ -50,6 +50,7 @@ Preencha no formato `CHAVE=valor`, sem aspas, `$` ou `#`. O modelo está em `.en
 | `APP_ENV` | Só `development` libera `COOKIE_SECURE=false`. Vazio ou ausente conta como produção. |
 | `COOKIE_SECURE` | Vazio vale `true`. `false` só com `APP_ENV=development`; com outro `APP_ENV` a API não sobe. |
 | `REGISTRO_ABERTO` | `false` por padrão. `true` libera `POST /auth/cadastro`, com 5 cadastros por hora por IP (ADR-049). |
+| `MFA_CHAVE` | Chave AES-256 em base64 que cifra o segredo do MFA (`openssl rand -base64 32`). Vazia, o MFA não liga (ADR-050). |
 | `CADASTRO_MAX_USUARIOS` | Teto de usuários cadastrados. Vazio vale 20. Cheio, o cadastro responde 403 (ADR-049). |
 | `VITE_REGISTRO_ABERTO` | Vazio por padrão. `true` mostra a tela de cadastro no web. Só funciona junto com `REGISTRO_ABERTO=true` (ADR-022). O `make dev` repassa a do `.env` da raiz; rodando `pnpm dev` direto, ponha em `web/.env`. |
 | `SEED_EMAIL`, `SEED_SENHA`, `SEED_NOME` | Usuário criado por `make seed`. Senha de 12 a 128 caracteres. Nome é opcional, até 100 caracteres. |

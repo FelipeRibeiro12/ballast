@@ -78,7 +78,14 @@ class RateLimitFilter extends OncePerRequestFilter {
       return null;
     }
     return switch (request.getRequestURI()) {
-      case "/auth/login" -> login;
+      // O código do MFA e as rotas que pedem senha contam como login: cada uma é uma tentativa
+      // de adivinhar um segredo, e as de senha gastam argon2 (ADR-050).
+      case "/auth/login",
+          "/auth/login/mfa",
+          "/auth/mfa/configurar",
+          "/auth/mfa/ativar",
+          "/auth/mfa/desativar" ->
+          login;
       case "/auth/cadastro" -> registration;
       default -> null;
     };

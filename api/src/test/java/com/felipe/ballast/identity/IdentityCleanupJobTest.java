@@ -104,4 +104,37 @@ class IdentityCleanupJobTest {
     assertThat(attemptExists(old)).isFalse();
     assertThat(attemptExists(recent)).isTrue();
   }
+
+  @Test
+  void deletesExpiredMfaChallengesAndKeepsLiveOnes() {
+    UUID expired = challenge(now.minusSeconds(1));
+    UUID live = challenge(now.plusSeconds(60));
+
+    job.run();
+
+    assertThat(challengeExists(expired)).isFalse();
+    assertThat(challengeExists(live)).isTrue();
+  }
+
+  private UUID challenge(Instant expiresAt) {
+    UUID id = UUID.randomUUID();
+    jdbc.sql(
+            """
+            INSERT INTO desafio_mfa (id, usuario_id, token_hash, expira_em)
+            VALUES (:id, :user, decode(md5(random()::text) || md5(random()::text), 'hex'), :expires)
+            """)
+        .param("id", id)
+        .param("user", userId)
+        .param("expires", expiresAt.atOffset(ZoneOffset.UTC))
+        .update();
+    return id;
+  }
+
+  private boolean challengeExists(UUID id) {
+    return jdbc.sql("SELECT count(*) FROM desafio_mfa WHERE id = :id")
+            .param("id", id)
+            .query(Long.class)
+            .single()
+        == 1;
+  }
 }
