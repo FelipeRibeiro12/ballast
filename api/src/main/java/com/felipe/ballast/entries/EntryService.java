@@ -17,7 +17,8 @@ import org.springframework.transaction.TransactionStatus;
 // Toda escrita roda numa transação que trava a linha da conta (SELECT ... FOR UPDATE) antes de
 // conferir conta arquivada e saldo. Arquivar faz UPDATE na mesma linha e entra na fila, e dois
 // lançamentos simultâneos na mesma conta não leem o mesmo saldo (ADR-024). Os dois travamentos de
-// um PUT que troca de conta seguem a ordem de id, para trocas cruzadas não se travarem.
+// um PUT que troca de conta seguem a ordem de id, para trocas cruzadas não se travarem. A ordem
+// geral é template, lançamento, conta (ADR-057).
 @Service
 class EntryService {
 
@@ -99,9 +100,8 @@ class EntryService {
     }
   }
 
-  // Confirmar ou cancelar uma ocorrência prevista. Ordem de travas: o lançamento, depois a conta
-  // (só ao confirmar; cancelar não mexe em saldo). Nenhum caminho trava template aqui, então não
-  // há ciclo com o job (template, depois conta) nem com desativar (template, depois a linha).
+  // Confirmar ou cancelar uma ocorrência prevista. Ordem de travas: template (só em ocorrência),
+  // lançamento, conta (só ao confirmar; cancelar não mexe em saldo).
   // Valor e data opcionais só chegam com REALIZED (o controller recusa com cancelado) e são
   // gravados na mesma transação da confirmação, antes de conferir o teto com o valor novo.
   SaveResult changeStatus(
@@ -156,6 +156,16 @@ class EntryService {
     return saved(userId, id);
   }
 
+  // Ordem de travas (ADR-057): template, lançamento, conta. A ocorrência precisa do template em
+  // modo compartilhado (a marca de apagada e a FK pedem), e pedir depois do lançamento fecha ciclo
+  // com quem edita o template, que trava o template e depois as linhas dele.
+  private Optional<EntryQueries.LockedEntry> lockEntryInOrder(UUID userId, UUID id) {
+    queries
+        .templateOf(userId, id)
+        .ifPresent(template -> queries.lockTemplateShared(userId, template));
+    return queries.lockEntry(userId, id);
+  }
+
   private SaveResult changeStatusLocked(
       TransactionStatus status,
       UUID userId,
@@ -163,7 +173,7 @@ class EntryService {
       TargetStatus target,
       BigDecimal amount,
       LocalDate date) {
-    Optional<EntryQueries.LockedEntry> entry = queries.lockEntry(userId, id);
+    Optional<EntryQueries.LockedEntry> entry = lockEntryInOrder(userId, id);
     if (entry.isEmpty()) {
       return SaveResult.Rejected.ENTRY_NOT_FOUND;
     }
@@ -199,7 +209,7 @@ class EntryService {
       TransactionStatus status, UUID userId, UUID id, EntryInput input) {
     // O lançamento é travado primeiro para a conta de origem não mudar entre a leitura e o
     // travamento dela. Nenhum outro caminho trava lançamento depois de travar conta.
-    Optional<EntryQueries.LockedEntry> locked = queries.lockEntry(userId, id);
+    Optional<EntryQueries.LockedEntry> locked = lockEntryInOrder(userId, id);
     if (locked.isEmpty()) {
       return SaveResult.Rejected.ENTRY_NOT_FOUND;
     }
@@ -264,7 +274,7 @@ class EntryService {
   }
 
   private DeleteResult deleteLocked(TransactionStatus status, UUID userId, UUID id) {
-    Optional<EntryQueries.LockedEntry> entry = queries.lockEntry(userId, id);
+    Optional<EntryQueries.LockedEntry> entry = lockEntryInOrder(userId, id);
     if (entry.isEmpty()) {
       return DeleteResult.NOT_FOUND;
     }

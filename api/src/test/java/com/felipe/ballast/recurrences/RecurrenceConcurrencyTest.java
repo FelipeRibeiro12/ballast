@@ -159,8 +159,10 @@ class RecurrenceConcurrencyTest {
         .getResponse();
   }
 
+  // O job trava a conta (ADR-057) e depois espera a linha ocupada. A espera dele é de 200 ms, então
+  // quem precisa da conta espera no máximo isso, e não os 2 s de uma escrita comum.
   @Test
-  void aJobWaitingForAnOccurrenceRowDoesNotHoldTheAccount() throws Exception {
+  void aJobWaitingForAnOccurrenceRowFreesTheAccountAfterItsShortTimeout() throws Exception {
     String busyRow = db.byKey(templateId, LocalDate.of(2026, 10, 25)).orElseThrow().id();
     String otherRow = db.byKey(templateId, LocalDate.of(2026, 10, 26)).orElseThrow().id();
     try (Connection holder = dataSource.getConnection()) {
@@ -168,8 +170,6 @@ class RecurrenceConcurrencyTest {
       CompletableFuture<Void> running = CompletableFuture.runAsync(job::run, pool);
       awaitBlockedSessions(1);
 
-      // Com o job parado na linha, quem precisa da conta passa na hora. Antes, o job segurava a
-      // conta e a escrita esperava os 2 s dele.
       long started = System.nanoTime();
       MockHttpServletResponse created = postEntry();
       MockHttpServletResponse confirmed = api.confirm(actor.session(), otherRow);
@@ -181,14 +181,14 @@ class RecurrenceConcurrencyTest {
       holder.commit();
       running.get(20, TimeUnit.SECONDS);
     }
-    assertThat(db.countOccurrences(templateId)).isEqualTo(367);
+    // O job desistiu da rodada por prazo e desfez tudo; a próxima rodada completa o horizonte.
+    assertThat(db.countOccurrences(templateId)).isEqualTo(366);
   }
 
-  // Consequência aceita do job não travar a conta: arquivar entre a leitura e o INSERT deixa uma
-  // prevista na conta arquivada. Ela fica fora do saldo, não confirma e pode ser cancelada.
+  // Arquivar entra na fila da conta atrás do job. Quando o job desiste ou termina, o arquivar
+  // responde 200 e nenhuma prevista nova aparece na conta arquivada.
   @Test
-  void aPlannedLeftByTheJobOnAnArchivedAccountCannotBeConfirmedButCanBeCancelled()
-      throws Exception {
+  void noPlannedAppearsOnTheAccountAfterTheArchiveWhileTheJobIsWaiting() throws Exception {
     String busyRow = db.byKey(templateId, LocalDate.of(2026, 10, 25)).orElseThrow().id();
     try (Connection holder = dataSource.getConnection()) {
       holdOccurrenceRow(holder, busyRow);
@@ -208,15 +208,8 @@ class RecurrenceConcurrencyTest {
       running.get(20, TimeUnit.SECONDS);
     }
 
-    LocalDate leftover = LocalDate.of(2027, 10, 20);
-    RecurrenceTestSupport.Row row = db.byKey(templateId, leftover).orElseThrow();
-    assertThat(row.status()).isEqualTo("previsto");
-    MockHttpServletResponse confirmed = api.confirm(actor.session(), row.id());
-    assertThat(confirmed.getStatus()).isEqualTo(400);
-    assertThat(RecurrencesApi.text(confirmed)).isEqualTo("{\"erro\":\"conta arquivada\"}");
-    assertThat(db.byKey(templateId, leftover).orElseThrow().status()).isEqualTo("previsto");
-    assertThat(api.cancel(actor.session(), row.id()).getStatus()).isEqualTo(200);
-    assertThat(db.byKey(templateId, leftover).orElseThrow().status()).isEqualTo("cancelado");
+    assertThat(db.byKey(templateId, LocalDate.of(2027, 10, 20))).isEmpty();
+    assertThat(db.countOccurrences(templateId)).isEqualTo(366);
   }
 
   private interface Call<T> {

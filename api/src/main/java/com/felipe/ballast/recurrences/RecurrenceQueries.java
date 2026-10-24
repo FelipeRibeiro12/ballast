@@ -205,16 +205,6 @@ class RecurrenceQueries {
         .single();
   }
 
-  // Lê "arquivada" sem travar a conta: o job não pode segurar a conta enquanto espera linha de
-  // lançamento, que é a ordem inversa de PUT e confirmar. Vazio quando a conta não existe.
-  Optional<Boolean> isAccountArchived(UUID userId, UUID accountId) {
-    return jdbc.sql("SELECT arquivada FROM conta WHERE usuario_id = :userId AND id = :id")
-        .param("userId", userId)
-        .param("id", accountId)
-        .query(Boolean.class)
-        .optional();
-  }
-
   // Confere dono e tipo juntos: categoria de receita não serve para despesa.
   boolean categoryExists(UUID userId, UUID categoryId, EntryType type) {
     return jdbc.sql(
@@ -289,39 +279,82 @@ class RecurrenceQueries {
     return id;
   }
 
-  // Trava o template e devolve o estado atual com a regra. Vazio para template alheio ou
+  // Trava o template e devolve o estado atual com a regra e a divisão, numa leitura só: nenhum
+  // caminho enxerga o template com a divisão ainda nula. Vazio para template alheio ou
   // inexistente. É a trava que serializa desativar, criar e o job: quem chega depois enxerga o
-  // resultado de quem chegou antes.
+  // resultado de quem chegou antes. Só o template é travado (OF t); regra e divisão são lidas.
   Optional<LockedTemplate> lockTemplate(UUID userId, UUID templateId) {
     return jdbc.sql(
             """
             SELECT t.ativo, t.conta_id, t.valor_total,
                    r.frequencia, r.intervalo, r.dia_do_mes, r.dia_da_semana, r.inicio, r.fim,
-                   r.ocorrencias_max
+                   r.ocorrencias_max,
+                   d.ordem AS parte_ordem, d.dia_do_mes AS parte_dia, d.percentual AS parte_percentual,
+                   d.valor_fixo AS parte_valor_fixo
             FROM template_lancamento t
             JOIN regra_recorrencia r ON r.id = t.regra_id AND r.usuario_id = t.usuario_id
+            LEFT JOIN template_divisao d ON d.template_id = t.id AND d.usuario_id = t.usuario_id
             WHERE t.usuario_id = :userId AND t.id = :id
+            ORDER BY d.ordem
             FOR UPDATE OF t
             """)
         .param("userId", userId)
         .param("id", templateId)
         .query(
-            (rs, row) ->
-                new LockedTemplate(
-                    rs.getBoolean("ativo"),
-                    rs.getObject("conta_id", UUID.class),
-                    rs.getBigDecimal("valor_total"),
-                    mapRule(rs),
-                    null))
-        .optional()
-        .map(
-            locked ->
-                new LockedTemplate(
-                    locked.active(),
-                    locked.accountId(),
-                    locked.amount(),
-                    locked.rule(),
-                    findDivision(userId, templateId).orElse(null)));
+            rs -> {
+              if (!rs.next()) {
+                return Optional.<LockedTemplate>empty();
+              }
+              boolean active = rs.getBoolean("ativo");
+              UUID accountId = rs.getObject("conta_id", UUID.class);
+              BigDecimal amount = rs.getBigDecimal("valor_total");
+              RecurrenceRule rule = mapRule(rs);
+              List<DivisionPart> parts = new ArrayList<>();
+              DivisionMode mode = null;
+              do {
+                if (rs.getObject("parte_ordem") == null) {
+                  continue;
+                }
+                BigDecimal percent = rs.getBigDecimal("parte_percentual");
+                mode = percent == null ? DivisionMode.AMOUNT : DivisionMode.PERCENT;
+                parts.add(
+                    new DivisionPart(
+                        rs.getInt("parte_ordem"),
+                        rs.getInt("parte_dia"),
+                        percent,
+                        rs.getBigDecimal("parte_valor_fixo")));
+              } while (rs.next());
+              Division division = parts.isEmpty() ? null : new Division(mode, parts);
+              return Optional.of(new LockedTemplate(active, accountId, amount, rule, division));
+            });
+  }
+
+  // Trava, em ordem de id, as previstas que deleteFuturePlanned vai apagar. O DELETE sozinho trava
+  // na ordem em que varre a tabela, e duas transações varrendo em ordens diferentes se travam.
+  void lockFuturePlanned(UUID userId, UUID templateId, LocalDate today) {
+    jdbc.sql(
+            """
+            SELECT id FROM lancamento
+            WHERE usuario_id = :userId AND template_id = :id AND status = 'previsto'
+              AND NOT desgarrado AND ocorrencia_data >= :today
+            ORDER BY id FOR UPDATE
+            """)
+        .param("userId", userId)
+        .param("id", templateId)
+        .param("today", today)
+        .query(UUID.class)
+        .list();
+  }
+
+  // Todas as linhas do template em ordem de id, para apagar a recorrência sem ciclo.
+  void lockOccurrences(UUID userId, UUID templateId) {
+    jdbc.sql(
+            "SELECT id FROM lancamento WHERE usuario_id = :userId AND template_id = :id"
+                + " ORDER BY id FOR UPDATE")
+        .param("userId", userId)
+        .param("id", templateId)
+        .query(UUID.class)
+        .list();
   }
 
   // Grava as ocorrências copiando os campos do próprio template, na mesma instrução: o título e as

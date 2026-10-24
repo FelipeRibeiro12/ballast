@@ -159,6 +159,29 @@ class EntryQueries {
         .update();
   }
 
+  // Template da ocorrência, lido sem travar. Serve para travar o template antes do lançamento.
+  Optional<UUID> templateOf(UUID userId, UUID entryId) {
+    return jdbc.sql(
+            "SELECT template_id FROM lancamento WHERE usuario_id = :userId AND id = :id"
+                + " AND template_id IS NOT NULL")
+        .param("userId", userId)
+        .param("id", entryId)
+        .query(UUID.class)
+        .optional();
+  }
+
+  // Modo compartilhado: não segura as outras ocorrências entre si, mas espera quem edita ou apaga
+  // o template (FOR UPDATE) e é esperado por ele.
+  void lockTemplateShared(UUID userId, UUID templateId) {
+    jdbc.sql(
+            "SELECT id FROM template_lancamento WHERE usuario_id = :userId AND id = :id"
+                + " FOR KEY SHARE")
+        .param("userId", userId)
+        .param("id", templateId)
+        .query(UUID.class)
+        .optional();
+  }
+
   record LockedEntry(
       String title,
       UUID categoryId,
