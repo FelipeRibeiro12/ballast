@@ -119,10 +119,12 @@ class EntryController {
   @ApiResponse(
       responseCode = "400",
       description =
-          "Entrada inválida, inclusive campo não declarado; \"conta não encontrada\","
-              + " \"conta arquivada\", \"categoria não encontrada\" ou \"saldo da conta fora"
-              + " do limite\" (o saldo passaria de 9007199254740991 centavos, para mais ou para"
-              + " menos)",
+          "Entrada inválida, inclusive campo não declarado; \"transferência só pela rota"
+              + " /transferencias\" (tipo transferencia); \"conta não encontrada\","
+              + " \"conta arquivada\", \"categoria não encontrada\", \"categoria não permitida"
+              + " nesta conta\" (despesa em conta de benefício, fora da lista da conta) ou"
+              + " \"saldo da conta fora do limite\" (o saldo passaria de 9007199254740991"
+              + " centavos, para mais ou para menos)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -303,9 +305,12 @@ class EntryController {
   @ApiResponse(
       responseCode = "400",
       description =
-          "Entrada inválida, inclusive campo não declarado e tipo transferencia;"
-              + " \"conta não encontrada\", \"conta arquivada\" (só ao trocar de conta),"
-              + " \"categoria não encontrada\", \"saldo da conta fora do limite\" (em qualquer"
+          "Entrada inválida, inclusive campo não declarado; \"transferência só pela rota"
+              + " /transferencias\" (tipo transferencia); \"conta não encontrada\","
+              + " \"conta arquivada\" (só ao trocar de conta), \"categoria não encontrada\","
+              + " \"categoria não permitida nesta conta\" (despesa em conta de benefício, fora da"
+              + " lista da conta), \"edite a compra inteira\" (parcela com título, categoria,"
+              + " conta ou data diferentes), \"saldo da conta fora do limite\" (em qualquer"
               + " das contas afetadas), \"compra fora do limite\" (parcela cuja soma da compra"
               + " passaria do teto) ou \"use a rota de transferência\" (o lançamento é perna"
               + " de transferência)",

@@ -80,8 +80,9 @@ class RecurrenceController {
       responseCode = "400",
       description =
           "Entrada inválida, inclusive campo não declarado e combinação de campos que a frequência"
-              + " não aceita; \"conta não encontrada\", \"conta arquivada\" ou \"categoria não"
-              + " encontrada\"",
+              + " não aceita; \"conta não encontrada\", \"conta arquivada\", \"categoria não"
+              + " encontrada\" ou \"categoria não permitida nesta conta\" (despesa em conta de"
+              + " benefício, fora da lista da conta)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -206,7 +207,8 @@ class RecurrenceController {
   @ApiResponse(
       responseCode = "400",
       description =
-          "Corpo inválido, inclusive campo não declarado; \"conta arquivada\" ao reativar",
+          "Corpo inválido, inclusive campo não declarado; \"conta arquivada\" ou \"categoria não"
+              + " permitida nesta conta\" ao reativar",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -283,7 +285,8 @@ class RecurrenceController {
       responseCode = "400",
       description =
           "Entrada inválida como no POST, tipo diferente do atual, conta ou categoria que não"
-              + " serve",
+              + " serve, inclusive \"categoria não permitida nesta conta\" e \"conta arquivada\""
+              + " (só em recorrência ativa)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",

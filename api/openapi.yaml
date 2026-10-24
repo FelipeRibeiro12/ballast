@@ -1564,10 +1564,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Entrada inválida, inclusive campo não declarado; \"conta nã\
-            o encontrada\", \"conta arquivada\", \"categoria não encontrada\" ou \"\
-            saldo da conta fora do limite\" (o saldo passaria de 9007199254740991\
-            \ centavos, para mais ou para menos)"
+          description: "Entrada inválida, inclusive campo não declarado; \"transferê\
+            ncia só pela rota /transferencias\" (tipo transferencia); \"conta não\
+            \ encontrada\", \"conta arquivada\", \"categoria não encontrada\", \"\
+            categoria não permitida nesta conta\" (despesa em conta de benefício,\
+            \ fora da lista da conta) ou \"saldo da conta fora do limite\" (o saldo\
+            \ passaria de 9007199254740991 centavos, para mais ou para menos)"
         "401":
           content:
             application/json:
@@ -1834,12 +1836,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Erro"
-          description: "Entrada inválida, inclusive campo não declarado e tipo transferencia;\
-            \ \"conta não encontrada\", \"conta arquivada\" (só ao trocar de conta),\
-            \ \"categoria não encontrada\", \"saldo da conta fora do limite\" (em\
-            \ qualquer das contas afetadas), \"compra fora do limite\" (parcela cuja\
-            \ soma da compra passaria do teto) ou \"use a rota de transferência\"\
-            \ (o lançamento é perna de transferência)"
+          description: "Entrada inválida, inclusive campo não declarado; \"transferê\
+            ncia só pela rota /transferencias\" (tipo transferencia); \"conta não\
+            \ encontrada\", \"conta arquivada\" (só ao trocar de conta), \"categoria\
+            \ não encontrada\", \"categoria não permitida nesta conta\" (despesa em\
+            \ conta de benefício, fora da lista da conta), \"edite a compra inteira\"\
+            \ (parcela com título, categoria, conta ou data diferentes), \"saldo da\
+            \ conta fora do limite\" (em qualquer das contas afetadas), \"compra fora\
+            \ do limite\" (parcela cuja soma da compra passaria do teto) ou \"use\
+            \ a rota de transferência\" (o lançamento é perna de transferência)"
         "401":
           content:
             application/json:
@@ -2661,7 +2666,8 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "Entrada inválida, inclusive campo não declarado e combinaç\
             ão de campos que a frequência não aceita; \"conta não encontrada\", \"\
-            conta arquivada\" ou \"categoria não encontrada\""
+            conta arquivada\", \"categoria não encontrada\" ou \"categoria não permitida\
+            \ nesta conta\" (despesa em conta de benefício, fora da lista da conta)"
         "401":
           content:
             application/json:
@@ -2803,7 +2809,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: "Corpo inválido, inclusive campo não declarado; \"conta arquivada\"\
-            \ ao reativar"
+            \ ou \"categoria não permitida nesta conta\" ao reativar"
         "401":
           content:
             application/json:
@@ -2870,7 +2876,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: "Entrada inválida como no POST, tipo diferente do atual, conta\
-            \ ou categoria que não serve"
+            \ ou categoria que não serve, inclusive \"categoria não permitida nesta\
+            \ conta\" e \"conta arquivada\" (só em recorrência ativa)"
         "401":
           content:
             application/json:
@@ -3295,7 +3302,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Erro"
           description: "Entrada inválida, inclusive campo não declarado; \"conta nã\
-            o encontrada\", \"conta arquivada\" (origem ou destino), \"contas devem\
+            o encontrada\", \"conta arquivada\" (origem ou destino), \"conta de benefí\
+            cio não participa de transferência\" (origem ou destino), \"contas devem\
             \ ser diferentes\", \"cartão não pode ser origem de transferência\" ou\
             \ \"saldo da conta fora do limite\" (em qualquer das duas contas)"
         "401":

@@ -257,8 +257,7 @@ class OccurrenceEditTest {
   }
 
   @Test
-  void aDeletedCancelledOccurrenceStaysGoneWhenTheRecurrenceIsReactivated()
-      throws Exception {
+  void aDeletedCancelledOccurrenceStaysGoneWhenTheRecurrenceIsReactivated() throws Exception {
     String id = occurrenceId(FIRST);
     api.cancel(actor.session(), id);
     api.deleteEntry(actor.session(), id);

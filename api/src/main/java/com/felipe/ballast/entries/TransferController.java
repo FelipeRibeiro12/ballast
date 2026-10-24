@@ -70,7 +70,8 @@ class TransferController {
       responseCode = "400",
       description =
           "Entrada inválida, inclusive campo não declarado; \"conta não encontrada\","
-              + " \"conta arquivada\" (origem ou destino), \"contas devem ser diferentes\","
+              + " \"conta arquivada\" (origem ou destino), \"conta de benefício não participa de"
+              + " transferência\" (origem ou destino), \"contas devem ser diferentes\","
               + " \"cartão não pode ser origem de transferência\" ou \"saldo da conta fora do"
               + " limite\" (em qualquer das duas contas)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
