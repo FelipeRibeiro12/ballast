@@ -101,6 +101,11 @@ backup ──pg_dump cifrado──> Object Storage do Oracle
    `/api` dos previews leva 403 da VM, que é o que se quer.
 6. Não defina `VITE_API_URL`. Se ela apontar para outra origem, o build falha
    de propósito (ADR-044).
+7. **Firewall, opcional e recomendado.** A mitigação de DDoS do Vercel já vale
+   no Hobby, sem configurar nada. Em Firewall, crie uma regra de rate limit em
+   `/api/`, por IP, com ação 429. Por exemplo, 300 por minuto, abaixo dos 600
+   da API (ADR-049). Requisição barrada no Vercel nem acorda o Neon. Confira
+   no painel quantas regras o seu plano permite.
 
 ## 6. Object Storage [dono]
 
@@ -143,9 +148,12 @@ barra no fim.
 ## 8. Primeiro deploy
 
 1. Na `main` com o CI verde: Actions, `deploy`, Run workflow. Aprove os jobs.
-2. O primeiro `migracao` aplica da V1 à V18 e roda os `GRANT` para
+2. O primeiro `migracao` aplica da V1 à V19 e roda os `GRANT` para
    `ballast_app`.
-3. Crie o primeiro usuário. O cadastro fica fechado. Na VM, como `deploy`:
+3. Crie o primeiro usuário. O cadastro fica fechado. Para abrir depois, ponha
+   `REGISTRO_ABERTO=true` no `api.env` e o build do web com
+   `VITE_REGISTRO_ABERTO=true`. O teto é `CADASTRO_MAX_USUARIOS` (padrão 20),
+   e cada IP cadastra no máximo 5 por hora (ADR-049). Na VM, como `deploy`:
 
    ```
    cd /opt/ballast
@@ -153,7 +161,7 @@ barra no fim.
    API_TAG="$(cat .api_tag)" docker compose run --rm \
      -e SPRING_PROFILES_ACTIVE=producao,seed -e SEED_EMAIL -e SEED_SENHA \
      -e BALLAST_RECURRENCE_JOB_ENABLED=false -e BALLAST_INDICES_JOB_ENABLED=false \
-     -e BALLAST_COTACOES_JOB_ENABLED=false api
+     -e BALLAST_COTACOES_JOB_ENABLED=false -e BALLAST_IDENTITY_CLEANUP_JOB_ENABLED=false api
    unset SEED_SENHA
    ```
 
@@ -174,6 +182,11 @@ barra no fim.
 - **Workflow agendado para em repositório público sem commit há 60 dias.** Se
   o projeto ficar parado, abra Actions e reative `backup` e `saude`, ou faça
   um commit.
+- **Cobrança.** Neon Free, Vercel Hobby e Oracle Always Free não cobram
+  excesso: a cota acaba e o serviço para até o mês seguinte. Um ataque tira o
+  app do ar, sem gerar fatura. Isso deixa de valer com cartão num plano pago
+  ou com a conta do Oracle em Pay As You Go. Nesse caso, ponha um alerta de
+  orçamento antes.
 - **Cota do Neon.** Confira no painel, depois do primeiro dia, que o compute
   dorme. Se ele ficar acordado com o pool vazio, a conta do ADR-044 não fecha.
 
