@@ -83,9 +83,7 @@ repetição: duplo clique, retry de rede ou da PWA offline gravam duas vezes.
   `BodyLimitFilter`) e entregue de novo à cadeia.
 - Cada POST com chave faz 2 a 3 comandos extras no banco (claim, conclusão); sem
   cabeçalho o custo é zero.
-- O web ainda não manda a chave nem segue o cursor. Até seguir, uma lista com mais
-  de 1000 itens no período sai cortada nos 1000 mais novos. `/lancamentos` limita o
-  período a 366 dias, e o uso atual fica abaixo.
+- O web manda a chave em cada POST de dinheiro e segue o cursor até o fim, com teto de 20 páginas.
 - Fica de fora: guardar respostas de erro, TTL configurável, chave em rotas PUT,
   PATCH e DELETE (já são idempotentes por natureza, ou o 404 cobre).
 
