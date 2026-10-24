@@ -2463,6 +2463,48 @@ paths:
       summary: Edita uma recorrência
       tags:
       - recorrencias
+  /relatorios:
+    get:
+      description: "Por competência e só o realizado até hoje (ADR-046). Sem mes,\
+        \ vale o mês corrente em America/Sao_Paulo."
+      operationId: getRelatorios
+      parameters:
+      - in: query
+        name: mes
+        required: false
+        schema:
+          type: string
+          pattern: "(19[0-9]{2}|2[01][0-9]{2})-(0[1-9]|1[0-2])"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RelatorioDoMes"
+          description: Relatório do mês
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: mes fora do formato ou "relatório fora do limite"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Despesa por categoria e receita contra despesa
+      tags:
+      - relatorios
   /saldo-projetado:
     get:
       description: "Um ponto por dia, de hoje (America/Sao_Paulo) até hoje + dias\
@@ -3512,6 +3554,24 @@ components:
       required:
       - nome
       - tipo
+    DespesaDaCategoria:
+      type: object
+      properties:
+        categoriaId:
+          type: string
+          format: uuid
+        categoriaNome:
+          type: string
+        gastoCentavos:
+          type: integer
+          format: int64
+          description: Inclui as despesas das categorias filhas
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - categoriaId
+      - categoriaNome
+      - gastoCentavos
     DiaProjetado:
       type: object
       properties:
@@ -4453,6 +4513,26 @@ components:
       - data
       - dolar
       - posicoes
+    ReceitaEDespesaDoMes:
+      type: object
+      properties:
+        despesaCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 0
+        mes:
+          type: string
+          description: AAAA-MM
+        receitaCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: 0
+      required:
+      - despesaCentavos
+      - mes
+      - receitaCentavos
     Recorrencia:
       type: object
       properties:
@@ -4687,6 +4767,35 @@ components:
       required:
       - frequencia
       - inicio
+    RelatorioDoMes:
+      type: object
+      properties:
+        despesasPorCategoria:
+          type: array
+          description: "Despesas realizadas com competência no mês até hoje, por categoria\
+            \ de cima, da maior para a menor"
+          items:
+            $ref: "#/components/schemas/DespesaDaCategoria"
+        mes:
+          type: string
+          pattern: "(19[0-9]{2}|2[01][0-9]{2})-(0[1-9]|1[0-2])"
+        receitasEDespesas:
+          type: array
+          description: "Os seis meses que terminam em mes, do mais antigo para o mais\
+            \ novo, com zero nos meses sem lançamento"
+          items:
+            $ref: "#/components/schemas/ReceitaEDespesaDoMes"
+        totalDespesasCentavos:
+          type: integer
+          format: int64
+          description: Soma de despesasPorCategoria
+          maximum: 9007199254740991
+          minimum: 0
+      required:
+      - despesasPorCategoria
+      - mes
+      - receitasEDespesas
+      - totalDespesasCentavos
     ResumoExclusaoConta:
       type: object
       properties:

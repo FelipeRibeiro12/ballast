@@ -664,6 +664,26 @@ export interface paths {
         patch: operations["patchRecorrenciasById"];
         trace?: never;
     };
+    "/relatorios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Despesa por categoria e receita contra despesa
+         * @description Por competência e só o realizado até hoje (ADR-046). Sem mes, vale o mês corrente em America/Sao_Paulo.
+         */
+        get: operations["getRelatorios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/saldo-projetado": {
         parameters: {
             query?: never;
@@ -1072,6 +1092,16 @@ export interface components {
             saldoInicialCentavos: number;
             /** @enum {string} */
             tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto" | "investimento";
+        };
+        DespesaDaCategoria: {
+            /** Format: uuid */
+            categoriaId: string;
+            categoriaNome: string;
+            /**
+             * Format: int64
+             * @description Inclui as despesas das categorias filhas
+             */
+            gastoCentavos: number;
         };
         DiaProjetado: {
             /** Format: date */
@@ -1568,6 +1598,14 @@ export interface components {
             dolar: components["schemas"]["Dolar"];
             posicoes: components["schemas"]["PosicaoCripto"][];
         };
+        ReceitaEDespesaDoMes: {
+            /** Format: int64 */
+            despesaCentavos: number;
+            /** @description AAAA-MM */
+            mes: string;
+            /** Format: int64 */
+            receitaCentavos: number;
+        };
         Recorrencia: {
             ativo: boolean;
             /** Format: uuid */
@@ -1681,6 +1719,18 @@ export interface components {
              * @description Conta as ocorrências desde o início; não vale junto com fim
              */
             ocorrenciasMax?: number | null;
+        };
+        RelatorioDoMes: {
+            /** @description Despesas realizadas com competência no mês até hoje, por categoria de cima, da maior para a menor */
+            despesasPorCategoria: components["schemas"]["DespesaDaCategoria"][];
+            mes: string;
+            /** @description Os seis meses que terminam em mes, do mais antigo para o mais novo, com zero nos meses sem lançamento */
+            receitasEDespesas: components["schemas"]["ReceitaEDespesaDoMes"][];
+            /**
+             * Format: int64
+             * @description Soma de despesasPorCategoria
+             */
+            totalDespesasCentavos: number;
         };
         ResumoExclusaoConta: {
             /**
@@ -4711,6 +4761,55 @@ export interface operations {
             };
             /** @description Content-Type diferente de application/json */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getRelatorios: {
+        parameters: {
+            query?: {
+                mes?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relatório do mês */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelatorioDoMes"];
+                };
+            };
+            /** @description mes fora do formato ou "relatório fora do limite" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
