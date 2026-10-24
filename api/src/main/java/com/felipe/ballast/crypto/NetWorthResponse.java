@@ -53,20 +53,43 @@ public record NetWorthResponse(
         long totalCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
-            description = "Posições sem cotação até a data, fora do total")
-        List<Unquoted> semCotacao) {
+            description =
+                "Posições fora do total: sem cotação até a data, ou com o valor fora do limite")
+        List<Unquoted> semCotacao,
+    @Schema(
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+            description =
+                "Títulos de renda fixa com valor fora do limite, que ficam fora de"
+                    + " rendaFixaCentavos")
+        List<TitleWithoutValue> rendaFixaSemValor) {
 
   @Schema(name = "PosicaoSemCotacao")
   public record Unquoted(
       @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID contaId,
       @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID ativoId,
       @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Em texto")
-          String quantidade) {}
+          String quantidade,
+      @Schema(
+              requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+              allowableValues = {"sem cotação", "fora do limite"})
+          String motivo) {}
+
+  @Schema(name = "TituloSemValor")
+  public record TitleWithoutValue(
+      @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID tituloId,
+      @Schema(requiredMode = Schema.RequiredMode.REQUIRED, allowableValues = "fora do limite")
+          String motivo) {}
 
   static NetWorthResponse from(LocalDate date, NetWorthService.NetWorth netWorth) {
     List<Unquoted> unquoted =
         netWorth.unquoted().stream()
-            .map(p -> new Unquoted(p.accountId(), p.assetId(), Decimals.format(p.quantity())))
+            .map(
+                item ->
+                    new Unquoted(
+                        item.position().accountId(),
+                        item.position().assetId(),
+                        Decimals.format(item.position().quantity()),
+                        item.reason()))
             .toList();
     return new NetWorthResponse(
         date,
@@ -76,7 +99,10 @@ public record NetWorthResponse(
         nullableCents(netWorth.cryptoAppreciation()),
         cents(netWorth.fixedIncome()),
         cents(netWorth.total()),
-        unquoted);
+        unquoted,
+        netWorth.fixedIncomeExcluded().stream()
+            .map(item -> new TitleWithoutValue(item.titleId(), item.reason()))
+            .toList());
   }
 
   // O serviço já conferiu a faixa; longValueExact falha alto se algum valor escapar.

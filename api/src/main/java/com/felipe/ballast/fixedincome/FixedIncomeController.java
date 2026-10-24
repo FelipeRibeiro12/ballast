@@ -52,7 +52,10 @@ class FixedIncomeController {
   private static final ErrorResponse REDEEMED = new ErrorResponse("título já resgatado nessa data");
   private static final ErrorResponse INVALID_DATE =
       new ErrorResponse("data deve ser uma data AAAA-MM-DD com ano entre 1900 e 2199");
-  private static final ErrorResponse OUT_OF_RANGE = new ErrorResponse("renda fixa fora do limite");
+  private static final ErrorResponse APPLICATION_AFTER_MARK =
+      new ErrorResponse("dataAplicacao não pode ser depois de uma marcação");
+  private static final ErrorResponse REDEMPTION_BEFORE_MARK =
+      new ErrorResponse("resgate não pode ser antes de uma marcação");
 
   private final FixedIncomeService titles;
 
@@ -110,7 +113,9 @@ class FixedIncomeController {
       content = @Content(schema = @Schema(implementation = TitleResponse.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "Como no POST, e aplicação depois do resgate (no mesmo dia vale)",
+      description =
+          "Como no POST, aplicação depois do resgate (no mesmo dia vale) e aplicação depois de uma"
+              + " marcação já gravada",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -176,7 +181,7 @@ class FixedIncomeController {
       content = @Content(schema = @Schema(implementation = TitleListResponse.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "data fora do formato ou \"renda fixa fora do limite\"",
+      description = "data fora do formato",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -191,18 +196,12 @@ class FixedIncomeController {
     if (day.isEmpty()) {
       return ResponseEntity.badRequest().body(INVALID_DATE);
     }
-    return titles
-        .list(user.id(), day.get())
-        .<ResponseEntity<?>>map(
-            found ->
-                ResponseEntity.ok(
-                    new TitleListResponse(
-                        day.get(),
-                        new IndicesResponse(found.cdiUntil(), found.ipcaUntil()),
-                        found.titles().stream()
-                            .map(item -> TitleResponse.from(item.title(), item.valuation()))
-                            .toList())))
-        .orElseGet(() -> ResponseEntity.badRequest().body(OUT_OF_RANGE));
+    FixedIncomeService.ValuedList found = titles.list(user.id(), day.get());
+    return ResponseEntity.ok(
+        new TitleListResponse(
+            day.get(),
+            new IndicesResponse(found.cdiUntil(), found.ipcaUntil()),
+            found.titles().stream().map(TitleResponse::from).toList()));
   }
 
   @Operation(
@@ -244,6 +243,7 @@ class FixedIncomeController {
       case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case DATE_OUT_OF_RANGE -> ResponseEntity.badRequest().body(DATE_OUT_OF_RANGE);
       case REDEEMED -> ResponseEntity.badRequest().body(REDEEMED);
+      case REDEMPTION_BEFORE_MARK -> ResponseEntity.badRequest().body(REDEMPTION_BEFORE_MARK);
     };
   }
 
@@ -258,7 +258,9 @@ class FixedIncomeController {
       content = @Content(schema = @Schema(implementation = TitleResponse.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "Entrada inválida, data antes da aplicação ou no futuro",
+      description =
+          "Entrada inválida, data antes da aplicação ou no futuro, ou antes de uma marcação já"
+              + " gravada (no mesmo dia vale)",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
       responseCode = "401",
@@ -290,7 +292,37 @@ class FixedIncomeController {
       }
       case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case DATE_OUT_OF_RANGE, REDEEMED -> ResponseEntity.badRequest().body(DATE_OUT_OF_RANGE);
+      case REDEMPTION_BEFORE_MARK -> ResponseEntity.badRequest().body(REDEMPTION_BEFORE_MARK);
     };
+  }
+
+  @Operation(
+      operationId = "deleteTitulosRendaFixaByIdResgate",
+      summary = "Desfaz o resgate do título",
+      description =
+          "O título volta a render e as marcações escondidas pelo resgate voltam a valer."
+              + " Idempotente: título sem resgate também responde 204.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(responseCode = "204", description = "Sem resgate")
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "Título de outro usuário, inexistente ou id que não é UUID; mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @DeleteMapping(
+      path = "/titulos-renda-fixa/{id}/resgate",
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> undoRedemption(
+      @AuthenticationPrincipal AuthenticatedUser user, @PathVariable("id") String id) {
+    Optional<UUID> titleId = CanonicalUuid.parse(id);
+    if (titleId.isEmpty() || !titles.undoRedemption(user.id(), titleId.get())) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    log.info("resgate desfeito usuario_id={} titulo_id={}", user.id(), titleId.get());
+    return ResponseEntity.noContent().build();
   }
 
   @Operation(
@@ -354,6 +386,7 @@ class FixedIncomeController {
           case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
           case APPLICATION_AFTER_REDEMPTION ->
               ResponseEntity.badRequest().body(APPLICATION_AFTER_REDEMPTION);
+          case APPLICATION_AFTER_MARK -> ResponseEntity.badRequest().body(APPLICATION_AFTER_MARK);
         };
       }
     };

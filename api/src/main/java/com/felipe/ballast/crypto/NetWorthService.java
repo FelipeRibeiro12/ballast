@@ -50,7 +50,15 @@ class NetWorthService {
       BigDecimal gainUsd,
       BigDecimal gainBrl,
       BigDecimal realizedUsd,
-      BigDecimal realizedBrl) {
+      BigDecimal realizedBrl,
+      boolean outOfRange) {
+
+    // Posição cujo valor não cabe no inteiro seguro do JSON: a quantidade fica, todo valor some
+    // (ADR-058).
+    private static ValuedPosition withoutValue(CryptoQueries.Position position) {
+      return new ValuedPosition(
+          position, null, null, null, null, null, null, null, null, null, null, null, true);
+    }
 
     private List<BigDecimal> amounts() {
       return Arrays.asList(
@@ -73,6 +81,12 @@ class NetWorthService {
 
   record Positions(CryptoQueries.Dollar dollar, List<ValuedPosition> positions) {}
 
+  static final String OUT_OF_RANGE_REASON = "fora do limite";
+  static final String UNQUOTED_REASON = "sem cotação";
+
+  // reason diz por que a posição ficou fora do total: sem cotação (ou sem dólar) ou fora do limite.
+  record Unquoted(CryptoQueries.Position position, String reason) {}
+
   // cryptoContribution é compras menos vendas, em reais, das posições que entram em crypto, e
   // cryptoAppreciation o resto do valor delas. Os dois nulos sem a PTAX de algum movimento.
   record NetWorth(
@@ -82,10 +96,12 @@ class NetWorthService {
       BigDecimal cryptoAppreciation,
       BigDecimal fixedIncome,
       BigDecimal total,
-      List<CryptoQueries.Position> unquoted) {}
+      List<Unquoted> unquoted,
+      List<FixedIncomeService.Excluded> fixedIncomeExcluded) {}
 
-  // Vazio quando algum valor sai da faixa do JSON. dollar é a PTAX da data (nula se não há).
-  Optional<Positions> positions(UUID userId, LocalDate date) {
+  // dollar é a PTAX da data (nula se não há). Posição com valor fora da faixa do JSON vem sem
+  // valor, e não derruba a lista (ADR-058).
+  Positions positions(UUID userId, LocalDate date) {
     CryptoQueries.Dollar dollar = queries.dollarAt(date).orElse(null);
     BigDecimal rate = dollar == null ? null : dollar.value();
     List<ValuedPosition> valued = new ArrayList<>();
@@ -122,27 +138,28 @@ class NetWorthService {
               difference(valueUsd, costOfPositionUsd),
               difference(valueBrl, costOfPositionBrl),
               basisUsd == null ? null : cents(basisUsd.realized()),
-              basisBrl == null ? null : cents(basisBrl.realized()));
-      if (!item.amounts().stream().allMatch(NetWorthService::fits)) {
-        return Optional.empty();
-      }
-      valued.add(item);
+              basisBrl == null ? null : cents(basisBrl.realized()),
+              false);
+      valued.add(
+          item.amounts().stream().allMatch(NetWorthService::fits)
+              ? item
+              : ValuedPosition.withoutValue(position));
     }
-    return Optional.of(new Positions(dollar, valued));
+    return new Positions(dollar, valued);
   }
 
   Optional<NetWorth> netWorth(UUID userId, LocalDate date) {
-    Optional<Positions> positions = positions(userId, date);
-    if (positions.isEmpty()) {
-      return Optional.empty();
-    }
-    // Sem cotação, ou sem o dólar que leva a cotação em USD para reais, a posição fica de fora.
+    Positions positions = positions(userId, date);
+    // Sem cotação, sem o dólar que leva a cotação em USD para reais, ou com o valor fora da faixa,
+    // a posição fica de fora.
     BigDecimal crypto = BigDecimal.ZERO;
     BigDecimal contribution = BigDecimal.ZERO;
-    List<CryptoQueries.Position> unquoted = new ArrayList<>();
-    for (ValuedPosition valued : positions.get().positions()) {
+    List<Unquoted> unquoted = new ArrayList<>();
+    for (ValuedPosition valued : positions.positions()) {
       if (valued.valueBrl() == null) {
-        unquoted.add(valued.position());
+        unquoted.add(
+            new Unquoted(
+                valued.position(), valued.outOfRange() ? OUT_OF_RANGE_REASON : UNQUOTED_REASON));
       } else {
         crypto = crypto.add(valued.valueBrl());
         contribution =
@@ -154,11 +171,11 @@ class NetWorthService {
     BigDecimal appreciation = difference(crypto, contribution);
     BigDecimal accounts = queries.accountsBalance(userId, date);
     // O líquido de cada título: o que se receberia resgatando (ADR-037).
-    Optional<BigDecimal> titles = fixedIncome.netTotal(userId, date);
+    Optional<FixedIncomeService.NetTotal> titles = fixedIncome.netTotal(userId, date);
     if (titles.isEmpty()) {
       return Optional.empty();
     }
-    BigDecimal total = accounts.add(crypto).add(titles.get());
+    BigDecimal total = accounts.add(crypto).add(titles.get().total());
     if (!fits(accounts)
         || !fits(crypto)
         || !fits(contribution)
@@ -167,7 +184,15 @@ class NetWorthService {
       return Optional.empty();
     }
     return Optional.of(
-        new NetWorth(accounts, crypto, contribution, appreciation, titles.get(), total, unquoted));
+        new NetWorth(
+            accounts,
+            crypto,
+            contribution,
+            appreciation,
+            titles.get().total(),
+            total,
+            unquoted,
+            titles.get().excluded()));
   }
 
   // Patrimônio no fim de cada mês, até hoje (ADR-047). O mês corrente vale hoje, e mês depois

@@ -247,16 +247,69 @@ class NetWorthTest {
   }
 
   @Test
-  void aValueBeyondTheSafeIntegerIs400() throws Exception {
+  void aValueBeyondTheSafeIntegerComesWithoutValueAndTheNetWorthFlagsIt() throws Exception {
     buy("99999999999999999999", "2026-03-01", 100);
     api.quoteOk(actor.session(), bitcoin, "999999999999", "2026-03-01T12:00:00Z");
 
-    MockHttpServletResponse netWorth = api.netWorth(actor.session(), "?data=2026-03-01");
-    MockHttpServletResponse positions = api.positions(actor.session(), "?data=2026-03-01");
+    JsonNode position = positions("?data=2026-03-01").get("posicoes").get(0);
+    JsonNode netWorth = netWorth("?data=2026-03-01");
 
-    assertThat(netWorth.getStatus()).isEqualTo(400);
-    assertThat(CryptoApi.text(netWorth)).isEqualTo("{\"erro\":\"patrimônio fora do limite\"}");
-    assertThat(CryptoApi.text(positions)).isEqualTo("{\"erro\":\"posição fora do limite\"}");
+    assertThat(position.get("quantidade").asString()).isEqualTo("99999999999999999999");
+    assertThat(position.get("motivoSemValor").asString()).isEqualTo("fora do limite");
+    for (String field :
+        List.of(
+            "valorUsdCentavos",
+            "valorCentavos",
+            "custoUsdCentavos",
+            "custoCentavos",
+            "ganhoUsdCentavos",
+            "ganhoCentavos",
+            "realizadoCentavos")) {
+      assertThat(position.get(field).isNull()).as(field).isTrue();
+    }
+    assertThat(netWorth.get("criptoCentavos").asLong()).isZero();
+    assertThat(netWorth.get("semCotacao")).hasSize(1);
+    assertThat(netWorth.get("semCotacao").get(0).get("motivo").asString())
+        .isEqualTo("fora do limite");
+  }
+
+  @Test
+  void aPositionWithoutQuoteSaysItInTheNetWorthReason() throws Exception {
+    buy("1", "2026-03-01", 100);
+
+    JsonNode netWorth = netWorth("?data=2026-03-01");
+
+    assertThat(netWorth.get("semCotacao").get(0).get("motivo").asString()).isEqualTo("sem cotação");
+    assertThat(positions("?data=2026-03-01").get("posicoes").get(0).get("motivoSemValor").isNull())
+        .isTrue();
+  }
+
+  @Test
+  void anAbsurdPositionDoesNotTakeTheOtherOneDown() throws Exception {
+    Map<String, Object> eth = CryptoApi.bitcoin();
+    eth.put("rede", "ethereum");
+    eth.put("simbolo", "ETH");
+    eth.put("decimais", 18);
+    String ether = api.createAssetOk(actor.session(), eth);
+    buy("99999999999999999999", "2026-03-01", 100);
+    api.quoteOk(actor.session(), bitcoin, "999999999999", "2026-03-01T12:00:00Z");
+    api.moveOk(
+        actor.session(), movement(actor.cryptoId(), ether, "compra", "2", "2026-03-01", 100));
+    api.quoteOk(actor.session(), ether, "1000", "2026-03-01T12:00:00Z");
+
+    JsonNode body = positions("?data=2026-03-01");
+    JsonNode netWorth = netWorth("?data=2026-03-01");
+
+    JsonNode normal = null;
+    for (JsonNode item : body.get("posicoes")) {
+      if (item.get("motivoSemValor").isNull()) {
+        normal = item;
+      }
+    }
+    assertThat(normal).isNotNull();
+    assertThat(netWorth.get("criptoCentavos").asLong())
+        .isEqualTo(normal.get("valorCentavos").asLong());
+    assertThat(netWorth.get("semCotacao")).hasSize(1);
   }
 
   @Test

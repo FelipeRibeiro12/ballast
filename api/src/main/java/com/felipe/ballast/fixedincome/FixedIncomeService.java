@@ -14,7 +14,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -61,9 +60,23 @@ public class FixedIncomeService {
   record Valuation(
       BigDecimal gross, BigDecimal iof, BigDecimal incomeTax, BigDecimal net, BigDecimal gain) {}
 
-  record Valued(FixedIncomeQueries.Title title, Valuation valuation) {}
+  // valuation nulo quando a data é antes da aplicação (reason nulo) ou quando algum valor passa da
+  // faixa do JSON (reason diz isso). indexWarning é o texto curto de índice que não cobre o
+  // período.
+  record Valued(
+      FixedIncomeQueries.Title title,
+      Valuation valuation,
+      String reason,
+      boolean matured,
+      String indexWarning) {}
 
   record ValuedList(LocalDate cdiUntil, LocalDate ipcaUntil, List<Valued> titles) {}
+
+  public record Excluded(UUID titleId, String reason) {}
+
+  public record NetTotal(BigDecimal total, List<Excluded> excluded) {}
+
+  static final String OUT_OF_RANGE_REASON = "fora do limite";
 
   sealed interface SaveResult {
     record Saved(FixedIncomeQueries.Title title) implements SaveResult {}
@@ -73,7 +86,8 @@ public class FixedIncomeService {
       ACCOUNT_NOT_FOUND,
       NOT_INVESTMENT,
       ACCOUNT_ARCHIVED,
-      APPLICATION_AFTER_REDEMPTION
+      APPLICATION_AFTER_REDEMPTION,
+      APPLICATION_AFTER_MARK
     }
   }
 
@@ -81,7 +95,8 @@ public class FixedIncomeService {
     SAVED,
     NOT_FOUND,
     DATE_OUT_OF_RANGE,
-    REDEEMED
+    REDEEMED,
+    REDEMPTION_BEFORE_MARK
   }
 
   LocalDate today() {
@@ -115,6 +130,10 @@ public class FixedIncomeService {
             }
             if (id != null && queries.find(userId, id).isEmpty()) {
               return SaveResult.Rejected.NOT_FOUND;
+            }
+            // Uma marcação antes da aplicação nova não faria sentido, e o cálculo a ignora.
+            if (id != null && queries.hasMarkBefore(userId, id, fields.applicationDate())) {
+              return SaveResult.Rejected.APPLICATION_AFTER_MARK;
             }
             Optional<FixedIncomeQueries.Account> account =
                 fields.accountId() == null
@@ -189,7 +208,8 @@ public class FixedIncomeService {
         });
   }
 
-  // Resgatar de novo troca a data e o valor.
+  // Resgatar de novo troca a data e o valor. Marcação depois do resgate ficaria escondida, então o
+  // resgate antes de uma marcação é recusado (ADR-058); no mesmo dia vale.
   DatedResult redeem(UUID userId, UUID id, LocalDate date, BigDecimal value) {
     return transaction.execute(
         status -> {
@@ -200,19 +220,28 @@ public class FixedIncomeService {
           if (outOfRange(title.get(), date)) {
             return DatedResult.DATE_OUT_OF_RANGE;
           }
+          if (queries.hasMarkAfter(userId, id, date)) {
+            return DatedResult.REDEMPTION_BEFORE_MARK;
+          }
           queries.redeem(userId, id, date, value);
           return DatedResult.SAVED;
         });
+  }
+
+  // Idempotente: sem resgate, não muda nada e também vale. Falso só para título que não é do dono.
+  boolean undoRedemption(UUID userId, UUID id) {
+    Integer updated = transaction.execute(status -> queries.unredeem(userId, id));
+    return updated != null && updated > 0;
   }
 
   Optional<FixedIncomeQueries.Title> find(UUID userId, UUID id) {
     return queries.find(userId, id);
   }
 
-  // Vazio quando algum valor sai da faixa do JSON. Data futura vale o valor de hoje: não há
-  // projeção
-  // de índice, e o laço de dias úteis fica limitado (auditoria do PR #22).
-  Optional<ValuedList> list(UUID userId, LocalDate requested) {
+  // Data futura vale o valor de hoje: não há projeção de índice, e o laço de dias úteis fica
+  // limitado (auditoria do PR #22). Título com valor fora da faixa do JSON vem sem valor e com o
+  // motivo, e não derruba a lista (ADR-058).
+  ValuedList list(UUID userId, LocalDate requested) {
     LocalDate today = today();
     LocalDate date = requested.isAfter(today) ? today : requested;
     List<FixedIncomeQueries.Title> titles = queries.list(userId);
@@ -227,30 +256,47 @@ public class FixedIncomeService {
         indices.load(IndexSeries.IPCA, from.withDayOfMonth(1).minusYears(1));
     List<Valued> valued = new ArrayList<>();
     for (FixedIncomeQueries.Title title : titles) {
-      Valuation valuation = evaluate(title, marks.get(title.id()), date, cdi, ipca);
+      FixedIncomeQueries.Mark mark = marks.get(title.id());
+      Valuation valuation = evaluate(title, mark, date, cdi, ipca);
+      String reason = null;
       if (valuation != null && !fits(valuation)) {
-        return Optional.empty();
+        valuation = null;
+        reason = OUT_OF_RANGE_REASON;
       }
-      valued.add(new Valued(title, valuation));
+      boolean matured =
+          title.maturity() != null
+              && title.redemptionDate() == null
+              && !date.isBefore(title.applicationDate())
+              && !date.isBefore(title.maturity());
+      String warning =
+          valuation == null
+              ? null
+              : IndexCoverage.warning(title, period(title, mark, date), cdi, ipca);
+      valued.add(new Valued(title, valuation, reason, matured, warning));
     }
-    return Optional.of(
-        new ValuedList(
-            indices.last(IndexSeries.CDI).orElse(null),
-            indices.last(IndexSeries.IPCA).orElse(null),
-            valued));
+    return new ValuedList(
+        indices.last(IndexSeries.CDI).orElse(null),
+        indices.last(IndexSeries.IPCA).orElse(null),
+        valued);
   }
 
-  // Soma do líquido de cada título na data, para o patrimônio (ADR-037). Vazio fora da faixa.
-  public Optional<BigDecimal> netTotal(UUID userId, LocalDate date) {
-    return list(userId, date)
-        .map(
-            found ->
-                found.titles().stream()
-                    .map(Valued::valuation)
-                    .filter(Objects::nonNull)
-                    .map(Valuation::net)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add))
-        .filter(total -> total.abs().compareTo(LIMIT) <= 0);
+  // Soma do líquido de cada título na data, para o patrimônio (ADR-037), sem os que vieram sem
+  // valor. Vazio só se a soma dos outros sai da faixa.
+  public Optional<NetTotal> netTotal(UUID userId, LocalDate date) {
+    ValuedList found = list(userId, date);
+    BigDecimal total = BigDecimal.ZERO;
+    List<Excluded> excluded = new ArrayList<>();
+    for (Valued item : found.titles()) {
+      if (item.reason() != null) {
+        excluded.add(new Excluded(item.title().id(), item.reason()));
+      } else if (item.valuation() != null) {
+        total = total.add(item.valuation().net());
+      }
+    }
+    if (total.abs().compareTo(LIMIT) > 0) {
+      return Optional.empty();
+    }
+    return Optional.of(new NetTotal(total, excluded));
   }
 
   public Optional<LocalDate> cdiUntil() {
@@ -259,6 +305,21 @@ public class FixedIncomeService {
 
   public Optional<LocalDate> ipcaUntil() {
     return indices.last(IndexSeries.IPCA);
+  }
+
+  // De onde e até onde o título rende. Depois do vencimento o valor fica congelado nele
+  // (ADR-058). A marcação vale como partida só se cair depois da aplicação.
+  record Period(LocalDate start, LocalDate end, BigDecimal startValue) {}
+
+  static Period period(
+      FixedIncomeQueries.Title title, FixedIncomeQueries.Mark mark, LocalDate date) {
+    boolean fromMark = mark != null && !mark.date().isBefore(title.applicationDate());
+    LocalDate end =
+        title.maturity() != null && date.isAfter(title.maturity()) ? title.maturity() : date;
+    return new Period(
+        fromMark ? mark.date() : title.applicationDate(),
+        end,
+        fromMark ? mark.value() : title.invested());
   }
 
   // Nulo antes da aplicação. Depois do resgate vale zero: o dinheiro saiu do título.
@@ -279,25 +340,29 @@ public class FixedIncomeService {
           BigDecimal.ZERO,
           title.redemptionValue().subtract(title.invested()));
     }
-    boolean fromMark = mark != null && !mark.date().isBefore(title.applicationDate());
-    LocalDate start = fromMark ? mark.date() : title.applicationDate();
-    BigDecimal startValue = fromMark ? mark.value() : title.invested();
+    Period period = period(title, mark, date);
+    LocalDate start = period.start();
+    LocalDate end = period.end();
+    BigDecimal startValue = period.startValue();
+    // Marcação depois do vencimento: o banco já disse o valor final, não há o que render.
     BigDecimal factor =
-        switch (title.indexer()) {
-          case PREFIXED ->
-              FixedIncomeMath.prefixedFactor(
-                  title.rate(), FixedIncomeMath.businessDays(cdi, start, date));
-          case CDI -> FixedIncomeMath.cdiFactor(cdi, start, date, title.rate());
-          case IPCA ->
-              FixedIncomeMath.ipcaFactor(ipca, start, date)
-                  .multiply(
-                      FixedIncomeMath.prefixedFactor(
-                          title.rate(), FixedIncomeMath.businessDays(cdi, start, date)),
-                      FixedIncomeMath.CONTEXT);
-        };
+        !end.isAfter(start)
+            ? BigDecimal.ONE
+            : switch (title.indexer()) {
+              case PREFIXED ->
+                  FixedIncomeMath.prefixedFactor(
+                      title.rate(), FixedIncomeMath.businessDays(cdi, start, end));
+              case CDI -> FixedIncomeMath.cdiFactor(cdi, start, end, title.rate());
+              case IPCA ->
+                  FixedIncomeMath.ipcaFactor(ipca, start, end)
+                      .multiply(
+                          FixedIncomeMath.prefixedFactor(
+                              title.rate(), FixedIncomeMath.businessDays(cdi, start, end)),
+                          FixedIncomeMath.CONTEXT);
+            };
     // Uma vez, aqui: HALF_EVEN pela mesma razão da cripto (ADR-035, ADR-037).
     BigDecimal gross = startValue.multiply(factor).setScale(2, RoundingMode.HALF_EVEN);
-    long days = ChronoUnit.DAYS.between(title.applicationDate(), date);
+    long days = ChronoUnit.DAYS.between(title.applicationDate(), end);
     FixedIncomeMath.Taxes taxes =
         FixedIncomeMath.taxes(title.type(), title.invested(), gross, days);
     return new Valuation(
