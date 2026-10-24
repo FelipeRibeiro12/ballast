@@ -451,3 +451,12 @@ Dívida registrada: espera de 10 s por chave em andamento, `Location` no replay,
 Achados do revisor: security 0 bloqueantes, 3 baixos viraram dívida
 Pipeline: a preencher no PR
 Em aberto: nada
+
+## 2026-10-24 — Rodada de fechamento, onda 5: concorrência e categorias
+
+O que entrou: causa do deadlock da QA F13.1 achada e travada por teste (25 rodadas), job de recorrência trava a conta, `lockTemplate` numa leitura, marca de semente, tipo da filha igual ao do pai, cartão fora da saída de transferência e aporte ligado à transferência.
+Decisões: ADR-057
+Dívida registrada: CRUD de categoria protegendo as sementes; V26 em banco com histórico
+Achados do revisor: 0 bloquearam, 3 viraram dívida ou já estavam no ADR
+Pipeline: a preencher no PR
+Em aberto: nada
