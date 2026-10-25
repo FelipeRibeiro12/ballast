@@ -1,7 +1,9 @@
 #cloud-config
-# Prepara a VM ARM do Oracle no primeiro boot (runbook, passo 3): atualizações, Docker, usuário
+# Prepara a VM ARM do Oracle no primeiro boot (runbook, passo 3): atualizacoes, Docker, usuario
 # deploy, /opt/ballast e as portas 80 e 443 no firewall do Ubuntu. Sem segredo aqui: o script fica
-# guardado no Oracle e legível de dentro da VM. Senhas vão à mão em api.env e caddy.env.
+# guardado no Oracle e legivel de dentro da VM. Senhas vao a mao em api.env e caddy.env.
+# So ASCII, sem acento: colado no console do Oracle, o texto chegou na VM em Latin-1, e o cloud-init
+# descarta o arquivo inteiro no primeiro byte que nao e UTF-8.
 package_update: true
 package_upgrade: true
 packages:
@@ -16,11 +18,11 @@ users:
     shell: /bin/bash
     lock_passwd: true
     ssh_authorized_keys:
-      # Chave pública só do deploy: ssh-keygen -t ed25519 -N "" -f ~/.ssh/ballast_deploy -C deploy
+      # Chave publica so do deploy: ssh-keygen -t ed25519 -N "" -f ~/.ssh/ballast_deploy -C deploy
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJg7OH4TNJ4h93LorA45U5FYRuto8nxUlSfBnM6uezhZ deploy
 
 runcmd:
-  # Docker Engine e plugin compose pelo repositório oficial (arm64)
+  # Docker Engine e plugin compose pelo repositorio oficial (arm64)
   - install -m 0755 -d /etc/apt/keyrings
   - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
   - chmod a+r /etc/apt/keyrings/docker.asc
@@ -31,7 +33,8 @@ runcmd:
   # deploy pode usar o Docker; isso equivale a root na VM
   - usermod -aG docker deploy
   - install -d -o deploy -g deploy -m 750 /opt/ballast
-  # A imagem Ubuntu do Oracle rejeita tudo no INPUT menos a 22; abre 80 e 443 antes do REJECT
-  - iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-  - iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+  # A imagem Ubuntu do Oracle rejeita tudo no INPUT menos a 22; abre 80 e 443 antes do REJECT.
+  # A posicao do REJECT muda entre versoes da imagem (ja foi 6, hoje e 5), por isso a busca.
+  - iptables -I INPUT "$(iptables -L INPUT -n --line-numbers | awk '$2 == "REJECT" {print $1; exit}')" -m state --state NEW -p tcp --dport 80 -j ACCEPT
+  - iptables -I INPUT "$(iptables -L INPUT -n --line-numbers | awk '$2 == "REJECT" {print $1; exit}')" -m state --state NEW -p tcp --dport 443 -j ACCEPT
   - netfilter-persistent save
