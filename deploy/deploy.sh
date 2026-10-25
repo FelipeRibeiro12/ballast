@@ -17,7 +17,10 @@ gunzip | docker load
 
 anterior="$(cat .api_tag 2>/dev/null || true)"
 echo "$tag" > .api_tag
-API_TAG="$tag" docker compose up -d --remove-orphans
+# Exportada porque todo docker compose relê o compose.yml, e o exec do reload e do wget também
+# precisa da tag para interpolar a imagem.
+export API_TAG="$tag"
+docker compose up -d --remove-orphans
 # O Caddyfile chega por scp e é montado no contêiner: sem o reload o Caddy segue com o antigo.
 docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 
@@ -33,7 +36,8 @@ done
 echo "a API não respondeu o /healthz com $tag" >&2
 if [ -n "$anterior" ]; then
   echo "$anterior" > .api_tag
-  API_TAG="$anterior" docker compose up -d --remove-orphans
+  export API_TAG="$anterior"
+  docker compose up -d --remove-orphans
   echo "voltou para $anterior" >&2
 fi
 exit 1

@@ -229,8 +229,8 @@ barra no fim.
   `SameSite=Lax`, no domínio do Vercel.
 - Uma consulta com parâmetro (Lançamentos de outro mês) volta certa: confere
   que o Vercel repassa a query string.
-- No log da API (`docker compose logs api`), uma senha errada aparece com o
-  seu IP, não com o do Caddy.
+- No log da API (`API_TAG="$(cat .api_tag)" docker compose logs api`), uma
+  senha errada aparece com o seu IP, não com o do Caddy.
 - Rode o `backup` à mão uma vez e faça a restauração do passo 11.
 
 ## 11. Restaurar um backup
@@ -267,6 +267,10 @@ barra no fim.
 - **Limpeza.** Uma vez por mês, `docker image prune -a --filter until=720h`.
 
 ## 13. Trocar segredos
+
+Todo `docker compose` em `/opt/ballast` precisa do `API_TAG`, porque o
+`compose.yml` interpola a imagem com ele. Abaixo, `docker compose up -d` quer
+dizer `API_TAG="$(cat .api_tag)" docker compose up -d`.
 
 - **`ORIGIN_SECRET`.** Troque no `caddy.env` e no Vercel, rode `docker compose
   up -d` e faça redeploy no Vercel. No intervalo entre os dois, a API responde
