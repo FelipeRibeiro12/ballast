@@ -21,7 +21,7 @@
     },
     {
       "src": "^/api/(.*)$",
-      "dest": "https://trocar-pelo-subdominio.duckdns.org/$1",
+      "dest": "https://ballastapp.duckdns.org/$1",
       "transforms": [
         {
           "type": "request.headers",

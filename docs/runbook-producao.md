@@ -33,53 +33,78 @@ backup ──pg_dump cifrado──> Object Storage do Oracle
    `pg_dump` e o Flyway precisam da conexão direta.
 3. **Crie o papel da aplicação por SQL, nunca pelo Console.** Papel criado pelo
    Console ou pela API entra no `neon_superuser` (`CREATEROLE`, `BYPASSRLS`,
-   `pg_write_all_data`), e isso desfaz o ADR-021. No seu computador, conectado
-   como `neondb_owner`:
+   `pg_write_all_data`), e isso desfaz o ADR-021. No **SQL Editor** do Neon, que
+   entra como `neondb_owner`:
 
    ```
-   psql "postgresql://neondb_owner@<host-direto>/<banco>?sslmode=verify-full&sslrootcert=system"
    CREATE ROLE ballast_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
-   \password ballast_app
    ```
 
-   O `\password` pede a senha sem deixar no histórico. Confira:
+4. **Senhas pelo painel.** Em Roles, use **Reset password** no `ballast_app` e
+   no `neondb_owner`. O Neon mostra a senha uma vez só: copie direto para o
+   gerenciador de senhas. Não use `ALTER ROLE ... PASSWORD` no editor: o
+   histórico guardaria a senha, e o Neon recusa o hash SCRAM ("only supports
+   being given plaintext passwords"). Confira que o reset não mudou as
+   permissões:
 
    ```
    SELECT pg_has_role('ballast_app', 'neon_superuser', 'member');  -- tem de dar f
    ```
 
-4. Os `GRANT` vêm da V3 na primeira migração (passo 8).
+5. **Teste o login** dos dois no seu computador, uma linha por vez, no fish. A
+   imagem do postgres não traz certificados de CA, por isso o do macOS vai
+   montado. A senha passa por variável e não aparece no comando nem no
+   histórico:
+
+   ```
+   read -s -g -x -P 'senha: ' PGPASSWORD
+   docker run --rm -e PGPASSWORD -v /etc/ssl/cert.pem:/etc/ssl/cert.pem:ro postgres:17 psql "postgresql://<papel>@<host-direto>/<banco>?sslmode=verify-full&sslrootcert=/etc/ssl/cert.pem&channel_binding=require" -c 'select current_user'
+   set -e PGPASSWORD
+   ```
+
+   Senha nunca na URL. No fish, `set -x VAR` sem valor zera a variável: o
+   `-x` do `read` é que exporta.
+
+6. Os `GRANT` vêm da V3 na primeira migração (passo 8).
 
 ## 3. VM no Oracle [dono]
 
-1. Crie a instância **VM.Standard.A1.Flex**, 2 OCPU e 12 GB, com Ubuntu 24.04
-   aarch64. Use só chave SSH, sem senha.
-2. Na security list da VCN, libere **TCP 80 e 443** de `0.0.0.0/0`. A porta 22
+1. No seu computador, gere um par de chaves só para o deploy, sem senha (o
+   Actions não tem como digitá-la):
+
+   ```
+   ssh-keygen -t ed25519 -N "" -f ~/.ssh/ballast_deploy -C deploy
+   ```
+
+   A pública (`~/.ssh/ballast_deploy.pub`) entra no cloud-init do item 2. A
+   privada (`~/.ssh/ballast_deploy`) vai para o segredo `VM_SSH_KEY` (passo 7).
+2. Crie a instância **VM.Standard.A1.Flex**, 2 OCPU e 12 GB, com Ubuntu 24.04
+   aarch64. Em "Add SSH keys" vai a sua chave de admin, que é outra. Em
+   "Initialization script", cole `deploy/cloud-init.yaml` com a linha da chave
+   trocada pela pública do item 1. O script instala o Docker com o compose,
+   liga as atualizações de segurança, cria o usuário `deploy` (no grupo
+   `docker`, que vale como root na VM) e a pasta `/opt/ballast`, e abre 80 e
+   443 no `iptables` da imagem do Oracle. Para recriar a VM, é o mesmo passo.
+3. Na security list da VCN, libere **TCP 80 e 443** de `0.0.0.0/0`. A porta 22
    continua aberta para o deploy, só com chave.
-3. Instale o Docker Engine com o plugin compose (repositório oficial do Docker
-   para Ubuntu) e ligue as atualizações automáticas de segurança
-   (`unattended-upgrades`).
-4. Crie o usuário de deploy e a pasta:
+4. Entre como `ubuntu` com a chave de admin e confira:
 
    ```
-   sudo adduser --disabled-password deploy
-   sudo usermod -aG docker deploy      # o grupo docker vale como root na VM
-   sudo install -d -o deploy -g deploy -m 750 /opt/ballast
+   cloud-init status --wait                     # termina em "done"
+   sudo -u deploy docker ps                     # sem erro de permissão
+   sudo iptables -L INPUT -n --line-numbers     # 80 e 443 antes do REJECT
    ```
 
-5. Gere um par de chaves só para o deploy (`ssh-keygen -t ed25519 -C deploy`).
-   A pública vai em `/home/deploy/.ssh/authorized_keys`, e a privada vai para o
-   segredo `VM_SSH_KEY` (passo 7).
-6. Em `/opt/ballast`, crie `api.env` e `caddy.env` a partir de
-   `deploy/api.env.example` e `deploy/caddy.env.example`, com `chmod 600`.
+   Se algo falhar, o log fica em `/var/log/cloud-init-output.log`.
+5. Em `/opt/ballast`, crie `api.env` e `caddy.env` a partir de
+   `deploy/api.env.example` e `deploy/caddy.env.example`, com `chmod 600` e
+   dono `deploy`. Segredo não vai no cloud-init: ele fica guardado no Oracle e
+   legível de dentro da VM.
    Preencha `ORIGENS_PERMITIDAS` com `https://<dominio-do-app>` (ADR-051); sem isso
    toda escrita do PWA recebe 403.
    Gere `MFA_CHAVE` com `openssl rand -base64 32` e guarde uma cópia num
    gerenciador de senhas. Sem ela, quem ligou o MFA só entra com código de
    recuperação (ADR-050).
-7. A imagem do Ubuntu no Oracle vem com regras de `iptables` próprias. Se o
-   teste de fora do passo 10 não chegar na 443, confira o `iptables -L` e
-   persista a liberação com `netfilter-persistent`.
 
 ## 4. DuckDNS [dono]
 
