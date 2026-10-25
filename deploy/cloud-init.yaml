@@ -11,6 +11,7 @@ packages:
   - curl
   - unattended-upgrades
   - iptables-persistent
+  - nano
 
 users:
   - default
