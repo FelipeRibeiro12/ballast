@@ -31,7 +31,12 @@ class ProjectionService {
   }
 
   Result project(UUID userId, UUID accountId, LocalDate today, int days) {
-    ProjectionRows rows = queries.load(userId, accountId, today, days);
+    return project(userId, accountId, today, days, false);
+  }
+
+  Result project(
+      UUID userId, UUID accountId, LocalDate today, int days, boolean excludeThirdParty) {
+    ProjectionRows rows = queries.load(userId, accountId, today, days, excludeThirdParty);
     // Com contaId, escopo vazio quer dizer conta de outro usuário ou inexistente.
     if (accountId != null && rows.accountCount() == 0) {
       return Result.Refused.ACCOUNT_NOT_FOUND;

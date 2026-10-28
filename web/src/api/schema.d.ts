@@ -889,11 +889,31 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Quanto dá para gastar até o próximo salário
-         * @description O menor saldo projetado (ADR-029) das contas que não são de benefício, de hoje até a véspera do próximo salário, ou até o fim do mês sem salário previsto. Cada benefício vem à parte (ADR-048).
+         * Quanto dá para gastar até o fim da janela
+         * @description O menor saldo projetado (ADR-029) das contas que não são de benefício, de hoje até o dia que o usuário escolheu, ou até a véspera do próximo pagamento da fatura âncora, ou até o fim do mês sem cartão. Compra de terceiro fica fora e o rendimento dos cofrinhos entra. Cada benefício vem à parte (ADR-063).
          */
         get: operations["getPossoGastar"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/posso-gastar/configuracao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Escolhe até que dia do mês o Posso gastar conta
+         * @description diaLimite de 1 a 31 fixa o dia; nulo volta ao ciclo da fatura. Não altera lançamento nenhum (ADR-063).
+         */
+        put: operations["putPossoGastarConfiguracao"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2083,11 +2103,16 @@ export interface components {
         PossoGastar: {
             /**
              * Format: date
-             * @description Véspera do próximo salário, ou o fim do mês sem salário previsto
+             * @description Último dia contado: o dia que o usuário escolheu, a véspera do próximo pagamento da fatura âncora, ou o fim do mês sem cartão
              */
             ate: string;
             /** @description Contas de benefício ativas, fora de livreCentavos, pelo nome */
             beneficios: components["schemas"]["BeneficioLivre"][];
+            /**
+             * Format: int32
+             * @description Dia do mês escolhido pelo usuário; nulo fora do modo dia
+             */
+            diaLimite: number | null;
             /**
              * Format: int32
              * @description Dias de hoje até ate, contando os dois
@@ -2097,7 +2122,7 @@ export interface components {
             hoje: string;
             /**
              * Format: int64
-             * @description Menor saldo projetado das contas que não são de benefício, de hoje até ate. Negativo quando falta
+             * @description Menor saldo projetado das contas que não são de benefício, de hoje até ate, mais o rendimento. Negativo quando falta
              */
             livreCentavos: number;
             /**
@@ -2106,23 +2131,32 @@ export interface components {
              */
             menorSaldoEm: string;
             /**
+             * @description De onde veio a data final da janela
+             * @enum {string}
+             */
+            modo: "dia" | "fatura" | "fim-do-mes";
+            /**
              * Format: int64
              * @description livreCentavos dividido por dias, para baixo; nulo quando não sobra nada
              */
             porDiaCentavos: number | null;
-            /** @description Próxima receita na categoria Salário depois de hoje; nulo sem salário */
-            proximoSalario: components["schemas"]["ProximoSalario"];
+            /**
+             * Format: int64
+             * @description Rendimento estimado dos cofrinhos até o dia do menor saldo, já dentro de livreCentavos (ADR-061)
+             */
+            rendimentoCofrinhoCentavos: number;
             /**
              * Format: int64
              * @description Soma com sinal das previstas vencidas, já dentro de livreCentavos (ADR-029)
              */
             vencidasCentavos: number;
         };
-        ProximoSalario: {
-            /** Format: date */
-            data: string;
-            /** Format: int64 */
-            valorCentavos: number;
+        PossoGastarConfiguracaoRequest: {
+            /**
+             * Format: int32
+             * @description Nulo volta ao ciclo da fatura âncora
+             */
+            diaLimite: number | null;
         };
         ReceitaEDespesaDoMes: {
             /** Format: int64 */
@@ -6196,6 +6230,46 @@ export interface operations {
             };
             /** @description Banco indisponível */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putPossoGastarConfiguracao: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PossoGastarConfiguracaoRequest"];
+            };
+        };
+        responses: {
+            /** @description Preferência gravada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description diaLimite fora de 1 a 31 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,10 +1,12 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import PossoGastar from './PossoGastar'
 
 const base = {
   hoje: '2026-03-15',
   ate: '2026-04-04',
-  proximoSalario: { data: '2026-04-05', valorCentavos: 500_000 },
+  modo: 'dia',
+  diaLimite: 4,
+  rendimentoCofrinhoCentavos: 0,
   livreCentavos: 60_000,
   menorSaldoEm: '2026-03-25',
   dias: 21,
@@ -35,35 +37,34 @@ function renderizar(versao = 0) {
 }
 
 describe('PossoGastar', () => {
-  it('mostra quanto dá para gastar até a véspera do salário e quanto por dia', async () => {
+  it('mostra quanto dá para gastar até o dia escolhido e quanto por dia', async () => {
     mockFetch(base)
     renderizar()
 
     const cartao = await screen.findByRole('region', { name: 'Posso gastar' })
     expect(await within(cartao).findByText(texto('R$ 600,00'), { selector: 'strong' })).toBeVisible()
-    expect(within(cartao).getByText('até 04/04, véspera do salário')).toBeVisible()
+    expect(within(cartao).getByText('até 04/04')).toBeVisible()
     expect(within(cartao).getByText(texto('R$ 28,57 por dia nos próximos 21 dias'))).toBeVisible()
     expect(within(cartao).getByText('O saldo chega ao menor valor em 25/03.')).toBeVisible()
     expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).toContain('/posso-gastar')
   })
 
-  it('sem salário previsto, conta até o fim do mês e diz isso', async () => {
-    mockFetch({ ...base, proximoSalario: null, ate: '2026-03-31', dias: 17, menorSaldoEm: '2026-03-15' })
+  it('sem dia escolhido nem cartão, conta até o fim do mês e diz isso', async () => {
+    mockFetch({ ...base, modo: 'fim-do-mes', diaLimite: null, ate: '2026-03-31', dias: 17, menorSaldoEm: '2026-03-15' })
     renderizar()
 
     const cartao = await screen.findByRole('region', { name: 'Posso gastar' })
     expect(await within(cartao).findByText('até 31/03, fim do mês')).toBeVisible()
-    expect(within(cartao).getByText('Nenhum salário previsto. Cadastre a recorrência na categoria Salário.')).toBeVisible()
     // O menor saldo hoje não precisa de aviso.
     expect(within(cartao).queryByText(/menor valor/)).toBeNull()
   })
 
-  it('o último dia antes do salário fala de hoje, não de dias', async () => {
+  it('o último dia da janela fala de hoje, não de dias', async () => {
     mockFetch({ ...base, ate: '2026-03-15', dias: 1, porDiaCentavos: 60_000, menorSaldoEm: '2026-03-15' })
     renderizar()
 
     const cartao = await screen.findByRole('region', { name: 'Posso gastar' })
-    expect(await within(cartao).findByText('até hoje, véspera do salário')).toBeVisible()
+    expect(await within(cartao).findByText('até hoje')).toBeVisible()
     expect(within(cartao).queryByText(/por dia/)).toBeNull()
   })
 
@@ -114,5 +115,48 @@ describe('PossoGastar', () => {
     mockFetch({ erro: 'sessão expirada' }, 401)
     const { aoSessaoExpirar } = renderizar()
     await vi.waitFor(() => expect(aoSessaoExpirar).toHaveBeenCalled())
+  })
+
+  it('a engrenagem grava o dia escolhido e recarrega o cálculo', async () => {
+    const chamadas: { url: string; metodo: string; corpo: string | null }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        chamadas.push({ url: String(url), metodo: init?.method ?? 'GET', corpo: (init?.body as string | undefined) ?? null })
+        if (init?.method === 'PUT') return Promise.resolve(new Response(null, { status: 204 }))
+        return Promise.resolve(jsonResponse(base, 200))
+      }),
+    )
+    renderizar()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Configurar o Posso gastar' }))
+    fireEvent.change(screen.getByLabelText('Contar entradas e saídas até o dia'), { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+
+    await waitFor(() => expect(chamadas.filter((c) => c.url === '/posso-gastar')).toHaveLength(2))
+    const gravacao = chamadas.find((c) => c.metodo === 'PUT')
+    expect(gravacao?.url).toBe('/posso-gastar/configuracao')
+    expect(gravacao?.corpo).toBe(JSON.stringify({ diaLimite: 10 }))
+  })
+
+  it('escolher o ciclo da fatura manda diaLimite nulo', async () => {
+    const corpos: (string | null)[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        if (init?.method === 'PUT') {
+          corpos.push((init.body as string | undefined) ?? null)
+          return Promise.resolve(new Response(null, { status: 204 }))
+        }
+        return Promise.resolve(jsonResponse(base, 200))
+      }),
+    )
+    renderizar()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Configurar o Posso gastar' }))
+    fireEvent.change(screen.getByLabelText('Contar entradas e saídas até o dia'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+
+    await waitFor(() => expect(corpos).toEqual([JSON.stringify({ diaLimite: null })]))
   })
 })

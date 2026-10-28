@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react'
-import { fetchPossoGastar } from './api'
+import type { FormEvent } from 'react'
+import { SessaoExpiradaError, fetchPossoGastar, putPossoGastarConfiguracao } from './api'
 import type { PossoGastar as Resposta } from './api'
 import { formatarDiaMes } from './datas'
 import { formatarCentavos } from './dinheiro'
 import type { Estado } from './leitura'
 import { carregar } from './leitura'
+import { IconeEngrenagem } from './icones'
+import Painel from './Painel'
 import { Carregando } from './ui'
 
 function ate(resposta: Resposta): string {
   const dia = resposta.ate === resposta.hoje ? 'hoje' : formatarDiaMes(resposta.ate)
-  return resposta.proximoSalario === null ? `até ${dia}, fim do mês` : `até ${dia}, véspera do salário`
+  if (resposta.modo === 'fatura') return `até ${dia}, véspera do pagamento da fatura`
+  if (resposta.modo === 'fim-do-mes') return `até ${dia}, fim do mês`
+  return `até ${dia}`
 }
 
 function Vencidas({ centavos }: { centavos: number }) {
@@ -24,10 +29,12 @@ function Vencidas({ centavos }: { centavos: number }) {
   )
 }
 
-// A pergunta que faz o app ser aberto todo dia (ADR-048): o menor saldo projetado até a véspera do
-// próximo salário. O benefício fica à parte porque só paga as categorias dele.
+// A pergunta que faz o app ser aberto todo dia (ADR-048, ADR-063): o menor saldo projetado até o fim da
+// janela que o usuário escolhe na engrenagem. O benefício fica à parte porque só paga as categorias dele.
 export default function PossoGastar({ versao, aoSessaoExpirar }: { versao: number; aoSessaoExpirar: () => void }) {
   const [estado, setEstado] = useState<Estado<Resposta>>({ tipo: 'carregando' })
+  const [configurando, setConfigurando] = useState(false)
+  const [recarga, setRecarga] = useState(0)
 
   useEffect(() => {
     let vale = true
@@ -35,11 +42,22 @@ export default function PossoGastar({ versao, aoSessaoExpirar }: { versao: numbe
     return () => {
       vale = false
     }
-  }, [versao, aoSessaoExpirar])
+  }, [versao, recarga, aoSessaoExpirar])
 
   return (
     <section className="cartao posso-gastar" aria-label="Posso gastar">
-      <h3 className="titulo-cartao">Posso gastar</h3>
+      <header className="posso-topo">
+        <h3 className="titulo-cartao">Posso gastar</h3>
+        <button
+          type="button"
+          className="icone-botao"
+          aria-label="Configurar o Posso gastar"
+          disabled={estado.tipo !== 'ok'}
+          onClick={() => setConfigurando(true)}
+        >
+          <IconeEngrenagem />
+        </button>
+      </header>
       {estado.tipo === 'carregando' && <Carregando texto="Calculando quanto dá para gastar..." linhas={2} />}
       {estado.tipo === 'erro' && (
         <p role="alert" className="erro">
@@ -47,6 +65,18 @@ export default function PossoGastar({ versao, aoSessaoExpirar }: { versao: numbe
         </p>
       )}
       {estado.tipo === 'ok' && <Resultado resposta={estado.dados} />}
+      {configurando && estado.tipo === 'ok' && (
+        <Painel titulo="Posso gastar" aoFechar={() => setConfigurando(false)}>
+          <Configuracao
+            atual={estado.dados.diaLimite}
+            aoSalvar={() => {
+              setConfigurando(false)
+              setRecarga((n) => n + 1)
+            }}
+            aoSessaoExpirar={aoSessaoExpirar}
+          />
+        </Painel>
+      )}
     </section>
   )
 }
@@ -75,8 +105,10 @@ function Resultado({ resposta }: { resposta: Resposta }) {
       {!falta && resposta.menorSaldoEm !== resposta.hoje && (
         <p className="posso-nota">O saldo chega ao menor valor em {formatarDiaMes(resposta.menorSaldoEm)}.</p>
       )}
-      {resposta.proximoSalario === null && (
-        <p className="posso-nota">Nenhum salário previsto. Cadastre a recorrência na categoria Salário.</p>
+      {resposta.rendimentoCofrinhoCentavos > 0 && (
+        <p className="posso-nota">
+          Inclui {formatarCentavos(resposta.rendimentoCofrinhoCentavos)} de rendimento estimado do cofrinho.
+        </p>
       )}
       <Vencidas centavos={resposta.vencidasCentavos} />
       {resposta.beneficios.length > 0 && (
@@ -93,5 +125,68 @@ function Resultado({ resposta }: { resposta: Resposta }) {
         </div>
       )}
     </>
+  )
+}
+
+const DIAS = Array.from({ length: 31 }, (_, i) => i + 1)
+
+// Escolher o dia só muda a janela da próxima leitura: nenhum lançamento é tocado (ADR-063).
+function Configuracao({
+  atual,
+  aoSalvar,
+  aoSessaoExpirar,
+}: {
+  atual: number | null
+  aoSalvar: () => void
+  aoSessaoExpirar: () => void
+}) {
+  const [dia, setDia] = useState(atual === null ? '' : String(atual))
+  const [enviando, setEnviando] = useState(false)
+  const [mensagem, setMensagem] = useState<string | null>(null)
+
+  async function salvar(evento: FormEvent<HTMLFormElement>): Promise<void> {
+    evento.preventDefault()
+    setEnviando(true)
+    setMensagem(null)
+    try {
+      await putPossoGastarConfiguracao(dia === '' ? null : Number(dia))
+      aoSalvar()
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return
+      }
+      setMensagem('Não foi possível salvar. Tente de novo.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <form onSubmit={(evento) => void salvar(evento)} aria-label="Configurar o Posso gastar">
+      <div className="campo">
+        <label htmlFor="posso-dia">Contar entradas e saídas até o dia</label>
+        <select id="posso-dia" value={dia} onChange={(evento) => setDia(evento.target.value)}>
+          <option value="">Ciclo da fatura</option>
+          {DIAS.map((valor) => (
+            <option key={valor} value={valor}>
+              Dia {valor}
+            </option>
+          ))}
+        </select>
+        <small>
+          Dia 31 em mês curto vale o último dia do mês. Mudar o dia não altera nenhum lançamento, só a janela do cálculo.
+          Sem dia, vale o ciclo da fatura de vencimento mais tarde, ou o fim do mês sem cartão.
+        </small>
+      </div>
+      {mensagem !== null && (
+        <p role="alert" className="erro">
+          {mensagem}
+        </p>
+      )}
+      <button type="submit" className="primario" disabled={enviando}>
+        Salvar
+      </button>
+    </form>
   )
 }

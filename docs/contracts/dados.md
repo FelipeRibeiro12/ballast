@@ -541,6 +541,19 @@ guardada.
 
 ---
 
+### Preferência do Posso gastar (V30, ADR-063)
+
+```
+preferencia_posso_gastar
+  usuario_id  uuid pk fk -> usuario ON DELETE CASCADE
+  dia_limite  smallint not null    -- 1 a 31
+```
+
+Sem linha, a janela segue o ciclo da fatura âncora. A linha só guarda o dia: o
+saldo continua sendo `saldo_inicial` mais os lançamentos.
+
+---
+
 ## Categoria
 
 ```

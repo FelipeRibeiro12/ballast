@@ -3274,8 +3274,10 @@ paths:
   /posso-gastar:
     get:
       description: "O menor saldo projetado (ADR-029) das contas que não são de benefí\
-        cio, de hoje até a véspera do próximo salário, ou até o fim do mês sem salá\
-        rio previsto. Cada benefício vem à parte (ADR-048)."
+        cio, de hoje até o dia que o usuário escolheu, ou até a véspera do próximo\
+        \ pagamento da fatura âncora, ou até o fim do mês sem cartão. Compra de terceiro\
+        \ fica fora e o rendimento dos cofrinhos entra. Cada benefício vem à parte\
+        \ (ADR-063)."
       operationId: getPossoGastar
       responses:
         "200":
@@ -3304,7 +3306,38 @@ paths:
           description: Banco indisponível
       security:
       - cookieAuth: []
-      summary: Quanto dá para gastar até o próximo salário
+      summary: Quanto dá para gastar até o fim da janela
+      tags:
+      - saldo-projetado
+  /posso-gastar/configuracao:
+    put:
+      description: diaLimite de 1 a 31 fixa o dia; nulo volta ao ciclo da fatura.
+        Não altera lançamento nenhum (ADR-063).
+      operationId: putPossoGastarConfiguracao
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PossoGastarConfiguracaoRequest"
+        required: true
+      responses:
+        "204":
+          description: Preferência gravada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: diaLimite fora de 1 a 31
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+      security:
+      - cookieAuth: []
+      summary: Escolhe até que dia do mês o Posso gastar conta
       tags:
       - saldo-projetado
   /recorrencias:
@@ -6327,12 +6360,21 @@ components:
         ate:
           type: string
           format: date
-          description: "Véspera do próximo salário, ou o fim do mês sem salário previsto"
+          description: "Último dia contado: o dia que o usuário escolheu, a véspera\
+            \ do próximo pagamento da fatura âncora, ou o fim do mês sem cartão"
         beneficios:
           type: array
           description: "Contas de benefício ativas, fora de livreCentavos, pelo nome"
           items:
             $ref: "#/components/schemas/BeneficioLivre"
+        diaLimite:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: Dia do mês escolhido pelo usuário; nulo fora do modo dia
+          maximum: 31
+          minimum: 1
         dias:
           type: integer
           format: int32
@@ -6346,13 +6388,20 @@ components:
           type: integer
           format: int64
           description: "Menor saldo projetado das contas que não são de benefício,\
-            \ de hoje até ate. Negativo quando falta"
+            \ de hoje até ate, mais o rendimento. Negativo quando falta"
           maximum: 9007199254740991
           minimum: -9007199254740991
         menorSaldoEm:
           type: string
           format: date
           description: Dia do menor saldo
+        modo:
+          type: string
+          description: De onde veio a data final da janela
+          enum:
+          - dia
+          - fatura
+          - fim-do-mes
         porDiaCentavos:
           type:
           - integer
@@ -6362,11 +6411,13 @@ components:
             o sobra nada"
           maximum: 9007199254740991
           minimum: 0
-        proximoSalario:
-          type: "null"
-          $ref: "#/components/schemas/ProximoSalario"
-          description: Próxima receita na categoria Salário depois de hoje; nulo sem
-            salário
+        rendimentoCofrinhoCentavos:
+          type: integer
+          format: int64
+          description: "Rendimento estimado dos cofrinhos até o dia do menor saldo,\
+            \ já dentro de livreCentavos (ADR-061)"
+          maximum: 9007199254740991
+          minimum: 0
         vencidasCentavos:
           type: integer
           format: int64
@@ -6377,27 +6428,28 @@ components:
       required:
       - ate
       - beneficios
+      - diaLimite
       - dias
       - hoje
       - livreCentavos
       - menorSaldoEm
+      - modo
       - porDiaCentavos
-      - proximoSalario
+      - rendimentoCofrinhoCentavos
       - vencidasCentavos
-    ProximoSalario:
+    PossoGastarConfiguracaoRequest:
       type: object
       properties:
-        data:
-          type: string
-          format: date
-        valorCentavos:
-          type: integer
-          format: int64
-          maximum: 9007199254740991
+        diaLimite:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: Nulo volta ao ciclo da fatura âncora
+          maximum: 31
           minimum: 1
       required:
-      - data
-      - valorCentavos
+      - diaLimite
     ReceitaEDespesaDoMes:
       type: object
       properties:

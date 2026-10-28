@@ -2125,17 +2125,6 @@ function isBeneficioLivre(valor: unknown): valor is BeneficioLivre {
   )
 }
 
-function isProximoSalario(valor: unknown): boolean {
-  return (
-    valor === null ||
-    (typeof valor === 'object' &&
-      'data' in valor &&
-      eDataIso(valor.data) &&
-      'valorCentavos' in valor &&
-      Number.isSafeInteger(valor.valorCentavos))
-  )
-}
-
 function isPossoGastar(valor: unknown): valor is PossoGastar {
   return (
     typeof valor === 'object' &&
@@ -2144,8 +2133,12 @@ function isPossoGastar(valor: unknown): valor is PossoGastar {
     eDataIso(valor.hoje) &&
     'ate' in valor &&
     eDataIso(valor.ate) &&
-    'proximoSalario' in valor &&
-    isProximoSalario(valor.proximoSalario) &&
+    'modo' in valor &&
+    (valor.modo === 'dia' || valor.modo === 'fatura' || valor.modo === 'fim-do-mes') &&
+    'diaLimite' in valor &&
+    (valor.diaLimite === null || Number.isSafeInteger(valor.diaLimite)) &&
+    'rendimentoCofrinhoCentavos' in valor &&
+    Number.isSafeInteger(valor.rendimentoCofrinhoCentavos) &&
     'livreCentavos' in valor &&
     Number.isSafeInteger(valor.livreCentavos) &&
     'menorSaldoEm' in valor &&
@@ -2168,6 +2161,17 @@ export async function fetchPossoGastar(): Promise<PossoGastar> {
   const corpo: unknown = await resposta.json()
   if (!isPossoGastar(corpo)) throw new ApiError('/posso-gastar com formato inesperado')
   return corpo
+}
+
+// diaLimite nulo volta ao ciclo da fatura (ADR-063).
+export async function putPossoGastarConfiguracao(diaLimite: number | null): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/posso-gastar/configuracao`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ diaLimite }),
+  })
+  if (resposta.status !== 204) return recusarRespostaDeProjecao(resposta, 'PUT /posso-gastar/configuracao')
 }
 
 export type MfaStatus = components['schemas']['MfaStatus']

@@ -52,6 +52,9 @@ class ProjectionQueries {
         LEFT JOIN transferencia ts ON ts.saida_id = l.id AND ts.usuario_id = l.usuario_id
         LEFT JOIN scope peer ON peer.id = COALESCE(te.conta_saida_id, ts.conta_entrada_id)
         WHERE l.usuario_id = :userId AND l.status IN ('realizado', 'previsto')
+          AND NOT (:excludeThirdParty AND l.tipo = 'despesa' AND EXISTS (
+            SELECT 1 FROM terceiro_lancamento tl
+            WHERE tl.lancamento_id = l.id AND tl.usuario_id = l.usuario_id))
       ),
       totals AS (
         SELECT COALESCE(SUM(valor) FILTER (WHERE data_caixa < :today), 0) AS before_today,
@@ -90,11 +93,18 @@ class ProjectionQueries {
 
   // accountId nulo é o total das contas ativas. A série tem sempre days pontos a partir de today.
   ProjectionRows load(UUID userId, UUID accountId, LocalDate today, int days) {
+    return load(userId, accountId, today, days, false);
+  }
+
+  // excludeThirdParty tira a compra de terceiro: no Posso gastar ela não é gasto do dono (ADR-062).
+  ProjectionRows load(
+      UUID userId, UUID accountId, LocalDate today, int days, boolean excludeThirdParty) {
     JdbcClient.StatementSpec statement =
         jdbc.sql(accountId == null ? ALL_QUERY : ONE_QUERY)
             .param("userId", userId)
             .param("today", today)
-            .param("lastOffset", days - 1);
+            .param("lastOffset", days - 1)
+            .param("excludeThirdParty", excludeThirdParty);
     if (accountId != null) {
       statement = statement.param("accountId", accountId);
     }
