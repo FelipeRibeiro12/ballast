@@ -163,7 +163,7 @@ class RecurrenceCardTest {
     assertThat(rows.getFirst())
         .isEqualTo(new Row(d("2026-10-20"), d("2026-10-20"), d("2026-11-25")));
     assertThat(rows.get(1)).isEqualTo(new Row(d("2026-11-10"), d("2026-11-10"), d("2026-11-25")));
-    assertThat(rows.get(2)).isEqualTo(new Row(d("2026-11-20"), d("2026-11-20"), d("2026-12-25")));
+    assertThat(rows.get(2)).isEqualTo(new Row(d("2026-11-20"), d("2026-11-20"), d("2026-12-28")));
   }
 
   @Test

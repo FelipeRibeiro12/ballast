@@ -68,6 +68,10 @@ class Category {
     return icon;
   }
 
+  boolean isProtected() {
+    return "outros".equals(seed) || "outras_receitas".equals(seed);
+  }
+
   UUID getParentId() {
     return parentId;
   }

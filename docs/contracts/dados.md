@@ -508,6 +508,52 @@ estiver faltando, em vez de inventar.
 
 ---
 
+### Cofrinho (V28, ADR-061)
+
+`conta.tipo` aceita `cofrinho`. `conta.percentual_cdi numeric(6,2)` fica nulo em
+todo tipo, menos no cofrinho, e nele pode ficar nulo até o usuário informar.
+`conta_percentual_cdi_so_no_cofrinho`: só no tipo `cofrinho` e entre 0 e 1000.
+
+---
+
+### Terceiro (V29, ADR-062)
+
+```
+terceiro
+  id          uuid pk
+  usuario_id  uuid fk not null
+  nome        text not null           -- 1 a 100, sem espaço nas pontas, único por usuário sem caixa
+  arquivado   boolean not null default false
+  criado_em   timestamptz not null default now()
+  unique (id, usuario_id)
+
+terceiro_lancamento
+  lancamento_id  uuid pk              -- um lançamento tem no máximo um terceiro
+  usuario_id     uuid not null
+  terceiro_id    uuid not null
+  fk (lancamento_id, usuario_id) -> lancamento (id, usuario_id) ON DELETE CASCADE
+  fk (terceiro_id, usuario_id)   -> terceiro (id, usuario_id)   ON DELETE NO ACTION
+```
+
+A V29 cria `lancamento_id_usuario_unico` para a FK composta. Despesa ligada é
+compra do terceiro e receita ligada é reembolso. A dívida é calculada, nunca
+guardada.
+
+---
+
+### Preferência do Posso gastar (V30, ADR-063)
+
+```
+preferencia_posso_gastar
+  usuario_id  uuid pk fk -> usuario ON DELETE CASCADE
+  dia_limite  smallint not null    -- 1 a 31
+```
+
+Sem linha, a janela segue o ciclo da fatura âncora. A linha só guarda o dia: o
+saldo continua sendo `saldo_inicial` mais os lançamentos.
+
+---
+
 ## Categoria
 
 ```
@@ -549,8 +595,9 @@ vem da aplicação.
   Recusam apagar o pai com filho do mesmo jeito, mas só checam no fim do comando.
   Com `RESTRICT`, apagar o usuário falharia no meio do cascade, quando a conta
   some antes dos lançamentos.
-- Categoria com lançamento não se apaga (a FK recusa). O CRUD de categoria
-  (fatia futura) decide entre arquivar e bloquear.
+- Apagar categoria move lançamentos, recorrências e teto de orçamento para
+  Outros ou Outras receitas, na transação do `DELETE /categorias/{id}`
+  (ADR-064). Até 20 por usuário, sem contar as duas protegidas.
 
 Sementes (usuários existentes na `V6`, usuários novos pela aplicação, **a mesma
 lista nos dois lugares**; esta é a fonte):

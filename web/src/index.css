@@ -629,6 +629,30 @@ p[role='status'] {
   }
 }
 
+/* Celular: quem rola é o .app, não a página. Com a página rolando, a barra do Safari do iOS encolhe e
+   cresce, a barra fixa de baixo flutua com conteúdo aparecendo por baixo e o toque cai no botão
+   vizinho. Sem rolagem da página a barra do navegador fica parada. */
+@media (max-width: 47.99rem) {
+  html:has(.app),
+  body:has(.app) {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .app {
+    height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Painel aberto trava o fundo: o body já não rola, então a trava passa para o .app. */
+  body.painel-aberto .app {
+    overflow: hidden;
+  }
+}
+
 /* Celular: barra inferior fixa, com o recuo da área segura do iOS. */
 .nav {
   position: fixed;
@@ -1440,10 +1464,11 @@ p[role='status'] {
   }
 }
 
-.previsto-no-mes {
-  margin-bottom: var(--esp-4);
-  color: var(--texto-fraco);
-  font-size: 0.875rem;
+.pilula .pilula-previsto {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--texto-suave);
 }
 
 .dia-grupo {
@@ -1642,6 +1667,32 @@ p[role='status'] {
 }
 
 /* Contas */
+
+.resumo-carrossel {
+  display: flex;
+  gap: var(--esp-3);
+  margin: 0 0 var(--esp-4);
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.resumo-grupo {
+  flex: 0 0 70%;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-1);
+  padding: var(--esp-3) var(--esp-4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+}
+
+.resumo-grupo strong {
+  font-size: 1.25rem;
+}
 
 .resumo-total {
   margin-bottom: var(--esp-4);
@@ -2015,6 +2066,17 @@ button.relatorio-mes:hover:not(:disabled) {
 .relatorio-tabela thead th {
   color: var(--texto-fraco);
   font-weight: 600;
+}
+
+.posso-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-3);
+}
+
+.posso-topo .titulo-cartao {
+  margin-bottom: 0;
 }
 
 .posso-gastar p {

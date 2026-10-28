@@ -322,7 +322,7 @@ class EntryService {
 
   // data_caixa do lançamento: a própria data fora de cartão, o vencimento da fatura em cartão.
   private LocalDate cashDate(UUID userId, UUID accountId, LocalDate date) {
-    return queries.findCardBilling(userId, accountId).map(card -> card.dueDate(date)).orElse(date);
+    return queries.findCardBilling(userId, accountId).map(card -> card.payDate(date)).orElse(date);
   }
 
   private SaveResult saved(UUID userId, UUID id) {

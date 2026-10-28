@@ -969,6 +969,141 @@ paths:
       summary: Lista as categorias do usuário
       tags:
       - categorias
+    post:
+      description: "Até 20 por usuário, sem contar Outros e Outras receitas (ADR-064)."
+      operationId: postCategorias
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoriaRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Categoria"
+          description: Categoria criada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Nome repetido ou limite de categorias atingido
+      security:
+      - cookieAuth: []
+      summary: Cria uma categoria
+      tags:
+      - categorias
+  /categorias/{id}:
+    delete:
+      description: Lançamentos e recorrências vão para Outros (ou Outras receitas)
+        e o teto de orçamento soma na Outros. Categoria listada em conta de benefício
+        não se apaga.
+      operationId: deleteCategoriasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Categoria apagada
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Categoria de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Protegida, com subcategorias ou listada em conta de benefí\
+            cio"
+      security:
+      - cookieAuth: []
+      summary: Apaga a categoria
+      tags:
+      - categorias
+    put:
+      description: Só o nome muda. Outros e Outras receitas não podem ser renomeadas.
+      operationId: putCategoriasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoriaRenomearRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Categoria"
+          description: Categoria renomeada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Categoria de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Nome repetido ou categoria protegida
+      security:
+      - cookieAuth: []
+      summary: Renomeia a categoria
+      tags:
+      - categorias
   /compras-parceladas:
     post:
       description: "Cria de 2 a 48 parcelas de despesa realizada na conta de cartã\
@@ -1223,6 +1358,51 @@ paths:
       summary: Muda o texto e a categoria da compra inteira
       tags:
       - compras-parceladas
+  /compras-parceladas/{id}/terceiro:
+    put:
+      operationId: putComprasParceladasByIdTerceiro
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LigarTerceiroRequest"
+        required: true
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Vínculo gravado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Terceiro arquivado
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Compra ou terceiro de outro usuário ou inexistente; mesmo corpo
+      security:
+      - cookieAuth: []
+      summary: Liga todas as parcelas da compra a um terceiro ou solta o vínculo
+      tags:
+      - terceiros
   /contas:
     get:
       description: "Ordenada por nome sem diferenciar caixa. Sem o parâmetro, devolve\
@@ -1607,6 +1787,54 @@ paths:
       security:
       - cookieAuth: []
       summary: Troca a lista de categorias permitidas de uma conta de benefício
+      tags:
+      - contas
+  /contas/{id}/cofrinho:
+    put:
+      description: O rendimento estimado usa o CDI do Banco Central vezes este percentual
+        (ADR-061).
+      operationId: putContasByIdCofrinho
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CofrinhoRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conta"
+          description: Conta atualizada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Percentual inválido, conta que não é cofrinho ou arquivada"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Define o percentual do CDI do cofrinho
       tags:
       - contas
   /contas/{id}/faturas:
@@ -2207,6 +2435,54 @@ paths:
       summary: Substitui um lançamento
       tags:
       - lancamentos
+  /lancamentos/{id}/terceiro:
+    put:
+      description: "Despesa ligada é compra do terceiro; receita ligada é reembolso.\
+        \ Compra de terceiro sai de relatórios, orçamento e do Posso gastar (ADR-062)."
+      operationId: putLancamentosByIdTerceiro
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LigarTerceiroRequest"
+        required: true
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Vínculo gravado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Transferência ou terceiro arquivado
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Lançamento ou terceiro de outro usuário ou inexistente; mesmo
+            corpo
+      security:
+      - cookieAuth: []
+      summary: Liga o lançamento a um terceiro ou solta o vínculo
+      tags:
+      - terceiros
   /metas:
     get:
       description: Pelo título sem diferenciar caixa (ADR-045).
@@ -2998,8 +3274,10 @@ paths:
   /posso-gastar:
     get:
       description: "O menor saldo projetado (ADR-029) das contas que não são de benefí\
-        cio, de hoje até a véspera do próximo salário, ou até o fim do mês sem salá\
-        rio previsto. Cada benefício vem à parte (ADR-048)."
+        cio, de hoje até o dia que o usuário escolheu, ou até a véspera do próximo\
+        \ pagamento da fatura âncora, ou até o fim do mês sem cartão. Compra de terceiro\
+        \ fica fora e o rendimento dos cofrinhos entra. Cada benefício vem à parte\
+        \ (ADR-063)."
       operationId: getPossoGastar
       responses:
         "200":
@@ -3028,7 +3306,38 @@ paths:
           description: Banco indisponível
       security:
       - cookieAuth: []
-      summary: Quanto dá para gastar até o próximo salário
+      summary: Quanto dá para gastar até o fim da janela
+      tags:
+      - saldo-projetado
+  /posso-gastar/configuracao:
+    put:
+      description: diaLimite de 1 a 31 fixa o dia; nulo volta ao ciclo da fatura.
+        Não altera lançamento nenhum (ADR-063).
+      operationId: putPossoGastarConfiguracao
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PossoGastarConfiguracaoRequest"
+        required: true
+      responses:
+        "204":
+          description: Preferência gravada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: diaLimite fora de 1 a 31
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+      security:
+      - cookieAuth: []
+      summary: Escolhe até que dia do mês o Posso gastar conta
       tags:
       - saldo-projetado
   /recorrencias:
@@ -3481,6 +3790,194 @@ paths:
       summary: Série diária do saldo projetado por dataCaixa
       tags:
       - saldo-projetado
+  /terceiros:
+    get:
+      operationId: getTerceiros
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Terceiro"
+          description: "Terceiros do usuário, ativos primeiro"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+      security:
+      - cookieAuth: []
+      summary: Lista os terceiros com o que compraram e o que já reembolsaram
+      tags:
+      - terceiros
+    post:
+      operationId: postTerceiros
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TerceiroRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Terceiro"
+          description: Terceiro criado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Nome repetido ou limite de terceiros atingido
+      security:
+      - cookieAuth: []
+      summary: Cria um terceiro
+      tags:
+      - terceiros
+  /terceiros/{id}:
+    delete:
+      operationId: deleteTerceirosById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Terceiro apagado
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Terceiro de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Terceiro com lançamentos ligados
+      security:
+      - cookieAuth: []
+      summary: Apaga o terceiro sem lançamentos
+      tags:
+      - terceiros
+    put:
+      operationId: putTerceirosById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TerceiroRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Terceiro"
+          description: Terceiro atualizado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Terceiro de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Nome repetido
+      security:
+      - cookieAuth: []
+      summary: Troca o nome e o arquivamento do terceiro
+      tags:
+      - terceiros
+  /terceiros/{id}/lancamentos:
+    get:
+      operationId: getTerceirosByIdLancamentos
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TerceiroLancamento"
+          description: Do mais novo ao mais antigo pela data de caixa
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Terceiro de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Compras e reembolsos ligados ao terceiro
+      tags:
+      - terceiros
   /titulos-renda-fixa:
     get:
       description: "Valor bruto, IOF e IR estimados (só CDB), líquido e rendimento\
@@ -4334,6 +4831,9 @@ components:
           - string
           - "null"
           format: uuid
+        protegida:
+          type: boolean
+          description: "Outros e Outras receitas: não renomeia nem apaga"
         tipo:
           type: string
           enum:
@@ -4345,6 +4845,32 @@ components:
       - id
       - nome
       - paiId
+      - protegida
+      - tipo
+    CategoriaRenomearRequest:
+      type: object
+      properties:
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+      required:
+      - nome
+    CategoriaRequest:
+      type: object
+      properties:
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+        tipo:
+          type: string
+          description: Só no cadastro; o tipo não muda depois
+          enum:
+          - receita
+          - despesa
+      required:
+      - nome
       - tipo
     CategoriasPermitidasRequest:
       type: object
@@ -4359,6 +4885,16 @@ components:
           minItems: 0
       required:
       - categoriaIds
+    CofrinhoRequest:
+      type: object
+      properties:
+        percentualCdi:
+          type: string
+          description: "Percentual do CDI, de 0,01 a 1000, com até duas casas"
+          example: "110"
+          pattern: "^(?:[1-9]\\d{0,2}|1000|0)(?:\\.\\d{1,2})?$"
+      required:
+      - percentualCdi
     CompraParcelada:
       type: object
       properties:
@@ -4536,6 +5072,12 @@ components:
           type: string
           maxLength: 100
           minLength: 1
+        percentualCdi:
+          type:
+          - string
+          - "null"
+          description: "Percentual do CDI do cofrinho, em texto com duas casas (ex.\
+            \ \"110.00\"). Nulo fora do cofrinho e no cofrinho sem percentual"
         saldoCentavos:
           type: integer
           format: int64
@@ -4558,6 +5100,7 @@ components:
           - beneficio
           - cripto
           - investimento
+          - cofrinho
       required:
       - arquivada
       - cartao
@@ -4566,6 +5109,7 @@ components:
       - id
       - moeda
       - nome
+      - percentualCdi
       - saldoCentavos
       - saldoInicialCentavos
       - tipo
@@ -4676,6 +5220,7 @@ components:
           - beneficio
           - cripto
           - investimento
+          - cofrinho
       required:
       - nome
       - tipo
@@ -4952,6 +5497,13 @@ components:
           - "null"
           format: uuid
           description: Id da recorrência que gerou a ocorrência; nulo nos avulsos
+        terceiroId:
+          type:
+          - string
+          - "null"
+          format: uuid
+          description: "Terceiro ligado: despesa é compra dele e receita é reembolso.\
+            \ Fora de relatórios, orçamento e Posso gastar (ADR-062); nulo no resto"
         tipo:
           type: string
           enum:
@@ -4990,6 +5542,7 @@ components:
       - parcelaTotal
       - status
       - templateId
+      - terceiroId
       - tipo
       - titulo
       - transferenciaId
@@ -5074,6 +5627,16 @@ components:
       required:
       - lancamentos
       - maisAlgum
+    LigarTerceiroRequest:
+      type: object
+      properties:
+        terceiroId:
+          type:
+          - string
+          - "null"
+          description: Nulo solta o vínculo
+      required:
+      - terceiroId
     LoginMfaPendente:
       type: object
       properties:
@@ -5797,12 +6360,21 @@ components:
         ate:
           type: string
           format: date
-          description: "Véspera do próximo salário, ou o fim do mês sem salário previsto"
+          description: "Último dia contado: o dia que o usuário escolheu, a véspera\
+            \ do próximo pagamento da fatura âncora, ou o fim do mês sem cartão"
         beneficios:
           type: array
           description: "Contas de benefício ativas, fora de livreCentavos, pelo nome"
           items:
             $ref: "#/components/schemas/BeneficioLivre"
+        diaLimite:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: Dia do mês escolhido pelo usuário; nulo fora do modo dia
+          maximum: 31
+          minimum: 1
         dias:
           type: integer
           format: int32
@@ -5816,13 +6388,20 @@ components:
           type: integer
           format: int64
           description: "Menor saldo projetado das contas que não são de benefício,\
-            \ de hoje até ate. Negativo quando falta"
+            \ de hoje até ate, mais o rendimento. Negativo quando falta"
           maximum: 9007199254740991
           minimum: -9007199254740991
         menorSaldoEm:
           type: string
           format: date
           description: Dia do menor saldo
+        modo:
+          type: string
+          description: De onde veio a data final da janela
+          enum:
+          - dia
+          - fatura
+          - fim-do-mes
         porDiaCentavos:
           type:
           - integer
@@ -5832,11 +6411,13 @@ components:
             o sobra nada"
           maximum: 9007199254740991
           minimum: 0
-        proximoSalario:
-          type: "null"
-          $ref: "#/components/schemas/ProximoSalario"
-          description: Próxima receita na categoria Salário depois de hoje; nulo sem
-            salário
+        rendimentoCofrinhoCentavos:
+          type: integer
+          format: int64
+          description: "Rendimento estimado dos cofrinhos até o dia do menor saldo,\
+            \ já dentro de livreCentavos (ADR-061)"
+          maximum: 9007199254740991
+          minimum: 0
         vencidasCentavos:
           type: integer
           format: int64
@@ -5847,27 +6428,28 @@ components:
       required:
       - ate
       - beneficios
+      - diaLimite
       - dias
       - hoje
       - livreCentavos
       - menorSaldoEm
+      - modo
       - porDiaCentavos
-      - proximoSalario
+      - rendimentoCofrinhoCentavos
       - vencidasCentavos
-    ProximoSalario:
+    PossoGastarConfiguracaoRequest:
       type: object
       properties:
-        data:
-          type: string
-          format: date
-        valorCentavos:
-          type: integer
-          format: int64
-          maximum: 9007199254740991
+        diaLimite:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: Nulo volta ao ciclo da fatura âncora
+          maximum: 31
           minimum: 1
       required:
-      - data
-      - valorCentavos
+      - diaLimite
     ReceitaEDespesaDoMes:
       type: object
       properties:
@@ -6221,6 +6803,98 @@ components:
       - menorSaldo
       - saldoAtualCentavos
       - vencidasCentavos
+    Terceiro:
+      type: object
+      properties:
+        arquivado:
+          type: boolean
+        compradoCentavos:
+          type: integer
+          format: int64
+          description: "Soma das despesas ligadas, sem as canceladas"
+          maximum: 9007199254740991
+          minimum: 0
+        devidoCentavos:
+          type: integer
+          format: int64
+          description: Comprado menos recebido; negativo quando pagou a mais
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+        recebidoCentavos:
+          type: integer
+          format: int64
+          description: Soma dos reembolsos realizados
+          maximum: 9007199254740991
+          minimum: 0
+      required:
+      - arquivado
+      - compradoCentavos
+      - devidoCentavos
+      - id
+      - nome
+      - recebidoCentavos
+    TerceiroLancamento:
+      type: object
+      properties:
+        dataCaixa:
+          type: string
+          format: date
+        id:
+          type: string
+          format: uuid
+        parcela:
+          type:
+          - integer
+          - "null"
+          format: int32
+        status:
+          type: string
+        tipo:
+          type: string
+          description: despesa é compra do terceiro; receita é reembolso
+          enum:
+          - despesa
+          - receita
+        titulo:
+          type: string
+        totalParcelas:
+          type:
+          - integer
+          - "null"
+          format: int32
+        valorCentavos:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - dataCaixa
+      - id
+      - parcela
+      - status
+      - tipo
+      - titulo
+      - totalParcelas
+      - valorCentavos
+    TerceiroRequest:
+      type: object
+      properties:
+        arquivado:
+          type: boolean
+          default: false
+          description: Só no PUT. Terceiro arquivado não recebe compra nova
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+      required:
+      - nome
     TituloRendaFixa:
       type: object
       properties:

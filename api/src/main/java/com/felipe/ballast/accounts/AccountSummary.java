@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+// cdiPercent é nulo fora do cofrinho e no cofrinho sem percentual.
 // permittedCategories é nulo fora de conta de benefício e vazio quando tudo é permitido.
 // Linha da consulta com saldo. Valores em BigDecimal com escala 2; a conversão para centavos
 // acontece só na saída (AccountResponse).
@@ -18,7 +19,8 @@ record AccountSummary(
     boolean archived,
     Instant createdAt,
     CardSummary card,
-    List<UUID> permittedCategories) {
+    List<UUID> permittedCategories,
+    BigDecimal cdiPercent) {
 
   // Nulo fora de conta de cartão.
   record CardSummary(BigDecimal limit, int closingDay, int dueDay, UUID paymentAccountId) {}

@@ -68,6 +68,8 @@ ballast:
     crypto-movements: ${LIMITE_MOVIMENTOS_CRIPTO:}
     crypto-assets: ${LIMITE_ATIVOS_CRIPTO:}
     quotes: ${LIMITE_COTACOES:}
+    categories: ${LIMITE_CATEGORIAS:}
+    third-parties: ${LIMITE_TERCEIROS:}
     # Prazo por instrução do DELETE /contas/{id}, como 15s ou 500ms. Vazio vale 15s.
     account-delete-timeout: ${TIMEOUT_APAGAR_CONTA:}
   origins:

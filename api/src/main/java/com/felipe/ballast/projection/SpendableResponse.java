@@ -14,21 +14,38 @@ record SpendableResponse(
             requiredMode = Schema.RequiredMode.REQUIRED,
             type = "string",
             format = "date",
-            description = "Véspera do próximo salário, ou o fim do mês sem salário previsto")
+            description =
+                "Último dia contado: o dia que o usuário escolheu, a véspera do próximo pagamento da"
+                    + " fatura âncora, ou o fim do mês sem cartão")
         LocalDate ate,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "De onde veio a data final da janela",
+            allowableValues = {"dia", "fatura", "fim-do-mes"})
+        String modo,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
-            description = "Próxima receita na categoria Salário depois de hoje; nulo sem salário")
-        Salary proximoSalario,
+            description = "Dia do mês escolhido pelo usuário; nulo fora do modo dia",
+            minimum = "1",
+            maximum = "31")
+        Integer diaLimite,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             description =
-                "Menor saldo projetado das contas que não são de benefício, de hoje até ate."
+                "Menor saldo projetado das contas que não são de benefício, de hoje até ate, mais o rendimento."
                     + " Negativo quando falta",
             minimum = "-9007199254740991",
             maximum = "9007199254740991")
         long livreCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description =
+                "Rendimento estimado dos cofrinhos até o dia do menor saldo, já dentro de"
+                    + " livreCentavos (ADR-061)",
+            minimum = "0",
+            maximum = "9007199254740991")
+        long rendimentoCofrinhoCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             type = "string",
@@ -60,16 +77,6 @@ record SpendableResponse(
             description = "Contas de benefício ativas, fora de livreCentavos, pelo nome")
         List<Benefit> beneficios) {
 
-  @Schema(name = "ProximoSalario")
-  record Salary(
-      @Schema(requiredMode = Schema.RequiredMode.REQUIRED, type = "string", format = "date")
-          LocalDate data,
-      @Schema(
-              requiredMode = Schema.RequiredMode.REQUIRED,
-              minimum = "1",
-              maximum = "9007199254740991")
-          long valorCentavos) {}
-
   @Schema(name = "BeneficioLivre")
   record Benefit(
       @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID contaId,
@@ -85,10 +92,14 @@ record SpendableResponse(
     return new SpendableResponse(
         found.today(),
         found.until(),
-        found.salary() == null
-            ? null
-            : new Salary(found.salary().date(), cents(found.salary().amount())),
+        switch (found.mode()) {
+          case CUSTOM_DAY -> "dia";
+          case INVOICE_CYCLE -> "fatura";
+          case END_OF_MONTH -> "fim-do-mes";
+        },
+        found.limitDay(),
         cents(found.spendable()),
+        cents(found.savingsYield()),
         found.lowestOn(),
         found.days(),
         found.perDay() == null ? null : cents(found.perDay()),

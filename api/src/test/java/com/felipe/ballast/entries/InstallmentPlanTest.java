@@ -72,19 +72,20 @@ class InstallmentPlanTest {
         .containsExactly(1, 2, 3, 4);
   }
 
-  // fechamento, vencimento, compra, primeira caixa, caixa da parcela 12 e da 3
+  // fechamento, vencimento, compra, primeira caixa, caixa da parcela 12 e da 3. Caixa em dia
+  // útil (ADR-060): vencimento em fim de semana ou feriado passa para o próximo dia útil.
   @ParameterizedTest(name = "F{0} V{1} compra {2}")
   @CsvSource({
     // Vencimento 31 atravessando fevereiro comum (2027) e a virada de ano.
-    "10, 31, 2026-12-05, 2026-12-31, 2027-01-31, 2027-02-28, 2027-03-31, 2027-11-30",
+    "10, 31, 2026-12-05, 2026-12-31, 2027-02-01, 2027-03-01, 2027-03-31, 2027-11-30",
     // Vencimento 31 passando por fevereiro bissexto (2028).
-    "10, 31, 2027-12-05, 2027-12-31, 2028-01-31, 2028-02-29, 2028-03-31, 2028-11-30",
+    "10, 31, 2027-12-05, 2027-12-31, 2028-01-31, 2028-03-01, 2028-03-31, 2028-11-30",
     // Vencimento 30: fevereiro cai no último dia, e os outros meses voltam ao 30.
-    "10, 30, 2026-12-05, 2026-12-30, 2027-01-30, 2027-02-28, 2027-03-30, 2027-11-30",
-    "10, 30, 2027-12-05, 2027-12-30, 2028-01-30, 2028-02-29, 2028-03-30, 2028-11-30",
+    "10, 30, 2026-12-05, 2026-12-30, 2027-02-01, 2027-03-01, 2027-03-30, 2027-11-30",
+    "10, 30, 2027-12-05, 2027-12-30, 2028-01-31, 2028-03-01, 2028-03-30, 2028-11-30",
     // Vencimento 5, menor que o fechamento: a primeira vence no mês seguinte ao do fechamento.
-    "25, 5, 2026-12-10, 2027-01-05, 2027-02-05, 2027-03-05, 2027-04-05, 2027-12-05",
-    "25, 5, 2027-01-26, 2027-03-05, 2027-04-05, 2027-05-05, 2027-06-05, 2028-02-05"
+    "25, 5, 2026-12-10, 2027-01-05, 2027-02-05, 2027-03-05, 2027-04-05, 2027-12-06",
+    "25, 5, 2027-01-26, 2027-03-05, 2027-04-05, 2027-05-05, 2027-06-07, 2028-02-07"
   })
   void dueDatesStepOneMonthAtTheCardDueDay(
       int closing,
@@ -113,10 +114,10 @@ class InstallmentPlanTest {
   void theFirstPartDueDateIsTheInvoiceDueDateOfThePurchase() {
     List<InstallmentPlan.Part> parts = split("300.00", 3);
 
-    assertThat(parts.getFirst().cashDate()).isEqualTo(BILLING.dueDate(PURCHASE));
+    assertThat(parts.getFirst().cashDate()).isEqualTo(BILLING.payDate(PURCHASE));
     assertThat(parts)
         .extracting(InstallmentPlan.Part::cashDate)
         .containsExactly(
-            LocalDate.of(2026, 3, 25), LocalDate.of(2026, 4, 25), LocalDate.of(2026, 5, 25));
+            LocalDate.of(2026, 3, 25), LocalDate.of(2026, 4, 27), LocalDate.of(2026, 5, 25));
   }
 }

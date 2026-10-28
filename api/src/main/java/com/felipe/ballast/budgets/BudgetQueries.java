@@ -77,6 +77,8 @@ class BudgetQueries {
               FROM alvo a
               JOIN lancamento l ON l.usuario_id = :userId AND l.categoria_id = a.categoria_id
                 AND l.tipo = 'despesa'
+                AND NOT EXISTS (SELECT 1 FROM terceiro_lancamento tl
+                  WHERE tl.lancamento_id = l.id AND tl.usuario_id = l.usuario_id)
                 AND l.data_competencia >= :start AND l.data_competencia < :end
               GROUP BY a.orcada
             )

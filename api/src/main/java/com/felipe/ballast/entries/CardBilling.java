@@ -22,11 +22,17 @@ public record CardBilling(int closingDay, int dueDay) {
     return clampedDay(closingMonth(purchase), closingDay);
   }
 
-  // data_caixa da compra: o vencimento da fatura em que ela entra.
+  // Vencimento nominal, no dia configurado. Serve para achar o mês da fatura; o dinheiro sai em
+  // payDate (ADR-060).
   public LocalDate dueDate(LocalDate purchase) {
     YearMonth closing = closingMonth(purchase);
     YearMonth due = dueDay > closingDay ? closing : closing.plusMonths(1);
     return clampedDay(due, dueDay);
+  }
+
+  // data_caixa da compra: o vencimento da fatura em que ela entra, passado para o próximo dia útil.
+  public LocalDate payDate(LocalDate purchase) {
+    return BusinessDays.nextOnOrAfter(dueDate(purchase));
   }
 
   // Uma fatura: fecha em closing, vence em due, e a seguinte fecha em nextClosing.
@@ -40,7 +46,7 @@ public record CardBilling(int closingDay, int dueDay) {
     for (YearMonth month = YearMonth.from(from).minusMonths(2);
         !month.isAfter(YearMonth.from(to));
         month = month.plusMonths(1)) {
-      LocalDate due = dueDate(month.atDay(1));
+      LocalDate due = payDate(month.atDay(1));
       if (!due.isBefore(from) && !due.isAfter(to)) {
         cycles.add(
             new Cycle(closingDate(month.atDay(1)), due, closingDate(month.plusMonths(1).atDay(1))));

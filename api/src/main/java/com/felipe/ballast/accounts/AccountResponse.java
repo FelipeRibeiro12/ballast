@@ -38,7 +38,14 @@ public record AccountResponse(
             description =
                 "Ids das categorias de despesa que a conta de benefício aceita, em ordem estável."
                     + " Vazia quando qualquer categoria é aceita; nula nos outros tipos")
-        List<UUID> categoriasPermitidas) {
+        List<UUID> categoriasPermitidas,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Percentual do CDI do cofrinho, em texto com duas casas (ex. \"110.00\"). Nulo"
+                    + " fora do cofrinho e no cofrinho sem percentual")
+        String percentualCdi) {
 
   // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
   // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
@@ -53,7 +60,8 @@ public record AccountResponse(
         summary.archived(),
         summary.createdAt(),
         summary.card() == null ? null : CardResponse.from(summary.card(), summary.balance()),
-        summary.permittedCategories());
+        summary.permittedCategories(),
+        summary.cdiPercent() == null ? null : summary.cdiPercent().toPlainString());
   }
 
   private static long toCents(BigDecimal amount) {

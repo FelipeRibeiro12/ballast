@@ -1,5 +1,6 @@
 package com.felipe.ballast.accounts;
 
+import com.felipe.ballast.fixedincome.IndexUpdater;
 import com.felipe.ballast.identity.AuthenticatedUser;
 import com.felipe.ballast.identity.MfaGate;
 import com.felipe.ballast.web.CanonicalUuid;
@@ -13,6 +14,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -68,6 +70,9 @@ class AccountController {
       new ErrorResponse("categoriasPermitidas não pode repetir categoria");
 
   private static final ErrorResponse ACCOUNT_ARCHIVED = new ErrorResponse("conta arquivada");
+  private static final ErrorResponse NOT_SAVINGS_POT =
+      new ErrorResponse("só cofrinho tem percentual do CDI");
+
   private static final ErrorResponse NOT_BENEFIT =
       new ErrorResponse("só conta de benefício tem categorias permitidas");
 
@@ -98,10 +103,12 @@ class AccountController {
 
   private final AccountService accounts;
   private final MfaGate mfaGate;
+  private final IndexUpdater indexUpdater;
 
-  AccountController(AccountService accounts, MfaGate mfaGate) {
+  AccountController(AccountService accounts, MfaGate mfaGate, IndexUpdater indexUpdater) {
     this.accounts = accounts;
     this.mfaGate = mfaGate;
+    this.indexUpdater = indexUpdater;
   }
 
   @Operation(
@@ -568,6 +575,57 @@ class AccountController {
             case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
             case CATEGORY_NOT_FOUND -> ResponseEntity.badRequest().body(CATEGORY_NOT_FOUND);
           };
+    };
+  }
+
+  @Operation(
+      operationId = "putContasByIdCofrinho",
+      summary = "Define o percentual do CDI do cofrinho",
+      description =
+          "O rendimento estimado usa o CDI do Banco Central vezes este percentual (ADR-061).",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Conta atualizada",
+      content = @Content(schema = @Schema(implementation = AccountResponse.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description = "Percentual inválido, conta que não é cofrinho ou arquivada",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "Conta de outro usuário, inexistente ou id que não é UUID; mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @PutMapping(
+      path = "/contas/{id}/cofrinho",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> setCdiPercent(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable("id") String id,
+      @Valid @RequestBody SavingsPotRequest request) {
+    Optional<UUID> accountId = CanonicalUuid.parse(id);
+    if (accountId.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    if (request.value().signum() <= 0) {
+      return ResponseEntity.badRequest().body(new ErrorResponse(SavingsPotRequest.PERCENT_MESSAGE));
+    }
+    Object result = accounts.setCdiPercent(user.id(), accountId.get(), request.value());
+    if (result instanceof AccountService.CdiUpdated updated) {
+      log.info("percentual do cdi trocado usuario_id={} conta_id={}", user.id(), accountId.get());
+      // Garante o CDI recente no banco sem esperar o job diário.
+      indexUpdater.requestFrom(LocalDate.now().minusDays(30));
+      return ResponseEntity.ok(AccountResponse.from(updated.account()));
+    }
+    return switch ((AccountService.CdiResult) result) {
+      case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+      case NOT_SAVINGS_POT -> ResponseEntity.badRequest().body(NOT_SAVINGS_POT);
+      case ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
     };
   }
 }

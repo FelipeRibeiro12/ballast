@@ -2,13 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 
 export type SecaoDaBarra = 'inicio' | 'lancamentos' | 'contas' | 'recorrencias' | 'investimentos'
 
-export type Secao = SecaoDaBarra | 'orcamento' | 'metas' | 'relatorios' | 'seguranca'
+export type Secao = SecaoDaBarra | 'orcamento' | 'metas' | 'relatorios' | 'categorias' | 'terceiros' | 'seguranca'
 
 // As da barra de navegação. Com seis os rótulos se sobrepõem em 360px, então Orçamento, Metas e
 // Relatórios abrem pelos cartões do Início e não têm lugar aqui.
 export const SECOES: readonly SecaoDaBarra[] = ['inicio', 'lancamentos', 'contas', 'recorrencias', 'investimentos']
 
-const TODAS_AS_SECOES: readonly Secao[] = [...SECOES, 'orcamento', 'metas', 'relatorios', 'seguranca']
+const TODAS_AS_SECOES: readonly Secao[] = [...SECOES, 'orcamento', 'metas', 'relatorios', 'categorias', 'terceiros', 'seguranca']
 
 export const ROTULO_DA_SECAO: Record<Secao, string> = {
   inicio: 'Início',
@@ -18,6 +18,8 @@ export const ROTULO_DA_SECAO: Record<Secao, string> = {
   orcamento: 'Orçamento',
   metas: 'Metas',
   relatorios: 'Relatórios',
+  categorias: 'Categorias',
+  terceiros: 'Terceiros',
   seguranca: 'Segurança',
   investimentos: 'Investimentos',
 }
@@ -43,6 +45,8 @@ export function useRota(): [Secao, (secao: Secao) => void] {
       setSecao(lerSecao(window.location.hash))
       // O hash não rola a página sozinho, e a seção nova começa do topo.
       window.scrollTo(0, 0)
+      // No celular quem rola é o .app (index.css). O jsdom não tem scrollTo em elemento.
+      document.querySelector('.app')?.scrollTo?.(0, 0)
     }
     window.addEventListener('hashchange', aoMudarOHash)
     return () => window.removeEventListener('hashchange', aoMudarOHash)

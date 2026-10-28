@@ -15,6 +15,7 @@ import {
   fetchContas,
   patchConta,
   postConta,
+  putCofrinho,
   putCategoriasPermitidas,
 } from './api'
 import type { AtualizarContaRequest, Categoria, Conta, CriarContaRequest, ResumoExclusaoConta } from './api'
@@ -22,6 +23,7 @@ import Faturas from './Faturas'
 import { centavosParaCampo, formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
 import { IconeBanco, IconeBeneficio, IconeCartao, IconeCripto, IconeDinheiro, IconeInvestimentos, IconeMais } from './icones'
 import Painel from './Painel'
+import ResumoDasContas from './ResumoDasContas'
 import { hashDaSecao } from './rota'
 import { Carregando, EstadoVazio, Selo } from './ui'
 
@@ -45,9 +47,10 @@ const ROTULO_DO_TIPO: Record<TipoDeConta, string> = {
   beneficio: 'Vale-benefício',
   cripto: 'Cripto',
   investimento: 'Investimento',
+  cofrinho: 'Cofrinho',
 }
 
-const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito', 'beneficio', 'cripto', 'investimento']
+const TIPOS: TipoDeConta[] = ['corrente', 'poupanca', 'dinheiro', 'cartao_credito', 'beneficio', 'cripto', 'investimento', 'cofrinho']
 
 const ICONE_DO_TIPO: Record<TipoDeConta, ReactNode> = {
   corrente: <IconeBanco />,
@@ -57,6 +60,15 @@ const ICONE_DO_TIPO: Record<TipoDeConta, ReactNode> = {
   beneficio: <IconeBeneficio />,
   cripto: <IconeCripto />,
   investimento: <IconeInvestimentos />,
+  cofrinho: <IconeDinheiro />,
+}
+
+// "110,5" ou "110" viram "110.5" para a API. Nulo fora de 0,01 a 1000 ou com mais de 2 casas.
+function lerPercentualDoCdi(texto: string): string | null {
+  const limpo = texto.trim().replace(',', '.')
+  if (!/^\d{1,4}(\.\d{1,2})?$/.test(limpo)) return null
+  const valor = Number(limpo)
+  return valor > 0 && valor <= 1000 ? limpo : null
 }
 
 // Só para a largura da barra: percentual inteiro do limite já usado, calculado em BigInt.
@@ -280,6 +292,7 @@ function EditarConta({
   const [saldo, setSaldo] = useState(saldoInicialNaTela(conta))
   const [limite, setLimite] = useState(conta.cartao === null ? '' : centavosParaCampo(conta.cartao.limiteCentavos))
   const [pagamento, setPagamento] = useState(conta.cartao?.contaPagamentoId ?? '')
+  const [percentual, setPercentual] = useState((conta.percentualCdi ?? '').replace('.', ','))
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
@@ -311,11 +324,20 @@ function EditarConta({
       const pagamentoMudou = pagamento !== '' && pagamento !== conta.cartao?.contaPagamentoId
       dados.cartao = { limiteCentavos, ...(pagamentoMudou ? { contaPagamentoId: pagamento } : {}) }
     }
+    let percentualParaEnviar: string | null = null
+    if (conta.tipo === 'cofrinho') {
+      percentualParaEnviar = lerPercentualDoCdi(percentual)
+      if (percentualParaEnviar === null) {
+        setMensagem('Percentual do CDI inválido. Use de 0,01 a 1000, com até duas casas.')
+        return
+      }
+    }
     emVoo.current = true
     setEnviando(true)
     setMensagem(null)
     try {
-      aoSalvar(await atualizarConta(conta.id, dados))
+      const atualizada = await atualizarConta(conta.id, dados)
+      aoSalvar(percentualParaEnviar === null ? atualizada : await putCofrinho(conta.id, percentualParaEnviar))
     } catch (erro) {
       if (erro instanceof SessaoExpiradaError) {
         aoSessaoExpirar()
@@ -345,6 +367,20 @@ function EditarConta({
           onChange={(evento) => setNome(evento.target.value)}
         />
       </div>
+      {conta.tipo === 'cofrinho' && (
+        <div className="campo">
+          <label htmlFor="editar-conta-percentual">% do CDI</label>
+          <input
+            id="editar-conta-percentual"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            required
+            value={percentual}
+            onChange={(evento) => setPercentual(evento.target.value)}
+          />
+        </div>
+      )}
       {!eCripto && (
         <div className="campo">
           <label htmlFor="editar-conta-saldo">
@@ -590,6 +626,7 @@ function NovaConta({
   const [diaFechamento, setDiaFechamento] = useState('')
   const [diaVencimento, setDiaVencimento] = useState('')
   const [pagamentoEscolhido, setPagamentoEscolhido] = useState('')
+  const [percentual, setPercentual] = useState('')
   const [categoriasMarcadas, setCategoriasMarcadas] = useState<string[]>([])
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
@@ -640,6 +677,11 @@ function NovaConta({
       saldoParaEnviar = saldoInicialCentavos === 0 ? 0 : -saldoInicialCentavos
       cartao = { limiteCentavos, diaFechamento: fechamento, diaVencimento: vencimento, contaPagamentoId }
     }
+    const percentualCdi = tipo === 'cofrinho' ? lerPercentualDoCdi(percentual) : null
+    if (tipo === 'cofrinho' && percentualCdi === null) {
+      setMensagem('Percentual do CDI inválido. Use de 0,01 a 1000, com até duas casas.')
+      return
+    }
     // Sem a lista carregada o envio mandaria vazio e a conta nasceria aceitando tudo sem o usuário pedir.
     if (eBeneficio && categorias.tipo !== 'ok') {
       setMensagem('Espere as categorias carregarem para criar o benefício.')
@@ -649,14 +691,17 @@ function NovaConta({
     setEnviando(true)
     setMensagem(null)
     try {
-      const conta = await postConta({
+      const criada = await postConta({
         nome,
         tipo,
         saldoInicialCentavos: saldoParaEnviar,
         ...(cartao === undefined ? {} : { cartao }),
         ...(eBeneficio ? { categoriasPermitidas: idsMarcados(categorias, categoriasMarcadas) } : {}),
       })
+      // A API grava o percentual numa segunda chamada; se ela falhar a conta já existe sem percentual.
+      const conta = percentualCdi === null ? criada : await putCofrinho(criada.id, percentualCdi)
       aoCriar(conta)
+      setPercentual('')
       setNome('')
       setTipo('corrente')
       setSaldo('')
@@ -709,6 +754,21 @@ function NovaConta({
           ))}
         </select>
       </div>
+      {tipo === 'cofrinho' && (
+        <div className="campo">
+          <label htmlFor="conta-percentual">% do CDI</label>
+          <input
+            id="conta-percentual"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="100"
+            required
+            value={percentual}
+            onChange={(evento) => setPercentual(evento.target.value)}
+          />
+        </div>
+      )}
       {eCripto ? (
         <p role="status">
           {tipo === 'cripto'
@@ -954,10 +1014,6 @@ export default function Contas({
     }
   }
 
-  // BigInt porque a soma de várias contas pode passar do inteiro seguro.
-  const total =
-    estado.tipo === 'ok' ? estado.contas.reduce((soma, conta) => soma + BigInt(conta.saldoCentavos), 0n) : 0n
-
   const contasDePagamento =
     estado.tipo === 'ok' ? estado.contas.filter((c) => c.tipo === 'corrente' || c.tipo === 'poupanca') : []
 
@@ -996,9 +1052,7 @@ export default function Contas({
       {estado.tipo === 'ok' && (
         <>
           {!arquivadas && estado.contas.length > 0 && (
-            <p className="resumo-total">
-              Total: <strong>{formatarCentavos(total)}</strong>
-            </p>
+            <ResumoDasContas contas={estado.contas} />
           )}
           {estado.contas.length === 0 && (
             <EstadoVazio
@@ -1023,7 +1077,10 @@ export default function Contas({
                     <span className="conta-icone">{ICONE_DO_TIPO[conta.tipo]}</span>
                     <div className="conta-nome">
                       <strong>{conta.nome}</strong>
-                      <span>{ROTULO_DO_TIPO[conta.tipo]}</span>
+                      <span>
+                        {ROTULO_DO_TIPO[conta.tipo]}
+                        {conta.percentualCdi != null && ` · ${conta.percentualCdi.replace('.', ',')}% do CDI`}
+                      </span>
                     </div>
                     {conta.tipo === 'cripto' || conta.tipo === 'investimento' ? (
                       <a className="conta-saldo" href={hashDaSecao('investimentos')}>

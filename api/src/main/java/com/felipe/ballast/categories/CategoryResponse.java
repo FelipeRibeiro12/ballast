@@ -12,7 +12,11 @@ public record CategoryResponse(
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) UUID paiId,
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true, maxLength = 9) String cor,
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true, maxLength = 50)
-        String icone) {
+        String icone,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "Outros e Outras receitas: não renomeia nem apaga")
+        boolean protegida) {
 
   static CategoryResponse from(Category category) {
     return new CategoryResponse(
@@ -21,6 +25,7 @@ public record CategoryResponse(
         category.getType(),
         category.getParentId(),
         category.getColor(),
-        category.getIcon());
+        category.getIcon(),
+        category.isProtected());
   }
 }

@@ -25,12 +25,14 @@ class EntryQueries {
       SELECT l.id, l.tipo, l.titulo, l.descricao, l.valor, l.categoria_id, l.conta_id,
              l.data_competencia, l.data_caixa, l.status, l.criado_em, l.template_id,
              l.parcela_ordem, l.parcela_de_id, l.parcela_num, l.parcela_total,
+             tl.terceiro_id,
              COALESCE(ts.id, te.id) AS transferencia_id,
              CASE WHEN ts.id IS NOT NULL THEN 'saida'
                   WHEN te.id IS NOT NULL THEN 'entrada' END AS direcao
       FROM lancamento l
       LEFT JOIN transferencia ts ON ts.saida_id = l.id AND ts.usuario_id = l.usuario_id
       LEFT JOIN transferencia te ON te.entrada_id = l.id AND te.usuario_id = l.usuario_id
+      LEFT JOIN terceiro_lancamento tl ON tl.lancamento_id = l.id AND tl.usuario_id = l.usuario_id
       """;
 
   private static final String ORDER = " ORDER BY l.data_caixa DESC, l.criado_em DESC, l.id DESC";
@@ -379,6 +381,7 @@ class EntryQueries {
         rs.getObject("parcela_ordem", Integer.class),
         rs.getObject("parcela_de_id", UUID.class),
         rs.getObject("parcela_num", Integer.class),
-        rs.getObject("parcela_total", Integer.class));
+        rs.getObject("parcela_total", Integer.class),
+        rs.getObject("terceiro_id", UUID.class));
   }
 }

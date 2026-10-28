@@ -15,6 +15,7 @@ function conta(id: string, nome: string): Conta {
     criadaEm: '2026-10-19T12:00:00Z',
     cartao: null,
     categoriasPermitidas: null,
+    percentualCdi: null,
   }
 }
 
