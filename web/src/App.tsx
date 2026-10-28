@@ -418,6 +418,7 @@ function App() {
   // Contas ativas vindas da tela de Contas, para os selects de Lançamentos não buscarem de novo.
   const [contasAtivas, setContasAtivas] = useState<Conta[] | null>(null)
   const [versaoDaLista, setVersaoDaLista] = useState(0)
+  const [versaoDeCategorias, setVersaoDeCategorias] = useState(0)
   const [versaoDeRecorrencias, setVersaoDeRecorrencias] = useState(0)
   const [recorrenciasAtivas, setRecorrenciasAtivas] = useState<ReadonlySet<string>>(new Set())
   const [parcelasPorRecorrencia, setParcelasPorRecorrencia] = useState<ReadonlyMap<string, number>>(new Map())
@@ -560,6 +561,7 @@ function App() {
             recorrenciasAtivas={recorrenciasAtivas}
             parcelasPorRecorrencia={parcelasPorRecorrencia}
             versaoDaLista={versaoDaLista}
+            versaoDeCategorias={versaoDeCategorias}
             aoMudarOcorrencia={() => setVersaoDeRecorrencias((n) => n + 1)}
             destinoDasVencidas={slotDeVencidas}
             aoEditarVencida={irParaLancamentos}
@@ -569,6 +571,7 @@ function App() {
           <Contas
             aoSessaoExpirar={aoSessaoExpirar}
             versaoDeSaldo={versaoDeSaldo}
+            versaoDeCategorias={versaoDeCategorias}
             aoCarregarAtivas={setContasAtivas}
             aoMudarSaldo={() => {
               setVersaoDeSaldo((n) => n + 1)
@@ -582,6 +585,7 @@ function App() {
             aoSessaoExpirar={aoSessaoExpirar}
             contas={contasEmReais}
             versao={versaoDeRecorrencias}
+            versaoDeCategorias={versaoDeCategorias}
             aoCarregarAtivas={setRecorrenciasAtivas}
             aoCarregarParcelas={setParcelasPorRecorrencia}
             aoMudarOcorrencias={() => {
@@ -592,7 +596,16 @@ function App() {
         </div>
         {rota === 'orcamento' && <Orcamento aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'metas' && <Metas aoSessaoExpirar={aoSessaoExpirar} />}
-        {rota === 'categorias' && <Categorias aoSessaoExpirar={aoSessaoExpirar} />}
+        {rota === 'categorias' && (
+          <Categorias
+            aoSessaoExpirar={aoSessaoExpirar}
+            aoMudar={() => {
+              setVersaoDeCategorias((n) => n + 1)
+              // Apagar move lançamentos para Outros: a lista do mês precisa recarregar.
+              setVersaoDaLista((n) => n + 1)
+            }}
+          />
+        )}
         {rota === 'terceiros' && <Terceiros aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'relatorios' && <Relatorios aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'seguranca' && <Seguranca aoSessaoExpirar={aoSessaoExpirar} />}

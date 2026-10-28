@@ -92,7 +92,13 @@ function Formulario({
 }
 
 // Criar, renomear e apagar (ADR-064). Apagar manda os lançamentos para Outros.
-export default function Categorias({ aoSessaoExpirar }: { aoSessaoExpirar: () => void }) {
+export default function Categorias({
+  aoSessaoExpirar,
+  aoMudar,
+}: {
+  aoSessaoExpirar: () => void
+  aoMudar: () => void
+}) {
   const [versao, setVersao] = useState(0)
   const [estado, setEstado] = useState<Estado<Categoria[]>>({ tipo: 'carregando' })
   const [abertura, setAbertura] = useState<Abertura | null>(null)
@@ -113,6 +119,7 @@ export default function Categorias({ aoSessaoExpirar }: { aoSessaoExpirar: () =>
       await deleteCategoria(categoria.id)
       setConfirmando(null)
       setVersao((n) => n + 1)
+      aoMudar()
     } catch (erro) {
       if (erro instanceof SessaoExpiradaError) {
         aoSessaoExpirar()
@@ -225,6 +232,7 @@ export default function Categorias({ aoSessaoExpirar }: { aoSessaoExpirar: () =>
             aoSalvar={() => {
               setAbertura(null)
               setVersao((n) => n + 1)
+              aoMudar()
             }}
             aoSessaoExpirar={aoSessaoExpirar}
           />

@@ -68,7 +68,7 @@ export default function PossoGastar({ versao, aoSessaoExpirar }: { versao: numbe
       {configurando && estado.tipo === 'ok' && (
         <Painel titulo="Posso gastar" aoFechar={() => setConfigurando(false)}>
           <Configuracao
-            atual={estado.dados.diaLimite}
+            atual={estado.dados}
             aoSalvar={() => {
               setConfigurando(false)
               setRecarga((n) => n + 1)
@@ -136,11 +136,13 @@ function Configuracao({
   aoSalvar,
   aoSessaoExpirar,
 }: {
-  atual: number | null
+  atual: Resposta
   aoSalvar: () => void
   aoSessaoExpirar: () => void
 }) {
-  const [dia, setDia] = useState(atual === null ? '' : String(atual))
+  const [dia, setDia] = useState(atual.diaLimite === null ? '' : String(atual.diaLimite))
+  const [beneficios, setBeneficios] = useState(atual.incluirBeneficios)
+  const [terceiros, setTerceiros] = useState(atual.incluirTerceiros)
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
 
@@ -149,7 +151,11 @@ function Configuracao({
     setEnviando(true)
     setMensagem(null)
     try {
-      await putPossoGastarConfiguracao(dia === '' ? null : Number(dia))
+      await putPossoGastarConfiguracao({
+        diaLimite: dia === '' ? null : Number(dia),
+        incluirBeneficios: beneficios,
+        incluirTerceiros: terceiros,
+      })
       aoSalvar()
     } catch (erro) {
       if (erro instanceof SessaoExpiradaError) {
@@ -179,6 +185,21 @@ function Configuracao({
           Sem dia, vale o ciclo da fatura de vencimento mais tarde, ou o fim do mês sem cartão.
         </small>
       </div>
+      <fieldset className="posso-chaves">
+        <legend>O que entra na conta</legend>
+        <label className="posso-chave">
+          <input type="checkbox" checked={beneficios} onChange={(evento) => setBeneficios(evento.target.checked)} />
+          Benefícios
+        </label>
+        <label className="posso-chave">
+          <input type="checkbox" checked={terceiros} onChange={(evento) => setTerceiros(evento.target.checked)} />
+          Terceiros
+        </label>
+        <small>
+          Ligado, o saldo entra no cálculo. Desligado, vale zero. O benefício só paga as categorias dele, então ligar
+          pode mostrar mais do que dá para gastar em qualquer compra.
+        </small>
+      </fieldset>
       {mensagem !== null && (
         <p role="alert" className="erro">
           {mensagem}

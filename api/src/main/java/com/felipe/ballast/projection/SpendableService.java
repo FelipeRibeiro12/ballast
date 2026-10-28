@@ -43,6 +43,8 @@ class SpendableService {
       LocalDate until,
       Mode mode,
       Integer limitDay,
+      boolean includeBenefits,
+      boolean includeThirdParty,
       BigDecimal spendable,
       BigDecimal savingsYield,
       LocalDate lowestOn,
@@ -67,7 +69,8 @@ class SpendableService {
   // Vazio quando algum valor sai da faixa do JSON.
   Optional<Spendable> compute(UUID userId) {
     LocalDate today = LocalDate.ofInstant(clock.instant(), ZONE);
-    Optional<Integer> limitDay = queries.limitDay(userId);
+    SpendableQueries.Preferences preferences = queries.preferences(userId);
+    Optional<Integer> limitDay = Optional.ofNullable(preferences.limitDay());
     Mode mode;
     LocalDate until;
     if (limitDay.isPresent()) {
@@ -86,13 +89,16 @@ class SpendableService {
     int days = (int) Math.min(MAX_DAYS, ChronoUnit.DAYS.between(today, until) + 1);
     until = today.plusDays(days - 1L);
 
-    Optional<Projection> total = projected(userId, null, today, days);
+    Optional<Projection> total = projected(userId, null, today, days, preferences);
     if (total.isEmpty()) {
       return Optional.empty();
     }
     List<Benefit> benefits = new ArrayList<>();
-    for (SpendableQueries.Benefit benefit : queries.activeBenefits(userId)) {
-      Optional<Projection> found = projected(userId, benefit.id(), today, days);
+    // Com benefícios ligados eles já estão no total; listar à parte contaria duas vezes.
+    List<SpendableQueries.Benefit> apart =
+        preferences.includeBenefits() ? List.of() : queries.activeBenefits(userId);
+    for (SpendableQueries.Benefit benefit : apart) {
+      Optional<Projection> found = projected(userId, benefit.id(), today, days, preferences);
       if (found.isEmpty()) {
         return Optional.empty();
       }
@@ -113,6 +119,8 @@ class SpendableService {
             until,
             mode,
             limitDay.orElse(null),
+            preferences.includeBenefits(),
+            preferences.includeThirdParty(),
             spendable,
             savingsYield,
             lowest.date(),
@@ -122,13 +130,11 @@ class SpendableService {
             benefits));
   }
 
-  // Nulo volta ao ciclo da fatura. Só grava a preferência; nenhum lançamento muda.
-  void configure(UUID userId, Integer limitDay) {
-    if (limitDay == null) {
-      queries.clearLimitDay(userId);
-    } else {
-      queries.saveLimitDay(userId, limitDay);
-    }
+  // Só grava a preferência; nenhum lançamento muda. Dia nulo volta ao ciclo da fatura.
+  void configure(
+      UUID userId, Integer limitDay, boolean includeBenefits, boolean includeThirdParty) {
+    queries.savePreferences(
+        userId, new SpendableQueries.Preferences(limitDay, includeBenefits, includeThirdParty));
   }
 
   // Dia de 1 a 31, cortado no último do mês curto. Hoje conta: se o dia ainda não passou, a janela
@@ -163,9 +169,20 @@ class SpendableService {
     return total;
   }
 
-  private Optional<Projection> projected(UUID userId, UUID accountId, LocalDate today, int days) {
-    // Compra de terceiro não é gasto do dono (ADR-062).
-    return switch (projections.project(userId, accountId, today, days, true)) {
+  private Optional<Projection> projected(
+      UUID userId,
+      UUID accountId,
+      LocalDate today,
+      int days,
+      SpendableQueries.Preferences preferences) {
+    // Compra de terceiro só conta quando o usuário liga a chave (ADR-067). Desligada vale zero.
+    return switch (projections.project(
+        userId,
+        accountId,
+        today,
+        days,
+        !preferences.includeThirdParty(),
+        preferences.includeBenefits() && accountId == null)) {
       case ProjectionService.Result.Found found -> Optional.of(found.projection());
       // Fora da faixa, ou a conta de benefício sumiu entre as duas leituras.
       case ProjectionService.Result.Refused refused -> Optional.empty();

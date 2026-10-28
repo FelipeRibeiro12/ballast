@@ -2137,6 +2137,10 @@ function isPossoGastar(valor: unknown): valor is PossoGastar {
     (valor.modo === 'dia' || valor.modo === 'fatura' || valor.modo === 'fim-do-mes') &&
     'diaLimite' in valor &&
     (valor.diaLimite === null || Number.isSafeInteger(valor.diaLimite)) &&
+    'incluirBeneficios' in valor &&
+    typeof valor.incluirBeneficios === 'boolean' &&
+    'incluirTerceiros' in valor &&
+    typeof valor.incluirTerceiros === 'boolean' &&
     'rendimentoCofrinhoCentavos' in valor &&
     Number.isSafeInteger(valor.rendimentoCofrinhoCentavos) &&
     'livreCentavos' in valor &&
@@ -2163,13 +2167,19 @@ export async function fetchPossoGastar(): Promise<PossoGastar> {
   return corpo
 }
 
-// diaLimite nulo volta ao ciclo da fatura (ADR-063).
-export async function putPossoGastarConfiguracao(diaLimite: number | null): Promise<void> {
+export type ConfiguracaoDoPossoGastar = {
+  // Nulo volta ao ciclo da fatura (ADR-063).
+  diaLimite: number | null
+  incluirBeneficios: boolean
+  incluirTerceiros: boolean
+}
+
+export async function putPossoGastarConfiguracao(configuracao: ConfiguracaoDoPossoGastar): Promise<void> {
   const resposta = await fetch(`${baseUrl}/posso-gastar/configuracao`, {
     method: 'PUT',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ diaLimite }),
+    body: JSON.stringify(configuracao),
   })
   if (resposta.status !== 204) return recusarRespostaDeProjecao(resposta, 'PUT /posso-gastar/configuracao')
 }

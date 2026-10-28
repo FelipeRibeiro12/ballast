@@ -32,6 +32,14 @@ record SpendableResponse(
         Integer diaLimite,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "Os saldos dos benefícios entram no livre; ligado, a lista fica vazia")
+        boolean incluirBeneficios,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "As compras de terceiros contam como gasto; desligado valem zero")
+        boolean incluirTerceiros,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
             description =
                 "Menor saldo projetado das contas que não são de benefício, de hoje até ate, mais o rendimento."
                     + " Negativo quando falta",
@@ -98,6 +106,8 @@ record SpendableResponse(
           case END_OF_MONTH -> "fim-do-mes";
         },
         found.limitDay(),
+        found.includeBenefits(),
+        found.includeThirdParty(),
         cents(found.spendable()),
         cents(found.savingsYield()),
         found.lowestOn(),

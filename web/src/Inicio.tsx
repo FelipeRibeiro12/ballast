@@ -8,6 +8,7 @@ import { carregar } from './leitura'
 import type { Estado } from './leitura'
 import { ConsumoDoMes } from './Orcamento'
 import { hashDaSecao } from './rota'
+import ResumoDasContas from './ResumoDasContas'
 import PossoGastar from './PossoGastar'
 import SaldoProjetado from './SaldoProjetado'
 import { aindaNaoAconteceu } from './totaisDoMes'
@@ -49,28 +50,11 @@ function Destaque({ contas }: { contas: Conta[] | null }) {
       </section>
     )
   }
-  // O benefício só paga o que a lista permite e não cobre aluguel, então tem cartão próprio (ADR-034).
-  const abertas = contas.filter((conta) => conta.tipo !== 'beneficio')
-  // BigInt porque a soma de várias contas pode passar do inteiro seguro.
-  const saldo = abertas.reduce((soma, conta) => soma + BigInt(conta.saldoCentavos), 0n)
-  const cartoes = abertas.flatMap((conta) => (conta.cartao === null ? [] : [conta.cartao]))
-  const disponivel = cartoes.reduce((soma, cartao) => soma + BigInt(cartao.disponivelCentavos), 0n)
+  // O saldo é o mesmo carrossel de Contas: total sem cartão e um grupo por tipo (ADR-065).
   return (
-    <section className="cartao destaque" aria-label="Resumo das contas">
-      <p className="destaque-rotulo">Saldo nas contas ativas</p>
-      <p className="destaque-valor">{formatarCentavos(saldo)}</p>
-      <dl className="destaque-detalhes">
-        <div>
-          <dt>Contas ativas</dt>
-          <dd>{abertas.length}</dd>
-        </div>
-        {cartoes.length > 0 && (
-          <div>
-            <dt>Disponível nos cartões</dt>
-            <dd>{formatarCentavos(disponivel)}</dd>
-          </div>
-        )}
-      </dl>
+    <section className="cartao" aria-label="Resumo das contas">
+      <h3 className="titulo-cartao">Saldo</h3>
+      <ResumoDasContas contas={contas} />
     </section>
   )
 }

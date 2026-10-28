@@ -878,12 +878,14 @@ function NovaConta({
 export default function Contas({
   aoSessaoExpirar,
   versaoDeSaldo,
+  versaoDeCategorias,
   aoCarregarAtivas,
   aoMudarSaldo,
 }: {
   aoSessaoExpirar: () => void
   // Sobe quando um lançamento muda; a lista busca de novo para o saldo reagir.
   versaoDeSaldo: number
+  versaoDeCategorias: number
   // Entrega a lista de contas ativas sempre que ela muda, para a tela de lançamentos usar.
   aoCarregarAtivas: (contas: Conta[]) => void
   // Avisa o app que o saldo mudou (pagamento de fatura), para as outras telas buscarem de novo.
@@ -942,7 +944,7 @@ export default function Contas({
     return () => {
       ativo = false
     }
-  }, [tentativaDeCategorias, aoSessaoExpirar])
+  }, [tentativaDeCategorias, versaoDeCategorias, aoSessaoExpirar])
 
   useEffect(() => {
     if (!arquivadas && estado.tipo === 'ok') aoCarregarAtivas(estado.contas)
