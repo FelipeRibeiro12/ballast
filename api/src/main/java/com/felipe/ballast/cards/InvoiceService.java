@@ -72,14 +72,17 @@ class InvoiceService {
     // próprio fechamento porque, quando o vencimento cortado cai nesse dia, o dia é da fatura.
     LocalDate paymentsFrom = cycles.getFirst().closing();
     LocalDate paymentsTo = cycles.getLast().nextClosing();
+    // Lançamento gravado antes do dia útil (ADR-060) tem data_caixa no dia nominal, que pode ser
+    // alguns dias antes do vencimento real. O total da fatura soma do nominal ao real.
     Map<LocalDate, BigDecimal> totals =
-        queries.totalsByCashDate(userId, accountId, cycles.getFirst().due(), lastDue);
+        queries.totalsByCashDate(
+            userId, accountId, billing.get().dueDate(cycles.getFirst().closing()), lastDue);
     Map<LocalDate, BigDecimal> payments =
         queries.paymentsByCashDate(userId, accountId, paymentsFrom, paymentsTo);
 
     List<Invoice> invoices = new ArrayList<>(cycles.size());
     for (CardBilling.Cycle cycle : cycles) {
-      BigDecimal total = totals.getOrDefault(cycle.due(), BigDecimal.ZERO);
+      BigDecimal total = totalOf(totals, billing.get().dueDate(cycle.closing()), cycle.due());
       BigDecimal paid = paidIn(payments, billing.get(), cycle);
       BigDecimal remaining = total.subtract(paid);
       if (!fits(total) || !fits(paid) || !fits(remaining)) {
@@ -95,6 +98,17 @@ class InvoiceService {
               situation(today, cycle.closing(), remaining)));
     }
     return new Result.Found(invoices);
+  }
+
+  private static BigDecimal totalOf(
+      Map<LocalDate, BigDecimal> totals, LocalDate nominalDue, LocalDate payDate) {
+    BigDecimal sum = BigDecimal.ZERO;
+    for (Map.Entry<LocalDate, BigDecimal> entry : totals.entrySet()) {
+      if (!entry.getKey().isBefore(nominalDue) && !entry.getKey().isAfter(payDate)) {
+        sum = sum.add(entry.getValue());
+      }
+    }
+    return sum;
   }
 
   // Depois do fechamento da fatura e até o da seguinte, inclusive: (closing, nextClosing].

@@ -25,5 +25,8 @@ precisa seguir isso para o saldo projetado não mentir.
 
 ## Consequência
 
-Lançamento de cartão já gravado mantém o `data_caixa` antigo. Só o que for
-criado ou recalculado depois usa o dia útil.
+Lançamento de cartão já gravado mantém o `data_caixa` antigo, no dia nominal. Só
+o que for criado ou recalculado depois usa o dia útil. O total da fatura soma os
+lançamentos com `data_caixa` do vencimento nominal ao vencimento real, então
+os dois formatos aparecem na mesma fatura. O saldo projetado mostra o legado
+no dia nominal, sem corrigir.

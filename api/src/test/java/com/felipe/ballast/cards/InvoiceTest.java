@@ -160,6 +160,25 @@ class InvoiceTest {
     assertThat(invoice.get("situacao").asString()).isEqualTo("paga");
   }
 
+  // Compra gravada antes do dia útil (ADR-060) tem data_caixa no dia nominal, sábado 25/04. A
+  // fatura
+  // vence na segunda, 27/04, e o total tem que somar as duas formas.
+  @Test
+  void aPurchaseStoredOnTheNominalDueDayStillCountsOnTheBusinessDayInvoice() throws Exception {
+    api.purchase(actor, "despesa", 20_000, "2026-03-20");
+    api.purchase(actor, "despesa", 5_000, "2026-03-21");
+    jdbc.sql(
+            "UPDATE lancamento SET data_caixa = DATE '2026-04-25' WHERE usuario_id = :u"
+                + " AND data_competencia = DATE '2026-03-20'")
+        .param("u", actor.user().id())
+        .update();
+    today("2026-04-20");
+
+    JsonNode april = invoiceDueOn("2026-04-27");
+
+    assertThat(april.get("totalCentavos").asLong()).isEqualTo(25_000);
+  }
+
   @Test
   void aLatePaymentBeforeTheNextClosingStillBelongsToTheSameInvoice() throws Exception {
     api.purchase(actor, "despesa", 20_000, "2026-03-10");
