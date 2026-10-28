@@ -1744,6 +1744,54 @@ paths:
       summary: Troca a lista de categorias permitidas de uma conta de benefício
       tags:
       - contas
+  /contas/{id}/cofrinho:
+    put:
+      description: O rendimento estimado usa o CDI do Banco Central vezes este percentual
+        (ADR-061).
+      operationId: putContasByIdCofrinho
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CofrinhoRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conta"
+          description: Conta atualizada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Percentual inválido, conta que não é cofrinho ou arquivada"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Define o percentual do CDI do cofrinho
+      tags:
+      - contas
   /contas/{id}/faturas:
     get:
       description: "Todas as faturas com vencimento entre de e ate (pontas incluí\
@@ -4523,6 +4571,16 @@ components:
           minItems: 0
       required:
       - categoriaIds
+    CofrinhoRequest:
+      type: object
+      properties:
+        percentualCdi:
+          type: string
+          description: "Percentual do CDI, de 0,01 a 1000, com até duas casas"
+          example: "110"
+          pattern: "^(?:[1-9]\\d{0,2}|1000|0)(?:\\.\\d{1,2})?$"
+      required:
+      - percentualCdi
     CompraParcelada:
       type: object
       properties:
@@ -4700,6 +4758,12 @@ components:
           type: string
           maxLength: 100
           minLength: 1
+        percentualCdi:
+          type:
+          - string
+          - "null"
+          description: "Percentual do CDI do cofrinho, em texto com duas casas (ex.\
+            \ \"110.00\"). Nulo fora do cofrinho e no cofrinho sem percentual"
         saldoCentavos:
           type: integer
           format: int64
@@ -4722,6 +4786,7 @@ components:
           - beneficio
           - cripto
           - investimento
+          - cofrinho
       required:
       - arquivada
       - cartao
@@ -4730,6 +4795,7 @@ components:
       - id
       - moeda
       - nome
+      - percentualCdi
       - saldoCentavos
       - saldoInicialCentavos
       - tipo
@@ -4840,6 +4906,7 @@ components:
           - beneficio
           - cripto
           - investimento
+          - cofrinho
       required:
       - nome
       - tipo

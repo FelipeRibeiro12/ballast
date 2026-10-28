@@ -196,6 +196,33 @@ class AccountService {
     }
   }
 
+  enum CdiResult {
+    NOT_FOUND,
+    NOT_SAVINGS_POT,
+    ARCHIVED
+  }
+
+  record CdiUpdated(AccountSummary account) {}
+
+  // Devolve a conta nova ou o motivo da recusa. A trava segue o padrão de replacePermitted.
+  Object setCdiPercent(UUID userId, UUID id, BigDecimal percent) {
+    return transaction.execute(
+        status -> {
+          Optional<AccountQueries.LockedAccount> account = queries.lockAccount(userId, id);
+          if (account.isEmpty()) {
+            return CdiResult.NOT_FOUND;
+          }
+          if (account.get().type() != AccountType.SAVINGS_POT) {
+            return CdiResult.NOT_SAVINGS_POT;
+          }
+          if (account.get().archived()) {
+            return CdiResult.ARCHIVED;
+          }
+          queries.updateCdiPercent(userId, id, percent);
+          return new CdiUpdated(queries.find(userId, id).orElseThrow());
+        });
+  }
+
   private ReplaceResult replaceLocked(UUID userId, UUID id, List<UUID> ids) {
     Optional<AccountQueries.LockedAccount> account = queries.lockAccount(userId, id);
     if (account.isEmpty()) {

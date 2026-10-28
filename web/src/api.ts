@@ -253,6 +253,7 @@ const TIPOS_DE_CONTA: readonly string[] = [
   'beneficio',
   'cripto',
   'investimento',
+  'cofrinho',
 ]
 
 function isDiaDoMes(valor: unknown): boolean {
@@ -357,6 +358,18 @@ export async function postConta(dados: CriarContaRequest, chave?: string): Promi
   })
   if (!resposta.ok) return recusarResposta(resposta, 'POST /contas')
   return lerConta(resposta, 'POST /contas')
+}
+
+// percentual em texto com até duas casas ("110" ou "110,5" já normalizado por quem chama).
+export async function putCofrinho(id: string, percentualCdi: string): Promise<Conta> {
+  const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(id)}/cofrinho`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ percentualCdi }),
+  })
+  if (!resposta.ok) return recusarResposta(resposta, 'PUT /contas/{id}/cofrinho')
+  return lerConta(resposta, 'PUT /contas/{id}/cofrinho')
 }
 
 export async function patchConta(id: string, arquivada: boolean): Promise<Conta> {

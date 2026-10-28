@@ -214,6 +214,7 @@ describe('Contas', () => {
       'Vale-benefício',
       'Cripto',
       'Investimento',
+      'Cofrinho',
     ])
   })
 

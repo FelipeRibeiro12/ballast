@@ -13,6 +13,7 @@ const corretora: Conta = {
   criadaEm: '2026-10-19T12:00:00Z',
   cartao: null,
   categoriasPermitidas: null,
+    percentualCdi: null,
 }
 
 function titulo(sobra: Partial<Record<string, unknown>> = {}): Record<string, unknown> {

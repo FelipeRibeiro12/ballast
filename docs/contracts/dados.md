@@ -508,6 +508,14 @@ estiver faltando, em vez de inventar.
 
 ---
 
+### Cofrinho (V28, ADR-061)
+
+`conta.tipo` aceita `cofrinho`. `conta.percentual_cdi numeric(6,2)` fica nulo em
+todo tipo, menos no cofrinho, e nele pode ficar nulo até o usuário informar.
+`conta_percentual_cdi_so_no_cofrinho`: só no tipo `cofrinho` e entre 0 e 1000.
+
+---
+
 ## Categoria
 
 ```

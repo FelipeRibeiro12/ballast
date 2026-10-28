@@ -452,6 +452,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/contas/{id}/cofrinho": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Define o percentual do CDI do cofrinho
+         * @description O rendimento estimado usa o CDI do Banco Central vezes este percentual (ADR-061).
+         */
+        put: operations["putContasByIdCofrinho"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/contas/{id}/faturas": {
         parameters: {
             query?: never;
@@ -1217,6 +1237,13 @@ export interface components {
             /** @description Lista inteira que passa a valer. Vazia libera qualquer categoria de despesa */
             categoriaIds: string[];
         };
+        CofrinhoRequest: {
+            /**
+             * @description Percentual do CDI, de 0,01 a 1000, com até duas casas
+             * @example 110
+             */
+            percentualCdi: string;
+        };
         CompraParcelada: {
             /** Format: uuid */
             categoriaId: string;
@@ -1309,6 +1336,8 @@ export interface components {
             /** @enum {string} */
             moeda: "BRL";
             nome: string;
+            /** @description Percentual do CDI do cofrinho, em texto com duas casas (ex. "110.00"). Nulo fora do cofrinho e no cofrinho sem percentual */
+            percentualCdi: string | null;
             /**
              * Format: int64
              * @description Centavos de real, inteiro com sinal
@@ -1320,7 +1349,7 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto" | "investimento";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto" | "investimento" | "cofrinho";
         };
         Cotacao: {
             /** Format: uuid */
@@ -1378,7 +1407,7 @@ export interface components {
              */
             saldoInicialCentavos: number;
             /** @enum {string} */
-            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto" | "investimento";
+            tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto" | "investimento" | "cofrinho";
         };
         DespesaDaCategoria: {
             /** Format: uuid */
@@ -4336,6 +4365,59 @@ export interface operations {
             };
             /** @description Banco indisponível ou conta travada por mais de 2 s */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putContasByIdCofrinho: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CofrinhoRequest"];
+            };
+        };
+        responses: {
+            /** @description Conta atualizada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conta"];
+                };
+            };
+            /** @description Percentual inválido, conta que não é cofrinho ou arquivada */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
