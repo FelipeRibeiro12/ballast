@@ -59,7 +59,7 @@ export default function ResumoDasContas({ contas }: { contas: Conta[] }) {
     return () => {
       vale = false
     }
-  }, [])
+  }, [contas])
 
   return (
     <>

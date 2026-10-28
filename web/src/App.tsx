@@ -408,6 +408,9 @@ function Rodape() {
   )
 }
 
+// Fora da tela por mais que isso, o dado pode estar velho.
+const ATUALIZAR_APOS_MS = 30_000
+
 function App() {
   const [sessao, setSessao] = useState<EstadoSessao>({ tipo: 'carregando' })
   const [tentativa, setTentativa] = useState(0)
@@ -425,6 +428,27 @@ function App() {
   // Onde o Início abre espaço para as vencidas que a tela de Lançamentos desenha.
   const [slotDeVencidas, setSlotDeVencidas] = useState<HTMLElement | null>(null)
   const [rota, irPara] = useRota()
+
+  // O app fica aberto horas em segundo plano (PWA no celular) e as telas montadas não sabem que o
+  // dado mudou. Ao voltar depois de um tempo, todas buscam de novo.
+  useEffect(() => {
+    let saiuEm: number | null = null
+    function aoMudarVisibilidade(): void {
+      if (document.visibilityState === 'hidden') {
+        saiuEm = Date.now()
+        return
+      }
+      if (saiuEm !== null && Date.now() - saiuEm >= ATUALIZAR_APOS_MS) {
+        setVersaoDeSaldo((n) => n + 1)
+        setVersaoDaLista((n) => n + 1)
+        setVersaoDeCategorias((n) => n + 1)
+        setVersaoDeRecorrencias((n) => n + 1)
+      }
+      saiuEm = null
+    }
+    document.addEventListener('visibilitychange', aoMudarVisibilidade)
+    return () => document.removeEventListener('visibilitychange', aoMudarVisibilidade)
+  }, [])
   // Conta cripto e de investimento não recebem lançamento (ADR-035, ADR-037): ficam fora dos selects e
   // aparecem só na aba Investimentos.
   // Memo porque as telas buscam de novo quando a lista de contas muda de identidade.
@@ -606,7 +630,16 @@ function App() {
             }}
           />
         )}
-        {rota === 'terceiros' && <Terceiros aoSessaoExpirar={aoSessaoExpirar} />}
+        {rota === 'terceiros' && (
+          <Terceiros
+            aoSessaoExpirar={aoSessaoExpirar}
+            aoMudarLancamentos={() => {
+              // O reembolso é um lançamento novo: a lista e os saldos das telas montadas ficam velhos.
+              setVersaoDaLista((n) => n + 1)
+              setVersaoDeSaldo((n) => n + 1)
+            }}
+          />
+        )}
         {rota === 'relatorios' && <Relatorios aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'seguranca' && <Seguranca aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'investimentos' && (

@@ -250,7 +250,13 @@ type Abertura =
   | { tipo: 'detalhe'; terceiro: Terceiro }
 
 // Quem usa o cartão do dono e reembolsa depois (ADR-062). Fora de relatório, orçamento e Posso gastar.
-export default function Terceiros({ aoSessaoExpirar }: { aoSessaoExpirar: () => void }) {
+export default function Terceiros({
+  aoSessaoExpirar,
+  aoMudarLancamentos,
+}: {
+  aoSessaoExpirar: () => void
+  aoMudarLancamentos: () => void
+}) {
   const [versao, setVersao] = useState(0)
   const [estado, setEstado] = useState<Estado<Terceiro[]>>({ tipo: 'carregando' })
   const [abertura, setAbertura] = useState<Abertura | null>(null)
@@ -414,6 +420,7 @@ export default function Terceiros({ aoSessaoExpirar }: { aoSessaoExpirar: () => 
               aoSalvar={() => {
                 setAbertura(null)
                 setVersao((n) => n + 1)
+                aoMudarLancamentos()
               }}
               aoSessaoExpirar={aoSessaoExpirar}
             />
