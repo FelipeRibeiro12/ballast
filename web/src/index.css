@@ -2070,6 +2070,49 @@ button.relatorio-mes:hover:not(:disabled) {
   font-weight: 600;
 }
 
+.saldo-secao {
+  margin-bottom: var(--esp-4);
+}
+
+.saldo-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-3);
+  margin-bottom: var(--esp-3);
+}
+
+.saldo-topo .titulo-cartao {
+  margin-bottom: 0;
+}
+
+.saldo-carrossel {
+  display: flex;
+  gap: var(--esp-3);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: var(--esp-1);
+}
+
+.saldo-visao {
+  flex: 0 0 88%;
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+@media (min-width: 48rem) {
+  .saldo-visao {
+    flex-basis: 22rem;
+  }
+}
+
+.saldo-tipos {
+  margin: var(--esp-3) 0 0;
+  font-size: 0.8125rem;
+  opacity: 0.85;
+}
+
 .posso-chaves {
   display: flex;
   flex-direction: column;

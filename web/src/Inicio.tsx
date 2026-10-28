@@ -8,7 +8,7 @@ import { carregar } from './leitura'
 import type { Estado } from './leitura'
 import { ConsumoDoMes } from './Orcamento'
 import { hashDaSecao } from './rota'
-import ResumoDasContas from './ResumoDasContas'
+import SaldoDasContas from './SaldoDasContas'
 import PossoGastar from './PossoGastar'
 import SaldoProjetado from './SaldoProjetado'
 import { aindaNaoAconteceu } from './totaisDoMes'
@@ -27,7 +27,7 @@ function mensagemDeLeitura(erro: unknown): string {
   return 'Não foi possível carregar as próximas previstas.'
 }
 
-function Destaque({ contas }: { contas: Conta[] | null }) {
+function Destaque({ contas, aoSessaoExpirar }: { contas: Conta[] | null; aoSessaoExpirar: () => void }) {
   if (contas === null) {
     return (
       <section className="cartao" aria-label="Resumo das contas">
@@ -50,13 +50,7 @@ function Destaque({ contas }: { contas: Conta[] | null }) {
       </section>
     )
   }
-  // O saldo é o mesmo carrossel de Contas: total sem cartão e um grupo por tipo (ADR-065).
-  return (
-    <section className="cartao" aria-label="Resumo das contas">
-      <h3 className="titulo-cartao">Saldo</h3>
-      <ResumoDasContas contas={contas} />
-    </section>
-  )
+  return <SaldoDasContas contas={contas} aoSessaoExpirar={aoSessaoExpirar} />
 }
 
 function Beneficios({ contas }: { contas: Conta[] | null }) {
@@ -402,7 +396,7 @@ export default function Inicio({
       <div className="inicio-grade">
         <div className="coluna">
           <PossoGastar versao={versaoDeSaldo} aoSessaoExpirar={aoSessaoExpirar} />
-          <Destaque contas={contas} />
+          <Destaque contas={contas} aoSessaoExpirar={aoSessaoExpirar} />
           <Beneficios contas={contas} />
           <SaldoProjetado aoSessaoExpirar={aoSessaoExpirar} contas={contas} versaoDeSaldo={versaoDeSaldo} />
         </div>

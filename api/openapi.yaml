@@ -4517,6 +4517,152 @@ paths:
       summary: Devolve uma transferência do usuário
       tags:
       - transferencias
+  /visoes-saldo:
+    get:
+      description: "Na primeira leitura cria a visão padrão, Total sem cartão, com\
+        \ todos os tipos menos cartão de crédito (ADR-068)."
+      operationId: getVisoesSaldo
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VisaoSaldo"
+          description: "Visões, da mais antiga para a mais nova"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+      security:
+      - cookieAuth: []
+      summary: Lista as visões de saldo do usuário
+      tags:
+      - visoes-saldo
+    post:
+      description: Até 10 por usuário.
+      operationId: postVisoesSaldo
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VisaoSaldoRequest"
+        required: true
+      responses:
+        "204":
+          description: Visão criada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Limite de visões atingido
+      security:
+      - cookieAuth: []
+      summary: Cria uma visão de saldo
+      tags:
+      - visoes-saldo
+  /visoes-saldo/{id}:
+    delete:
+      description: A última visão não pode ser apagada.
+      operationId: deleteVisoesSaldoById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Visão apagada
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Visão de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: É a última visão do usuário
+      security:
+      - cookieAuth: []
+      summary: Apaga a visão de saldo
+      tags:
+      - visoes-saldo
+    put:
+      operationId: putVisoesSaldoById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VisaoSaldoRequest"
+        required: true
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Visão atualizada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Visão de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Troca o título e os tipos de conta da visão
+      tags:
+      - visoes-saldo
 components:
   schemas:
     ApagarContaRequest:
@@ -7235,6 +7381,59 @@ components:
       required:
       - data
       - valorCentavos
+    VisaoSaldo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipos:
+          type: array
+          items:
+            type: string
+            enum:
+            - corrente
+            - poupanca
+            - dinheiro
+            - cartao_credito
+            - beneficio
+            - cripto
+            - investimento
+            - cofrinho
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+      required:
+      - id
+      - tipos
+      - titulo
+    VisaoSaldoRequest:
+      type: object
+      properties:
+        tipos:
+          type: array
+          description: De 1 a 8 tipos de conta que o cartão soma
+          items:
+            type: string
+            enum:
+            - corrente
+            - poupanca
+            - dinheiro
+            - cartao_credito
+            - beneficio
+            - cripto
+            - investimento
+            - cofrinho
+          maxItems: 8
+          minItems: 1
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+      required:
+      - tipos
+      - titulo
   securitySchemes:
     cookieAuth:
       in: cookie
