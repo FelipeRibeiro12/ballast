@@ -56,6 +56,8 @@ function mockFetch(rotas: Rotas): void {
               ate: '2026-10-31',
               modo: 'fim-do-mes',
               diaLimite: null,
+              incluirBeneficios: false,
+              incluirTerceiros: false,
               rendimentoCofrinhoCentavos: 0,
               livreCentavos: 0,
               menorSaldoEm: '2026-10-22',

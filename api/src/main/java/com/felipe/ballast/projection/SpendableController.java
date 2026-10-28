@@ -65,10 +65,11 @@ class SpendableController {
 
   @Operation(
       operationId = "putPossoGastarConfiguracao",
-      summary = "Escolhe até que dia do mês o Posso gastar conta",
+      summary = "Configura o Posso gastar: dia final e o que entra na conta",
       description =
-          "diaLimite de 1 a 31 fixa o dia; nulo volta ao ciclo da fatura. Não altera lançamento"
-              + " nenhum (ADR-063).",
+          "diaLimite de 1 a 31 fixa o dia; nulo volta ao ciclo da fatura. incluirBeneficios e"
+              + " incluirTerceiros ligam o que entra no cálculo; desligados valem zero. Não altera"
+              + " lançamento nenhum (ADR-063, ADR-067).",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(responseCode = "204", description = "Preferência gravada")
   @ApiResponse(
@@ -86,7 +87,8 @@ class SpendableController {
   ResponseEntity<Void> configure(
       @AuthenticationPrincipal AuthenticatedUser user,
       @Valid @RequestBody SpendableConfigRequest request) {
-    spendable.configure(user.id(), request.limitDay());
+    spendable.configure(
+        user.id(), request.limitDay(), request.benefitsOn(), request.thirdPartiesOn());
     return ResponseEntity.noContent().build();
   }
 }

@@ -20,6 +20,8 @@ class ProjectionQueries {
   // do escopo é como o serviço percebe conta alheia ou inexistente.
   private static final String ALL_ACTIVE =
       "NOT arquivada AND tipo <> 'beneficio' AND tipo <> 'cripto'";
+  // Com benefícios ligados no Posso gastar (ADR-067) o escopo volta a incluí-los.
+  private static final String ALL_WITH_BENEFITS = "NOT arquivada AND tipo <> 'cripto'";
   private static final String ONE_ACCOUNT = "id = :accountId";
 
   private static final String QUERY_START =
@@ -83,6 +85,7 @@ class ProjectionQueries {
       """;
 
   private static final String ALL_QUERY = QUERY_START + ALL_ACTIVE + QUERY_END;
+  private static final String ALL_WITH_BENEFITS_QUERY = QUERY_START + ALL_WITH_BENEFITS + QUERY_END;
   private static final String ONE_QUERY = QUERY_START + ONE_ACCOUNT + QUERY_END;
 
   private final JdbcClient jdbc;
@@ -93,14 +96,22 @@ class ProjectionQueries {
 
   // accountId nulo é o total das contas ativas. A série tem sempre days pontos a partir de today.
   ProjectionRows load(UUID userId, UUID accountId, LocalDate today, int days) {
-    return load(userId, accountId, today, days, false);
+    return load(userId, accountId, today, days, false, false);
   }
 
   // excludeThirdParty tira a compra de terceiro: no Posso gastar ela não é gasto do dono (ADR-062).
   ProjectionRows load(
-      UUID userId, UUID accountId, LocalDate today, int days, boolean excludeThirdParty) {
+      UUID userId,
+      UUID accountId,
+      LocalDate today,
+      int days,
+      boolean excludeThirdParty,
+      boolean includeBenefits) {
     JdbcClient.StatementSpec statement =
-        jdbc.sql(accountId == null ? ALL_QUERY : ONE_QUERY)
+        jdbc.sql(
+                accountId != null
+                    ? ONE_QUERY
+                    : includeBenefits ? ALL_WITH_BENEFITS_QUERY : ALL_QUERY)
             .param("userId", userId)
             .param("today", today)
             .param("lastOffset", days - 1)

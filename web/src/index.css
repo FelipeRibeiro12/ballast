@@ -2068,6 +2068,22 @@ button.relatorio-mes:hover:not(:disabled) {
   font-weight: 600;
 }
 
+.posso-chaves {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  margin: 0 0 var(--esp-4);
+  padding: 0;
+  border: 0;
+}
+
+.posso-chave {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  min-height: 40px;
+}
+
 .posso-topo {
   display: flex;
   align-items: center;

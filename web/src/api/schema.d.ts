@@ -910,8 +910,8 @@ export interface paths {
         };
         get?: never;
         /**
-         * Escolhe até que dia do mês o Posso gastar conta
-         * @description diaLimite de 1 a 31 fixa o dia; nulo volta ao ciclo da fatura. Não altera lançamento nenhum (ADR-063).
+         * Configura o Posso gastar: dia final e o que entra na conta
+         * @description diaLimite de 1 a 31 fixa o dia; nulo volta ao ciclo da fatura. incluirBeneficios e incluirTerceiros ligam o que entra no cálculo; desligados valem zero. Não altera lançamento nenhum (ADR-063, ADR-067).
          */
         put: operations["putPossoGastarConfiguracao"];
         post?: never;
@@ -2120,6 +2120,10 @@ export interface components {
             dias: number;
             /** Format: date */
             hoje: string;
+            /** @description Os saldos dos benefícios entram no livre; ligado, a lista fica vazia */
+            incluirBeneficios: boolean;
+            /** @description As compras de terceiros contam como gasto; desligado valem zero */
+            incluirTerceiros: boolean;
             /**
              * Format: int64
              * @description Menor saldo projetado das contas que não são de benefício, de hoje até ate, mais o rendimento. Negativo quando falta
@@ -2157,6 +2161,16 @@ export interface components {
              * @description Nulo volta ao ciclo da fatura âncora
              */
             diaLimite: number | null;
+            /**
+             * @description Conta o saldo dos benefícios no cálculo. Desligado vale zero
+             * @default false
+             */
+            incluirBeneficios: boolean;
+            /**
+             * @description Conta as compras de terceiros como gasto. Desligado vale zero
+             * @default false
+             */
+            incluirTerceiros: boolean;
         };
         ReceitaEDespesaDoMes: {
             /** Format: int64 */

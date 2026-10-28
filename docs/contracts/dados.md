@@ -546,11 +546,14 @@ guardada.
 ```
 preferencia_posso_gastar
   usuario_id  uuid pk fk -> usuario ON DELETE CASCADE
-  dia_limite  smallint not null    -- 1 a 31
+  dia_limite  smallint null        -- 1 a 31; nulo é o ciclo da fatura (V31 tirou o not null)
+  incluir_beneficios boolean not null default false   -- V31, ADR-067
+  incluir_terceiros  boolean not null default false   -- V31, ADR-067
 ```
 
-Sem linha, a janela segue o ciclo da fatura âncora. A linha só guarda o dia: o
-saldo continua sendo `saldo_inicial` mais os lançamentos.
+Sem linha, a janela segue o ciclo da fatura âncora, benefícios à parte e compra
+de terceiro fora. A linha só guarda preferência: o saldo continua sendo
+`saldo_inicial` mais os lançamentos.
 
 ---
 

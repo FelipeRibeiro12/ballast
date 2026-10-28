@@ -212,6 +212,76 @@ class SpendableTest {
         .isEqualTo(LocalDate.of(2026, 4, 28));
   }
 
+  private void configure(Integer day, boolean benefits, boolean thirdParties) throws Exception {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("diaLimite", day);
+    body.put("incluirBeneficios", benefits);
+    body.put("incluirTerceiros", thirdParties);
+    assertThat(call(put("/posso-gastar/configuracao"), body).getStatus()).isEqualTo(204);
+  }
+
+  private void tagAsThirdParty(long cents) {
+    UUID friend = UUID.randomUUID();
+    jdbc.sql("INSERT INTO terceiro (id, usuario_id, nome) VALUES (:id, :u, 'Maria')")
+        .param("id", friend)
+        .param("u", actor.user().id())
+        .update();
+    jdbc.sql(
+            """
+            INSERT INTO terceiro_lancamento (lancamento_id, usuario_id, terceiro_id)
+            SELECT id, usuario_id, :t FROM lancamento
+            WHERE usuario_id = :u AND tipo = 'despesa' AND valor = :v
+            """)
+        .param("t", friend)
+        .param("u", actor.user().id())
+        .param("v", java.math.BigDecimal.valueOf(cents, 2))
+        .update();
+  }
+
+  @Test
+  void turningThirdPartiesOnCountsTheirPurchasesAsSpending() throws Exception {
+    fixture.expense(actor, checking, "previsto", 300_00, LocalDate.of(2026, 3, 20));
+    tagAsThirdParty(300_00);
+
+    configure(31, false, false);
+    JsonNode off = fixture.spendableOk(actor.session());
+    configure(31, false, true);
+    JsonNode on = fixture.spendableOk(actor.session());
+
+    assertThat(off.get("livreCentavos").asLong()).isEqualTo(1_000_00);
+    assertThat(off.get("incluirTerceiros").asBoolean()).isFalse();
+    assertThat(on.get("livreCentavos").asLong()).isEqualTo(700_00);
+    assertThat(on.get("incluirTerceiros").asBoolean()).isTrue();
+  }
+
+  @Test
+  void turningBenefitsOnAddsTheirBalanceAndEmptiesTheApartList() throws Exception {
+    UUID meal = fixture.benefitAccount(actor, "VR", 600_00);
+    fixture.expense(actor, meal, "previsto", 50_00, LocalDate.of(2026, 3, 18));
+    configure(31, false, false);
+    JsonNode off = fixture.spendableOk(actor.session());
+    configure(31, true, false);
+    JsonNode on = fixture.spendableOk(actor.session());
+
+    assertThat(off.get("livreCentavos").asLong()).isEqualTo(1_000_00);
+    assertThat(off.get("beneficios")).hasSize(1);
+    assertThat(on.get("livreCentavos").asLong()).isEqualTo(1_550_00);
+    assertThat(on.get("beneficios")).isEmpty();
+    assertThat(on.get("incluirBeneficios").asBoolean()).isTrue();
+  }
+
+  @Test
+  void theSwitchesWorkWithoutAChosenDay() throws Exception {
+    configure(null, true, true);
+
+    JsonNode body = fixture.spendableOk(actor.session());
+
+    assertThat(body.get("modo").asString()).isEqualTo("fim-do-mes");
+    assertThat(body.get("diaLimite").isNull()).isTrue();
+    assertThat(body.get("incluirBeneficios").asBoolean()).isTrue();
+    assertThat(body.get("incluirTerceiros").asBoolean()).isTrue();
+  }
+
   @Test
   void aThirdPartyPurchaseIsNotMySpending() throws Exception {
     chooseDay(31);

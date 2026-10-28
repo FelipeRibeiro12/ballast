@@ -16,7 +16,27 @@ record SpendableConfigRequest(
             description = "Nulo volta ao ciclo da fatura âncora")
         @Min(value = 1, message = MESSAGE)
         @Max(value = 31, message = MESSAGE)
-        Integer limitDay) {
+        Integer limitDay,
+    @JsonProperty("incluirBeneficios")
+        @Schema(
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+            defaultValue = "false",
+            description = "Conta o saldo dos benefícios no cálculo. Desligado vale zero")
+        Boolean includeBenefits,
+    @JsonProperty("incluirTerceiros")
+        @Schema(
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+            defaultValue = "false",
+            description = "Conta as compras de terceiros como gasto. Desligado vale zero")
+        Boolean includeThirdParties) {
 
   static final String MESSAGE = "diaLimite deve ser um inteiro de 1 a 31, ou nulo";
+
+  boolean benefitsOn() {
+    return includeBenefits != null && includeBenefits;
+  }
+
+  boolean thirdPartiesOn() {
+    return includeThirdParties != null && includeThirdParties;
+  }
 }

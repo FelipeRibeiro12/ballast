@@ -3311,8 +3311,9 @@ paths:
       - saldo-projetado
   /posso-gastar/configuracao:
     put:
-      description: diaLimite de 1 a 31 fixa o dia; nulo volta ao ciclo da fatura.
-        Não altera lançamento nenhum (ADR-063).
+      description: "diaLimite de 1 a 31 fixa o dia; nulo volta ao ciclo da fatura.\
+        \ incluirBeneficios e incluirTerceiros ligam o que entra no cálculo; desligados\
+        \ valem zero. Não altera lançamento nenhum (ADR-063, ADR-067)."
       operationId: putPossoGastarConfiguracao
       requestBody:
         content:
@@ -3337,7 +3338,7 @@ paths:
           description: Sem sessão válida
       security:
       - cookieAuth: []
-      summary: Escolhe até que dia do mês o Posso gastar conta
+      summary: "Configura o Posso gastar: dia final e o que entra na conta"
       tags:
       - saldo-projetado
   /recorrencias:
@@ -6384,6 +6385,14 @@ components:
         hoje:
           type: string
           format: date
+        incluirBeneficios:
+          type: boolean
+          description: "Os saldos dos benefícios entram no livre; ligado, a lista\
+            \ fica vazia"
+        incluirTerceiros:
+          type: boolean
+          description: As compras de terceiros contam como gasto; desligado valem
+            zero
         livreCentavos:
           type: integer
           format: int64
@@ -6431,6 +6440,8 @@ components:
       - diaLimite
       - dias
       - hoje
+      - incluirBeneficios
+      - incluirTerceiros
       - livreCentavos
       - menorSaldoEm
       - modo
@@ -6448,6 +6459,14 @@ components:
           description: Nulo volta ao ciclo da fatura âncora
           maximum: 31
           minimum: 1
+        incluirBeneficios:
+          type: boolean
+          default: false
+          description: Conta o saldo dos benefícios no cálculo. Desligado vale zero
+        incluirTerceiros:
+          type: boolean
+          default: false
+          description: Conta as compras de terceiros como gasto. Desligado vale zero
       required:
       - diaLimite
     ReceitaEDespesaDoMes:

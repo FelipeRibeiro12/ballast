@@ -6,6 +6,8 @@ const base = {
   ate: '2026-04-04',
   modo: 'dia',
   diaLimite: 4,
+  incluirBeneficios: false,
+  incluirTerceiros: false,
   rendimentoCofrinhoCentavos: 0,
   livreCentavos: 60_000,
   menorSaldoEm: '2026-03-25',
@@ -136,7 +138,7 @@ describe('PossoGastar', () => {
     await waitFor(() => expect(chamadas.filter((c) => c.url === '/posso-gastar')).toHaveLength(2))
     const gravacao = chamadas.find((c) => c.metodo === 'PUT')
     expect(gravacao?.url).toBe('/posso-gastar/configuracao')
-    expect(gravacao?.corpo).toBe(JSON.stringify({ diaLimite: 10 }))
+    expect(gravacao?.corpo).toBe(JSON.stringify({ diaLimite: 10, incluirBeneficios: false, incluirTerceiros: false }))
   })
 
   it('escolher o ciclo da fatura manda diaLimite nulo', async () => {
@@ -157,6 +159,42 @@ describe('PossoGastar', () => {
     fireEvent.change(screen.getByLabelText('Contar entradas e saídas até o dia'), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
 
-    await waitFor(() => expect(corpos).toEqual([JSON.stringify({ diaLimite: null })]))
+    await waitFor(() =>
+      expect(corpos).toEqual([JSON.stringify({ diaLimite: null, incluirBeneficios: false, incluirTerceiros: false })]),
+    )
+  })
+
+  it('as chaves de benefícios e terceiros vão junto na gravação', async () => {
+    const corpos: (string | null)[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        if (init?.method === 'PUT') {
+          corpos.push((init.body as string | undefined) ?? null)
+          return Promise.resolve(new Response(null, { status: 204 }))
+        }
+        return Promise.resolve(jsonResponse(base, 200))
+      }),
+    )
+    renderizar()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Configurar o Posso gastar' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Benefícios' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Terceiros' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+
+    await waitFor(() =>
+      expect(corpos).toEqual([JSON.stringify({ diaLimite: 4, incluirBeneficios: true, incluirTerceiros: true })]),
+    )
+  })
+
+  it('abre a engrenagem com as chaves que já estavam ligadas', async () => {
+    mockFetch({ ...base, incluirBeneficios: true })
+    renderizar()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Configurar o Posso gastar' }))
+
+    expect(screen.getByRole('checkbox', { name: 'Benefícios' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Terceiros' })).not.toBeChecked()
   })
 })

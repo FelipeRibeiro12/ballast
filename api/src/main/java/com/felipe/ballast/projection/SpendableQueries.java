@@ -23,27 +23,40 @@ class SpendableQueries {
     this.jdbc = jdbc;
   }
 
-  Optional<Integer> limitDay(UUID userId) {
-    return jdbc.sql("SELECT dia_limite FROM preferencia_posso_gastar WHERE usuario_id = :userId")
-        .param("userId", userId)
-        .query(Integer.class)
-        .optional();
-  }
+  // Sem linha vale o padrão: ciclo da fatura, benefícios à parte e compra de terceiro fora.
+  record Preferences(Integer limitDay, boolean includeBenefits, boolean includeThirdParty) {}
 
-  void saveLimitDay(UUID userId, int day) {
-    jdbc.sql(
+  Preferences preferences(UUID userId) {
+    return jdbc.sql(
             """
-            INSERT INTO preferencia_posso_gastar (usuario_id, dia_limite) VALUES (:userId, :day)
-            ON CONFLICT (usuario_id) DO UPDATE SET dia_limite = EXCLUDED.dia_limite
+            SELECT dia_limite, incluir_beneficios, incluir_terceiros
+            FROM preferencia_posso_gastar WHERE usuario_id = :userId
             """)
         .param("userId", userId)
-        .param("day", day)
-        .update();
+        .query(
+            (rs, row) ->
+                new Preferences(
+                    (Integer) rs.getObject("dia_limite"),
+                    rs.getBoolean("incluir_beneficios"),
+                    rs.getBoolean("incluir_terceiros")))
+        .optional()
+        .orElse(new Preferences(null, false, false));
   }
 
-  void clearLimitDay(UUID userId) {
-    jdbc.sql("DELETE FROM preferencia_posso_gastar WHERE usuario_id = :userId")
+  void savePreferences(UUID userId, Preferences preferences) {
+    jdbc.sql(
+            """
+            INSERT INTO preferencia_posso_gastar
+              (usuario_id, dia_limite, incluir_beneficios, incluir_terceiros)
+            VALUES (:userId, :day, :benefits, :thirdParty)
+            ON CONFLICT (usuario_id) DO UPDATE SET dia_limite = EXCLUDED.dia_limite,
+              incluir_beneficios = EXCLUDED.incluir_beneficios,
+              incluir_terceiros = EXCLUDED.incluir_terceiros
+            """)
         .param("userId", userId)
+        .param("day", preferences.limitDay())
+        .param("benefits", preferences.includeBenefits())
+        .param("thirdParty", preferences.includeThirdParty())
         .update();
   }
 
