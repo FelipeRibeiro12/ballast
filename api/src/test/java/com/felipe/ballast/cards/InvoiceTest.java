@@ -93,7 +93,7 @@ class InvoiceTest {
     assertThat(list.get(0).get("vencimento").asString()).isEqualTo("2026-03-25");
     assertThat(list.get(0).get("fechamento").asString()).isEqualTo("2026-03-15");
     assertThat(list.get(0).get("totalCentavos").asLong()).isEqualTo(13_346);
-    assertThat(list.get(1).get("vencimento").asString()).isEqualTo("2026-04-25");
+    assertThat(list.get(1).get("vencimento").asString()).isEqualTo("2026-04-27");
     assertThat(list.get(1).get("fechamento").asString()).isEqualTo("2026-04-15");
     assertThat(list.get(1).get("totalCentavos").asLong()).isEqualTo(5_000);
   }
@@ -115,7 +115,7 @@ class InvoiceTest {
     JsonNode list = invoices("?de=2026-01-01&ate=2026-03-31").get("faturas");
 
     assertThat(list).hasSize(3);
-    assertThat(list.get(0).get("vencimento").asString()).isEqualTo("2026-01-25");
+    assertThat(list.get(0).get("vencimento").asString()).isEqualTo("2026-01-26");
     assertThat(list.get(1).get("vencimento").asString()).isEqualTo("2026-02-25");
     assertThat(list.get(2).get("vencimento").asString()).isEqualTo("2026-03-25");
     for (JsonNode invoice : list) {
@@ -169,7 +169,7 @@ class InvoiceTest {
     today("2026-04-20");
 
     JsonNode march = invoiceDueOn("2026-03-25");
-    JsonNode april = invoiceDueOn("2026-04-25");
+    JsonNode april = invoiceDueOn("2026-04-27");
 
     assertThat(march.get("pagoCentavos").asLong()).isEqualTo(21_000);
     assertThat(march.get("restanteCentavos").asLong()).isEqualTo(-1_000);
@@ -184,7 +184,7 @@ class InvoiceTest {
     api.pay(actor, 3_000, "2026-04-16");
 
     assertThat(invoiceDueOn("2026-03-25").get("pagoCentavos").asLong()).isZero();
-    assertThat(invoiceDueOn("2026-04-25").get("pagoCentavos").asLong()).isEqualTo(3_000);
+    assertThat(invoiceDueOn("2026-04-27").get("pagoCentavos").asLong()).isEqualTo(3_000);
   }
 
   @Test
@@ -330,9 +330,9 @@ class InvoiceTest {
     JsonNode list = InvoicesApi.body(response).get("faturas");
 
     assertThat(list).hasSize(3);
-    assertThat(list.get(0).get("vencimento").asString()).isEqualTo("2026-01-31");
+    assertThat(list.get(0).get("vencimento").asString()).isEqualTo("2026-02-02");
     assertThat(list.get(0).get("pagoCentavos").asLong()).isZero();
-    assertThat(list.get(1).get("vencimento").asString()).isEqualTo("2026-02-28");
+    assertThat(list.get(1).get("vencimento").asString()).isEqualTo("2026-03-02");
     assertThat(list.get(1).get("fechamento").asString()).isEqualTo("2026-02-28");
     assertThat(list.get(1).get("pagoCentavos").asLong()).isEqualTo(5_000);
     assertThat(list.get(1).get("restanteCentavos").asLong()).isEqualTo(3_000);

@@ -90,14 +90,14 @@ class CardEntryTest {
     // Fechamento 31 em fevereiro, ano comum e bissexto.
     "31, 10, 2026-02-28, 2026-03-10",
     "31, 10, 2026-03-01, 2026-04-10",
-    "31, 10, 2024-02-29, 2024-03-10",
+    "31, 10, 2024-02-29, 2024-03-11",
     "31, 10, 2024-03-01, 2024-04-10",
     // Vencimento menor que o fechamento.
-    "25, 5, 2026-03-10, 2026-04-05",
+    "25, 5, 2026-03-10, 2026-04-06",
     "25, 5, 2026-03-26, 2026-05-05",
     // Compra no próprio dia do fechamento e no dia seguinte.
     "15, 25, 2026-03-15, 2026-03-25",
-    "15, 25, 2026-03-16, 2026-04-25",
+    "15, 25, 2026-03-16, 2026-04-27",
     // Virada de ano.
     "15, 5, 2026-12-20, 2027-02-05"
   })
@@ -119,7 +119,7 @@ class CardEntryTest {
             actor.session(),
             with(with(incomeBody(actor), "contaId", cardId), "data", "2026-03-16"));
 
-    assertThat(refund.get("dataCaixa").asString()).isEqualTo("2026-04-25");
+    assertThat(refund.get("dataCaixa").asString()).isEqualTo("2026-04-27");
   }
 
   @Test
@@ -166,15 +166,16 @@ class CardEntryTest {
 
     assertThat(response.getStatus()).isEqualTo(200);
     JsonNode days = EntriesApi.body(response).get("dias");
-    // O primeiro dia da série é 2026-10-19 e o vencimento (fechamento 15, vencimento 25) é dia 25.
+    // O primeiro dia da série é 2026-10-19 e o vencimento (fechamento 15, vencimento 25) cai num
+    // domingo, então a caixa vai para a segunda, dia 26 (ADR-060).
     assertThat(days.get(0).get("data").asString()).isEqualTo("2026-10-19");
     assertThat(days.get(0).get("saidasCentavos").asLong()).isZero();
     assertThat(days.get(0).get("saldoCentavos").asLong()).isZero();
     assertThat(days.get(5).get("data").asString()).isEqualTo("2026-10-24");
     assertThat(days.get(5).get("saldoCentavos").asLong()).isZero();
-    assertThat(days.get(6).get("data").asString()).isEqualTo("2026-10-25");
-    assertThat(days.get(6).get("saidasCentavos").asLong()).isEqualTo(12_345L);
-    assertThat(days.get(6).get("saldoCentavos").asLong()).isEqualTo(-12_345L);
+    assertThat(days.get(7).get("data").asString()).isEqualTo("2026-10-26");
+    assertThat(days.get(7).get("saidasCentavos").asLong()).isEqualTo(12_345L);
+    assertThat(days.get(7).get("saldoCentavos").asLong()).isEqualTo(-12_345L);
   }
 
   @Test
@@ -206,7 +207,7 @@ class CardEntryTest {
 
     assertThat(updated.getStatus()).isEqualTo(200);
     assertThat(storedDates(id))
-        .isEqualTo(new Dates(LocalDate.of(2026, 3, 16), LocalDate.of(2026, 4, 25)));
+        .isEqualTo(new Dates(LocalDate.of(2026, 3, 16), LocalDate.of(2026, 4, 27)));
   }
 
   private String plannedOnCard(String competenceAndCash) {
@@ -238,9 +239,9 @@ class CardEntryTest {
     assertThat(confirmed.getStatus()).isEqualTo(200);
     JsonNode body = EntriesApi.body(confirmed);
     assertThat(body.get("dataCompetencia").asString()).isEqualTo("2026-03-16");
-    assertThat(body.get("dataCaixa").asString()).isEqualTo("2026-04-25");
+    assertThat(body.get("dataCaixa").asString()).isEqualTo("2026-04-27");
     assertThat(storedDates(id))
-        .isEqualTo(new Dates(LocalDate.of(2026, 3, 16), LocalDate.of(2026, 4, 25)));
+        .isEqualTo(new Dates(LocalDate.of(2026, 3, 16), LocalDate.of(2026, 4, 27)));
   }
 
   @Test

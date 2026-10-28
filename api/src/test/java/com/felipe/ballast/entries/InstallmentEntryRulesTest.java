@@ -111,7 +111,7 @@ class InstallmentEntryRulesTest {
     JsonNode body = EntriesApi.body(response);
     assertThat(body.get("descricao").asString()).isEqualTo("Ajuste");
     assertThat(body.get("valorCentavos").asLong()).isEqualTo(40_000);
-    assertThat(body.get("dataCaixa").asString()).isEqualTo("2026-04-25");
+    assertThat(body.get("dataCaixa").asString()).isEqualTo("2026-04-27");
     assertThat(body.get("dataCompetencia").asString()).isEqualTo("2026-03-10");
     assertThat(body.get("compraParceladaId").asString()).isEqualTo(first);
     assertThat(body.get("parcelaNum").asInt()).isEqualTo(2);

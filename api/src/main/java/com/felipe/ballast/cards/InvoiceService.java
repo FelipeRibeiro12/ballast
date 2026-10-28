@@ -103,7 +103,8 @@ class InvoiceService {
   // vencimento daquela fatura, então o dia entra na própria e sai da anterior (ADR-032).
   private static BigDecimal paidIn(
       Map<LocalDate, BigDecimal> payments, CardBilling billing, CardBilling.Cycle cycle) {
-    boolean startsOnClosingDay = cycle.due().equals(cycle.closing());
+    // O dia nominal, não o útil: é ele que coincide com o fechamento (ADR-060).
+    boolean startsOnClosingDay = billing.dueDate(cycle.closing()).equals(cycle.closing());
     boolean endsBeforeNextClosingDay =
         billing.dueDate(cycle.nextClosing()).equals(cycle.nextClosing());
     BigDecimal sum = BigDecimal.ZERO;

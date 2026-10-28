@@ -79,7 +79,7 @@ class InstallmentCreationTest {
     assertThat(items.get(1).get("valorCentavos").asLong()).isEqualTo(33_333);
     assertThat(items.get(2).get("valorCentavos").asLong()).isEqualTo(33_334);
     assertThat(items.get(0).get("dataCaixa").asString()).isEqualTo("2026-03-25");
-    assertThat(items.get(1).get("dataCaixa").asString()).isEqualTo("2026-04-25");
+    assertThat(items.get(1).get("dataCaixa").asString()).isEqualTo("2026-04-27");
     assertThat(items.get(2).get("dataCaixa").asString()).isEqualTo("2026-05-25");
   }
 
@@ -125,7 +125,7 @@ class InstallmentCreationTest {
     // Fechamento 15: a compra de 20/12 entra na fatura que fecha em 15/01 e vence em 25/01.
     assertThat(items.get(0).get("dataCaixa").asString()).isEqualTo("2027-01-25");
     assertThat(items.get(1).get("dataCaixa").asString()).isEqualTo("2027-02-25");
-    assertThat(items.get(11).get("dataCaixa").asString()).isEqualTo("2027-12-25");
+    assertThat(items.get(11).get("dataCaixa").asString()).isEqualTo("2027-12-27");
     long sum = 0;
     for (JsonNode item : items) {
       sum += item.get("valorCentavos").asLong();
