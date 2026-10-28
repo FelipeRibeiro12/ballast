@@ -629,6 +629,30 @@ p[role='status'] {
   }
 }
 
+/* Celular: quem rola é o .app, não a página. Com a página rolando, a barra do Safari do iOS encolhe e
+   cresce, a barra fixa de baixo flutua com conteúdo aparecendo por baixo e o toque cai no botão
+   vizinho. Sem rolagem da página a barra do navegador fica parada. */
+@media (max-width: 47.99rem) {
+  html:has(.app),
+  body:has(.app) {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .app {
+    height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Painel aberto trava o fundo: o body já não rola, então a trava passa para o .app. */
+  body.painel-aberto .app {
+    overflow: hidden;
+  }
+}
+
 /* Celular: barra inferior fixa, com o recuo da área segura do iOS. */
 .nav {
   position: fixed;

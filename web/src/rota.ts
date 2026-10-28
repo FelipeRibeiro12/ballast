@@ -45,6 +45,8 @@ export function useRota(): [Secao, (secao: Secao) => void] {
       setSecao(lerSecao(window.location.hash))
       // O hash não rola a página sozinho, e a seção nova começa do topo.
       window.scrollTo(0, 0)
+      // No celular quem rola é o .app (index.css). O jsdom não tem scrollTo em elemento.
+      document.querySelector('.app')?.scrollTo?.(0, 0)
     }
     window.addEventListener('hashchange', aoMudarOHash)
     return () => window.removeEventListener('hashchange', aoMudarOHash)
