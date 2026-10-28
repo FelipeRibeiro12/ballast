@@ -36,7 +36,13 @@ public enum UserLimit {
       "cotações",
       "SELECT count(*) FROM cotacao WHERE usuario_id = :userId AND ativo_id IN"
           + " (SELECT id FROM ativo_cripto WHERE usuario_id = :userId)",
-      LimitsProperties::quotes);
+      LimitsProperties::quotes),
+  // Outros e Outras receitas são protegidas e ficam fora da conta (ADR-064).
+  CATEGORIES(
+      "categorias",
+      "SELECT count(*) FROM categoria WHERE usuario_id = :userId"
+          + " AND semente IS DISTINCT FROM 'outros' AND semente IS DISTINCT FROM 'outras_receitas'",
+      LimitsProperties::categories);
 
   final String label;
   final String countSql;

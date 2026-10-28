@@ -622,6 +622,57 @@ async function recusarRespostaDeLancamento(resposta: Response, origem: string): 
   throw new ApiError(`${origem} respondeu ${resposta.status}`)
 }
 
+// 400 e 409 do CRUD de categoria: nome inválido ou repetido, protegida, limite, em uso.
+export class CategoriaRecusadaError extends ApiError {
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('categoria recusada')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+async function recusarRespostaDeCategoria(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 400 || resposta.status === 409) {
+    throw new CategoriaRecusadaError(await lerMensagemDeErro(resposta))
+  }
+  return recusarRespostaDeLancamento(resposta, origem)
+}
+
+export async function postCategoria(nome: string, tipo: Categoria['tipo']): Promise<Categoria> {
+  const resposta = await fetch(`${baseUrl}/categorias`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(),
+    body: JSON.stringify({ nome, tipo }),
+  })
+  if (resposta.status !== 201) return recusarRespostaDeCategoria(resposta, 'POST /categorias')
+  const corpo: unknown = await resposta.json()
+  if (!isCategoria(corpo)) throw new ApiError('POST /categorias com formato inesperado')
+  return corpo
+}
+
+export async function putCategoria(id: string, nome: string): Promise<Categoria> {
+  const resposta = await fetch(`${baseUrl}/categorias/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(),
+    body: JSON.stringify({ nome }),
+  })
+  if (!resposta.ok) return recusarRespostaDeCategoria(resposta, 'PUT /categorias/{id}')
+  const corpo: unknown = await resposta.json()
+  if (!isCategoria(corpo)) throw new ApiError('PUT /categorias/{id} com formato inesperado')
+  return corpo
+}
+
+export async function deleteCategoria(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/categorias/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeCategoria(resposta, 'DELETE /categorias/{id}')
+}
+
 export async function fetchCategorias(): Promise<Categoria[]> {
   const resposta = await fetch(`${baseUrl}/categorias`, { credentials: 'same-origin' })
   if (!resposta.ok) return recusarRespostaDeLancamento(resposta, '/categorias')

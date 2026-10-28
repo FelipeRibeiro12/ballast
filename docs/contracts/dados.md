@@ -549,8 +549,9 @@ vem da aplicação.
   Recusam apagar o pai com filho do mesmo jeito, mas só checam no fim do comando.
   Com `RESTRICT`, apagar o usuário falharia no meio do cascade, quando a conta
   some antes dos lançamentos.
-- Categoria com lançamento não se apaga (a FK recusa). O CRUD de categoria
-  (fatia futura) decide entre arquivar e bloquear.
+- Apagar categoria move lançamentos, recorrências e teto de orçamento para
+  Outros ou Outras receitas, na transação do `DELETE /categorias/{id}`
+  (ADR-064). Até 20 por usuário, sem contar as duas protegidas.
 
 Sementes (usuários existentes na `V6`, usuários novos pela aplicação, **a mesma
 lista nos dois lugares**; esta é a fonte):

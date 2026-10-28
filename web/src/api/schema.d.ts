@@ -303,8 +303,36 @@ export interface paths {
          */
         get: operations["getCategorias"];
         put?: never;
-        post?: never;
+        /**
+         * Cria uma categoria
+         * @description Até 20 por usuário, sem contar Outros e Outras receitas (ADR-064).
+         */
+        post: operations["postCategorias"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/categorias/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Renomeia a categoria
+         * @description Só o nome muda. Outros e Outras receitas não podem ser renomeadas.
+         */
+        put: operations["putCategoriasById"];
+        post?: never;
+        /**
+         * Apaga a categoria
+         * @description Lançamentos e recorrências vão para Outros (ou Outras receitas) e o teto de orçamento soma na Outros. Categoria listada em conta de benefício não se apaga.
+         */
+        delete: operations["deleteCategoriasById"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1169,7 +1197,20 @@ export interface components {
             nome: string;
             /** Format: uuid */
             paiId: string | null;
+            /** @description Outros e Outras receitas: não renomeia nem apaga */
+            protegida: boolean;
             /** @enum {string} */
+            tipo: "receita" | "despesa";
+        };
+        CategoriaRenomearRequest: {
+            nome: string;
+        };
+        CategoriaRequest: {
+            nome: string;
+            /**
+             * @description Só no cadastro; o tipo não muda depois
+             * @enum {string}
+             */
             tipo: "receita" | "despesa";
         };
         CategoriasPermitidasRequest: {
@@ -3409,6 +3450,168 @@ export interface operations {
             };
             /** @description Banco indisponível */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postCategorias: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoriaRequest"];
+            };
+        };
+        responses: {
+            /** @description Categoria criada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Categoria"];
+                };
+            };
+            /** @description Entrada inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Nome repetido ou limite de categorias atingido */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putCategoriasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoriaRenomearRequest"];
+            };
+        };
+        responses: {
+            /** @description Categoria renomeada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Categoria"];
+                };
+            };
+            /** @description Entrada inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Categoria de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Nome repetido ou categoria protegida */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteCategoriasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Categoria apagada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Categoria de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Protegida, com subcategorias ou listada em conta de benefício */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

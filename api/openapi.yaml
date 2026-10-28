@@ -969,6 +969,141 @@ paths:
       summary: Lista as categorias do usuário
       tags:
       - categorias
+    post:
+      description: "Até 20 por usuário, sem contar Outros e Outras receitas (ADR-064)."
+      operationId: postCategorias
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoriaRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Categoria"
+          description: Categoria criada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Nome repetido ou limite de categorias atingido
+      security:
+      - cookieAuth: []
+      summary: Cria uma categoria
+      tags:
+      - categorias
+  /categorias/{id}:
+    delete:
+      description: Lançamentos e recorrências vão para Outros (ou Outras receitas)
+        e o teto de orçamento soma na Outros. Categoria listada em conta de benefício
+        não se apaga.
+      operationId: deleteCategoriasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Categoria apagada
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Categoria de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Protegida, com subcategorias ou listada em conta de benefí\
+            cio"
+      security:
+      - cookieAuth: []
+      summary: Apaga a categoria
+      tags:
+      - categorias
+    put:
+      description: Só o nome muda. Outros e Outras receitas não podem ser renomeadas.
+      operationId: putCategoriasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoriaRenomearRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Categoria"
+          description: Categoria renomeada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Categoria de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Nome repetido ou categoria protegida
+      security:
+      - cookieAuth: []
+      summary: Renomeia a categoria
+      tags:
+      - categorias
   /compras-parceladas:
     post:
       description: "Cria de 2 a 48 parcelas de despesa realizada na conta de cartã\
@@ -4334,6 +4469,9 @@ components:
           - string
           - "null"
           format: uuid
+        protegida:
+          type: boolean
+          description: "Outros e Outras receitas: não renomeia nem apaga"
         tipo:
           type: string
           enum:
@@ -4345,6 +4483,32 @@ components:
       - id
       - nome
       - paiId
+      - protegida
+      - tipo
+    CategoriaRenomearRequest:
+      type: object
+      properties:
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+      required:
+      - nome
+    CategoriaRequest:
+      type: object
+      properties:
+        nome:
+          type: string
+          maxLength: 100
+          minLength: 1
+        tipo:
+          type: string
+          description: Só no cadastro; o tipo não muda depois
+          enum:
+          - receita
+          - despesa
+      required:
+      - nome
       - tipo
     CategoriasPermitidasRequest:
       type: object

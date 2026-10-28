@@ -1,11 +1,12 @@
 import { hashDaSecao } from './rota'
 
-type SecaoDePlanejamento = 'orcamento' | 'metas' | 'relatorios'
+type SecaoDePlanejamento = 'orcamento' | 'metas' | 'relatorios' | 'categorias'
 
 const ATALHOS: readonly { secao: SecaoDePlanejamento; rotulo: string }[] = [
   { secao: 'orcamento', rotulo: 'Orçamento' },
   { secao: 'metas', rotulo: 'Metas' },
   { secao: 'relatorios', rotulo: 'Relatórios' },
+  { secao: 'categorias', rotulo: 'Categorias' },
 ]
 
 // Orçamento, Metas e Relatórios ficam fora da barra de navegação (ADR-043): estes links levam de

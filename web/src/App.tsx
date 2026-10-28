@@ -23,6 +23,7 @@ import Lancamentos from './Lancamentos'
 import Recorrencias from './Recorrencias'
 import { useRota } from './rota'
 import Investimentos from './Investimentos'
+import Categorias from './Categorias'
 import Metas from './Metas'
 import Orcamento from './Orcamento'
 import Relatorios from './Relatorios'
@@ -590,6 +591,7 @@ function App() {
         </div>
         {rota === 'orcamento' && <Orcamento aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'metas' && <Metas aoSessaoExpirar={aoSessaoExpirar} />}
+        {rota === 'categorias' && <Categorias aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'relatorios' && <Relatorios aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'seguranca' && <Seguranca aoSessaoExpirar={aoSessaoExpirar} />}
         {rota === 'investimentos' && (

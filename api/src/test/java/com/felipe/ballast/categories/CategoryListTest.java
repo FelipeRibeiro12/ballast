@@ -75,7 +75,7 @@ class CategoryListTest {
     JsonNode first = listOk(sessionA, "").get(0);
 
     assertThat(first.propertyNames())
-        .containsExactlyInAnyOrder("id", "nome", "tipo", "paiId", "cor", "icone");
+        .containsExactlyInAnyOrder("id", "nome", "tipo", "paiId", "cor", "icone", "protegida");
     assertThat(first.get("id").asString()).matches("[0-9a-f-]{36}");
     assertThat(first.get("paiId").isNull()).isTrue();
     assertThat(first.get("cor").isNull()).isTrue();
