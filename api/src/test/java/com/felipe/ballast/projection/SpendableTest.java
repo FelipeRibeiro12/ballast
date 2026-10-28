@@ -47,6 +47,9 @@ class SpendableTest {
   @AfterEach
   void tearDown() {
     clock.reset();
+    // indice é compartilhada entre as classes de teste: deixar o CDI aqui muda os testes de renda
+    // fixa.
+    jdbc.sql("DELETE FROM indice WHERE serie = 'cdi' AND data = DATE '2026-03-13'").update();
   }
 
   private MockHttpServletResponse call(
