@@ -1507,21 +1507,19 @@ export default function Lancamentos({
             <div className="pilula">
               <dt>Receitas</dt>
               <dd className="receita">{formatarCentavos(receitas)}</dd>
+              <dd className="pilula-previsto">Previsto {formatarCentavos(previstoReceitas)}</dd>
             </div>
             <div className="pilula">
               <dt>Despesas</dt>
               <dd className="despesa">{formatarCentavos(despesas)}</dd>
+              <dd className="pilula-previsto">Previsto {formatarCentavos(previstoDespesas)}</dd>
             </div>
             <div className="pilula">
               <dt>Resultado</dt>
               <dd className={receitas - despesas < 0n ? 'despesa' : undefined}>{formatarCentavos(receitas - despesas)}</dd>
+              <dd className="pilula-previsto">Previsto {formatarCentavos(previstoReceitas - previstoDespesas)}</dd>
             </div>
           </dl>
-          <p className="previsto-no-mes">
-            Previsto no mês: <span className="receita">+{formatarCentavos(previstoReceitas)}</span>
-            {' / '}
-            <span className="despesa">−{formatarCentavos(previstoDespesas)}</span>
-          </p>
           {estado.lancamentos.length === 0 && (
             <EstadoVazio
               titulo="Nenhum lançamento neste mês."

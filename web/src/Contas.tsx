@@ -23,6 +23,7 @@ import Faturas from './Faturas'
 import { centavosParaCampo, formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
 import { IconeBanco, IconeBeneficio, IconeCartao, IconeCripto, IconeDinheiro, IconeInvestimentos, IconeMais } from './icones'
 import Painel from './Painel'
+import ResumoDasContas from './ResumoDasContas'
 import { hashDaSecao } from './rota'
 import { Carregando, EstadoVazio, Selo } from './ui'
 
@@ -1013,10 +1014,6 @@ export default function Contas({
     }
   }
 
-  // BigInt porque a soma de várias contas pode passar do inteiro seguro.
-  const total =
-    estado.tipo === 'ok' ? estado.contas.reduce((soma, conta) => soma + BigInt(conta.saldoCentavos), 0n) : 0n
-
   const contasDePagamento =
     estado.tipo === 'ok' ? estado.contas.filter((c) => c.tipo === 'corrente' || c.tipo === 'poupanca') : []
 
@@ -1055,9 +1052,7 @@ export default function Contas({
       {estado.tipo === 'ok' && (
         <>
           {!arquivadas && estado.contas.length > 0 && (
-            <p className="resumo-total">
-              Total: <strong>{formatarCentavos(total)}</strong>
-            </p>
+            <ResumoDasContas contas={estado.contas} />
           )}
           {estado.contas.length === 0 && (
             <EstadoVazio

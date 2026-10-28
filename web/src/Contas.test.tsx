@@ -129,7 +129,7 @@ describe('Contas', () => {
     expect(itens[1].textContent).toMatch(texto('-R$ 34,56'))
     expect(itens[2]).toHaveTextContent('Poupança')
     // 123456 - 3456 + 1000 = 121000
-    expect(screen.getByText(/total/i).textContent).toMatch(texto('R$ 1.210,00'))
+    expect(screen.getByText('Total, sem cartão').parentElement?.textContent).toMatch(texto('R$ 1.210,00'))
     expect(chamadasA('GET /contas')[0][1]).toMatchObject({ credentials: 'same-origin' })
   })
 
@@ -143,7 +143,7 @@ describe('Contas', () => {
     })
     render(<App />)
     await screen.findByRole('list')
-    expect(screen.getByText(/total/i).textContent).toMatch(texto('R$ 180.143.985.094.819,82'))
+    expect(screen.getByText('Total, sem cartão').parentElement?.textContent).toMatch(texto('R$ 180.143.985.094.819,82'))
   })
 
   it('lista vazia mostra "Nenhuma conta ainda."', async () => {

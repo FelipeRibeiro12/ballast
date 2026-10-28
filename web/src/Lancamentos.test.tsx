@@ -275,9 +275,9 @@ describe('Lancamentos', () => {
       expect(await area.findByText('Tênis')).toBeVisible()
       expect(area.getByText('Despesas').nextSibling).toHaveTextContent(texto('R$ 123,45'))
       expect(area.getByText('Receitas').nextSibling).toHaveTextContent(texto('R$ 0,00'))
-      const previsto = area.getByText(/previsto no mês/i)
-      expect(previsto).toHaveTextContent(texto('+R$ 5.000,00'))
-      expect(previsto).toHaveTextContent(texto('−R$ 300,00'))
+      expect(area.getByText('Receitas').parentElement).toHaveTextContent(texto('Previsto R$ 5.000,00'))
+      expect(area.getByText('Despesas').parentElement).toHaveTextContent(texto('Previsto R$ 300,00'))
+      expect(area.getByText('Resultado').parentElement).toHaveTextContent(texto('Previsto R$ 4.700,00'))
       const tenis = area.getByText('Tênis').closest('li')
       expect(tenis).not.toBeNull()
       expect(within(tenis as HTMLElement).getByText('Na fatura')).toBeVisible()
@@ -297,7 +297,7 @@ describe('Lancamentos', () => {
       const area = within(await secao())
       expect(await area.findByText('Boleto')).toBeVisible()
       expect(area.getByText('Despesas').nextSibling).toHaveTextContent(texto('R$ 10,00'))
-      expect(area.getByText(/previsto no mês/i)).toHaveTextContent(texto('−R$ 200,00'))
+      expect(area.getByText('Despesas').parentElement).toHaveTextContent(texto('Previsto R$ 200,00'))
       const boleto = area.getByText('Boleto').closest('li')
       expect(within(boleto as HTMLElement).getByText('Agendado')).toBeVisible()
       const padaria = area.getByText('Padaria').closest('li')
@@ -822,7 +822,9 @@ describe('Lancamentos', () => {
       expect(area.getByText('Receitas').nextSibling).toHaveTextContent(texto('R$ 0,00'))
       expect(area.getByText('Despesas').nextSibling).toHaveTextContent(texto('R$ 123,45'))
       expect(area.getByText('Resultado').nextSibling).toHaveTextContent(texto('-R$ 123,45'))
-      expect(area.getByText(/previsto no mês/i)).toHaveTextContent(texto('+R$ 200,00 / −R$ 1.500,00'))
+      expect(area.getByText('Receitas').parentElement).toHaveTextContent(texto('Previsto R$ 200,00'))
+      expect(area.getByText('Despesas').parentElement).toHaveTextContent(texto('Previsto R$ 1.500,00'))
+      expect(area.getByText('Resultado').parentElement).toHaveTextContent(texto('Previsto -R$ 1.300,00'))
     })
 
     it('cancelada aparece riscada com a marca Cancelado e fora dos totais', async () => {
@@ -833,7 +835,7 @@ describe('Lancamentos', () => {
       expect(item).toHaveTextContent('Cancelado')
       expect(item).toHaveClass('cancelado')
       expect(area.getByText('Despesas').nextSibling).toHaveTextContent(texto('R$ 0,00'))
-      expect(area.getByText(/previsto no mês/i)).toHaveTextContent(texto('+R$ 0,00 / −R$ 0,00'))
+      expect(area.getByText('Despesas').parentElement).toHaveTextContent(texto('Previsto R$ 0,00'))
     })
 
     it('prevista não tem Apagar', async () => {

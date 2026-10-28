@@ -1440,10 +1440,11 @@ p[role='status'] {
   }
 }
 
-.previsto-no-mes {
-  margin-bottom: var(--esp-4);
-  color: var(--texto-fraco);
-  font-size: 0.875rem;
+.pilula .pilula-previsto {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--texto-suave);
 }
 
 .dia-grupo {
@@ -1642,6 +1643,32 @@ p[role='status'] {
 }
 
 /* Contas */
+
+.resumo-carrossel {
+  display: flex;
+  gap: var(--esp-3);
+  margin: 0 0 var(--esp-4);
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.resumo-grupo {
+  flex: 0 0 70%;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-1);
+  padding: var(--esp-3) var(--esp-4);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+}
+
+.resumo-grupo strong {
+  font-size: 1.25rem;
+}
 
 .resumo-total {
   margin-bottom: var(--esp-4);
