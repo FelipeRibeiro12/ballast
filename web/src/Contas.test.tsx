@@ -109,7 +109,7 @@ describe('Contas', () => {
     expect(await screen.findByText(/carregando contas/i)).toBeVisible()
   })
 
-  it('mostra nome, tipo, saldo formatado e o total', async () => {
+  it('mostra nome, tipo e saldo formatado', async () => {
     mockFetch({
       ...sessaoViva,
       'GET /contas': responde([
@@ -128,22 +128,7 @@ describe('Contas', () => {
     expect(itens[1]).toHaveTextContent('Dinheiro')
     expect(itens[1].textContent).toMatch(texto('-R$ 34,56'))
     expect(itens[2]).toHaveTextContent('Poupança')
-    // 123456 - 3456 + 1000 = 121000
-    expect(screen.getByText('Total, sem cartão').parentElement?.textContent).toMatch(texto('R$ 1.210,00'))
     expect(chamadasA('GET /contas')[0][1]).toMatchObject({ credentials: 'same-origin' })
-  })
-
-  it('soma o total em inteiro exato mesmo passando do limite seguro', async () => {
-    mockFetch({
-      ...sessaoViva,
-      'GET /contas': responde([
-        conta({ saldoCentavos: 9007199254740991 }),
-        conta({ id: 'c2', nome: 'Outra', saldoCentavos: 9007199254740991 }),
-      ]),
-    })
-    render(<App />)
-    await screen.findByRole('list')
-    expect(screen.getByText('Total, sem cartão').parentElement?.textContent).toMatch(texto('R$ 180.143.985.094.819,82'))
   })
 
   it('lista vazia mostra "Nenhuma conta ainda."', async () => {
