@@ -141,22 +141,15 @@ describe('Início', () => {
   })
 
   describe('resumo das contas', () => {
-    it('soma o saldo das contas ativas e o disponível dos cartões', async () => {
+    it('o saldo é o carrossel de totais e não conta o cartão de crédito', async () => {
       mockFetch({ 'GET /contas': responde([conta(), visa]) })
       render(<App />)
       const resumo = within(await screen.findByRole('region', { name: 'Resumo das contas' }))
-      // 1.000,00 da conta corrente menos 200,00 de fatura em aberto.
-      expect(await resumo.findByText(texto('R$ 800,00'))).toBeVisible()
-      expect(resumo.getByText('Disponível nos cartões').nextSibling).toHaveTextContent(texto('R$ 4.800,00'))
-      expect(resumo.getByText('Contas ativas').nextSibling).toHaveTextContent('2')
-    })
-
-    it('sem cartão não fala de disponível', async () => {
-      mockFetch({ 'GET /contas': responde([conta()]) })
-      render(<App />)
-      const resumo = within(await screen.findByRole('region', { name: 'Resumo das contas' }))
-      expect(await resumo.findByText(texto('R$ 1.000,00'))).toBeVisible()
-      expect(resumo.queryByText('Disponível nos cartões')).toBeNull()
+      // 1.000,00 da conta corrente; a fatura de 200,00 do cartão fica fora do total.
+      await waitFor(() =>
+        expect(resumo.getByText('Total, sem cartão').parentElement).toHaveTextContent(texto('R$ 1.000,00')),
+      )
+      expect(resumo.getByText('Corrente e poupança').parentElement).toHaveTextContent(texto('R$ 1.000,00'))
     })
 
     it('mostra carregando enquanto as contas não chegam', async () => {
@@ -177,13 +170,15 @@ describe('Início', () => {
     const vr = conta({ id: 'b1', nome: 'VR', tipo: 'beneficio', saldoCentavos: 80000, categoriasPermitidas: ['cd1'] })
     const va = conta({ id: 'b2', nome: 'VA', tipo: 'beneficio', saldoCentavos: 25050, categoriasPermitidas: [] })
 
-    it('tira o benefício de "Saldo nas contas" e mostra o saldo somado num cartão próprio', async () => {
+    it('conta o benefício no total, num grupo próprio, e mantém o cartão de benefícios', async () => {
       mockFetch({ 'GET /contas': responde([conta(), vr, va]) })
       render(<App />)
       const resumo = within(await screen.findByRole('region', { name: 'Resumo das contas' }))
-      // Só os 1.000,00 da corrente: os 800,00 do VR e os 250,50 do VA ficam de fora.
-      expect(await resumo.findByText(texto('R$ 1.000,00'))).toBeVisible()
-      expect(resumo.getByText('Contas ativas').nextSibling).toHaveTextContent('1')
+      // 1.000,00 da corrente mais 800,00 do VR e 250,50 do VA.
+      await waitFor(() =>
+        expect(resumo.getByText('Total, sem cartão').parentElement).toHaveTextContent(texto('R$ 2.050,50')),
+      )
+      expect(resumo.getByText('Benefício').parentElement).toHaveTextContent(texto('R$ 1.050,50'))
       const beneficios = within(screen.getByRole('region', { name: 'Benefícios' }))
       expect(beneficios.getByText(texto('R$ 1.050,50'), { selector: 'p' })).toBeVisible()
       const itens = beneficios.getAllByRole('listitem')
@@ -197,7 +192,9 @@ describe('Início', () => {
       mockFetch({ 'GET /contas': responde([conta()]) })
       render(<App />)
       const resumo = within(await screen.findByRole('region', { name: 'Resumo das contas' }))
-      expect(await resumo.findByText(texto('R$ 1.000,00'))).toBeVisible()
+      await waitFor(() =>
+        expect(resumo.getByText('Total, sem cartão').parentElement).toHaveTextContent(texto('R$ 1.000,00')),
+      )
       expect(screen.queryByRole('region', { name: 'Benefícios' })).toBeNull()
     })
 
