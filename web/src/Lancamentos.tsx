@@ -907,6 +907,7 @@ export default function Lancamentos({
   recorrenciasAtivas,
   parcelasPorRecorrencia,
   versaoDaLista,
+  versaoDeCategorias,
   aoMudarOcorrencia,
   destinoDasVencidas,
   aoEditarVencida,
@@ -922,6 +923,8 @@ export default function Lancamentos({
   parcelasPorRecorrencia: ReadonlyMap<string, number>
   // Sobe quando outra tela mexeu nas ocorrências (criar ou desativar recorrência).
   versaoDaLista: number
+  // Sobe quando o usuário cria, renomeia ou apaga categoria: a tela fica montada e não recarregaria sozinha.
+  versaoDeCategorias: number
   // Avisa a tela de recorrências que a próxima ocorrência pode ter mudado.
   aoMudarOcorrencia: () => void
   // Onde desenhar o bloco de vencidas (no Início). Sem destino o bloco não aparece.
@@ -1016,7 +1019,7 @@ export default function Lancamentos({
     return () => {
       ativo = false
     }
-  }, [tentativaDoApoio, aoSessaoExpirar])
+  }, [tentativaDoApoio, versaoDeCategorias, aoSessaoExpirar])
 
   function recarregar(): void {
     setEstado({ tipo: 'carregando' })

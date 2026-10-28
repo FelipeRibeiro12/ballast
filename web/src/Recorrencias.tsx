@@ -618,6 +618,7 @@ export default function Recorrencias({
   aoSessaoExpirar,
   contas,
   versao,
+  versaoDeCategorias,
   aoCarregarAtivas,
   aoCarregarParcelas,
   aoMudarOcorrencias,
@@ -627,6 +628,7 @@ export default function Recorrencias({
   contas: Conta[] | null
   // Sobe quando a lista de lançamentos mexeu nas ocorrências (muda a próxima data).
   versao: number
+  versaoDeCategorias: number
   // Entrega os ids das recorrências ativas para a lista do mês avisar que apagar faz voltar.
   aoCarregarAtivas: (ids: ReadonlySet<string>) => void
   // Entrega o total de parcelas de cada recorrência com divisão, ativa ou não: as já realizadas continuam na lista do mês.
@@ -693,7 +695,7 @@ export default function Recorrencias({
     return () => {
       ativo = false
     }
-  }, [tentativaDoApoio, aoSessaoExpirar])
+  }, [tentativaDoApoio, versaoDeCategorias, aoSessaoExpirar])
 
   function recarregar(): void {
     setEstado({ tipo: 'carregando' })
