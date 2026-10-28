@@ -111,3 +111,7 @@ entre pessoas, saldo automático de corretora. Motivos em `visao.md`.
   Anote o que sobrou como fatia nova em vez de esticar a atual.
 - Dívida técnica aceita vira linha aqui com dono, não comentário `TODO` no
   código.
+- **DÍVIDA** — Terceiros: criar o lançamento e ligar ao terceiro são duas chamadas do web (ADR-062). Uma falha no meio deixa o lançamento sem vínculo. Aceitar `terceiroId` no `POST /lancamentos` e no `POST /compras-parceladas` fecha a janela. Dono: backend.
+- **DÍVIDA** — Dia útil só conhece feriado nacional (ADR-060). Feriado estadual e municipal mudam o pagamento real da fatura. Dono: backend, se o dono pedir.
+- **DÍVIDA** — Orçamento ao apagar categoria soma o teto na Outros mês a mês, sem recalcular a vigência (ADR-064). Dono: backend.
+
