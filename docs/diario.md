@@ -475,6 +475,6 @@ Em aberto: onda 6b, o web.
 O que entrou, uma branch empilhada por ponto: vencimento da fatura em dia útil, CRUD de categoria com teto de 20, conta tipo cofrinho com percentual do CDI, terceiros (compra, reembolso e dívida calculada), Posso gastar por janela escolhida (engrenagem, ciclo da fatura âncora, terceiros fora, rendimento do cofrinho) e as telas de Contas (carrossel por grupo) e Lançamentos (previsto na pílula).
 Decisões: ADR-060 a ADR-065 (o ADR-059 está reservado na branch `feat/onda7-front`)
 Dívida registrada: o vínculo de terceiro e o reembolso são duas chamadas no web; feriado estadual e municipal fora do dia útil; o rendimento do cofrinho é estimativa sobre saldo parado
-Achados do revisor: a rodar (reviewer e security ficam para o fim da rodada)
+Achados do revisor: security 0 crítico, 0 alto, 1 médio e 1 baixo viraram dívida; reviewer não rodou (decisão de economia)
 Pipeline: a preencher no PR
 Em aberto: item 1 (Safari iOS), subir as branches e abrir os PRs, security na rota de terceiros e categorias.
