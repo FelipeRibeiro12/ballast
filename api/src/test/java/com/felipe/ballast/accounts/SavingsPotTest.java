@@ -34,8 +34,7 @@ class SavingsPotTest {
     sessionB = users.session(users.register());
   }
 
-  private MockHttpServletResponse send(Cookie session, String path, Object body)
-      throws Exception {
+  private MockHttpServletResponse send(Cookie session, String path, Object body) throws Exception {
     var request = path.endsWith("/cofrinho") ? put(path) : post(path);
     return mvc.perform(
             request

@@ -14,7 +14,8 @@ import org.springframework.stereotype.Repository;
 class ThirdPartyQueries {
 
   // bought: despesas não canceladas. received: reembolsos já realizados.
-  record ThirdParty(UUID id, String name, boolean archived, BigDecimal bought, BigDecimal received) {}
+  record ThirdParty(
+      UUID id, String name, boolean archived, BigDecimal bought, BigDecimal received) {}
 
   record TaggedEntry(
       UUID id,
@@ -61,7 +62,8 @@ class ThirdPartyQueries {
   }
 
   Optional<ThirdParty> find(UUID userId, UUID id) {
-    return jdbc.sql(SELECT_THIRD_PARTY + " WHERE t.usuario_id = :userId AND t.id = :id GROUP BY t.id")
+    return jdbc.sql(
+            SELECT_THIRD_PARTY + " WHERE t.usuario_id = :userId AND t.id = :id GROUP BY t.id")
         .param("userId", userId)
         .param("id", id)
         .query(ThirdPartyQueries::map)

@@ -1,27 +1,27 @@
 package com.felipe.ballast.projection;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletResponse;
-import tools.jackson.databind.json.JsonMapper;
+
 import com.felipe.ballast.IntegrationTest;
 import com.felipe.ballast.TestClock;
 import com.felipe.ballast.entries.CardBilling;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 // Hoje é 15 de março de 2026 em São Paulo.
 @IntegrationTest
@@ -154,7 +154,9 @@ class SpendableTest {
     for (int day : new int[] {0, 32, -1}) {
       Map<String, Object> body = new LinkedHashMap<>();
       body.put("diaLimite", day);
-      assertThat(call(put("/posso-gastar/configuracao"), body).getStatus()).as("" + day).isEqualTo(400);
+      assertThat(call(put("/posso-gastar/configuracao"), body).getStatus())
+          .as("" + day)
+          .isEqualTo(400);
     }
   }
 

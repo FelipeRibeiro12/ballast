@@ -84,7 +84,8 @@ class SpendableQueries {
             """)
         .param("userId", userId)
         .query(
-            (rs, row) -> new SavingsPot(rs.getBigDecimal("saldo"), rs.getBigDecimal("percentual_cdi")))
+            (rs, row) ->
+                new SavingsPot(rs.getBigDecimal("saldo"), rs.getBigDecimal("percentual_cdi")))
         .list();
   }
 

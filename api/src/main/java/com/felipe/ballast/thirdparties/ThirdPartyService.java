@@ -56,8 +56,7 @@ class ThirdPartyService {
     }
   }
 
-  Result<ThirdPartyQueries.ThirdParty> update(
-      UUID userId, UUID id, String name, boolean archived) {
+  Result<ThirdPartyQueries.ThirdParty> update(UUID userId, UUID id, String name, boolean archived) {
     try {
       return transaction.execute(
           status -> {

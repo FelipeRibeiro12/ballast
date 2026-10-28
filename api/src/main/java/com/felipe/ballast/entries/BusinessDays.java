@@ -5,7 +5,8 @@ import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
 
-// Dia útil bancário nacional (ADR-060). Feriado estadual e municipal não entram. Carnaval, Sexta-feira
+// Dia útil bancário nacional (ADR-060). Feriado estadual e municipal não entram. Carnaval,
+// Sexta-feira
 // Santa e Corpus Christi entram porque o banco não compensa boleto nesses dias, mesmo sem serem
 // feriado de lei. Consciência Negra só vale a partir de 2024.
 public final class BusinessDays {

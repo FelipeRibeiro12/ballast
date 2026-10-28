@@ -6,7 +6,8 @@ import java.time.LocalDate;
 import java.util.NavigableMap;
 import org.springframework.stereotype.Component;
 
-// Rendimento estimado de saldo parado a um percentual do CDI (ADR-061). Usa o CDI guardado e, depois
+// Rendimento estimado de saldo parado a um percentual do CDI (ADR-061). Usa o CDI guardado e,
+// depois
 // do último publicado, o último valor conhecido nos dias úteis.
 @Component
 public class CdiYield {

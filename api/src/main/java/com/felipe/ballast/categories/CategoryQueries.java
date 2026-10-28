@@ -45,7 +45,8 @@ class CategoryQueries {
 
   UUID insert(UUID userId, String name, String type) {
     UUID id = UUID.randomUUID();
-    jdbc.sql("INSERT INTO categoria (id, usuario_id, nome, tipo) VALUES (:id, :userId, :name, :type)")
+    jdbc.sql(
+            "INSERT INTO categoria (id, usuario_id, nome, tipo) VALUES (:id, :userId, :name, :type)")
         .param("id", id)
         .param("userId", userId)
         .param("name", name)
@@ -73,8 +74,7 @@ class CategoryQueries {
   }
 
   UUID findFallback(UUID userId, String type) {
-    return jdbc.sql(
-            "SELECT id FROM categoria WHERE usuario_id = :userId AND semente = :seed")
+    return jdbc.sql("SELECT id FROM categoria WHERE usuario_id = :userId AND semente = :seed")
         .param("userId", userId)
         .param("seed", "despesa".equals(type) ? "outros" : "outras_receitas")
         .query(UUID.class)

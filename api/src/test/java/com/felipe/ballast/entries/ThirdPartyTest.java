@@ -49,8 +49,7 @@ class ThirdPartyTest {
   }
 
   private String newThirdParty(Cookie session, String name) throws Exception {
-    MockHttpServletResponse response =
-        send(session, post("/terceiros"), Map.of("nome", name));
+    MockHttpServletResponse response = send(session, post("/terceiros"), Map.of("nome", name));
     assertThat(response.getStatus()).isEqualTo(201);
     return json(response).get("id").asString();
   }
@@ -99,8 +98,7 @@ class ThirdPartyTest {
   void aLinkedPurchaseLeavesTheMonthlyReport() throws Exception {
     String friend = newThirdParty(actor.session(), "João");
     JsonNode purchase = api.createOk(actor.session(), EntriesApi.expenseBody(actor));
-    JsonNode before =
-        json(send(actor.session(), get("/relatorios?mes=2026-03"), null));
+    JsonNode before = json(send(actor.session(), get("/relatorios?mes=2026-03"), null));
     assertThat(before.get("totalDespesasCentavos").asLong()).isEqualTo(12_345);
 
     link(actor.session(), purchase.get("id").asString(), friend);
@@ -146,10 +144,10 @@ class ThirdPartyTest {
     JsonNode otherPurchase = api.createOk(other.session(), EntriesApi.expenseBody(other));
 
     assertThat(link(other.session(), otherPurchase.get("id").asString(), friend)).isEqualTo(404);
-    assertThat(send(other.session(), get("/terceiros/" + friend + "/lancamentos"), null).getStatus())
-        .isEqualTo(404);
     assertThat(
-            send(other.session(), put("/terceiros/" + friend), Map.of("nome", "X")).getStatus())
+            send(other.session(), get("/terceiros/" + friend + "/lancamentos"), null).getStatus())
+        .isEqualTo(404);
+    assertThat(send(other.session(), put("/terceiros/" + friend), Map.of("nome", "X")).getStatus())
         .isEqualTo(404);
     assertThat(send(other.session(), delete("/terceiros/" + friend), null).getStatus())
         .isEqualTo(404);

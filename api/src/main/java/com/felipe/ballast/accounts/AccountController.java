@@ -1,8 +1,8 @@
 package com.felipe.ballast.accounts;
 
+import com.felipe.ballast.fixedincome.IndexUpdater;
 import com.felipe.ballast.identity.AuthenticatedUser;
 import com.felipe.ballast.identity.MfaGate;
-import com.felipe.ballast.fixedincome.IndexUpdater;
 import com.felipe.ballast.web.CanonicalUuid;
 import com.felipe.ballast.web.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,8 +14,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import java.util.List;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;

@@ -26,8 +26,7 @@ class CategoryDeletionTest {
             .getResponse();
 
     assertThat(response.getStatus()).isEqualTo(204);
-    JsonNode moved =
-        EntriesApi.body(api.find(actor.session(), entry.get("id").asString()));
+    JsonNode moved = EntriesApi.body(api.find(actor.session(), entry.get("id").asString()));
     assertThat(moved.get("categoriaId").asString())
         .isEqualTo(api.categoryId(actor.session(), "Outros"));
   }

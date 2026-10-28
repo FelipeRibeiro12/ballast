@@ -301,7 +301,8 @@ class ThirdPartyController {
       log.info("vinculo de terceiro gravado usuario_id={} alvo_id={}", user.id(), targetId);
       return ResponseEntity.noContent().build();
     }
-    ThirdPartyService.Failure failure = ((ThirdPartyService.Result.Failed<Boolean>) result).failure();
+    ThirdPartyService.Failure failure =
+        ((ThirdPartyService.Result.Failed<Boolean>) result).failure();
     // NOT_FOUND aqui pode ser o lançamento ou o terceiro; o corpo é o mesmo para não revelar qual.
     return failure == ThirdPartyService.Failure.NOT_FOUND
         ? ResponseEntity.status(HttpStatus.NOT_FOUND).body(ENTRY_NOT_FOUND)

@@ -245,8 +245,7 @@ class AccountQueries {
   }
 
   void updateCdiPercent(UUID userId, UUID accountId, BigDecimal percent) {
-    jdbc.sql(
-            "UPDATE conta SET percentual_cdi = :percent WHERE usuario_id = :userId AND id = :id")
+    jdbc.sql("UPDATE conta SET percentual_cdi = :percent WHERE usuario_id = :userId AND id = :id")
         .param("percent", percent)
         .param("userId", userId)
         .param("id", accountId)

@@ -17,7 +17,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
-// "Posso gastar quanto" (ADR-048, ADR-063): o menor saldo projetado de hoje até o fim da janela, mais o
+// "Posso gastar quanto" (ADR-048, ADR-063): o menor saldo projetado de hoje até o fim da janela,
+// mais o
 // rendimento estimado dos cofrinhos até o dia desse menor saldo. A janela vem do dia que o usuário
 // escolheu, ou do ciclo da fatura âncora, ou do fim do mês sem cartão.
 @Service
@@ -157,8 +158,7 @@ class SpendableService {
     }
     NavigableMap<LocalDate, BigDecimal> cdi = cdiYield.load(today);
     for (SpendableQueries.SavingsPot pot : pots) {
-      total =
-          total.add(CdiYield.estimate(cdi, pot.balance(), pot.cdiPercent(), today, lowestOn));
+      total = total.add(CdiYield.estimate(cdi, pot.balance(), pot.cdiPercent(), today, lowestOn));
     }
     return total;
   }

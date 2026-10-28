@@ -104,8 +104,7 @@ class CategoryCrudTest {
     }
     assertThat(create(sessionA, "Extra 7", "despesa").getStatus()).isEqualTo(409);
     // apagar abre vaga
-    assertThat(
-            send(sessionA, delete("/categorias/" + idOf(sessionA, "Extra 0")), null).getStatus())
+    assertThat(send(sessionA, delete("/categorias/" + idOf(sessionA, "Extra 0")), null).getStatus())
         .isEqualTo(204);
     assertThat(create(sessionA, "Extra 8", "receita").getStatus()).isEqualTo(201);
   }
