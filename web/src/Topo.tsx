@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { postLogout } from './api'
+import MenuDeAcoes from './MenuDeAcoes'
 import {
   IconeContas,
   IconeEscudo,
@@ -53,6 +54,11 @@ function SeletorDeTema() {
   )
 }
 
+// Mudar o hash dispara a troca de seção (rota.ts), igual a um link.
+function irPara(secao: Secao): void {
+  window.location.hash = hashDaSecao(secao)
+}
+
 // Um só <nav>: o CSS põe a barra embaixo no celular e no topo a partir de 768px.
 export default function Topo({ secao, aoSair }: { secao: Secao; aoSair: () => void }) {
   const [saindo, setSaindo] = useState(false)
@@ -92,6 +98,14 @@ export default function Topo({ secao, aoSair }: { secao: Secao; aoSair: () => vo
         </nav>
         <div className="topo-acoes">
           <SeletorDeTema />
+          <MenuDeAcoes rotulo="Mais">
+            <button type="button" onClick={() => irPara('categorias')}>
+              Categorias
+            </button>
+            <button type="button" onClick={() => irPara('terceiros')}>
+              Terceiros
+            </button>
+          </MenuDeAcoes>
           <a
             className="topo-link-icone"
             href={hashDaSecao('seguranca')}

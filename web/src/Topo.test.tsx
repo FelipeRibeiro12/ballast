@@ -105,3 +105,26 @@ describe('Topo: segurança', () => {
     expect(await screen.findByRole('heading', { level: 2, name: 'Segurança' })).toBeVisible()
   })
 })
+
+describe('Topo: menu Mais', () => {
+  beforeEach(() => {
+    window.location.hash = '#/inicio'
+    mockFetch()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('leva a Categorias e a Terceiros', async () => {
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Categorias' }))
+    expect(window.location.hash).toBe('#/categorias')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Terceiros' }))
+    expect(window.location.hash).toBe('#/terceiros')
+  })
+})
