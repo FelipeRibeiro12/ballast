@@ -82,14 +82,14 @@ class CardBillingTest {
   void listsEveryCycleWhoseDueDateFallsInTheRangeWithTheNextClosing() {
     CardBilling billing = new CardBilling(15, 25);
 
-    assertThat(billing.cycles(LocalDate.of(2026, 2, 25), LocalDate.of(2026, 4, 25)))
+    assertThat(billing.cycles(LocalDate.of(2026, 2, 25), LocalDate.of(2026, 4, 27)))
         .containsExactly(
             new CardBilling.Cycle(
                 LocalDate.of(2026, 2, 15), LocalDate.of(2026, 2, 25), LocalDate.of(2026, 3, 15)),
             new CardBilling.Cycle(
                 LocalDate.of(2026, 3, 15), LocalDate.of(2026, 3, 25), LocalDate.of(2026, 4, 15)),
             new CardBilling.Cycle(
-                LocalDate.of(2026, 4, 15), LocalDate.of(2026, 4, 25), LocalDate.of(2026, 5, 15)));
+                LocalDate.of(2026, 4, 15), LocalDate.of(2026, 4, 27), LocalDate.of(2026, 5, 15)));
   }
 
   @Test
@@ -119,6 +119,6 @@ class CardBillingTest {
     assertThat(billing.cycles(LocalDate.of(2026, 4, 1), LocalDate.of(2026, 4, 30)))
         .containsExactly(
             new CardBilling.Cycle(
-                LocalDate.of(2026, 3, 25), LocalDate.of(2026, 4, 5), LocalDate.of(2026, 4, 25)));
+                LocalDate.of(2026, 3, 25), LocalDate.of(2026, 4, 6), LocalDate.of(2026, 4, 25)));
   }
 }

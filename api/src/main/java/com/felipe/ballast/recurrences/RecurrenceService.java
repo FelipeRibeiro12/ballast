@@ -425,7 +425,7 @@ class RecurrenceService {
   // Em conta de cartão a ocorrência fica na data gerada e a caixa vai para o vencimento da fatura
   // (ADR-031). O horizonte e a chave da regra continuam pela data gerada.
   private static LocalDate cashDate(Optional<CardBilling> card, LocalDate date) {
-    return card.map(billing -> billing.dueDate(date)).orElse(date);
+    return card.map(billing -> billing.payDate(date)).orElse(date);
   }
 
   private LocalDate today() {
