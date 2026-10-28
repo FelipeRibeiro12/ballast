@@ -27,4 +27,5 @@ record EntrySummary(
     Integer parcelOrder,
     UUID purchaseId,
     Integer installment,
-    Integer installmentTotal) {}
+    Integer installmentTotal,
+    UUID thirdPartyId) {}

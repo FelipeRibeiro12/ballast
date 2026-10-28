@@ -83,7 +83,14 @@ public record EntryResponse(
             description = "Quantas parcelas a compra teve ao nascer; nulo nos outros",
             minimum = "2",
             maximum = "48")
-        Integer parcelaTotal) {
+        Integer parcelaTotal,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Terceiro ligado: despesa é compra dele e receita é reembolso. Fora de relatórios,"
+                    + " orçamento e Posso gastar (ADR-062); nulo no resto")
+        UUID terceiroId) {
 
   // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
   // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
@@ -106,7 +113,8 @@ public record EntryResponse(
         summary.parcelOrder(),
         summary.purchaseId(),
         summary.installment(),
-        summary.installmentTotal());
+        summary.installmentTotal(),
+        summary.thirdPartyId());
   }
 
   private static long toCents(BigDecimal amount) {

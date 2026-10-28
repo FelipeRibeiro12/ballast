@@ -386,6 +386,23 @@ export interface paths {
         patch: operations["patchComprasParceladasById"];
         trace?: never;
     };
+    "/compras-parceladas/{id}/terceiro": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Liga todas as parcelas da compra a um terceiro ou solta o vínculo */
+        put: operations["putComprasParceladasByIdTerceiro"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/contas": {
         parameters: {
             query?: never;
@@ -614,6 +631,26 @@ export interface paths {
          * @description Corpo {"status": "realizado"} ou {"status": "cancelado"}. Só uma ocorrência prevista muda de status. Ao confirmar, valorCentavos e data são opcionais e gravam o valor e a data reais (a data vale para dataCompetencia e dataCaixa); ocorrencia_data da série não muda. Com cancelado, os dois dão 400. Confirmar passa a contar no saldo, com a trava e o teto do saldo do lançamento, e recusa conta arquivada; cancelar não mexe em saldo e vale mesmo com a conta arquivada. As duas são definitivas e deixam a ocorrência desgarrada: o job não a recria nem a altera.
          */
         patch: operations["patchLancamentosById"];
+        trace?: never;
+    };
+    "/lancamentos/{id}/terceiro": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Liga o lançamento a um terceiro ou solta o vínculo
+         * @description Despesa ligada é compra do terceiro; receita ligada é reembolso. Compra de terceiro sai de relatórios, orçamento e do Posso gastar (ADR-062).
+         */
+        put: operations["putLancamentosByIdTerceiro"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/metas": {
@@ -949,6 +986,59 @@ export interface paths {
          * @description Um ponto por dia, de hoje (America/Sao_Paulo) até hoje + dias - 1. O saldo do dia é o saldo inicial das contas mais tudo que é realizado ou previsto com dataCaixa até o dia; cancelado nunca entra, e a prevista vencida entra pela própria data. Sem contaId soma as contas ativas, menos as de benefício (transferência entre duas delas se anula; de ativa para arquivada sai do total). Com contaId vale só a conta, também arquivada, e a transferência conta pelo sinal da perna dela. entradas e saídas de um dia são só os lançamentos com dataCaixa naquele dia; a perna de transferência só conta quando a outra perna está fora do filtro.
          */
         get: operations["getSaldoProjetado"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/terceiros": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista os terceiros com o que compraram e o que já reembolsaram */
+        get: operations["getTerceiros"];
+        put?: never;
+        /** Cria um terceiro */
+        post: operations["postTerceiros"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/terceiros/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Troca o nome e o arquivamento do terceiro */
+        put: operations["putTerceirosById"];
+        post?: never;
+        /** Apaga o terceiro sem lançamentos */
+        delete: operations["deleteTerceirosById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/terceiros/{id}/lancamentos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Compras e reembolsos ligados ao terceiro */
+        get: operations["getTerceirosByIdLancamentos"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1565,6 +1655,11 @@ export interface components {
              * @description Id da recorrência que gerou a ocorrência; nulo nos avulsos
              */
             templateId: string | null;
+            /**
+             * Format: uuid
+             * @description Terceiro ligado: despesa é compra dele e receita é reembolso. Fora de relatórios, orçamento e Posso gastar (ADR-062); nulo no resto
+             */
+            terceiroId: string | null;
             /** @enum {string} */
             tipo: "receita" | "despesa" | "transferencia";
             titulo: string;
@@ -1622,6 +1717,10 @@ export interface components {
             lancamentos: components["schemas"]["Lancamento"][];
             /** @description True quando havia mais de 200 previstas vencidas e a lista foi cortada */
             maisAlgum: boolean;
+        };
+        LigarTerceiroRequest: {
+            /** @description Nulo solta o vínculo */
+            terceiroId: string | null;
         };
         LoginMfaPendente: {
             mfaPendente: boolean;
@@ -2205,6 +2304,54 @@ export interface components {
              * @description Soma com sinal das previstas com dataCaixa antes de hoje
              */
             vencidasCentavos: number;
+        };
+        Terceiro: {
+            arquivado: boolean;
+            /**
+             * Format: int64
+             * @description Soma das despesas ligadas, sem as canceladas
+             */
+            compradoCentavos: number;
+            /**
+             * Format: int64
+             * @description Comprado menos recebido; negativo quando pagou a mais
+             */
+            devidoCentavos: number;
+            /** Format: uuid */
+            id: string;
+            nome: string;
+            /**
+             * Format: int64
+             * @description Soma dos reembolsos realizados
+             */
+            recebidoCentavos: number;
+        };
+        TerceiroLancamento: {
+            /** Format: date */
+            dataCaixa: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            parcela: number | null;
+            status: string;
+            /**
+             * @description despesa é compra do terceiro; receita é reembolso
+             * @enum {string}
+             */
+            tipo: "despesa" | "receita";
+            titulo: string;
+            /** Format: int32 */
+            totalParcelas: number | null;
+            /** Format: int64 */
+            valorCentavos: number;
+        };
+        TerceiroRequest: {
+            /**
+             * @description Só no PUT. Terceiro arquivado não recebe compra nova
+             * @default false
+             */
+            arquivado: boolean;
+            nome: string;
         };
         TituloRendaFixa: {
             /** @description Texto curto quando o CDI ou o IPCA guardado não cobre o período do título; o valor sai com o que há */
@@ -3936,6 +4083,59 @@ export interface operations {
             };
         };
     };
+    putComprasParceladasByIdTerceiro: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LigarTerceiroRequest"];
+            };
+        };
+        responses: {
+            /** @description Vínculo gravado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Terceiro arquivado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Compra ou terceiro de outro usuário ou inexistente; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     getContas: {
         parameters: {
             query?: {
@@ -5036,6 +5236,59 @@ export interface operations {
             };
             /** @description Banco indisponível ou trava ocupada por mais de 2 s; pode tentar de novo */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putLancamentosByIdTerceiro: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LigarTerceiroRequest"];
+            };
+        };
+        responses: {
+            /** @description Vínculo gravado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Transferência ou terceiro arquivado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Lançamento ou terceiro de outro usuário ou inexistente; mesmo corpo */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6447,6 +6700,237 @@ export interface operations {
             };
             /** @description Banco indisponível; pode tentar de novo */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getTerceiros: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Terceiros do usuário, ativos primeiro */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Terceiro"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postTerceiros: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerceiroRequest"];
+            };
+        };
+        responses: {
+            /** @description Terceiro criado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Terceiro"];
+                };
+            };
+            /** @description Entrada inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Nome repetido ou limite de terceiros atingido */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putTerceirosById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerceiroRequest"];
+            };
+        };
+        responses: {
+            /** @description Terceiro atualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Terceiro"];
+                };
+            };
+            /** @description Entrada inválida */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Terceiro de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Nome repetido */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteTerceirosById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Terceiro apagado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Terceiro de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Terceiro com lançamentos ligados */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getTerceirosByIdLancamentos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Do mais novo ao mais antigo pela data de caixa */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TerceiroLancamento"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Terceiro de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -33,6 +33,8 @@ class ReportQueries {
               FROM lancamento l
               JOIN categoria c ON c.usuario_id = :userId AND c.id = l.categoria_id
               WHERE l.usuario_id = :userId AND l.tipo = 'despesa' AND l.status = 'realizado'
+                AND NOT EXISTS (SELECT 1 FROM terceiro_lancamento tl
+                  WHERE tl.lancamento_id = l.id AND tl.usuario_id = l.usuario_id)
                 AND l.data_competencia >= :start AND l.data_competencia < :end
                 AND l.data_competencia <= :today
               GROUP BY 1
@@ -61,8 +63,10 @@ class ReportQueries {
             SELECT date_trunc('month', data_competencia)::date AS mes,
               COALESCE(SUM(valor) FILTER (WHERE tipo = 'receita'), 0) AS receita,
               COALESCE(SUM(valor) FILTER (WHERE tipo = 'despesa'), 0) AS despesa
-            FROM lancamento
+            FROM lancamento l
             WHERE usuario_id = :userId AND status = 'realizado'
+              AND NOT EXISTS (SELECT 1 FROM terceiro_lancamento tl
+                  WHERE tl.lancamento_id = l.id AND tl.usuario_id = l.usuario_id)
               AND data_competencia >= :start AND data_competencia < :end
               AND data_competencia <= :today
             GROUP BY 1

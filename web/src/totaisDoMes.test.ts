@@ -19,6 +19,7 @@ function lancamento(sobra: Partial<Lancamento> = {}): Lancamento {
     compraParceladaId: null,
     parcelaNum: null,
     parcelaTotal: null,
+    terceiroId: null,
     direcao: null,
     contaId: 'c1',
     dataCompetencia: '2026-10-05',
@@ -78,5 +79,21 @@ describe('somarTotaisDoMes', () => {
       HOJE,
     )
     expect(totais).toEqual({ receitas: 0n, despesas: 0n, previstoReceitas: 0n, previstoDespesas: 0n })
+  })
+})
+
+describe('terceiro', () => {
+  it('deixa compra e reembolso de terceiro fora dos totais', () => {
+    const totais = somarTotaisDoMes(
+      [
+        lancamento({ valorCentavos: 1000 }),
+        lancamento({ id: 'l2', valorCentavos: 5000, terceiroId: 't1' }),
+        lancamento({ id: 'l3', tipo: 'receita', valorCentavos: 700, terceiroId: 't1' }),
+      ],
+      HOJE,
+    )
+
+    expect(totais.despesas).toBe(1000n)
+    expect(totais.receitas).toBe(0n)
   })
 })

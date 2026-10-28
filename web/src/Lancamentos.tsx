@@ -19,12 +19,15 @@ import {
   fetchVencidos,
   patchCompraParcelada,
   patchStatusLancamento,
+  fetchTerceiros,
+  ligarCompraAoTerceiro,
+  ligarLancamentoAoTerceiro,
   postCompraParcelada,
   postLancamento,
   postTransferencia,
   putLancamento,
 } from './api'
-import type { AjusteDeConfirmacao, Categoria, CompraParceladaAtualizarRequest, Conta, Lancamento } from './api'
+import type { AjusteDeConfirmacao, Categoria, CompraParceladaAtualizarRequest, Conta, Lancamento, Terceiro } from './api'
 import { categoriaEfetiva, categoriasDaConta } from './categoriasDaConta'
 import { vencimentoDaFatura } from './fatura'
 import {
@@ -189,10 +192,29 @@ function FormularioDeLancamento({
   const [descricao, setDescricao] = useState(inicial?.descricao ?? '')
   // Vazio é à vista; o resto é o número de parcelas, de 2 a 48.
   const [parcelas, setParcelas] = useState('')
+  // Terceiro de quem é a compra ou o reembolso (ADR-062). Vazio é do próprio dono.
+  const [terceiroEscolhido, setTerceiroEscolhido] = useState(inicial?.terceiroId ?? '')
+  const [terceiros, setTerceiros] = useState<Terceiro[]>([])
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
   const emVoo = useRef(false)
+
+  useEffect(() => {
+    let vale = true
+    // Sem a lista o campo fica sem opção e o lançamento sai do dono, como antes.
+    fetchTerceiros().then(
+      (lista) => {
+        if (vale) setTerceiros(lista.filter((t) => !t.arquivado || t.id === inicial?.terceiroId))
+      },
+      (erro: unknown) => {
+        if (erro instanceof SessaoExpiradaError) aoSessaoExpirar()
+      },
+    )
+    return () => {
+      vale = false
+    }
+  }, [aoSessaoExpirar, inicial?.terceiroId])
 
   // Conta e data de uma parcela só mudam apagando a compra (ADR-032); o servidor recusa com 400.
   const eParcela = inicial !== null && inicial.compraParceladaId !== null
@@ -258,7 +280,7 @@ function FormularioDeLancamento({
     try {
       if (inicial === null) {
         if (parcelando) {
-          await postCompraParcelada({
+          const compra = await postCompraParcelada({
             titulo: corpo.titulo,
             ...(descricao.trim() === '' ? {} : { descricao: descricao.trim() }),
             valorTotalCentavos: valorCentavos,
@@ -267,15 +289,21 @@ function FormularioDeLancamento({
             contaId,
             data,
           })
+          if (terceiroEscolhido !== '') await ligarCompraAoTerceiro(compra.id, terceiroEscolhido)
         } else {
-          await postLancamento(corpo)
+          const criado = await postLancamento(corpo)
+          if (terceiroEscolhido !== '') await ligarLancamentoAoTerceiro(criado.id, terceiroEscolhido)
         }
+        setTerceiroEscolhido('')
         setParcelas('')
         setTitulo('')
         setValor('')
         setDescricao('')
       } else {
         await putLancamento(inicial.id, corpo)
+        if (terceiroEscolhido !== (inicial.terceiroId ?? '')) {
+          await ligarLancamentoAoTerceiro(inicial.id, terceiroEscolhido === '' ? null : terceiroEscolhido)
+        }
       }
       aoSalvar()
     } catch (erro) {
@@ -347,6 +375,23 @@ function FormularioDeLancamento({
           onChange={(evento) => setValor(evento.target.value)}
         />
       </div>
+      {terceiros.length > 0 && (
+        <div className="campo">
+          <label htmlFor="lancamento-terceiro">Terceiro (opcional)</label>
+          <select
+            id="lancamento-terceiro"
+            value={terceiroEscolhido}
+            onChange={(evento) => setTerceiroEscolhido(evento.target.value)}
+          >
+            <option value="">Meu</option>
+            {terceiros.map((terceiro) => (
+              <option key={terceiro.id} value={terceiro.id}>
+                {terceiro.nome}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="campo">
         <label htmlFor="lancamento-categoria">Categoria</label>
         <select

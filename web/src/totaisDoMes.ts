@@ -20,6 +20,8 @@ export function somarTotaisDoMes(lancamentos: Lancamento[], hoje: string): Totai
   for (const lancamento of lancamentos) {
     // Transferência fica fora: mover dinheiro entre contas não é ganho nem gasto.
     if (lancamento.tipo === 'transferencia' || lancamento.status === 'cancelado') continue
+    // Compra e reembolso de terceiro não são ganho nem gasto do dono (ADR-062).
+    if (lancamento.terceiroId != null) continue
     const valor = BigInt(lancamento.valorCentavos)
     const previsto = aindaNaoAconteceu(lancamento, hoje)
     if (lancamento.tipo === 'receita') {

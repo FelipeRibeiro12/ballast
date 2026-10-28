@@ -516,6 +516,31 @@ todo tipo, menos no cofrinho, e nele pode ficar nulo até o usuário informar.
 
 ---
 
+### Terceiro (V29, ADR-062)
+
+```
+terceiro
+  id          uuid pk
+  usuario_id  uuid fk not null
+  nome        text not null           -- 1 a 100, sem espaço nas pontas, único por usuário sem caixa
+  arquivado   boolean not null default false
+  criado_em   timestamptz not null default now()
+  unique (id, usuario_id)
+
+terceiro_lancamento
+  lancamento_id  uuid pk              -- um lançamento tem no máximo um terceiro
+  usuario_id     uuid not null
+  terceiro_id    uuid not null
+  fk (lancamento_id, usuario_id) -> lancamento (id, usuario_id) ON DELETE CASCADE
+  fk (terceiro_id, usuario_id)   -> terceiro (id, usuario_id)   ON DELETE NO ACTION
+```
+
+A V29 cria `lancamento_id_usuario_unico` para a FK composta. Despesa ligada é
+compra do terceiro e receita ligada é reembolso. A dívida é calculada, nunca
+guardada.
+
+---
+
 ## Categoria
 
 ```

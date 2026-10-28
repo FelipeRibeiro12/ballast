@@ -6,6 +6,7 @@ import {
   MetaInvalidaError,
   OrcamentoInvalidoError,
   RelatorioInvalidoError,
+  TerceiroRecusadoError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
 } from './api'
@@ -38,6 +39,7 @@ export function mensagemDeEscrita(erro: unknown, padrao: string): string {
     (erro instanceof CriptoInvalidoError ||
       erro instanceof CriptoRepetidoError ||
       erro instanceof CategoriaRecusadaError ||
+      erro instanceof TerceiroRecusadoError ||
       erro instanceof OrcamentoInvalidoError ||
       erro instanceof MetaInvalidaError) &&
     erro.mensagemServidor !== null

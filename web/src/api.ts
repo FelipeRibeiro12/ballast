@@ -2256,3 +2256,136 @@ export async function postMfaCodigosDeRecuperacao(codigo: string): Promise<strin
 export async function postMfaDesativar(senha: string, codigo: string): Promise<void> {
   await chamarMfa('/auth/mfa/desativar', { method: 'POST', body: JSON.stringify({ senha, codigo }) })
 }
+
+export type Terceiro = components['schemas']['Terceiro']
+export type TerceiroLancamento = components['schemas']['TerceiroLancamento']
+
+// 400 e 409 dos terceiros: nome repetido, limite, arquivado, com lançamentos.
+export class TerceiroRecusadoError extends ApiError {
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('terceiro recusado')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+async function recusarRespostaDeTerceiro(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 400 || resposta.status === 409) {
+    throw new TerceiroRecusadoError(await lerMensagemDeErro(resposta))
+  }
+  return recusarRespostaDeLancamento(resposta, origem)
+}
+
+function isTerceiro(valor: unknown): valor is Terceiro {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'nome' in valor &&
+    typeof valor.nome === 'string' &&
+    'arquivado' in valor &&
+    typeof valor.arquivado === 'boolean' &&
+    'compradoCentavos' in valor &&
+    Number.isSafeInteger(valor.compradoCentavos) &&
+    'recebidoCentavos' in valor &&
+    Number.isSafeInteger(valor.recebidoCentavos) &&
+    'devidoCentavos' in valor &&
+    Number.isSafeInteger(valor.devidoCentavos)
+  )
+}
+
+function isTerceiroLancamento(valor: unknown): valor is TerceiroLancamento {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'titulo' in valor &&
+    typeof valor.titulo === 'string' &&
+    'tipo' in valor &&
+    (valor.tipo === 'despesa' || valor.tipo === 'receita') &&
+    'valorCentavos' in valor &&
+    Number.isSafeInteger(valor.valorCentavos) &&
+    'dataCaixa' in valor &&
+    typeof valor.dataCaixa === 'string' &&
+    'status' in valor &&
+    typeof valor.status === 'string'
+  )
+}
+
+export async function fetchTerceiros(): Promise<Terceiro[]> {
+  const resposta = await fetch(`${baseUrl}/terceiros`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeTerceiro(resposta, '/terceiros')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isTerceiro)) throw new ApiError('/terceiros com formato inesperado')
+  return corpo
+}
+
+export async function fetchLancamentosDoTerceiro(id: string): Promise<TerceiroLancamento[]> {
+  const resposta = await fetch(`${baseUrl}/terceiros/${encodeURIComponent(id)}/lancamentos`, {
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarRespostaDeTerceiro(resposta, '/terceiros/{id}/lancamentos')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isTerceiroLancamento)) {
+    throw new ApiError('/terceiros/{id}/lancamentos com formato inesperado')
+  }
+  return corpo
+}
+
+export async function postTerceiro(nome: string): Promise<Terceiro> {
+  const resposta = await fetch(`${baseUrl}/terceiros`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(),
+    body: JSON.stringify({ nome }),
+  })
+  if (resposta.status !== 201) return recusarRespostaDeTerceiro(resposta, 'POST /terceiros')
+  const corpo: unknown = await resposta.json()
+  if (!isTerceiro(corpo)) throw new ApiError('POST /terceiros com formato inesperado')
+  return corpo
+}
+
+export async function putTerceiro(id: string, nome: string, arquivado: boolean): Promise<Terceiro> {
+  const resposta = await fetch(`${baseUrl}/terceiros/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(),
+    body: JSON.stringify({ nome, arquivado }),
+  })
+  if (!resposta.ok) return recusarRespostaDeTerceiro(resposta, 'PUT /terceiros/{id}')
+  const corpo: unknown = await resposta.json()
+  if (!isTerceiro(corpo)) throw new ApiError('PUT /terceiros/{id} com formato inesperado')
+  return corpo
+}
+
+export async function deleteTerceiro(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/terceiros/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeTerceiro(resposta, 'DELETE /terceiros/{id}')
+}
+
+// terceiroId nulo solta o vínculo.
+export async function ligarLancamentoAoTerceiro(lancamentoId: string, terceiroId: string | null): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/lancamentos/${encodeURIComponent(lancamentoId)}/terceiro`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ terceiroId }),
+  })
+  if (resposta.status !== 204) return recusarRespostaDeTerceiro(resposta, 'PUT /lancamentos/{id}/terceiro')
+}
+
+export async function ligarCompraAoTerceiro(compraId: string, terceiroId: string | null): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/compras-parceladas/${encodeURIComponent(compraId)}/terceiro`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ terceiroId }),
+  })
+  if (resposta.status !== 204) return recusarRespostaDeTerceiro(resposta, 'PUT /compras-parceladas/{id}/terceiro')
+}

@@ -42,7 +42,11 @@ public enum UserLimit {
       "categorias",
       "SELECT count(*) FROM categoria WHERE usuario_id = :userId"
           + " AND semente IS DISTINCT FROM 'outros' AND semente IS DISTINCT FROM 'outras_receitas'",
-      LimitsProperties::categories);
+      LimitsProperties::categories),
+  THIRD_PARTIES(
+      "terceiros",
+      "SELECT count(*) FROM terceiro WHERE usuario_id = :userId",
+      LimitsProperties::thirdParties);
 
   final String label;
   final String countSql;

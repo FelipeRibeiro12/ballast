@@ -2,13 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 
 export type SecaoDaBarra = 'inicio' | 'lancamentos' | 'contas' | 'recorrencias' | 'investimentos'
 
-export type Secao = SecaoDaBarra | 'orcamento' | 'metas' | 'relatorios' | 'categorias' | 'seguranca'
+export type Secao = SecaoDaBarra | 'orcamento' | 'metas' | 'relatorios' | 'categorias' | 'terceiros' | 'seguranca'
 
 // As da barra de navegação. Com seis os rótulos se sobrepõem em 360px, então Orçamento, Metas e
 // Relatórios abrem pelos cartões do Início e não têm lugar aqui.
 export const SECOES: readonly SecaoDaBarra[] = ['inicio', 'lancamentos', 'contas', 'recorrencias', 'investimentos']
 
-const TODAS_AS_SECOES: readonly Secao[] = [...SECOES, 'orcamento', 'metas', 'relatorios', 'categorias', 'seguranca']
+const TODAS_AS_SECOES: readonly Secao[] = [...SECOES, 'orcamento', 'metas', 'relatorios', 'categorias', 'terceiros', 'seguranca']
 
 export const ROTULO_DA_SECAO: Record<Secao, string> = {
   inicio: 'Início',
@@ -19,6 +19,7 @@ export const ROTULO_DA_SECAO: Record<Secao, string> = {
   metas: 'Metas',
   relatorios: 'Relatórios',
   categorias: 'Categorias',
+  terceiros: 'Terceiros',
   seguranca: 'Segurança',
   investimentos: 'Investimentos',
 }
