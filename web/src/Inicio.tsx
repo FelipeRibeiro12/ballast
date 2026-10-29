@@ -53,31 +53,6 @@ function Destaque({ contas, aoSessaoExpirar }: { contas: Conta[] | null; aoSessa
   return <SaldoDasContas contas={contas} aoSessaoExpirar={aoSessaoExpirar} />
 }
 
-function Beneficios({ contas }: { contas: Conta[] | null }) {
-  const beneficios = contas?.filter((conta) => conta.tipo === 'beneficio') ?? []
-  if (beneficios.length === 0) return null
-  const saldo = beneficios.reduce((soma, conta) => soma + BigInt(conta.saldoCentavos), 0n)
-  return (
-    <section className="cartao beneficios" aria-labelledby="titulo-beneficios">
-      <h3 id="titulo-beneficios" className="titulo-cartao">
-        Benefícios
-      </h3>
-      <p className="beneficios-valor">{formatarCentavos(saldo)}</p>
-      {/* Com uma conta só, a lista repetiria o total. */}
-      {beneficios.length > 1 && (
-      <ul className="beneficios-lista" aria-label="Contas de benefício">
-        {beneficios.map((conta) => (
-          <li key={conta.id}>
-            <span>{conta.nome}</span>
-            <span className="beneficios-saldo">{formatarCentavos(conta.saldoCentavos)}</span>
-          </li>
-        ))}
-      </ul>
-      )}
-    </section>
-  )
-}
-
 function ProximasPrevistas({
   contas,
   versao,
@@ -397,7 +372,6 @@ export default function Inicio({
         <div className="coluna">
           <PossoGastar versao={versaoDeSaldo} aoSessaoExpirar={aoSessaoExpirar} />
           <Destaque contas={contas} aoSessaoExpirar={aoSessaoExpirar} />
-          <Beneficios contas={contas} />
           <SaldoProjetado aoSessaoExpirar={aoSessaoExpirar} contas={contas} versaoDeSaldo={versaoDeSaldo} />
         </div>
         <div className="coluna">

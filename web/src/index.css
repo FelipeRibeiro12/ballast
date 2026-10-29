@@ -1252,37 +1252,6 @@ p[role='status'] {
   font-weight: 650;
 }
 
-.beneficios-valor {
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.beneficios-lista {
-  margin-top: var(--esp-3);
-}
-
-.beneficios-lista li {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--esp-3);
-  padding: var(--esp-2) 0;
-  border-top: 1px solid var(--borda);
-  font-size: 0.9375rem;
-  color: var(--texto-suave);
-  overflow-wrap: anywhere;
-}
-
-.beneficios-saldo {
-  flex: none;
-  color: var(--texto);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
 .cartao-rodape {
   margin-top: var(--esp-3);
   text-align: right;
