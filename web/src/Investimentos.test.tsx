@@ -53,7 +53,7 @@ describe('Investimentos', () => {
     mockFetch()
     render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} aoSessaoExpirar={vi.fn()} />)
 
-    const resumo = await screen.findByRole('region', { name: 'Investimentos' })
+    const resumo = await screen.findByRole('region', { name: 'Total investido' })
     expect(within(resumo).getByText(texto('R$ 53.700,00'))).toBeVisible()
     expect(within(resumo).queryByText('Contas')).toBeNull()
     expect(within(resumo).queryByText(texto('R$ 5.000,00'))).toBeNull()
@@ -67,7 +67,7 @@ describe('Investimentos', () => {
     mockFetch()
     render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} aoSessaoExpirar={vi.fn()} />)
 
-    const resumo = await screen.findByRole('region', { name: 'Investimentos' })
+    const resumo = await screen.findByRole('region', { name: 'Total investido' })
     expect(
       within(resumo).getByText(texto('Na cripto, R$ 40.000,00 de aporte e R$ 3.200,00 de valorização.')),
     ).toBeVisible()
@@ -86,7 +86,7 @@ describe('Investimentos', () => {
   it('a data vale para o patrimônio e para a aba aberta', async () => {
     mockFetch()
     render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} aoSessaoExpirar={vi.fn()} />)
-    await screen.findByRole('region', { name: 'Investimentos' })
+    await screen.findByRole('region', { name: 'Total investido' })
 
     fireEvent.change(screen.getByLabelText('Posição em'), { target: { value: '2026-03-10' } })
 
