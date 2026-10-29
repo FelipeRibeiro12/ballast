@@ -60,8 +60,13 @@ final class WalletAddress {
   }
 
   private static boolean isSolanaKey(String address) {
-    if (address.isEmpty() || address.length() > SOLANA_MAX_CHARS) {
-      return false;
+    return decodeSolanaKey(address).isPresent();
+  }
+
+  // Os 32 bytes da chave pública, ou vazio se o texto não for base58 de 32 bytes.
+  static Optional<byte[]> decodeSolanaKey(String address) {
+    if (address == null || address.isEmpty() || address.length() > SOLANA_MAX_CHARS) {
+      return Optional.empty();
     }
     BigInteger value = BigInteger.ZERO;
     BigInteger base = BigInteger.valueOf(58);
@@ -70,7 +75,7 @@ final class WalletAddress {
     for (int i = 0; i < address.length(); i++) {
       int digit = BASE58.indexOf(address.charAt(i));
       if (digit < 0) {
-        return false;
+        return Optional.empty();
       }
       if (leading && digit == 0) {
         leadingZeros++;
@@ -79,7 +84,18 @@ final class WalletAddress {
       }
       value = value.multiply(base).add(BigInteger.valueOf(digit));
     }
-    int significant = value.signum() == 0 ? 0 : (value.bitLength() + 7) / 8;
-    return leadingZeros + significant == SOLANA_KEY_BYTES;
+    byte[] significant = value.signum() == 0 ? new byte[0] : unsigned(value);
+    if (leadingZeros + significant.length != SOLANA_KEY_BYTES) {
+      return Optional.empty();
+    }
+    byte[] key = new byte[SOLANA_KEY_BYTES];
+    System.arraycopy(significant, 0, key, leadingZeros, significant.length);
+    return Optional.of(key);
+  }
+
+  // BigInteger.toByteArray põe um byte de sinal à frente quando o bit alto está ligado.
+  private static byte[] unsigned(BigInteger value) {
+    byte[] raw = value.toByteArray();
+    return raw[0] == 0 ? java.util.Arrays.copyOfRange(raw, 1, raw.length) : raw;
   }
 }
