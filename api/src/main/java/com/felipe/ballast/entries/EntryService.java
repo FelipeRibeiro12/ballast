@@ -137,7 +137,29 @@ class EntryService {
     }
   }
 
+  // Para a confirmação de importação, que já abriu a transação e cria vários lançamentos nela.
+  // Não captura violação de FK: ela sobe e desfaz a confirmação inteira, como o resto da
+  // transação. Recusa de regra (conta arquivada, saldo fora da faixa) volta como Rejected e
+  // quem chamou desfaz.
+  SaveResult createImported(
+      TransactionStatus status,
+      UUID userId,
+      EntryInput input,
+      String externalHash,
+      UUID importLineId) {
+    return createLocked(status, userId, input, externalHash, importLineId);
+  }
+
   private SaveResult createLocked(TransactionStatus status, UUID userId, EntryInput input) {
+    return createLocked(status, userId, input, null, null);
+  }
+
+  private SaveResult createLocked(
+      TransactionStatus status,
+      UUID userId,
+      EntryInput input,
+      String externalHash,
+      UUID importLineId) {
     if (input.accountId() == null) {
       return SaveResult.Rejected.ACCOUNT_NOT_FOUND;
     }
@@ -149,7 +171,12 @@ class EntryService {
     UUID id =
         entries
             .saveAndFlush(
-                new Entry(userId, input, cashDate(userId, input.accountId(), input.date())))
+                new Entry(
+                    userId,
+                    input,
+                    cashDate(userId, input.accountId(), input.date()),
+                    externalHash,
+                    importLineId))
             .getId();
     if (!balanceFits(userId, input.accountId())) {
       status.setRollbackOnly();

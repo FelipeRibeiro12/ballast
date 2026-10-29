@@ -48,6 +48,13 @@ class Entry {
   @Column(name = "data_caixa", nullable = false)
   private LocalDate cashDate;
 
+  // Preenchidos só por lançamento vindo de importação (ADR-069). O hash nunca muda depois.
+  @Column(name = "hash_externo", updatable = false)
+  private String externalHash;
+
+  @Column(name = "importacao_linha_id")
+  private UUID importLineId;
+
   protected Entry() {}
 
   // As duas datas só divergem em conta de cartão (ADR-031); quem chama calcula a caixa.
@@ -61,6 +68,12 @@ class Entry {
     this.amount = input.amount();
     this.competenceDate = input.date();
     this.cashDate = cashDate;
+  }
+
+  Entry(UUID userId, EntryInput input, LocalDate cashDate, String externalHash, UUID importLineId) {
+    this(userId, input, cashDate);
+    this.externalHash = externalHash;
+    this.importLineId = importLineId;
   }
 
   UUID getId() {
