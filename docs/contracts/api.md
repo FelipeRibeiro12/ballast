@@ -850,6 +850,22 @@ Mudanças em rotas que já existiam (campos só acrescentados):
   ou numa filha dela, numa conta que não é de benefício.
 - 400 `projeção fora do limite`.
 
+## Rendimento diário do cofrinho (ADR-074)
+
+- O job diário (03:30 em São Paulo) lança o rendimento estimado de cada cofrinho
+  com percentual como receita `realizado` na categoria Rendimento, título
+  `Rendimento do cofrinho (estimado)`. Aparece no extrato e nos saldos como
+  qualquer lançamento; o usuário edita ou apaga e o dia não volta.
+- `POST /contas/{id}/cofrinho/rendimento`, corpo vazio, roda a conta para hoje.
+  200 com `{situacao, valor}`:
+  - `situacao`: `lancado`, `ja_lancado`, `sem_cdi`, `sem_rendimento` (saldo
+    zero ou negativo, valor abaixo de um centavo, sem categoria Rendimento ou
+    hoje sem dia útil) ou `sem_percentual`;
+  - `valor`: inteiro de centavos em `lancado`, nulo nas outras.
+- 404 `não encontrado` para conta de outro usuário, inexistente, que não é
+  cofrinho, arquivada ou id que não é UUID. 401 sem sessão. 503 se a conta
+  estiver em uso por outra requisição.
+
 ## Relatórios (ADR-046)
 
 - `GET /relatorios?mes=AAAA-MM`: sem `mes`, o mês corrente em

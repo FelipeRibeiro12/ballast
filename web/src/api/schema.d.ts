@@ -594,6 +594,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/contas/{id}/cofrinho/rendimento": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lança agora o rendimento de hoje do cofrinho
+         * @description Roda a conta para hoje, como o job diário, sem esperar as 03:30. Repetir no mesmo dia responde ja_lancado e não duplica. Hoje sem dia útil responde sem_rendimento (ADR-074). O corpo é vazio.
+         */
+        post: operations["postContasByIdCofrinhoRendimento"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/contas/{id}/faturas": {
         parameters: {
             query?: never;
@@ -2971,6 +2991,18 @@ export interface components {
              * @description Soma de despesasPorCategoria
              */
             totalDespesasCentavos: number;
+        };
+        RendimentoCofrinho: {
+            /**
+             * @description O que a rodada de hoje fez com a conta
+             * @enum {string}
+             */
+            situacao: "lancado" | "ja_lancado" | "sem_cdi" | "sem_rendimento" | "sem_percentual";
+            /**
+             * Format: int64
+             * @description Rendimento lançado, em centavos; nulo quando não lançou
+             */
+            valor: number | null;
         };
         ResumoExclusaoConta: {
             /**
@@ -5738,6 +5770,64 @@ export interface operations {
             };
             /** @description Conta de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postContasByIdCofrinhoRendimento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O que a rodada fez; valor só vem em lancado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RendimentoCofrinho"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário, inexistente, que não é cofrinho ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Limite geral de requisições por IP (ADR-049) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta em uso por outra requisição; tentar de novo */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
