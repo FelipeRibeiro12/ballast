@@ -2473,3 +2473,212 @@ export async function deleteVisaoSaldo(id: string): Promise<void> {
   })
   if (resposta.status !== 204) return recusarRespostaDeVisao(resposta, 'DELETE /visoes-saldo/{id}')
 }
+
+export type Importacao = components['schemas']['Importacao']
+export type ImportacaoDetalhe = components['schemas']['ImportacaoDetalhe']
+export type ImportacaoLinha = components['schemas']['ImportacaoLinha']
+export type ImportacaoLinhaRequest = components['schemas']['ImportacaoLinhaRequest']
+export type ImportacaoConfirmacao = components['schemas']['ImportacaoConfirmacao']
+
+export class ImportacaoNaoEncontradaError extends ApiError {}
+
+// O mesmo arquivo já foi enviado: o servidor devolve o id da importação que o recebeu.
+export class ArquivoJaImportadoError extends ApiError {
+  readonly importacaoId: string
+
+  constructor(importacaoId: string) {
+    super('arquivo já importado')
+    this.importacaoId = importacaoId
+  }
+}
+
+// 400, 409, 413, 415 e 422 das rotas de importação. O status fica para a tela escolher o texto.
+export class ImportacaoRecusadaError extends ApiError {
+  readonly status: number
+  readonly mensagemServidor: string | null
+
+  constructor(status: number, mensagemServidor: string | null) {
+    super('importação recusada')
+    this.status = status
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+const ACOES_DE_IMPORTACAO: readonly unknown[] = ['importar', 'ignorar', 'conciliar']
+
+function isTextoOuNulo(valor: unknown): boolean {
+  return valor === null || typeof valor === 'string'
+}
+
+function isImportacaoLinha(valor: unknown): valor is ImportacaoLinha {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'ordem' in valor &&
+    Number.isSafeInteger(valor.ordem) &&
+    'titulo' in valor &&
+    typeof valor.titulo === 'string' &&
+    'valida' in valor &&
+    typeof valor.valida === 'boolean' &&
+    'acao' in valor &&
+    ACOES_DE_IMPORTACAO.includes(valor.acao) &&
+    'proposta' in valor &&
+    ACOES_DE_IMPORTACAO.includes(valor.proposta) &&
+    'data' in valor &&
+    isTextoOuNulo(valor.data) &&
+    'tipo' in valor &&
+    (valor.tipo === null || valor.tipo === 'receita' || valor.tipo === 'despesa') &&
+    'valorCentavos' in valor &&
+    (valor.valorCentavos === null || Number.isSafeInteger(valor.valorCentavos)) &&
+    'categoriaId' in valor &&
+    isTextoOuNulo(valor.categoriaId) &&
+    'lancamentoId' in valor &&
+    isTextoOuNulo(valor.lancamentoId) &&
+    'motivo' in valor &&
+    isTextoOuNulo(valor.motivo) &&
+    'resultado' in valor &&
+    isTextoOuNulo(valor.resultado)
+  )
+}
+
+function isImportacao(valor: unknown): valor is Importacao {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'status' in valor &&
+    (valor.status === 'pendente' || valor.status === 'confirmada') &&
+    'criadoEm' in valor &&
+    typeof valor.criadoEm === 'string' &&
+    'totalLinhas' in valor &&
+    Number.isSafeInteger(valor.totalLinhas) &&
+    'totalInvalidas' in valor &&
+    Number.isSafeInteger(valor.totalInvalidas) &&
+    'totalImportar' in valor &&
+    Number.isSafeInteger(valor.totalImportar) &&
+    'totalConciliar' in valor &&
+    Number.isSafeInteger(valor.totalConciliar) &&
+    'totalIgnorar' in valor &&
+    Number.isSafeInteger(valor.totalIgnorar)
+  )
+}
+
+function isImportacaoDetalhe(valor: unknown): valor is ImportacaoDetalhe {
+  return isImportacao(valor) && 'linhas' in valor && Array.isArray(valor.linhas) && valor.linhas.every(isImportacaoLinha)
+}
+
+function isImportacaoConfirmacao(valor: unknown): valor is ImportacaoConfirmacao {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'criadas' in valor &&
+    Number.isSafeInteger(valor.criadas) &&
+    'conciliadas' in valor &&
+    Number.isSafeInteger(valor.conciliadas) &&
+    'ignoradas' in valor &&
+    Number.isSafeInteger(valor.ignoradas) &&
+    'duplicadas' in valor &&
+    Number.isSafeInteger(valor.duplicadas)
+  )
+}
+
+async function recusarRespostaDeImportacao(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 404) throw new ImportacaoNaoEncontradaError('importação não encontrada')
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
+  if ([400, 409, 413, 415, 422].includes(resposta.status)) {
+    const corpo: unknown = await resposta.json().catch(() => null)
+    // O 409 com importacaoId é "mesmo arquivo"; sem ele é limite, importação confirmada ou chave em andamento.
+    if (
+      resposta.status === 409 &&
+      typeof corpo === 'object' &&
+      corpo !== null &&
+      'importacaoId' in corpo &&
+      typeof corpo.importacaoId === 'string'
+    ) {
+      throw new ArquivoJaImportadoError(corpo.importacaoId)
+    }
+    const mensagem =
+      typeof corpo === 'object' && corpo !== null && 'erro' in corpo && typeof corpo.erro === 'string' && corpo.erro !== ''
+        ? corpo.erro
+        : null
+    throw new ImportacaoRecusadaError(resposta.status, mensagem)
+  }
+  throw new ApiError(`${origem} respondeu ${resposta.status}`)
+}
+
+// O arquivo vai cru no corpo (ADR-069): sem multipart, o nome dele nunca sai do aparelho.
+export async function postImportacao(contaId: string, arquivo: Blob): Promise<ImportacaoDetalhe> {
+  const resposta = await fetch(`${baseUrl}/importacoes?conta_id=${encodeURIComponent(contaId)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: arquivo,
+  })
+  if (resposta.status !== 201) return recusarRespostaDeImportacao(resposta, 'POST /importacoes')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoDetalhe(corpo)) throw new ApiError('POST /importacoes com formato inesperado')
+  return corpo
+}
+
+export async function fetchImportacoes(): Promise<Importacao[]> {
+  const resposta = await fetch(`${baseUrl}/importacoes`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeImportacao(resposta, '/importacoes')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isImportacao)) throw new ApiError('/importacoes com formato inesperado')
+  return corpo
+}
+
+export async function fetchImportacao(id: string): Promise<ImportacaoDetalhe> {
+  const resposta = await fetch(`${baseUrl}/importacoes/${encodeURIComponent(id)}`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeImportacao(resposta, '/importacoes/{id}')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoDetalhe(corpo)) throw new ApiError('/importacoes/{id} com formato inesperado')
+  return corpo
+}
+
+export async function putImportacaoLinha(
+  id: string,
+  linhaId: string,
+  dados: ImportacaoLinhaRequest,
+): Promise<ImportacaoLinha> {
+  const resposta = await fetch(`${baseUrl}/importacoes/${encodeURIComponent(id)}/linhas/${encodeURIComponent(linhaId)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeImportacao(resposta, 'PUT /importacoes/{id}/linhas/{linhaId}')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoLinha(corpo)) throw new ApiError('PUT /importacoes/{id}/linhas/{linhaId} com formato inesperado')
+  return corpo
+}
+
+export async function deleteImportacao(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/importacoes/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeImportacao(resposta, 'DELETE /importacoes/{id}')
+}
+
+// A chave identifica a tentativa de confirmar: quem repete o pedido (rede caiu) manda a mesma (ADR-056).
+export async function postConfirmacaoDeImportacao(id: string, chave: string): Promise<ImportacaoConfirmacao> {
+  const resposta = await fetch(`${baseUrl}/importacoes/${encodeURIComponent(id)}/confirmacao`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Idempotency-Key': chave },
+  })
+  if (!resposta.ok) return recusarRespostaDeImportacao(resposta, 'POST /importacoes/{id}/confirmacao')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoConfirmacao(corpo)) throw new ApiError('POST /importacoes/{id}/confirmacao com formato inesperado')
+  return corpo
+}
