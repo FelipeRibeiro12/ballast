@@ -3,6 +3,7 @@ import {
   ImportacaoNaoEncontradaError,
   ImportacaoRecusadaError,
   LimiteTentativasError,
+  MapeamentoNaoEncontradoError,
   ServicoIndisponivelError,
 } from './api'
 import { MENSAGEM_INDISPONIVEL, MENSAGEM_LIMITE } from './leitura'
@@ -21,7 +22,7 @@ export function mensagemDeImportacao(erro: unknown, padrao: string): string {
   if (!(erro instanceof ImportacaoRecusadaError)) return padrao
   if (erro.status === 413) return MENSAGEM_ARQUIVO_GRANDE
   if (erro.status === 422) {
-    return 'Não consegui ler este arquivo. Ele precisa ser um extrato OFX com até 2000 transações.'
+    return 'Não consegui ler este arquivo. Ele precisa ser um extrato OFX ou CSV com até 2000 transações.'
   }
   if (erro.status === 415) return 'O arquivo não pôde ser enviado neste formato.'
   if (erro.status === 409 && erro.mensagemServidor?.startsWith('limite') === true) {
@@ -29,4 +30,32 @@ export function mensagemDeImportacao(erro: unknown, padrao: string): string {
   }
   if (erro.status === 409) return 'Esta importação já foi confirmada ou está em andamento. Atualize a tela.'
   return erro.mensagemServidor ?? padrao
+}
+
+// Envio e prévia de CSV. 400, 404 e 422 têm texto próprio: o corpo do servidor nunca vai para a tela.
+export function mensagemDeCsv(erro: unknown, padrao: string): string {
+  if (erro instanceof MapeamentoNaoEncontradoError) {
+    return 'Não encontrei a conta ou o mapeamento. Atualize a tela e escolha de novo.'
+  }
+  if (erro instanceof ImportacaoRecusadaError) {
+    if (erro.status === 422) {
+      return 'Não consegui ler este arquivo com esse mapeamento. Confira o separador e as colunas. O CSV pode ter até 2000 linhas e 50 colunas.'
+    }
+    if (erro.status === 400) return 'O servidor não aceitou os dados do mapeamento ou da conta. Confira os campos.'
+  }
+  return mensagemDeImportacao(erro, padrao)
+}
+
+// Salvar e apagar mapeamento. O 409 tem dois motivos, separados pelo começo da mensagem fixa do servidor.
+export function mensagemDeMapeamento(erro: unknown, padrao: string): string {
+  if (erro instanceof MapeamentoNaoEncontradoError) return 'Não encontrei este mapeamento. Ele pode já ter sido apagado.'
+  if (erro instanceof ImportacaoRecusadaError) {
+    if (erro.status === 409) {
+      return erro.mensagemServidor?.startsWith('limite') === true
+        ? 'Você já tem 20 mapeamentos. Apague algum antes de criar outro.'
+        : 'Já existe um mapeamento com esse nome. Escolha outro.'
+    }
+    if (erro.status === 400) return 'O servidor não aceitou os dados do mapeamento. Confira o nome e as colunas.'
+  }
+  return mensagemDeImportacao(erro, padrao)
 }

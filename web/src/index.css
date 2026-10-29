@@ -2842,3 +2842,11 @@ button.relatorio-mes:hover:not(:disabled) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+.previa-csv th,
+.previa-csv td {
+  max-width: 14rem;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

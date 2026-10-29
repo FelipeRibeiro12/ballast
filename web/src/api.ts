@@ -2682,3 +2682,190 @@ export async function postConfirmacaoDeImportacao(id: string, chave: string): Pr
   if (!isImportacaoConfirmacao(corpo)) throw new ApiError('POST /importacoes/{id}/confirmacao com formato inesperado')
   return corpo
 }
+
+export type MapeamentoCsv = components['schemas']['MapeamentoCsv']
+export type MapeamentoCsvRequest = components['schemas']['MapeamentoCsvRequest']
+export type CsvPrevia = components['schemas']['CsvPrevia']
+export type CsvPreviaLinha = components['schemas']['CsvPreviaLinha']
+
+// Colunas do mapeamento, sem o nome: é o que a prévia recebe na query.
+export type ParametrosDoCsv = Omit<MapeamentoCsvRequest, 'nome'>
+
+export const SEPARADORES_DE_CSV: readonly MapeamentoCsv['separador'][] = ['ponto_e_virgula', 'virgula', 'tab', 'barra_vertical']
+export const FORMATOS_DE_DATA_DE_CSV: readonly MapeamentoCsv['formatoData'][] = [
+  'dd/MM/yyyy',
+  'yyyy-MM-dd',
+  'MM/dd/yyyy',
+  'dd-MM-yyyy',
+]
+export const DECIMAIS_DE_CSV: readonly MapeamentoCsv['decimal'][] = ['virgula', 'ponto']
+export const SINAIS_DE_CSV: readonly MapeamentoCsv['sinal'][] = ['negativo_despesa', 'positivo_despesa']
+
+// 404 das rotas de CSV: conta ou mapeamento que não existe ou é de outro usuário (mesmo corpo).
+export class MapeamentoNaoEncontradoError extends ApiError {}
+
+// Compara por string para o guarda não precisar de cast para o tipo literal.
+function isUmDe(valor: unknown, lista: readonly string[]): boolean {
+  return typeof valor === 'string' && lista.includes(valor)
+}
+
+function isColuna(valor: unknown): boolean {
+  return typeof valor === 'number' && Number.isInteger(valor) && valor >= 0 && valor <= 49
+}
+
+function isMapeamentoCsv(valor: unknown): valor is MapeamentoCsv {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'nome' in valor &&
+    typeof valor.nome === 'string' &&
+    'separador' in valor &&
+    isUmDe(valor.separador, SEPARADORES_DE_CSV) &&
+    'formatoData' in valor &&
+    isUmDe(valor.formatoData, FORMATOS_DE_DATA_DE_CSV) &&
+    'decimal' in valor &&
+    isUmDe(valor.decimal, DECIMAIS_DE_CSV) &&
+    'sinal' in valor &&
+    isUmDe(valor.sinal, SINAIS_DE_CSV) &&
+    'temCabecalho' in valor &&
+    typeof valor.temCabecalho === 'boolean' &&
+    'colunaData' in valor &&
+    isColuna(valor.colunaData) &&
+    'colunaValor' in valor &&
+    isColuna(valor.colunaValor) &&
+    'colunaDescricao' in valor &&
+    isColuna(valor.colunaDescricao) &&
+    'colunaId' in valor &&
+    (valor.colunaId === null || isColuna(valor.colunaId))
+  )
+}
+
+function isCsvPreviaLinha(valor: unknown): valor is CsvPreviaLinha {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'ordem' in valor &&
+    Number.isSafeInteger(valor.ordem) &&
+    'celulas' in valor &&
+    Array.isArray(valor.celulas) &&
+    valor.celulas.every((celula) => typeof celula === 'string') &&
+    'valida' in valor &&
+    typeof valor.valida === 'boolean' &&
+    'erro' in valor &&
+    isTextoOuNulo(valor.erro) &&
+    'data' in valor &&
+    isTextoOuNulo(valor.data) &&
+    'tipo' in valor &&
+    (valor.tipo === null || valor.tipo === 'receita' || valor.tipo === 'despesa') &&
+    'valorCentavos' in valor &&
+    (valor.valorCentavos === null || Number.isSafeInteger(valor.valorCentavos)) &&
+    'titulo' in valor &&
+    typeof valor.titulo === 'string'
+  )
+}
+
+function isCsvPrevia(valor: unknown): valor is CsvPrevia {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'totalLinhas' in valor &&
+    Number.isSafeInteger(valor.totalLinhas) &&
+    'colunasDetectadas' in valor &&
+    Number.isSafeInteger(valor.colunasDetectadas) &&
+    'linhas' in valor &&
+    Array.isArray(valor.linhas) &&
+    valor.linhas.every(isCsvPreviaLinha)
+  )
+}
+
+async function recusarRespostaDeCsv(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 404) throw new MapeamentoNaoEncontradoError('conta ou mapeamento não encontrado')
+  return recusarRespostaDeImportacao(resposta, origem)
+}
+
+export async function fetchMapeamentosCsv(): Promise<MapeamentoCsv[]> {
+  const resposta = await fetch(`${baseUrl}/mapeamentos-csv`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeCsv(resposta, '/mapeamentos-csv')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isMapeamentoCsv)) throw new ApiError('/mapeamentos-csv com formato inesperado')
+  return corpo
+}
+
+export async function postMapeamentoCsv(dados: MapeamentoCsvRequest): Promise<MapeamentoCsv> {
+  const resposta = await fetch(`${baseUrl}/mapeamentos-csv`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (resposta.status !== 201) return recusarRespostaDeCsv(resposta, 'POST /mapeamentos-csv')
+  const corpo: unknown = await resposta.json()
+  if (!isMapeamentoCsv(corpo)) throw new ApiError('POST /mapeamentos-csv com formato inesperado')
+  return corpo
+}
+
+export async function putMapeamentoCsv(id: string, dados: MapeamentoCsvRequest): Promise<MapeamentoCsv> {
+  const resposta = await fetch(`${baseUrl}/mapeamentos-csv/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeCsv(resposta, 'PUT /mapeamentos-csv/{id}')
+  const corpo: unknown = await resposta.json()
+  if (!isMapeamentoCsv(corpo)) throw new ApiError('PUT /mapeamentos-csv/{id} com formato inesperado')
+  return corpo
+}
+
+export async function deleteMapeamentoCsv(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/mapeamentos-csv/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeCsv(resposta, 'DELETE /mapeamentos-csv/{id}')
+}
+
+// Mesmo corpo cru do OFX; o mapeamento salvo diz como ler as colunas (ADR-070).
+export async function postImportacaoCsv(contaId: string, mapeamentoId: string, arquivo: Blob): Promise<ImportacaoDetalhe> {
+  const consulta = `conta_id=${encodeURIComponent(contaId)}&mapeamento_id=${encodeURIComponent(mapeamentoId)}`
+  const resposta = await fetch(`${baseUrl}/importacoes/csv?${consulta}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: arquivo,
+  })
+  if (resposta.status !== 201) return recusarRespostaDeCsv(resposta, 'POST /importacoes/csv')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoDetalhe(corpo)) throw new ApiError('POST /importacoes/csv com formato inesperado')
+  return corpo
+}
+
+// Não grava nada no servidor. A coluna do identificador só vai na query quando existe.
+export async function postPreviaCsv(parametros: ParametrosDoCsv, arquivo: Blob, sinal?: AbortSignal): Promise<CsvPrevia> {
+  const consulta = new URLSearchParams({
+    separador: parametros.separador,
+    formato_data: parametros.formatoData,
+    decimal: parametros.decimal,
+    sinal: parametros.sinal,
+    tem_cabecalho: String(parametros.temCabecalho),
+    coluna_data: String(parametros.colunaData),
+    coluna_valor: String(parametros.colunaValor),
+    coluna_descricao: String(parametros.colunaDescricao),
+  })
+  if (parametros.colunaId !== null && parametros.colunaId !== undefined) {
+    consulta.set('coluna_id', String(parametros.colunaId))
+  }
+  const resposta = await fetch(`${baseUrl}/importacoes/csv/previa?${consulta.toString()}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: arquivo,
+    signal: sinal,
+  })
+  if (resposta.status !== 200) return recusarRespostaDeCsv(resposta, 'POST /importacoes/csv/previa')
+  const corpo: unknown = await resposta.json()
+  if (!isCsvPrevia(corpo)) throw new ApiError('POST /importacoes/csv/previa com formato inesperado')
+  return corpo
+}

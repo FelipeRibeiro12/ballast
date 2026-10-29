@@ -10,6 +10,7 @@ import {
   TETO_DO_ARQUIVO_EM_BYTES,
   mensagemDeImportacao,
 } from './mensagensDeImportacao'
+import ImportarCsv from './ImportarCsv'
 import RevisaoDeImportacao from './RevisaoDeImportacao'
 import { Carregando, EstadoVazio } from './ui'
 
@@ -93,7 +94,7 @@ function FormularioDeEnvio({
   )
 }
 
-// Enviar o extrato, retomar uma importação pendente e revisar linha a linha (ADR-008, ADR-069).
+// Enviar o extrato (OFX ou CSV), retomar uma importação pendente e revisar linha a linha (ADR-008, ADR-069).
 export default function Importar({
   contas,
   aoSessaoExpirar,
@@ -106,6 +107,7 @@ export default function Importar({
   const [versao, setVersao] = useState(0)
   const [estado, setEstado] = useState<Estado<Importacao[]>>({ tipo: 'carregando' })
   const [aberta, setAberta] = useState<Aberta | null>(null)
+  const [formato, setFormato] = useState<'ofx' | 'csv'>('ofx')
 
   useEffect(() => {
     let vale = true
@@ -149,11 +151,24 @@ export default function Importar({
         <EstadoVazio titulo="Nenhuma conta para receber o extrato." dica="Crie uma conta em Contas antes de importar." />
       )}
       {contas !== null && contas.length > 0 && (
-        <FormularioDeEnvio
-          contas={contas}
-          aoAbrir={setAberta}
-          aoSessaoExpirar={aoSessaoExpirar}
-        />
+        <>
+          <fieldset>
+            <legend>Formato do arquivo</legend>
+            <label>
+              <input type="radio" name="formato-do-extrato" checked={formato === 'ofx'} onChange={() => setFormato('ofx')} />{' '}
+              OFX (extrato do banco)
+            </label>{' '}
+            <label>
+              <input type="radio" name="formato-do-extrato" checked={formato === 'csv'} onChange={() => setFormato('csv')} />{' '}
+              CSV (planilha)
+            </label>
+          </fieldset>
+          {formato === 'ofx' ? (
+            <FormularioDeEnvio contas={contas} aoAbrir={setAberta} aoSessaoExpirar={aoSessaoExpirar} />
+          ) : (
+            <ImportarCsv contas={contas} aoAbrir={setAberta} aoSessaoExpirar={aoSessaoExpirar} />
+          )}
+        </>
       )}
       <h3>Importações pendentes</h3>
       {estado.tipo === 'carregando' && <Carregando texto="Carregando importações..." />}
