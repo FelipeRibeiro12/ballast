@@ -349,6 +349,22 @@ class ImportUploadTest {
   }
 
   @Test
+  void refusesAtTheLimitBeforeReadingTheFile() throws Exception {
+    for (int i = 0; i < 20; i++) {
+      api.uploadOk(
+          actor.session(), actor.accountId(), ofx(new Tx("20261003", "-1.00", "F" + i, "X" + i)));
+    }
+
+    // Arquivo que não é OFX: se o teto fosse conferido depois do parse, a resposta seria 422.
+    MockHttpServletResponse response =
+        api.upload(actor.session(), actor.accountId(), "isto nao e ofx".getBytes());
+
+    assertThat(response.getStatus()).isEqualTo(409);
+    assertThat(body(response).get("erro").asString())
+        .isEqualTo("limite de importações pendentes atingido");
+  }
+
+  @Test
   void deletingTheAccountDeletesItsImports() throws Exception {
     String account = api.newAccount(actor.session(), "corrente");
     String importId =

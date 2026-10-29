@@ -33,6 +33,15 @@ public class UserLimits {
     }
   }
 
+  // Leitura sem trava, só para recusar cedo uma requisição cara. Não garante nada sob corrida:
+  // quem grava confere de novo com checkRoom, dentro da transação.
+  public void checkRoomEarly(UUID userId, UserLimit limit) {
+    long current = jdbc.sql(limit.countSql).param("userId", userId).query(Long.class).single();
+    if (current >= limit.max.applyAsInt(properties)) {
+      throw new LimitReachedException(limit);
+    }
+  }
+
   public Duration accountDeleteTimeout() {
     return properties.accountDeleteTimeout();
   }

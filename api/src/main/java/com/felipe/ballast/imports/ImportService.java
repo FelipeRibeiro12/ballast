@@ -93,6 +93,9 @@ class ImportService {
     if (existing.isPresent()) {
       return new Result.Failed<>(Failure.DUPLICATE_FILE, existing.get(), null);
     }
+    // Antes do parse e do plano: com o teto cheio o envio não gasta CPU nem memória. A conferência
+    // com trava continua dentro da transação.
+    limits.checkRoomEarly(userId, UserLimit.PENDING_IMPORTS);
     OfxFile file;
     try {
       file = OfxParser.parse(content);
