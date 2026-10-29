@@ -921,8 +921,9 @@ sem paginar: contas, recorrências, títulos e ativos têm teto por usuário (AD
 
 Cabeçalho opcional em `POST /contas`, `/lancamentos`, `/transferencias`,
 `/compras-parceladas`, `/recorrencias`, `/metas`, `/metas/{id}/aportes`,
-`/movimentos-cripto`, `/titulos-renda-fixa` e
-`/titulos-renda-fixa/{id}/marcacoes` e `/resgate`. Nas outras rotas é ignorado.
+`/movimentos-cripto`, `/titulos-renda-fixa`,
+`/titulos-renda-fixa/{id}/marcacoes` e `/resgate`, e em
+`/importacoes/{id}/confirmacao`. Nas outras rotas é ignorado.
 
 - Formato: 1 a 80 caracteres entre letras, dígitos e `. _ : -` (um UUID serve).
   Fora do formato, ou repetido no mesmo pedido, dá 400
@@ -939,6 +940,61 @@ Cabeçalho opcional em `POST /contas`, `/lancamentos`, `/transferencias`,
 - A chave vale por 24 h e é do usuário: a mesma chave de outro usuário é outra.
 - O cliente deve gerar uma chave por intenção do usuário (um clique em salvar) e
   reusá-la só no retry daquela mesma requisição.
+
+## Importação de extrato OFX (ADR-008, ADR-069)
+
+Duas etapas: enviar o arquivo devolve uma proposta por linha, e a confirmação
+cria os lançamentos. Nada entra no extrato antes dela. Toda rota exige sessão e
+filtra por dono: importação, linha, conta, lançamento ou categoria de outro
+usuário responde 404, com o mesmo corpo do inexistente.
+
+- `POST /importacoes?conta_id=<uuid>` com o arquivo cru no corpo
+  (`Content-Type: application/octet-stream`; outro tipo dá 415). Sem multipart,
+  então nome de arquivo nunca chega ao servidor. Teto de 1 MiB, contado na
+  leitura (413 `corpo grande demais`); é a única rota com teto acima de 4 KiB.
+  OFX 1.x (SGML) e 2.x (XML), em UTF-8 ou Windows-1252. 201 com o detalhe
+  abaixo. Erros: 400 `conta_id` ausente ou que não é UUID, `conta arquivada`,
+  `conta cripto ou de investimento não recebe lançamento`; 404 `conta não
+  encontrada`; 409 `{"erro":"arquivo já importado","importacaoId":"..."}` para
+  o mesmo arquivo (descartar a pendente libera) ou `limite de importações
+  pendentes atingido` (20); 422 para arquivo vazio, que não é OFX, com
+  `DOCTYPE` ou `ENTITY`, sem transação ou com mais de 2000.
+- `GET /importacoes`: até 100, da mais nova para a mais antiga, sem as linhas.
+  Cada item: `id`, `contaId`, `status` (`pendente` ou `confirmada`),
+  `totalLinhas`, `totalInvalidas`, `totalImportar`, `totalConciliar`,
+  `totalIgnorar` (pela ação vigente de cada linha), `criadoEm`, `confirmadaEm`.
+- `GET /importacoes/{id}`: os mesmos campos mais `linhas`, em ordem do arquivo.
+- `DELETE /importacoes/{id}`: descarta a pendente (204). Confirmada: 409
+  `importação já confirmada`.
+- `PUT /importacoes/{id}/linhas/{linhaId}` com `{acao, lancamentoId?,
+  categoriaId?, titulo?}`. `acao` é `importar`, `ignorar` ou `conciliar`.
+  `conciliar` exige `lancamentoId` (realizado, da mesma conta, sem vínculo de
+  importação); `categoriaId` (do mesmo tipo da linha) e `titulo` (1 a 100) só
+  valem com `importar`. Campo que não pertence à ação dá 400. Linha que a
+  proposta já ignorou só aceita `ignorar` (400). Devolve a linha. Importação
+  confirmada: 409.
+- `POST /importacoes/{id}/confirmacao`, sem corpo, com `Idempotency-Key`
+  opcional. Cria os lançamentos pelas mesmas regras do `POST /lancamentos` e
+  responde 200 `{id, status: "confirmada", criadas, conciliadas, ignoradas,
+  duplicadas}`. Uma recusa de regra (`conta arquivada`, `categoria não
+  encontrada`, `categoria não permitida nesta conta`, `saldo da conta fora do
+  limite`) é 400 e desfaz tudo; a importação segue pendente. Segunda
+  confirmação: 409.
+
+Linha (`ImportacaoLinha`): `id`, `ordem`, `data`, `tipo` (`receita` ou
+`despesa`), `valorCentavos` (inteiro de centavos, sempre positivo), `titulo`,
+`descricao`, `valida`, `erro`, `proposta`, `motivo` (`ja_importada`,
+`invalida` ou `duplicada_no_arquivo` quando a proposta é ignorar), `decisao`
+(nula enquanto vale a proposta), `acao` (a vigente), `categoriaId` (a escolhida
+ou Outros / Outras receitas), `lancamentoId` (alvo da conciliação; depois da
+confirmação, o lançamento criado) e `resultado` (`criada`, `conciliada`,
+`ignorada` ou `duplicada`, nulo antes da confirmação). Em linha inválida `data`,
+`tipo`, `valorCentavos` e `categoriaId` são nulos.
+
+Detalhes: o `TRNAMT` aceita ponto ou vírgula e no máximo 2 casas; mais que isso
+deixa a linha inválida. A `DTPOSTED` vale como foi escrita, sem conversão de
+fuso. `dataCompetencia` do lançamento criado é essa data e `dataCaixa` segue a
+conta (vencimento da fatura em cartão). Logs levam só ids e contagens.
 
 ## Limites (ADR-049)
 
@@ -959,7 +1015,8 @@ Cabeçalho opcional em `POST /contas`, `/lancamentos`, `/transferencias`,
   de cripto ou cotação manual além do teto responde 409
   `{"erro":"limite de X atingido"}`, com X em `contas`, `recorrências ativas`,
   `compras parceladas`, `títulos de renda fixa`, `movimentos de cripto`,
-  `ativos de cripto` ou `cotações`. Nada é gravado. O teto vale por usuário, e
+  `ativos de cripto`, `cotações` ou `importações pendentes` (20, variável
+  `LIMITE_IMPORTACOES_PENDENTES`). Nada é gravado. O teto vale por usuário, e
   os padrões e as variáveis estão no `.env.example`. Os 409 que já existiam
   (nome repetido, ativo repetido, cotação repetida) mantêm a mensagem.
 - `DELETE /contas/{id}` que passa do prazo por instrução (`TIMEOUT_APAGAR_CONTA`,

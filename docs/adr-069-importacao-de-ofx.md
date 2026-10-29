@@ -94,3 +94,37 @@ Importação pendente esquecida ocupa linhas no banco. Ela é limitada a 20 por
 usuário e ganha limpeza por idade no backlog.
 Cartão de crédito vai pelo mesmo caminho do `POST /lancamentos`, mas a F26
 (fatura) é quem trata o vencimento da fatura como destino da linha.
+
+## Detalhes de implementação
+
+Escolhas da F22 que o texto acima deixou abertas.
+
+- **Rotas e formato.** O parâmetro do envio é `conta_id`, como no ADR. O envio
+  devolve 201 com o detalhe e as linhas. A confirmação devolve só as contagens
+  (`criadas`, `conciliadas`, `ignoradas`, `duplicadas`). `GET /importacoes`
+  traz as 100 mais novas, sem linhas.
+- **Parser.** `DTPOSTED` vale como escrito (8 primeiros dígitos), sem converter
+  fuso. Com vírgula e ponto juntos, o último separador é o decimal. `2.50` e
+  `2.500` valem 2,50 (zeros à direita não contam como casa); `2.505` é inválida.
+  Valor zero ou acima do teto da coluna também é linha inválida. Só as cinco
+  entidades nomeadas do XML são desfeitas.
+- **Título.** `NAME` vira título e `MEMO` vira descrição se for diferente; sem
+  `NAME`, o `MEMO` é o título. Sem nenhum dos dois, "Sem descrição".
+- **Hash sem FITID.** Usa a conta, a data, o valor com sinal, nome, memo e a
+  ordem da ocorrência entre linhas idênticas. FITID repetido dentro do arquivo
+  deixa a segunda linha em `ignorar`, motivo `duplicada_no_arquivo`.
+- **Conciliação.** Só lançamento `realizado`: conciliar uma ocorrência prevista
+  deixaria o hash numa linha que continua atrasada. O pareamento é global, do
+  par mais próximo ao mais distante, e desempata por ordem do arquivo.
+- **Linha que a proposta ignorou** (inválida, repetida, já importada) só aceita
+  `ignorar` no `PUT`. Importar de novo seria duplicar.
+- **Confirmação.** Uma trava consultiva por usuário serializa confirmações, para
+  dois arquivos com o mesmo FITID não baterem no unique parcial. Primeiro vêm as
+  conciliações, em ordem de id do lançamento, e depois as criações; é a ordem do
+  ADR-057 (lançamento antes da conta). Se o lançamento a conciliar sumiu ou já
+  tem hash, a linha vira lançamento novo, porque a transação do banco existe.
+  Uma recusa de regra (conta arquivada, categoria fora da lista do benefício,
+  saldo fora da faixa) desfaz a confirmação inteira com 400 e a importação segue
+  pendente.
+- **Apagar conta** apaga as importações dela antes (a FK é `NO ACTION`).
+- **Teto de pendentes.** Conta só a `pendente`; a confirmada libera a vaga.

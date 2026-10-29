@@ -1135,44 +1135,75 @@ Progresso é `soma(aporte_meta.valor)`, que a aplicação nunca deixa negativo
 (trava a meta com `FOR UPDATE`). A projeção ("necessário por mês", "chega pelo
 plano", "chega no ritmo") é calculada na leitura.
 
-## Importação de extrato e fatura
+## Importação de extrato e fatura (V34, ADR-008, ADR-069)
 
 Duas etapas: a importação grava as linhas cruas e **propõe** uma decisão; o
-usuário confirma. Nada entra no extrato sem confirmação (ADR-008).
+usuário confirma. Nada entra no extrato sem confirmação (ADR-008). A F22 entrega
+só o OFX; a CSV e a fatura em PDF usam as mesmas tabelas.
 
 ```
 importacao
-  id             uuid pk
-  usuario_id     uuid fk not null
-  conta_id       uuid fk not null       -- destino dos lançamentos
-  formato        text not null          -- ofx | csv | pdf_fatura
-  nome_arquivo   text not null
-  hash_arquivo   text not null          -- sha256 do conteúdo
-  periodo_inicio date null
-  periodo_fim    date null
-  status         text not null          -- processando | revisao | concluida | falhou
-  erro           text null
-  criada_em      timestamptz not null
+  id               uuid pk
+  usuario_id       uuid fk not null
+  conta_id         uuid not null           -- destino dos lançamentos
+  hash_arquivo     text not null           -- sha256 do conteúdo, 64 hexa minúsculos
+  status           text not null default 'pendente'   -- pendente | confirmada
+  total_linhas     integer not null        -- 1 a 2000
+  total_invalidas  integer not null        -- 0 a total_linhas
+  criado_em        timestamptz not null default now()
+  confirmada_em    timestamptz null        -- preenchida se, e só se, confirmada
+  unique (id, usuario_id)
   unique (usuario_id, hash_arquivo)
+  fk (conta_id, usuario_id) -> conta (id, usuario_id) ON DELETE NO ACTION
 
 importacao_linha
-  id              uuid pk
-  importacao_id   uuid fk not null
-  linha_bruta     jsonb not null         -- o que veio, cru, para auditoria
-  hash_externo    text null              -- FITID, ou hash de (data, valor, descrição)
-  data            date null              -- campos já interpretados
-  valor           numeric(18,2) null
-  descricao       text null
-  decisao         text not null default 'pendente'
-                  -- pendente | importar | ignorar | conciliar
-  lancamento_id   uuid fk null           -- criado a partir dela
-  conciliado_com  uuid fk null           -- lançamento manual que já existia
+  id               uuid pk
+  usuario_id       uuid fk not null
+  importacao_id    uuid not null
+  ordem            integer not null        -- posição no arquivo, 1 a 2000; única por importação
+  bruta            jsonb not null          -- os campos lidos, como texto (pode ter FITID)
+  hash_externo     text null               -- sha256 de conta_id|FITID, ou da composição sem FITID
+  data             date null               -- data, tipo e valor ficam nulos só na linha inválida
+  tipo             text null               -- receita | despesa
+  valor            numeric(18,2) null      -- positivo; o sinal vem do tipo
+  titulo           text not null           -- 1 a 100, sem espaço nas pontas
+  descricao        text null               -- até 500
+  invalida_motivo  text null               -- texto fixo; preenchido = linha inválida
+  proposta         text not null           -- importar | ignorar | conciliar
+  proposta_motivo  text null               -- ja_importada | invalida | duplicada_no_arquivo
+  decisao          text null               -- escolha do usuário; nula = vale a proposta
+  lancamento_id    uuid null               -- vínculo: alvo da conciliação, ou o lançamento criado
+  categoria_id     uuid null               -- escolhida; nula = Outros / Outras receitas
+  resultado        text null               -- criada | conciliada | ignorada | duplicada
+  unique (id, usuario_id)
+  unique (importacao_id, ordem)
+  fk (importacao_id, usuario_id) -> importacao (id, usuario_id) ON DELETE CASCADE
+  fk (lancamento_id, usuario_id) -> lancamento (id, usuario_id) ON DELETE SET NULL (lancamento_id)
+  fk (categoria_id, usuario_id, tipo) -> categoria (id, usuario_id, tipo) ON DELETE SET NULL (categoria_id)
+
+lancamento (colunas da V34)
+  hash_externo         text null           -- 64 hexa minúsculos
+  importacao_linha_id  uuid null
+  fk (importacao_linha_id, usuario_id) -> importacao_linha (id, usuario_id)
+     ON DELETE SET NULL (importacao_linha_id)
+  unique parcial (usuario_id, hash_externo) where hash_externo is not null
 ```
 
-`unique (usuario_id, hash_arquivo)` impede reimportar o mesmo arquivo.
-`unique (usuario_id, hash_externo)` em `lancamento` impede a mesma transação
-entrar duas vezes por arquivos diferentes que se sobrepõem — extrato de
-setembro e de outubro costumam repetir os dias da virada.
+`unique (usuario_id, hash_arquivo)` impede reimportar o mesmo arquivo; descartar
+a importação pendente apaga a linha e libera o hash. O unique parcial em
+`lancamento` impede a mesma transação entrar duas vezes por arquivos diferentes
+que se sobrepõem: extrato de setembro e de outubro costumam repetir os dias da
+virada. O `SET NULL` com lista de colunas (Postgres 15+) solta só o vínculo e
+deixa `usuario_id`, que é `NOT NULL`, em paz.
+
+A V34 também cria `lancamento_por_importacao_linha` (alvo do `SET NULL`),
+`lancamento_usuario_conta_competencia` (candidatos da conciliação),
+`importacao_usuario_criado_em`, `importacao_usuario_conta` e dois parciais em
+`importacao_linha`. As colunas novas de `lancamento` são nulas e sem `DEFAULT`, então
+o Postgres só mexe no catálogo; o `CREATE INDEX` e o `ADD CONSTRAINT` leem a tabela.
+
+Apagar uma conta apaga as importações dela (a FK é `NO ACTION`, então o
+`DELETE /contas/{id}` remove as importações antes da conta).
 
 ### Conciliação
 
@@ -1181,19 +1212,28 @@ almoço de ontem na mão e o extrato traz o mesmo almoço.
 
 A proposta de decisão por linha, em ordem:
 
-1. `hash_externo` bate com lançamento existente → **ignorar** (já está lá)
-2. Mesma conta, valor exatamente igual, data a até 3 dias de distância →
-   **conciliar**, propondo o lançamento candidato
-3. Nada bateu → **importar**
+1. Linha que o app não leu (data, valor ou tipo ausente) → **ignorar**, motivo
+   `invalida`
+2. `hash_externo` repetido dentro do mesmo arquivo → **ignorar**, motivo
+   `duplicada_no_arquivo`
+3. `hash_externo` bate com lançamento existente → **ignorar**, motivo
+   `ja_importada`
+4. Mesma conta, mesmo tipo, valor igual por `compareTo`, `data_competencia` a
+   até 3 dias, lançamento realizado e sem `hash_externo`, um para um (vale o de
+   data mais próxima) → **conciliar**, propondo o lançamento candidato
+5. Nada bateu → **importar**
 
-O passo 2 é heurística e vai errar. É exatamente por isso que existe a etapa de
+O passo 4 é heurística e vai errar. É exatamente por isso que existe a etapa de
 revisão: errar sozinho no saldo é inaceitável.
 
-Conciliar não cria lançamento novo: preenche `hash_externo` no lançamento que
-já existia e marca a linha como resolvida.
+Conciliar não cria lançamento novo: preenche `hash_externo` e
+`importacao_linha_id` no lançamento que já existia. Se na confirmação o
+lançamento sumiu ou já tem hash, a linha vira lançamento novo, porque a
+transação do banco é real.
 
-O arquivo original **não é guardado** depois de processado. O que fica é
-`linha_bruta`, suficiente para auditar.
+O hash sem FITID usa data, valor com sinal, nome, memo e a ordem da ocorrência
+entre linhas iguais do arquivo. O arquivo original **não é guardado** depois de
+processado. O que fica é `bruta`, suficiente para auditar.
 
 ## Orçamento
 
@@ -1255,8 +1295,8 @@ apenas em código:
 5. Compra parcelada (V11, ADR-032): `parcela_num` entre 1 e `parcela_total`, `parcela_total` entre 2 e 48, as três colunas juntas, parcela só em cartão, só despesa realizada, e toda parcela aponta para uma primeira do mesmo usuário e do mesmo total (FK composta)
 6. `regra_recorrencia`: `fim` e `ocorrencias_max` não coexistem
 7. Transferência: `saida_id` e `entrada_id` em contas diferentes (V7, `CHECK` mais FKs compostas)
-8. `hash_externo` único por usuário (deduplicação de importação)
-9. `hash_arquivo` único por usuário (mesmo arquivo não reimporta)
+8. `hash_externo` único por usuário em `lancamento` (V34, deduplicação de importação); formato de 64 hexa minúsculos
+9. `hash_arquivo` único por usuário em `importacao` (V34, mesmo arquivo não reimporta); `importacao` e `importacao_linha` ligadas por FK composta ao dono da conta, da categoria e do lançamento; linha inválida só pode ser ignorada
 10. `hash_tx` único por posição (mesma transação não duplica)
 11. `carteira_observada`: endereço único por usuário e rede
 12. `posicao_cripto` com `origem = 'sincronizada'` não aceita escrita manual (F24; a F13 não tem a tabela)
@@ -1274,11 +1314,11 @@ create index on transferencia (usuario_id);
 create index on lancamento (template_id) where template_id is not null;
 create index on lancamento (parcela_de_id) where parcela_de_id is not null;
 create index on cotacao (ativo_id, momento desc);
-create index on lancamento (usuario_id, hash_externo) where hash_externo is not null;
-create index on importacao_linha (importacao_id, decisao);
+create unique index on lancamento (usuario_id, hash_externo) where hash_externo is not null;
+create index on lancamento (usuario_id, conta_id, data_competencia);
 ```
 
-Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`. A `V12` não acrescenta nenhum (a PK de `conta_categoria_permitida` serve, conferido com `EXPLAIN`). A `V13` cria `movimento_cripto (usuario_id, conta_id, data)` e dispensa o índice descendente de `cotacao`, porque a PK serve (seção Cripto). A `V18` cria o de `(usuario_id, data_competencia, categoria_id)` para o orçamento. A `V23` cria `idempotencia (criada_em)` para a limpeza diária.
+Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`. A `V12` não acrescenta nenhum (a PK de `conta_categoria_permitida` serve, conferido com `EXPLAIN`). A `V13` cria `movimento_cripto (usuario_id, conta_id, data)` e dispensa o índice descendente de `cotacao`, porque a PK serve (seção Cripto). A `V18` cria o de `(usuario_id, data_competencia, categoria_id)` para o orçamento. A `V23` cria `idempotencia (criada_em)` para a limpeza diária. A `V34` cria o unique parcial em `hash_externo` e `(usuario_id, conta_id, data_competencia)`, que lê os candidatos da conciliação.
 O primeiro serve saldo e fluxo de caixa; o segundo, gráfico por categoria e
 orçamento. Antes de adicionar qualquer outro, rode `EXPLAIN ANALYZE` e mostre o
 antes e o depois.
