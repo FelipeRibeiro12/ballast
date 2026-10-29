@@ -169,6 +169,15 @@ class AccountDeletionQueries {
         .update();
   }
 
+  // As linhas saem em cascata. A FK da importação com a conta é NO ACTION: sem isto a conta não
+  // seria apagada.
+  void deleteImports(UUID userId, UUID accountId) {
+    jdbc.sql("DELETE FROM importacao WHERE usuario_id = :userId AND conta_id = :id")
+        .param("userId", userId)
+        .param("id", accountId)
+        .update();
+  }
+
   void deleteEntries(UUID userId, UUID accountId) {
     jdbc.sql("DELETE FROM lancamento WHERE usuario_id = :userId AND conta_id = :id")
         .param("userId", userId)

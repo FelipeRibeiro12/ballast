@@ -10,6 +10,7 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -37,6 +38,8 @@ final class OfxParser {
   private static final Pattern PLAIN_NUMBER = Pattern.compile("[+-]?\\d+(\\.\\d+)?");
 
   private static final String TRANSACTION = "STMTTRN";
+  private static final List<String> KNOWN_FIELDS =
+      List.of("TRNTYPE", "DTPOSTED", "TRNAMT", "FITID", "NAME", "MEMO", "CHECKNUM");
 
   private OfxParser() {}
 
@@ -105,6 +108,12 @@ final class OfxParser {
   }
 
   private static OfxTransaction toTransaction(int order, Map<String, String> fields) {
+    Map<String, String> known = new LinkedHashMap<>();
+    for (String name : KNOWN_FIELDS) {
+      if (fields.get(name) != null && !fields.get(name).isEmpty()) {
+        known.put(name, fields.get(name));
+      }
+    }
     LocalDate date = parseDate(fields.get("DTPOSTED"));
     BigDecimal amount = null;
     String reason = null;
@@ -136,7 +145,8 @@ final class OfxParser {
         blankToNull(fields.get("NAME")),
         blankToNull(fields.get("MEMO")),
         blankToNull(fields.get("CHECKNUM")),
-        reason);
+        reason,
+        known);
   }
 
   // Com os dois separadores, o último é o decimal: "1.234,56" e "1,234.56" valem 1234.56. Com um
@@ -189,8 +199,7 @@ final class OfxParser {
             .replace("&apos;", "'")
             .replace("&amp;", "&");
     StringBuilder builder = new StringBuilder();
-    text.codePoints()
-        .forEach(point -> builder.appendCodePoint(Character.isISOControl(point) ? ' ' : point));
+    text.codePoints().forEach(point -> builder.appendCodePoint(isControl(point) ? ' ' : point));
     String stripped = builder.toString().strip();
     if (stripped.isEmpty()) {
       return null;
@@ -199,6 +208,15 @@ final class OfxParser {
       return stripped.substring(0, stripped.offsetByCodePoints(0, MAX_FIELD_CHARS)).strip();
     }
     return stripped;
+  }
+
+  // Mesmo critério do @NoControlCharacters: o título importado passa pelas mesmas regras do manual.
+  private static boolean isControl(int point) {
+    int type = Character.getType(point);
+    return type == Character.CONTROL
+        || (type == Character.FORMAT && point != 0x200C && point != 0x200D)
+        || point == 0x2028
+        || point == 0x2029;
   }
 
   private static String blankToNull(String value) {

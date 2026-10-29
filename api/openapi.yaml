@@ -1963,6 +1963,315 @@ paths:
       summary: Verifica se a API alcança o banco
       tags:
       - health
+  /importacoes:
+    get:
+      description: "No máximo 100, sem as linhas."
+      operationId: getImportacoes
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Importacao"
+          description: Importações do usuário
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+      security:
+      - cookieAuth: []
+      summary: "Lista as importações do usuário, da mais nova para a mais antiga"
+      tags:
+      - importacoes
+    post:
+      description: "O corpo é o arquivo cru (application/octet-stream), de até 1 MiB\
+        \ e 2000 transações. Nada vira lançamento até a confirmação. O mesmo arquivo\
+        \ duas vezes devolve 409 com o importacaoId da primeira; descartar a pendente\
+        \ libera o arquivo."
+      operationId: postImportacoes
+      parameters:
+      - in: query
+        name: conta_id
+        required: false
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportacaoDetalhe"
+          description: Importação pendente criada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "conta_id ausente ou que não é UUID, \"conta arquivada\" ou\
+            \ \"conta cripto ou de investimento não recebe lançamento\""
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Conta de outro usuário ou inexistente; mesmo corpo
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportacaoDuplicada"
+          description: Arquivo já enviado (corpo com importacaoId) ou 20 importações
+            pendentes (corpo comum de erro)
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Arquivo maior que 1 MiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/octet-stream
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Arquivo vazio, que não é OFX, com DOCTYPE ou ENTITY, sem transaç\
+            ões ou com mais de 2000"
+      security:
+      - cookieAuth: []
+      summary: Envia um extrato OFX e devolve a proposta por linha
+      tags:
+      - importacoes
+  /importacoes/{id}:
+    delete:
+      description: Libera o arquivo para um novo envio. A confirmada não se descarta.
+      operationId: deleteImportacoesById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Importação descartada
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Importação de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Importação já confirmada
+      security:
+      - cookieAuth: []
+      summary: Descarta uma importação pendente
+      tags:
+      - importacoes
+    get:
+      operationId: getImportacoesById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportacaoDetalhe"
+          description: Importação com as linhas
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Importação de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Importação com todas as linhas e a proposta de cada uma
+      tags:
+      - importacoes
+  /importacoes/{id}/confirmacao:
+    post:
+      description: "Sem corpo. Cada linha vale pela decisão ou, sem ela, pela proposta:\
+        \ importar cria o lançamento pelas mesmas regras do POST /lancamentos (dataCompetencia\
+        \ é a data do arquivo; dataCaixa segue a conta), conciliar só grava o vínculo\
+        \ no lançamento existente e ignorar não grava nada. Linha cujo FITID entrou\
+        \ no meio-tempo conta como duplicada. Tudo numa transação: uma recusa de regra\
+        \ desfaz a confirmação inteira. Aceita Idempotency-Key (ADR-056)."
+      operationId: postImportacoesByIdConfirmacao
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: "Chave de idempotência, de 1 a 80 caracteres entre letras, dí\
+          gitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx\
+          \ original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale\
+          \ por 24 h."
+        in: header
+        name: Idempotency-Key
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportacaoConfirmacao"
+          description: "Importação confirmada, com a contagem por resultado"
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Recusa de regra ao criar um lançamento (conta arquivada, categoria\
+            \ não encontrada, categoria não permitida nesta conta, saldo da conta\
+            \ fora do limite) ou Idempotency-Key inválida. Nada é criado"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Importação de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Importação já confirmada
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Idempotency-Key já usada com outra rota ou outro corpo
+      security:
+      - cookieAuth: []
+      summary: Confirma a importação e cria os lançamentos
+      tags:
+      - importacoes
+  /importacoes/{id}/linhas/{linhaId}:
+    put:
+      description: "acao importar aceita categoriaId e titulo; conciliar exige lancamentoId\
+        \ de um lançamento realizado da mesma conta, ainda sem vínculo de importaç\
+        ão; ignorar não leva nada. Sem decisão vale a proposta. Linha que a proposta\
+        \ já ignorou (inválida, repetida no arquivo ou já importada) só aceita ignorar."
+      operationId: putImportacoesByIdLinhasByLinhaId
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: linhaId
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportacaoLinhaRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportacaoLinha"
+          description: Linha com a decisão nova
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado; campos que\
+            \ não pertencem à ação; categoria de outro tipo; linha que só aceita ignorar"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Importação, linha, lançamento ou categoria de outro usuário,\
+            \ inexistente ou id que não é UUID; mesmo corpo para os três casos de\
+            \ cada um"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Importação já confirmada
+      security:
+      - cookieAuth: []
+      summary: Muda a decisão de uma linha da importação pendente
+      tags:
+      - importacoes
   /indices:
     get:
       operationId: getIndices
@@ -5542,6 +5851,311 @@ components:
           type: string
       required:
       - mensagem
+    Importacao:
+      type: object
+      properties:
+        confirmadaEm:
+          type:
+          - string
+          - "null"
+          format: date-time
+        contaId:
+          type: string
+          format: uuid
+        criadoEm:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - pendente
+          - confirmada
+        totalConciliar:
+          type: integer
+          format: int32
+        totalIgnorar:
+          type: integer
+          format: int32
+        totalImportar:
+          type: integer
+          format: int32
+          description: "Linhas cuja ação vigente (decisão, ou a proposta sem decisã\
+            o) é importar"
+        totalInvalidas:
+          type: integer
+          format: int32
+          description: Linhas que o app não conseguiu ler; ficam de fora da confirmação
+        totalLinhas:
+          type: integer
+          format: int32
+          maximum: 2000
+          minimum: 1
+      required:
+      - confirmadaEm
+      - contaId
+      - criadoEm
+      - id
+      - status
+      - totalConciliar
+      - totalIgnorar
+      - totalImportar
+      - totalInvalidas
+      - totalLinhas
+    ImportacaoConfirmacao:
+      type: object
+      properties:
+        conciliadas:
+          type: integer
+          format: int32
+          description: Lançamentos existentes que ganharam o vínculo com o extrato
+        criadas:
+          type: integer
+          format: int32
+          description: Lançamentos criados
+        duplicadas:
+          type: integer
+          format: int32
+          description: Linhas cujo FITID já tinha entrado quando a confirmação rodou
+        id:
+          type: string
+          format: uuid
+        ignoradas:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - confirmada
+      required:
+      - conciliadas
+      - criadas
+      - duplicadas
+      - id
+      - ignoradas
+      - status
+    ImportacaoDetalhe:
+      type: object
+      properties:
+        confirmadaEm:
+          type:
+          - string
+          - "null"
+          format: date-time
+        contaId:
+          type: string
+          format: uuid
+        criadoEm:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+        linhas:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportacaoLinha"
+        status:
+          type: string
+          enum:
+          - pendente
+          - confirmada
+        totalConciliar:
+          type: integer
+          format: int32
+        totalIgnorar:
+          type: integer
+          format: int32
+        totalImportar:
+          type: integer
+          format: int32
+        totalInvalidas:
+          type: integer
+          format: int32
+        totalLinhas:
+          type: integer
+          format: int32
+          maximum: 2000
+          minimum: 1
+      required:
+      - confirmadaEm
+      - contaId
+      - criadoEm
+      - id
+      - linhas
+      - status
+      - totalConciliar
+      - totalIgnorar
+      - totalImportar
+      - totalInvalidas
+      - totalLinhas
+    ImportacaoDuplicada:
+      type: object
+      properties:
+        erro:
+          type: string
+        importacaoId:
+          type: string
+          format: uuid
+          description: Importação que já recebeu este arquivo
+      required:
+      - erro
+      - importacaoId
+    ImportacaoLinha:
+      type: object
+      properties:
+        acao:
+          type: string
+          description: "Ação vigente: a decisão, ou a proposta quando não há decisã\
+            o"
+          enum:
+          - importar
+          - ignorar
+          - conciliar
+        categoriaId:
+          type:
+          - string
+          - "null"
+          format: uuid
+          description: "Categoria com que a linha vira lançamento: a escolhida, ou\
+            \ Outros / Outras receitas. Nulo em linha inválida"
+        data:
+          type:
+          - string
+          - "null"
+          format: date
+        decisao:
+          type:
+          - string
+          - "null"
+          description: Escolha do usuário; nulo enquanto vale a proposta
+          enum:
+          - importar
+          - ignorar
+          - conciliar
+        descricao:
+          type:
+          - string
+          - "null"
+          maxLength: 500
+        erro:
+          type:
+          - string
+          - "null"
+          description: "Por que a linha é inválida; texto fixo, sem trecho do arquivo"
+        id:
+          type: string
+          format: uuid
+        lancamentoId:
+          type:
+          - string
+          - "null"
+          format: uuid
+          description: "Lançamento existente com que a linha concilia; depois da confirmaç\
+            ão, o lançamento criado"
+        motivo:
+          type:
+          - string
+          - "null"
+          description: Por que a proposta é ignorar; nulo nas outras
+          enum:
+          - ja_importada
+          - invalida
+          - duplicada_no_arquivo
+        ordem:
+          type: integer
+          format: int32
+          description: "Posição da transação no arquivo, a partir de 1"
+          minimum: 1
+        proposta:
+          type: string
+          enum:
+          - importar
+          - ignorar
+          - conciliar
+        resultado:
+          type:
+          - string
+          - "null"
+          description: O que a confirmação fez com a linha; nulo antes dela
+          enum:
+          - criada
+          - conciliada
+          - ignorada
+          - duplicada
+        tipo:
+          type:
+          - string
+          - "null"
+          description: Nulo só em linha inválida
+          enum:
+          - receita
+          - despesa
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+        valida:
+          type: boolean
+        valorCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Centavos de real, sempre positivo; o sinal vem do tipo. Nulo\
+            \ em linha inválida"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - acao
+      - categoriaId
+      - data
+      - decisao
+      - descricao
+      - erro
+      - id
+      - lancamentoId
+      - motivo
+      - ordem
+      - proposta
+      - resultado
+      - tipo
+      - titulo
+      - valida
+      - valorCentavos
+    ImportacaoLinhaRequest:
+      type: object
+      properties:
+        acao:
+          type: string
+          enum:
+          - importar
+          - ignorar
+          - conciliar
+        categoriaId:
+          type:
+          - string
+          - "null"
+          format: uuid
+          description: Só com importar. Sem ela vale Outros (despesa) ou Outras receitas
+            (receita)
+        lancamentoId:
+          type:
+          - string
+          - "null"
+          format: uuid
+          description: Obrigatório com conciliar e proibido nas outras ações
+        titulo:
+          type:
+          - string
+          - "null"
+          description: Só com importar. Sem ele fica o título que veio do arquivo
+          maxLength: 100
+          minLength: 1
+      required:
+      - acao
     Indices:
       type: object
       properties:

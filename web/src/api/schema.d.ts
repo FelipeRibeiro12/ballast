@@ -543,6 +543,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/importacoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as importações do usuário, da mais nova para a mais antiga
+         * @description No máximo 100, sem as linhas.
+         */
+        get: operations["getImportacoes"];
+        put?: never;
+        /**
+         * Envia um extrato OFX e devolve a proposta por linha
+         * @description O corpo é o arquivo cru (application/octet-stream), de até 1 MiB e 2000 transações. Nada vira lançamento até a confirmação. O mesmo arquivo duas vezes devolve 409 com o importacaoId da primeira; descartar a pendente libera o arquivo.
+         */
+        post: operations["postImportacoes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/importacoes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Importação com todas as linhas e a proposta de cada uma */
+        get: operations["getImportacoesById"];
+        put?: never;
+        post?: never;
+        /**
+         * Descarta uma importação pendente
+         * @description Libera o arquivo para um novo envio. A confirmada não se descarta.
+         */
+        delete: operations["deleteImportacoesById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/importacoes/{id}/confirmacao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirma a importação e cria os lançamentos
+         * @description Sem corpo. Cada linha vale pela decisão ou, sem ela, pela proposta: importar cria o lançamento pelas mesmas regras do POST /lancamentos (dataCompetencia é a data do arquivo; dataCaixa segue a conta), conciliar só grava o vínculo no lançamento existente e ignorar não grava nada. Linha cujo FITID entrou no meio-tempo conta como duplicada. Tudo numa transação: uma recusa de regra desfaz a confirmação inteira. Aceita Idempotency-Key (ADR-056).
+         */
+        post: operations["postImportacoesByIdConfirmacao"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/importacoes/{id}/linhas/{linhaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Muda a decisão de uma linha da importação pendente
+         * @description acao importar aceita categoriaId e titulo; conciliar exige lancamentoId de um lançamento realizado da mesma conta, ainda sem vínculo de importação; ignorar não leva nada. Sem decisão vale a proposta. Linha que a proposta já ignorou (inválida, repetida no arquivo ou já importada) só aceita ignorar.
+         */
+        put: operations["putImportacoesByIdLinhasByLinhaId"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/indices": {
         parameters: {
             query?: never;
@@ -1655,6 +1740,162 @@ export interface components {
         };
         HealthResponse: {
             mensagem: string;
+        };
+        Importacao: {
+            /** Format: date-time */
+            confirmadaEm: string | null;
+            /** Format: uuid */
+            contaId: string;
+            /** Format: date-time */
+            criadoEm: string;
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "pendente" | "confirmada";
+            /** Format: int32 */
+            totalConciliar: number;
+            /** Format: int32 */
+            totalIgnorar: number;
+            /**
+             * Format: int32
+             * @description Linhas cuja ação vigente (decisão, ou a proposta sem decisão) é importar
+             */
+            totalImportar: number;
+            /**
+             * Format: int32
+             * @description Linhas que o app não conseguiu ler; ficam de fora da confirmação
+             */
+            totalInvalidas: number;
+            /** Format: int32 */
+            totalLinhas: number;
+        };
+        ImportacaoConfirmacao: {
+            /**
+             * Format: int32
+             * @description Lançamentos existentes que ganharam o vínculo com o extrato
+             */
+            conciliadas: number;
+            /**
+             * Format: int32
+             * @description Lançamentos criados
+             */
+            criadas: number;
+            /**
+             * Format: int32
+             * @description Linhas cujo FITID já tinha entrado quando a confirmação rodou
+             */
+            duplicadas: number;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            ignoradas: number;
+            /** @enum {string} */
+            status: "confirmada";
+        };
+        ImportacaoDetalhe: {
+            /** Format: date-time */
+            confirmadaEm: string | null;
+            /** Format: uuid */
+            contaId: string;
+            /** Format: date-time */
+            criadoEm: string;
+            /** Format: uuid */
+            id: string;
+            linhas: components["schemas"]["ImportacaoLinha"][];
+            /** @enum {string} */
+            status: "pendente" | "confirmada";
+            /** Format: int32 */
+            totalConciliar: number;
+            /** Format: int32 */
+            totalIgnorar: number;
+            /** Format: int32 */
+            totalImportar: number;
+            /** Format: int32 */
+            totalInvalidas: number;
+            /** Format: int32 */
+            totalLinhas: number;
+        };
+        ImportacaoDuplicada: {
+            erro: string;
+            /**
+             * Format: uuid
+             * @description Importação que já recebeu este arquivo
+             */
+            importacaoId: string;
+        };
+        ImportacaoLinha: {
+            /**
+             * @description Ação vigente: a decisão, ou a proposta quando não há decisão
+             * @enum {string}
+             */
+            acao: "importar" | "ignorar" | "conciliar";
+            /**
+             * Format: uuid
+             * @description Categoria com que a linha vira lançamento: a escolhida, ou Outros / Outras receitas. Nulo em linha inválida
+             */
+            categoriaId: string | null;
+            /** Format: date */
+            data: string | null;
+            /**
+             * @description Escolha do usuário; nulo enquanto vale a proposta
+             * @enum {string|null}
+             */
+            decisao: "importar" | "ignorar" | "conciliar" | null;
+            descricao: string | null;
+            /** @description Por que a linha é inválida; texto fixo, sem trecho do arquivo */
+            erro: string | null;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Lançamento existente com que a linha concilia; depois da confirmação, o lançamento criado
+             */
+            lancamentoId: string | null;
+            /**
+             * @description Por que a proposta é ignorar; nulo nas outras
+             * @enum {string|null}
+             */
+            motivo: "ja_importada" | "invalida" | "duplicada_no_arquivo" | null;
+            /**
+             * Format: int32
+             * @description Posição da transação no arquivo, a partir de 1
+             */
+            ordem: number;
+            /** @enum {string} */
+            proposta: "importar" | "ignorar" | "conciliar";
+            /**
+             * @description O que a confirmação fez com a linha; nulo antes dela
+             * @enum {string|null}
+             */
+            resultado: "criada" | "conciliada" | "ignorada" | "duplicada" | null;
+            /**
+             * @description Nulo só em linha inválida
+             * @enum {string|null}
+             */
+            tipo: "receita" | "despesa" | null;
+            titulo: string;
+            valida: boolean;
+            /**
+             * Format: int64
+             * @description Centavos de real, sempre positivo; o sinal vem do tipo. Nulo em linha inválida
+             */
+            valorCentavos: number | null;
+        };
+        ImportacaoLinhaRequest: {
+            /** @enum {string} */
+            acao: "importar" | "ignorar" | "conciliar";
+            /**
+             * Format: uuid
+             * @description Só com importar. Sem ela vale Outros (despesa) ou Outras receitas (receita)
+             */
+            categoriaId?: string | null;
+            /**
+             * Format: uuid
+             * @description Obrigatório com conciliar e proibido nas outras ações
+             */
+            lancamentoId?: string | null;
+            /** @description Só com importar. Sem ele fica o título que veio do arquivo */
+            titulo?: string | null;
         };
         Indices: {
             /**
@@ -4869,6 +5110,346 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthError"];
+                };
+            };
+        };
+    };
+    getImportacoes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Importações do usuário */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Importacao"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postImportacoes: {
+        parameters: {
+            query?: {
+                conta_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Importação pendente criada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDetalhe"];
+                };
+            };
+            /** @description conta_id ausente ou que não é UUID, "conta arquivada" ou "conta cripto ou de investimento não recebe lançamento" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário ou inexistente; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo já enviado (corpo com importacaoId) ou 20 importações pendentes (corpo comum de erro) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDuplicada"];
+                };
+            };
+            /** @description Arquivo maior que 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/octet-stream */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo vazio, que não é OFX, com DOCTYPE ou ENTITY, sem transações ou com mais de 2000 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getImportacoesById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Importação com as linhas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDetalhe"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteImportacoesById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Importação descartada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação já confirmada */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postImportacoesByIdConfirmacao: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Importação confirmada, com a contagem por resultado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoConfirmacao"];
+                };
+            };
+            /** @description Recusa de regra ao criar um lançamento (conta arquivada, categoria não encontrada, categoria não permitida nesta conta, saldo da conta fora do limite) ou Idempotency-Key inválida. Nada é criado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação já confirmada */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putImportacoesByIdLinhasByLinhaId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                linhaId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportacaoLinhaRequest"];
+            };
+        };
+        responses: {
+            /** @description Linha com a decisão nova */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoLinha"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado; campos que não pertencem à ação; categoria de outro tipo; linha que só aceita ignorar */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação, linha, lançamento ou categoria de outro usuário, inexistente ou id que não é UUID; mesmo corpo para os três casos de cada um */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação já confirmada */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
                 };
             };
         };

@@ -21,7 +21,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 // O Spring MVC lê corpo JSON sem teto. Em toda rota o maior DTO válido (em /auth/*: e-mail 254 +
 // senha 128 + nome 100 caracteres, cada um no pior caso escapado em 6 bytes) cabe em ~3 KB;
 // 4 KiB dá folga para espaço e formatação e continua pequeno para quem quer esgotar memória.
-// Rota que precisar de corpo maior (upload de extrato, F22) pede uma exceção própria aqui.
+// O envio de extrato (POST /importacoes, F22) tem exceção própria de 1 MiB; nenhuma outra rota tem.
 // Sem o cabeçalho Content-Length (chunked) o tamanho só aparece lendo, então a leitura é contada
 // e aborta no estouro, sem juntar o corpo na memória.
 @Component
@@ -30,17 +30,26 @@ import org.springframework.web.filter.OncePerRequestFilter;
 class BodyLimitFilter extends OncePerRequestFilter {
 
   static final int BODY_LIMIT_BYTES = 4096;
+  static final int UPLOAD_LIMIT_BYTES = 1 << 20;
   static final String MESSAGE = "{\"erro\":\"corpo grande demais\"}";
 
   @Override
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
-    if (request.getContentLengthLong() > BODY_LIMIT_BYTES) {
+    int limit = limitFor(request);
+    if (request.getContentLengthLong() > limit) {
       reject(response);
       return;
     }
-    chain.doFilter(new LimitedRequest(request, BODY_LIMIT_BYTES), response);
+    chain.doFilter(new LimitedRequest(request, limit), response);
+  }
+
+  // Caminho exato e só POST: /importacoes/{id}/... e as outras rotas seguem em 4 KiB.
+  private static int limitFor(HttpServletRequest request) {
+    boolean upload =
+        "POST".equals(request.getMethod()) && "/importacoes".equals(request.getRequestURI());
+    return upload ? UPLOAD_LIMIT_BYTES : BODY_LIMIT_BYTES;
   }
 
   private static void reject(HttpServletResponse response) throws IOException {

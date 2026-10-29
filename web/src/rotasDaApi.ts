@@ -6,6 +6,7 @@ export const prefixosDaApi: readonly string[] = [
   'compras-parceladas',
   'contas',
   'healthz',
+  'importacoes',
   'indices',
   'lancamentos',
   'metas',

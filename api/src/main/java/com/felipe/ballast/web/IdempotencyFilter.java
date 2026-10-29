@@ -66,7 +66,8 @@ public class IdempotencyFilter extends OncePerRequestFilter {
           "/movimentos-cripto",
           "/titulos-renda-fixa",
           "/titulos-renda-fixa/{id}/marcacoes",
-          "/titulos-renda-fixa/{id}/resgate");
+          "/titulos-renda-fixa/{id}/resgate",
+          "/importacoes/{id}/confirmacao");
 
   // Cabe na coluna rota (200). Caminho maior que isto não é de recurso válido: o controller
   // responderia 404 e nada seria gravado.
