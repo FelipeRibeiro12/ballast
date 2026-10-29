@@ -16,14 +16,16 @@ class RateLimitPropertiesTest {
         new Binder(new MapConfigurationPropertySource(Map.of()))
             .bindOrCreate("ballast.rate-limit", RateLimitProperties.class);
 
-    assertThat(defaults).isEqualTo(new RateLimitProperties(600, 10, 5, 60, 20000));
+    assertThat(defaults).isEqualTo(new RateLimitProperties(600, 10, 5, 60, 10, 20000));
   }
 
   @Test
   void refusesZeroOrNegative() {
-    assertThatThrownBy(() -> new RateLimitProperties(600, 0, 5, 60, 20000))
+    assertThatThrownBy(() -> new RateLimitProperties(600, 10, 5, 60, 0, 20000))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> new RateLimitProperties(600, 10, 5, 60, -1))
+    assertThatThrownBy(() -> new RateLimitProperties(600, 0, 5, 60, 10, 20000))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new RateLimitProperties(600, 10, 5, 60, 10, -1))
         .isInstanceOf(IllegalArgumentException.class);
   }
 }

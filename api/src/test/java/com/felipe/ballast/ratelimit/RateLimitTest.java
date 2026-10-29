@@ -37,6 +37,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
       "ballast.rate-limit.login-per-minute=2",
       "ballast.rate-limit.registration-per-hour=1",
       "ballast.rate-limit.auth-per-minute=3",
+      "ballast.rate-limit.imports-per-minute=2",
       "ballast.rate-limit.max-clients=50"
     })
 @AutoConfigureMockMvc
@@ -131,6 +132,32 @@ class RateLimitTest {
     clock.advance(Duration.ofMinutes(1));
 
     assertThat(call(get("/auth/eu"), "203.0.113.4").getStatus()).isEqualTo(401);
+  }
+
+  // Upload e confirmação gastam parse, consultas e escrita em lote: têm limite próprio por IP,
+  // dividido entre as duas rotas.
+  @Test
+  void importRoutesShareTheirOwnLimit() throws Exception {
+    assertThat(call(post("/importacoes"), "198.51.100.20").getStatus()).isEqualTo(401);
+    assertThat(
+            call(
+                    post("/importacoes/" + java.util.UUID.randomUUID() + "/confirmacao"),
+                    "198.51.100.20")
+                .getStatus())
+        .isEqualTo(401);
+
+    MockHttpServletResponse refused = call(post("/importacoes"), "198.51.100.20");
+
+    assertThat(refused.getStatus()).isEqualTo(429);
+    assertThat(refused.getHeader("Retry-After")).isEqualTo("60");
+    assertThat(call(post("/importacoes"), "198.51.100.21").getStatus()).isEqualTo(401);
+  }
+
+  @Test
+  void readingImportsIsNotLimitedByTheImportRule() throws Exception {
+    for (int i = 0; i < 4; i++) {
+      assertThat(call(get("/importacoes"), "198.51.100.22").getStatus()).isEqualTo(401);
+    }
   }
 
   @Test
