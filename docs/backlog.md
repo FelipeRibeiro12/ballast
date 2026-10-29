@@ -21,9 +21,18 @@ Notificação no PWA. No iOS só funciona se instalado na tela inicial.
 - Documentar `BALLAST_POSSE_DOMAIN` em `docs/runbook-producao.md`. Dono: devops.
 - Testar com Rabby e Phantom reais; só providers falsos foram exercitados. Dono: dono do projeto.
 
+### Dívidas da F26 (ADR-073)
+- Leitores por emissor (Nubank, Itaú, Inter etc.) quando o genérico falhar na fatura real do dono; só vale se a frustração for pequena, senão remover o recurso (ADR-008). Dono: backend.
+- Fatura em duas colunas ou com valor na linha de baixo não é lida. Dono: backend, junto com o primeiro leitor por emissor.
+- Parcela cuja data na fatura difere da compra parcelada já lançada vem como "importar" e não concilia sozinha. Dono: backend, conciliar por `parcela_num` e valor.
+- Teste com PDF real de banco (só PDFs gerados no teste foram lidos). Dono: dono do produto.
+- Teto de heap da JVM em produção como defesa contra fluxo Flate que expande, e conferir restart e alerta de OOM (ADR-073). Dono: devops.
+- Rate limit próprio e mais baixo para `/importacoes/pdf`, por usuário além de por IP (hoje divide a regra com OFX e CSV). Dono: backend.
+- Extração do PDF em processo separado que se possa matar, se o residual de heap preocupar. Dono: backend e devops.
+- Teste que fixe o corte de 200 caracteres por linha (regex do `GenericStatementReader` é quadrática e roda fora do timeout). Dono: qa.
+
 ## Mais adiante
 
-- **F26** — Importação de PDF de fatura (melhor esforço, revisão obrigatória)
 - **F27** — Previsão de gasto e detecção de anomalia (serviço Python, ADR-007)
 - **F28** — Classificação automática de categoria pela descrição
 - **F29** — Capacitor para publicar nas lojas

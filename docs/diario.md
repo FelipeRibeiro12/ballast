@@ -514,3 +514,12 @@ Dívida registrada: teto de desafios por usuário (hoje por carteira), teste de 
 Achados do revisor: security 0 bloqueantes, 4 baixos viraram dívida; reviewer não rodou (decisão de economia)
 Pipeline: local verde (make test, lint e web: test, tsc, lint, build); CI a preencher no PR
 Em aberto: `BALLAST_POSSE_DOMAIN` precisa ser definido no deploy de produção (a API não sobe sem ele fora de `APP_ENV=development`); runbook não atualizado; carteira real (Rabby, Phantom) nunca foi exercitada, só providers falsos; branch empilhada sobre `feat/f24-observar-endereco`
+
+## 2026-10-29 — F26: Importação de PDF de fatura
+
+O que entrou: `POST /importacoes/pdf` (corpo cru, 5 MiB, 30 páginas, 10 s, sem senha, só memória) que extrai texto com PDFBox 3.0.8 e lê data, descrição, valor, `CR` e parcela `n/m` por heurística, atrás da interface `BankStatementReader`. Sempre cai na revisão da F22, linha não reconhecida vira linha para ignorar com o texto cru, pagamento da fatura vem inválido, parcela vira lançamento comum (sem compra parcelada), `data_caixa` pela regra do cartão. Aba PDF na tela Importar extrato com aviso de melhor esforço. Sem migration.
+Decisões: ADR-073
+Dívida registrada: leitores por emissor, fatura em duas colunas, conciliação de parcela de compra parcelada já lançada, teste com PDF real, teto de heap em produção
+Achados do revisor: reviewer não rodou (decisão de economia); security 0 crítico, 2 altos (heap e threads abandonadas) corrigidos na fatia, 2 médios e 2 baixos no backlog
+Pipeline: local verde (make test, lint e web); CI a preencher no PR
+Em aberto: abrir o PR; a branch fica empilhada sobre `feat/f25-conectar-carteira`; nenhuma fatura real testada

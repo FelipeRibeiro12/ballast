@@ -1184,8 +1184,11 @@ plano", "chega no ritmo") é calculada na leitura.
 Duas etapas: a importação grava as linhas cruas e **propõe** uma decisão; o
 usuário confirma. Nada entra no extrato sem confirmação (ADR-008). A F22 entrega
 o OFX e a F23 o CSV, pelas mesmas tabelas: o formato do arquivo só muda quem lê
-as linhas, e `importacao` não guarda de que formato veio. A fatura em PDF usará
-as mesmas tabelas.
+as linhas, e `importacao` não guarda de que formato veio. A F26 (fatura em PDF,
+ADR-073) usa as mesmas tabelas, sem migration: só o `hash_externo` ganha a tag
+`pdf:` (conta, data, valor com sinal, descrição normalizada e ordinal) e a
+`bruta` leva `texto` e, em parcela, `parcela` (`n/m`). Parcela da fatura vira
+lançamento comum, nunca `parcela_de_id`.
 
 ```
 importacao
@@ -1208,7 +1211,7 @@ importacao_linha
   importacao_id    uuid not null
   ordem            integer not null        -- posição no arquivo, 1 a 2000; única por importação
   bruta            jsonb not null          -- os campos lidos, como texto (pode ter FITID). No CSV, as células `c1`, `c2`..., já com o apóstrofo de fórmula
-  hash_externo     text null               -- sha256 de `fitid:conta_id|FITID`, ou de `nofitid:` mais a composição sem FITID (OFX); `csvid:` ou `csv:` no CSV
+  hash_externo     text null               -- sha256 de `fitid:conta_id|FITID`, ou de `nofitid:` mais a composição sem FITID (OFX); `csvid:` ou `csv:` no CSV, `pdf:` no PDF
   data             date null               -- data, tipo e valor ficam nulos só na linha inválida
   tipo             text null               -- receita | despesa
   valor            numeric(18,2) null      -- positivo; o sinal vem do tipo

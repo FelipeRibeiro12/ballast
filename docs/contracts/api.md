@@ -1161,6 +1161,32 @@ Fórmula injetada: texto de célula (título, descrição, `bruta`) que começa 
 `=`, `+`, `-`, `@`, TAB ou CR ganha um apóstrofo na frente. O título que o
 cliente vê e o lançamento confirmado já levam o apóstrofo.
 
+### Envio de PDF de fatura (ADR-073)
+
+`POST /importacoes/pdf?conta_id=<uuid>` com o PDF cru no corpo
+(`application/octet-stream`). Melhor esforço: a leitura é heurística e a revisão
+é obrigatória; nada vira lançamento antes de `POST /importacoes/{id}/confirmacao`.
+A conta precisa ser de cartão de crédito. Resposta 201 com o mesmo
+`ImportacaoDetalhe`. Erros: 400 (`conta_id` ausente, repetido ou fora do formato
+UUID, parâmetro não declarado, `conta arquivada`, `o PDF de fatura só vale para
+conta de cartão de crédito`); 404 conta de outro usuário ou inexistente; 409
+arquivo já importado (`importacaoId`) ou 20 pendentes; 413 acima de 5 MiB; 415
+outro Content-Type; 422 com mensagem fixa: `arquivo vazio`, `o arquivo não parece
+um PDF`, `não foi possível ler o PDF`, `PDF protegido por senha ou criptografado
+não é aceito`, `PDF com mais de 30 páginas`, `PDF com texto demais para uma
+fatura`, `o PDF demorou demais para ser lido`, `o PDF não tem texto para ler...`,
+`nenhuma transação reconhecida nesta fatura`, `fatura com mais de 2000 linhas`.
+Mesmo limite de 10 por minuto por IP do OFX.
+
+Linha reconhecida: `data` (a da compra), `tipo` (`despesa`, ou `receita` para
+`CR` e sinal de menos), `valorCentavos`, `titulo` (descrição cortada em 100) e a
+parcela `n/m` no texto. Linha que começa com data ou termina em valor e não foi
+lida vem com `valida: false`, `erro: linha não reconhecida` (ou `data inválida`,
+`valor zero` etc.), `proposta: ignorar` e o texto cru em `titulo`; só aceita
+`ignorar`. Crédito de pagamento da fatura vem inválido (`pagamento da fatura:
+registre como transferência`). Na confirmação, `data_competencia` é a data da
+linha e `data_caixa` é o vencimento da fatura pela regra do cartão (ADR-031).
+
 ### Prévia
 
 `POST /importacoes/csv/previa` com o mapeamento na query e o arquivo cru no
