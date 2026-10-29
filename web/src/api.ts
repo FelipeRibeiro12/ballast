@@ -2403,3 +2403,73 @@ export async function ligarCompraAoTerceiro(compraId: string, terceiroId: string
   })
   if (resposta.status !== 204) return recusarRespostaDeTerceiro(resposta, 'PUT /compras-parceladas/{id}/terceiro')
 }
+
+export type VisaoSaldo = components['schemas']['VisaoSaldo']
+export type TipoDeConta = Conta['tipo']
+
+// 400 e 409 das visões: título inválido, tipos vazios, limite de 10, última visão.
+export class VisaoRecusadaError extends ApiError {
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('visão recusada')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+async function recusarRespostaDeVisao(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 400 || resposta.status === 409) {
+    throw new VisaoRecusadaError(await lerMensagemDeErro(resposta))
+  }
+  return recusarRespostaDeLancamento(resposta, origem)
+}
+
+function isVisaoSaldo(valor: unknown): valor is VisaoSaldo {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'titulo' in valor &&
+    typeof valor.titulo === 'string' &&
+    'tipos' in valor &&
+    Array.isArray(valor.tipos) &&
+    valor.tipos.every((tipo) => typeof tipo === 'string' && TIPOS_DE_CONTA.includes(tipo))
+  )
+}
+
+export async function fetchVisoesSaldo(): Promise<VisaoSaldo[]> {
+  const resposta = await fetch(`${baseUrl}/visoes-saldo`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeVisao(resposta, '/visoes-saldo')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isVisaoSaldo)) throw new ApiError('/visoes-saldo com formato inesperado')
+  return corpo
+}
+
+export async function postVisaoSaldo(titulo: string, tipos: TipoDeConta[]): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/visoes-saldo`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(),
+    body: JSON.stringify({ titulo, tipos }),
+  })
+  if (resposta.status !== 204) return recusarRespostaDeVisao(resposta, 'POST /visoes-saldo')
+}
+
+export async function putVisaoSaldo(id: string, titulo: string, tipos: TipoDeConta[]): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/visoes-saldo/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(),
+    body: JSON.stringify({ titulo, tipos }),
+  })
+  if (resposta.status !== 204) return recusarRespostaDeVisao(resposta, 'PUT /visoes-saldo/{id}')
+}
+
+export async function deleteVisaoSaldo(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/visoes-saldo/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeVisao(resposta, 'DELETE /visoes-saldo/{id}')
+}

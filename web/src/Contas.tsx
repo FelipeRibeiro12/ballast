@@ -23,7 +23,6 @@ import Faturas from './Faturas'
 import { centavosParaCampo, formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
 import { IconeBanco, IconeBeneficio, IconeCartao, IconeCripto, IconeDinheiro, IconeInvestimentos, IconeMais } from './icones'
 import Painel from './Painel'
-import ResumoDasContas from './ResumoDasContas'
 import { hashDaSecao } from './rota'
 import { Carregando, EstadoVazio, Selo } from './ui'
 
@@ -1053,9 +1052,6 @@ export default function Contas({
       )}
       {estado.tipo === 'ok' && (
         <>
-          {!arquivadas && estado.contas.length > 0 && (
-            <ResumoDasContas contas={estado.contas} />
-          )}
           {estado.contas.length === 0 && (
             <EstadoVazio
               titulo={arquivadas ? 'Nenhuma conta arquivada.' : 'Nenhuma conta ainda.'}

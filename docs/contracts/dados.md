@@ -557,6 +557,21 @@ de terceiro fora. A linha só guarda preferência: o saldo continua sendo
 
 ---
 
+### Visão de saldo (V32, ADR-068)
+
+```
+visao_saldo
+  id          uuid pk
+  usuario_id  uuid fk not null    -- ON DELETE CASCADE
+  titulo      text not null       -- 1 a 100, sem espaço nas pontas
+  tipos       text[] not null     -- 1 a 8 valores de conta.tipo
+  criado_em   timestamptz not null default now()
+```
+
+Até 10 por usuário, no `UserLimits`. A visão padrão é criada na primeira leitura.
+
+---
+
 ## Categoria
 
 ```

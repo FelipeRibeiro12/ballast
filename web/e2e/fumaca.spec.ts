@@ -204,7 +204,7 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await expect(projetado).toBeVisible()
     await expect(projetado.getByRole('img', { name: /saldo projetado/i })).toBeVisible()
     await expect(projetado.getByRole('alert')).toHaveCount(0)
-    await expect(page.getByRole('region', { name: 'Resumo das contas' })).toContainText('Total, sem cartão')
+    await expect(page.getByRole('region', { name: 'Resumo das contas' })).toContainText('Total sem cartão')
     await capturar(page, projeto, '10-saldo-projetado')
   })
 
@@ -340,9 +340,8 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
   await test.step('capturas das seções', async () => {
     await irPara(page, 'Início')
     await expect(page.getByRole('list', { name: 'Próximas previstas' })).toBeVisible()
-    // O saldo do vale aparece no cartão próprio e também como um grupo do carrossel de totais.
+    // O vale tem cartão próprio, e o total sem cartão da visão padrão também soma o saldo dele.
     await expect(page.getByRole('region', { name: 'Benefícios' })).toContainText(reais('450,00'))
-    await expect(page.getByRole('region', { name: 'Resumo das contas' })).toContainText('Benefício')
     await capturar(page, projeto, '12-inicio')
     await irPara(page, 'Lançamentos')
     await expect(page.getByRole('region', { name: 'Lançamentos' })).toContainText('Mercado')

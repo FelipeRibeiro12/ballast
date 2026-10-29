@@ -46,7 +46,11 @@ public enum UserLimit {
   THIRD_PARTIES(
       "terceiros",
       "SELECT count(*) FROM terceiro WHERE usuario_id = :userId",
-      LimitsProperties::thirdParties);
+      LimitsProperties::thirdParties),
+  BALANCE_VIEWS(
+      "visões de saldo",
+      "SELECT count(*) FROM visao_saldo WHERE usuario_id = :userId",
+      LimitsProperties::balanceViews);
 
   final String label;
   final String countSql;

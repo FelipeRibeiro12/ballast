@@ -25,7 +25,7 @@ public enum AccountType {
     return value;
   }
 
-  static AccountType fromValue(String value) {
+  public static AccountType fromValue(String value) {
     for (AccountType type : values()) {
       if (type.value.equals(value)) {
         return type;

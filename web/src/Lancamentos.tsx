@@ -1510,17 +1510,26 @@ export default function Lancamentos({
             <div className="pilula">
               <dt>Receitas</dt>
               <dd className="receita">{formatarCentavos(receitas)}</dd>
-              <dd className="pilula-previsto">Previsto {formatarCentavos(previstoReceitas)}</dd>
+              <dd className="pilula-previsto">
+                <span className="so-leitor">Previsto </span>
+                {formatarCentavos(previstoReceitas)}
+              </dd>
             </div>
             <div className="pilula">
               <dt>Despesas</dt>
               <dd className="despesa">{formatarCentavos(despesas)}</dd>
-              <dd className="pilula-previsto">Previsto {formatarCentavos(previstoDespesas)}</dd>
+              <dd className="pilula-previsto">
+                <span className="so-leitor">Previsto </span>
+                {formatarCentavos(previstoDespesas)}
+              </dd>
             </div>
             <div className="pilula">
               <dt>Resultado</dt>
               <dd className={receitas - despesas < 0n ? 'despesa' : undefined}>{formatarCentavos(receitas - despesas)}</dd>
-              <dd className="pilula-previsto">Previsto {formatarCentavos(previstoReceitas - previstoDespesas)}</dd>
+              <dd className="pilula-previsto">
+                <span className="so-leitor">Previsto </span>
+                {formatarCentavos(previstoReceitas - previstoDespesas)}
+              </dd>
             </div>
           </dl>
           {estado.lancamentos.length === 0 && (

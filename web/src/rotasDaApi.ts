@@ -20,6 +20,7 @@ export const prefixosDaApi: readonly string[] = [
   'terceiros',
   'titulos-renda-fixa',
   'transferencias',
+  'visoes-saldo',
 ]
 
 // Chave com '^' vira regex no proxy do Vite. Exige '/', '?' ou fim logo depois do segmento,

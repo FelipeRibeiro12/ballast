@@ -17,6 +17,7 @@ public record LimitsProperties(
     Integer quotes,
     Integer categories,
     Integer thirdParties,
+    Integer balanceViews,
     Duration accountDeleteTimeout) {
 
   static final int MAX = 1_000_000;
@@ -32,6 +33,7 @@ public record LimitsProperties(
     quotes = valid("quotes", quotes, 100_000);
     categories = valid("categories", categories, 20);
     thirdParties = valid("third-parties", thirdParties, 50);
+    balanceViews = valid("balance-views", balanceViews, 10);
     if (accountDeleteTimeout == null) {
       accountDeleteTimeout = DEFAULT_DELETE_TIMEOUT;
     }
@@ -44,7 +46,7 @@ public record LimitsProperties(
   }
 
   public static LimitsProperties defaults() {
-    return new LimitsProperties(null, null, null, null, null, null, null, null, null, null);
+    return new LimitsProperties(null, null, null, null, null, null, null, null, null, null, null);
   }
 
   private static int valid(String name, Integer value, int fallback) {
