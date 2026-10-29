@@ -29,3 +29,10 @@ parte do CDI. Ele quer o saldo no Posso gastar e uma estimativa do rendimento.
 
 O Posso gastar soma a estimativa do cofrinho até a data-limite (ADR-063). Sem
 CDI guardado, o rendimento estimado é zero.
+
+## Revisão de 2026-10-29
+
+- O percentual é validado como valor, de 0,01 a 1000: o regex só confere o
+  formato, e `1000.50` passava e estourava o CHECK da V28 com 500. Agora dá 400.
+- `PUT /contas/{id}/cofrinho` pede a busca do CDI e do IPCA no máximo uma vez a
+  cada 10 minutos, para todos os usuários juntos. O Banco Central não é nosso.

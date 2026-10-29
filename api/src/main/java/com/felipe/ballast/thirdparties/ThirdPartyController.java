@@ -188,6 +188,7 @@ class ThirdPartyController {
   @Operation(
       operationId = "getTerceirosByIdLancamentos",
       summary = "Compras e reembolsos ligados ao terceiro",
+      description = "Os 200 mais recentes pela data de caixa.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",

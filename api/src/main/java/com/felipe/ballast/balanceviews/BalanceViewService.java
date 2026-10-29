@@ -30,8 +30,11 @@ class BalanceViewService {
     this.limits = limits;
   }
 
-  // Quem ainda não tem visão recebe a padrão: todos os tipos menos cartão de crédito. A trava do
-  // teto serializa duas primeiras leituras juntas, e a segunda enxerga a linha da primeira.
+  // A visão padrão nasce no cadastro (BalanceViewSeeder) e a V33 deu uma a quem já existia, então
+  // esta
+  // leitura quase nunca escreve. O reparo fica para o caso de um usuário sem nenhuma visão. A trava
+  // do
+  // teto serializa duas leituras juntas, e a segunda enxerga a linha da primeira.
   List<BalanceViewQueries.View> list(UUID userId) {
     if (queries.count(userId) == 0) {
       transaction.execute(

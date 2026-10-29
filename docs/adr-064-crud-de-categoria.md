@@ -32,3 +32,9 @@ mais ser protegida.
 
 Apagar uma categoria muda o histórico dos relatórios: o gasto passa a aparecer
 em Outros. É o que o dono pediu.
+
+## Revisão de 2026-10-29
+
+Se um lançamento entra na categoria entre a mudança dos lançamentos e o DELETE,
+a FK recusa o DELETE e a rota responde 409 "a categoria mudou enquanto era
+apagada", sem apagar nada. Antes era 500.

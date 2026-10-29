@@ -14,10 +14,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -70,6 +73,10 @@ class AccountController {
       new ErrorResponse("categoriasPermitidas não pode repetir categoria");
 
   private static final ErrorResponse ACCOUNT_ARCHIVED = new ErrorResponse("conta arquivada");
+  // Um percentual novo não precisa de busca nova a cada chamada: o Banco Central não é nosso e o
+  // IPCA, datado do dia 1º, faria toda chamada pedir de novo. Vale para todos os usuários juntos.
+  private static final Duration REFRESH_INTERVAL = Duration.ofMinutes(10);
+
   private static final ErrorResponse NOT_SAVINGS_POT =
       new ErrorResponse("só cofrinho tem percentual do CDI");
 
@@ -104,6 +111,7 @@ class AccountController {
   private final AccountService accounts;
   private final MfaGate mfaGate;
   private final IndexUpdater indexUpdater;
+  private final AtomicReference<Instant> lastIndexRefresh = new AtomicReference<>(Instant.MIN);
 
   AccountController(AccountService accounts, MfaGate mfaGate, IndexUpdater indexUpdater) {
     this.accounts = accounts;
@@ -612,14 +620,14 @@ class AccountController {
     if (accountId.isEmpty()) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
     }
-    if (request.value().signum() <= 0) {
+    if (!request.inRange()) {
       return ResponseEntity.badRequest().body(new ErrorResponse(SavingsPotRequest.PERCENT_MESSAGE));
     }
     Object result = accounts.setCdiPercent(user.id(), accountId.get(), request.value());
     if (result instanceof AccountService.CdiUpdated updated) {
       log.info("percentual do cdi trocado usuario_id={} conta_id={}", user.id(), accountId.get());
       // Garante o CDI recente no banco sem esperar o job diário.
-      indexUpdater.requestFrom(LocalDate.now().minusDays(30));
+      requestIndexRefresh();
       return ResponseEntity.ok(AccountResponse.from(updated.account()));
     }
     return switch ((AccountService.CdiResult) result) {
@@ -627,5 +635,14 @@ class AccountController {
       case NOT_SAVINGS_POT -> ResponseEntity.badRequest().body(NOT_SAVINGS_POT);
       case ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
     };
+  }
+
+  private void requestIndexRefresh() {
+    Instant now = Instant.now();
+    Instant last = lastIndexRefresh.get();
+    if (Duration.between(last, now).compareTo(REFRESH_INTERVAL) >= 0
+        && lastIndexRefresh.compareAndSet(last, now)) {
+      indexUpdater.requestFrom(LocalDate.now().minusDays(30));
+    }
   }
 }

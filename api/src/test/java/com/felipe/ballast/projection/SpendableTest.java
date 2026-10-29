@@ -271,6 +271,17 @@ class SpendableTest {
   }
 
   @Test
+  void listsAtMostTenBenefitsApart() throws Exception {
+    for (int i = 0; i < 12; i++) {
+      fixture.benefitAccount(actor, "VR " + i, 10_00);
+    }
+
+    JsonNode body = fixture.spendableOk(actor.session());
+
+    assertThat(body.get("beneficios")).hasSize(SpendableService.MAX_BENEFITS_APART);
+  }
+
+  @Test
   void theSwitchesWorkWithoutAChosenDay() throws Exception {
     configure(null, true, true);
 

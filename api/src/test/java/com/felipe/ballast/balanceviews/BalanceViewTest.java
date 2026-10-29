@@ -28,6 +28,7 @@ class BalanceViewTest {
   private static final JsonMapper JSON = JsonMapper.builder().build();
 
   @Autowired MockMvc mvc;
+  @Autowired org.springframework.jdbc.core.simple.JdbcClient jdbc;
   private Cookie sessionA;
   private Cookie sessionB;
 
@@ -59,7 +60,10 @@ class BalanceViewTest {
   }
 
   @Test
-  void theFirstReadCreatesTheDefaultViewWithoutCreditCards() throws Exception {
+  void theDefaultViewIsCreatedAtSignUpWithoutCreditCards() throws Exception {
+    // Ainda sem nenhuma leitura: a visão já existe porque nasceu no cadastro.
+    assertThat(jdbc.sql("SELECT count(*) FROM visao_saldo").query(Long.class).single())
+        .isGreaterThanOrEqualTo(2L);
     JsonNode views = list(sessionA);
 
     assertThat(views).hasSize(1);

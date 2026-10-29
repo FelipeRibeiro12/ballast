@@ -46,6 +46,8 @@ class CategoryController {
       new ErrorResponse("já existe categoria com esse nome");
   private static final ErrorResponse LISTED =
       new ErrorResponse("categoria está na lista de uma conta de benefício");
+  private static final ErrorResponse CHANGED =
+      new ErrorResponse("a categoria mudou enquanto era apagada; tente de novo");
   private static final ErrorResponse HAS_CHILDREN =
       new ErrorResponse("categoria tem subcategorias");
 
@@ -235,6 +237,8 @@ class CategoryController {
           ResponseEntity.status(HttpStatus.CONFLICT).body(LISTED);
       case CategoryService.Result.HasChildren ignored ->
           ResponseEntity.status(HttpStatus.CONFLICT).body(HAS_CHILDREN);
+      case CategoryService.Result.Changed ignored ->
+          ResponseEntity.status(HttpStatus.CONFLICT).body(CHANGED);
       case CategoryService.Result.Done ignored -> throw new IllegalStateException();
     };
   }

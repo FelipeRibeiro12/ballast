@@ -29,3 +29,9 @@ vale zero.
 
 Ligar as chaves pode derrubar o valor livre: o benefício só paga as categorias
 dele, e o Posso gastar não sabe separar isso. O texto da tela avisa.
+
+## Revisão de 2026-10-29
+
+Com Benefícios desligado, no máximo 10 contas de benefício aparecem à parte,
+pelo nome. Cada uma custa uma projeção inteira, e o teto de contas por usuário
+é 100.

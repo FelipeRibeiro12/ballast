@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 class ThirdPartyService {
 
   private static final String UNIQUE_NAME = "terceiro_usuario_nome_unico";
+  private static final String ENTRY_FK = "terceiro_lancamento_do_usuario";
+  private static final String THIRD_PARTY_FK = "terceiro_lancamento_terceiro_do_usuario";
 
   enum Failure {
     NOT_FOUND,
@@ -95,6 +97,14 @@ class ThirdPartyService {
 
   // thirdPartyId nulo solta o vínculo.
   Result<Boolean> setEntryThirdParty(UUID userId, UUID entryId, UUID thirdPartyId) {
+    try {
+      return setEntryLocked(userId, entryId, thirdPartyId);
+    } catch (DataIntegrityViolationException e) {
+      return vanishedOrRethrow(e);
+    }
+  }
+
+  private Result<Boolean> setEntryLocked(UUID userId, UUID entryId, UUID thirdPartyId) {
     return transaction.execute(
         status -> {
           switch (queries.kindOf(userId, entryId)) {
@@ -123,6 +133,14 @@ class ThirdPartyService {
   }
 
   Result<Boolean> setPurchaseThirdParty(UUID userId, UUID purchaseId, UUID thirdPartyId) {
+    try {
+      return setPurchaseLocked(userId, purchaseId, thirdPartyId);
+    } catch (DataIntegrityViolationException e) {
+      return vanishedOrRethrow(e);
+    }
+  }
+
+  private Result<Boolean> setPurchaseLocked(UUID userId, UUID purchaseId, UUID thirdPartyId) {
     return transaction.execute(
         status -> {
           if (!queries.purchaseExists(userId, purchaseId)) {
@@ -142,6 +160,15 @@ class ThirdPartyService {
           queries.tagPurchase(userId, purchaseId, thirdPartyId);
           return new Result.Ok<>(true);
         });
+  }
+
+  // O lançamento, a compra ou o terceiro sumiu entre a conferência e a gravação: para o cliente é
+  // o mesmo que nunca ter existido. A FK composta já impediu o vínculo com dono errado.
+  private static <T> Result<T> vanishedOrRethrow(DataIntegrityViolationException e) {
+    if (Constraints.isViolated(e, ENTRY_FK) || Constraints.isViolated(e, THIRD_PARTY_FK)) {
+      return new Result.Failed<>(Failure.NOT_FOUND);
+    }
+    throw e;
   }
 
   private static <T> Result<T> duplicateOrRethrow(DataIntegrityViolationException e) {

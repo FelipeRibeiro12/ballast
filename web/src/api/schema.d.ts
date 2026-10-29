@@ -1057,7 +1057,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Compras e reembolsos ligados ao terceiro */
+        /**
+         * Compras e reembolsos ligados ao terceiro
+         * @description Os 200 mais recentes pela data de caixa.
+         */
         get: operations["getTerceirosByIdLancamentos"];
         put?: never;
         post?: never;

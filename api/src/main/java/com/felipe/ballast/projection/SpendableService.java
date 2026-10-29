@@ -29,6 +29,9 @@ class SpendableService {
   // A janela cabe na projeção, que vai até 366 dias.
   private static final int MAX_DAYS = 366;
 
+  // Cada benefício à parte custa uma projeção inteira. Passar disso é conta demais por chamada.
+  static final int MAX_BENEFITS_APART = 10;
+
   enum Mode {
     CUSTOM_DAY,
     INVOICE_CYCLE,
@@ -96,7 +99,9 @@ class SpendableService {
     List<Benefit> benefits = new ArrayList<>();
     // Com benefícios ligados eles já estão no total; listar à parte contaria duas vezes.
     List<SpendableQueries.Benefit> apart =
-        preferences.includeBenefits() ? List.of() : queries.activeBenefits(userId);
+        preferences.includeBenefits()
+            ? List.of()
+            : queries.activeBenefits(userId).stream().limit(MAX_BENEFITS_APART).toList();
     for (SpendableQueries.Benefit benefit : apart) {
       Optional<Projection> found = projected(userId, benefit.id(), today, days, preferences);
       if (found.isEmpty()) {

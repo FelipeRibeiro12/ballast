@@ -25,6 +25,8 @@ class CategoryService {
     record Listed() implements Result {}
 
     record HasChildren() implements Result {}
+
+    record Changed() implements Result {}
   }
 
   private final CategoryQueries queries;
@@ -70,6 +72,15 @@ class CategoryService {
 
   // Apagar move lançamentos e recorrências para a Outros do mesmo tipo e soma o orçamento nela.
   Result delete(UUID userId, UUID id) {
+    try {
+      return deleteLocked(userId, id);
+    } catch (DataIntegrityViolationException e) {
+      // Um lançamento entrou na categoria entre a mudança e o DELETE: nada foi apagado.
+      return new Result.Changed();
+    }
+  }
+
+  private Result deleteLocked(UUID userId, UUID id) {
     return transaction.execute(
         status -> {
           Optional<CategoryQueries.Row> found = queries.find(userId, id);
