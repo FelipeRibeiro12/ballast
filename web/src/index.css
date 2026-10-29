@@ -2829,3 +2829,16 @@ button.relatorio-mes:hover:not(:disabled) {
   background: var(--superficie-2);
   text-align: center;
 }
+
+/* Revisão de importação: campos de decisão empilhados no celular, lado a lado quando cabe. */
+.linha-importacao-campos {
+  display: grid;
+  gap: var(--esp-2);
+  margin-top: var(--esp-2);
+}
+
+@media (min-width: 768px) {
+  .linha-importacao-campos {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
