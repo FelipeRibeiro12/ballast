@@ -15,10 +15,11 @@ import {
   fetchContas,
   patchConta,
   postConta,
+  postRendimentoCofrinho,
   putCofrinho,
   putCategoriasPermitidas,
 } from './api'
-import type { AtualizarContaRequest, Categoria, Conta, CriarContaRequest, ResumoExclusaoConta } from './api'
+import type { AtualizarContaRequest, Categoria, Conta, CriarContaRequest, RendimentoCofrinho, ResumoExclusaoConta } from './api'
 import Faturas from './Faturas'
 import { centavosParaCampo, formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
 import { IconeBanco, IconeBeneficio, IconeCartao, IconeCripto, IconeDinheiro, IconeInvestimentos, IconeMais } from './icones'
@@ -114,6 +115,28 @@ function mensagemDeCategorias(erro: unknown): string {
   if (erro instanceof ContaInvalidaError && erro.mensagemServidor !== null) return erro.mensagemServidor
   if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
   return 'Não foi possível salvar as categorias. Tente de novo.'
+}
+
+function mensagemDeRendimento(resultado: RendimentoCofrinho): string {
+  switch (resultado.situacao) {
+    case 'lancado':
+      return `Rendimento de ${formatarCentavos(resultado.valor ?? 0)} lançado.`
+    case 'ja_lancado':
+      return 'O rendimento de hoje já foi lançado.'
+    case 'sem_cdi':
+      return 'Ainda não há CDI guardado para calcular. Tente de novo mais tarde.'
+    case 'sem_rendimento':
+      return 'Sem rendimento para lançar hoje.'
+    case 'sem_percentual':
+      return 'Defina o percentual do CDI deste cofrinho primeiro.'
+  }
+}
+
+function mensagemDeErroDeRendimento(erro: unknown): string {
+  if (erro instanceof ContaNaoEncontradaError) return 'Essa conta não existe mais.'
+  if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
+  if (erro instanceof LimiteTentativasError) return mensagemDeLimite(erro)
+  return 'Não foi possível lançar o rendimento. Tente de novo.'
 }
 
 const MENSAGEM_SEM_CONTA_DE_PAGAMENTO = 'Crie uma conta corrente ou poupança para pagar o cartão.'
@@ -874,6 +897,59 @@ function NovaConta({
   )
 }
 
+function LancarRendimento({
+  conta,
+  aoLancar,
+  aoSessaoExpirar,
+}: {
+  conta: Conta
+  aoLancar: () => void
+  aoSessaoExpirar: () => void
+}) {
+  const [enviando, setEnviando] = useState(false)
+  const [resultado, setResultado] = useState<{ erro: boolean; texto: string } | null>(null)
+
+  async function lancar(): Promise<void> {
+    setEnviando(true)
+    setResultado(null)
+    try {
+      const resposta = await postRendimentoCofrinho(conta.id)
+      setResultado({ erro: false, texto: mensagemDeRendimento(resposta) })
+      if (resposta.situacao === 'lancado') aoLancar()
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return
+      }
+      setResultado({ erro: true, texto: mensagemDeErroDeRendimento(erro) })
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div className="conta-rendimento">
+      <button
+        type="button"
+        className="pequeno discreto"
+        disabled={enviando}
+        onClick={() => void lancar()}
+      >
+        Lançar rendimento de hoje
+      </button>
+      <small>Estimativa pelo CDI; o banco pode diferir em centavos.</small>
+      {resultado !== null &&
+        (resultado.erro ? (
+          <p role="alert" className="erro">
+            {resultado.texto}
+          </p>
+        ) : (
+          <p role="status">{resultado.texto}</p>
+        ))}
+    </div>
+  )
+}
+
 export default function Contas({
   aoSessaoExpirar,
   versaoDeSaldo,
@@ -1118,6 +1194,16 @@ export default function Contas({
                         <p>{conta.categoriasPermitidas.length} categorias permitidas</p>
                       )}
                     </div>
+                  )}
+                  {conta.tipo === 'cofrinho' && !arquivadas && (
+                    <LancarRendimento
+                      conta={conta}
+                      aoLancar={() => {
+                        // Sobe a versão de saldo: a lista busca de novo sem desmontar a mensagem.
+                        aoMudarSaldo()
+                      }}
+                      aoSessaoExpirar={aoSessaoExpirar}
+                    />
                   )}
                   <div className="conta-acoes">
                     {conta.categoriasPermitidas !== null && !arquivadas && (
