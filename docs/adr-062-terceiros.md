@@ -41,3 +41,10 @@ isso apareça em relatório, orçamento ou Posso gastar.
 A compra de terceiro some do histórico de gastos do dono. O vínculo é feito em
 duas chamadas (criar o lançamento, depois ligar), então uma falha no meio deixa
 o lançamento sem terceiro até o usuário ligar de novo.
+
+## Revisão de 2026-10-29
+
+- `GET /terceiros/{id}/lancamentos` devolve os 200 mais recentes pela data de
+  caixa, para a resposta não crescer sem limite.
+- Se o lançamento, a compra ou o terceiro some entre a conferência e a gravação
+  do vínculo, a rota responde 404 e não 500.

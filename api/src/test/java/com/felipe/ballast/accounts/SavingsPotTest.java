@@ -74,7 +74,8 @@ class SavingsPotTest {
             send(sessionA, "/contas/" + checking + "/cofrinho", Map.of("percentualCdi", "100"))
                 .getStatus())
         .isEqualTo(400);
-    for (String bad : new String[] {"0", "0.00", "1001", "abc", "-1", "100.123", ""}) {
+    for (String bad :
+        new String[] {"0", "0.00", "1001", "1000.01", "1000.50", "abc", "-1", "100.123", ""}) {
       assertThat(
               send(sessionA, "/contas/" + pot + "/cofrinho", Map.of("percentualCdi", bad))
                   .getStatus())
@@ -91,5 +92,18 @@ class SavingsPotTest {
             send(sessionA, "/contas/" + pot + "/cofrinho", Map.of("percentualCdi", "100"))
                 .getStatus())
         .isEqualTo(404);
+  }
+
+  @Test
+  void acceptsTheLimitsOfTheRange() throws Exception {
+    String pot = newAccount(sessionA, "cofrinho");
+
+    for (String ok : new String[] {"0.01", "1000", "1000.00"}) {
+      assertThat(
+              send(sessionA, "/contas/" + pot + "/cofrinho", Map.of("percentualCdi", ok))
+                  .getStatus())
+          .as(ok)
+          .isEqualTo(200);
+    }
   }
 }

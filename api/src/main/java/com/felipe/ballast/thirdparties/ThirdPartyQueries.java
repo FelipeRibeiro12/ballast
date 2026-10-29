@@ -197,6 +197,7 @@ class ThirdPartyQueries {
             JOIN lancamento l ON l.id = v.lancamento_id AND l.usuario_id = v.usuario_id
             WHERE v.usuario_id = :userId AND v.terceiro_id = :thirdPartyId
             ORDER BY l.data_caixa DESC, l.id DESC
+            LIMIT 200
             """)
         .param("userId", userId)
         .param("thirdPartyId", thirdPartyId)

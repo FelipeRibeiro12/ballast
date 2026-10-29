@@ -26,6 +26,7 @@ class ThirdPartyTest {
   private static final JsonMapper JSON = JsonMapper.builder().build();
 
   @Autowired MockMvc mvc;
+  @Autowired org.springframework.jdbc.core.simple.JdbcClient jdbc;
   private EntriesApi api;
   private EntriesApi.Actor actor;
 
@@ -152,6 +153,37 @@ class ThirdPartyTest {
     assertThat(send(other.session(), delete("/terceiros/" + friend), null).getStatus())
         .isEqualTo(404);
     assertThat(json(send(other.session(), get("/terceiros"), null))).isEmpty();
+  }
+
+  @Test
+  void theEntriesOfAThirdPartyComeCappedAtTwoHundred() throws Exception {
+    String friend = newThirdParty(actor.session(), "Cap");
+    jdbc.sql(
+            """
+            INSERT INTO lancamento (id, usuario_id, tipo, titulo, categoria_id, conta_id, valor,
+                                    data_competencia, data_caixa, status)
+            SELECT gen_random_uuid(), CAST(:u AS uuid), 'despesa', 'x', CAST(:c AS uuid),
+                   CAST(:a AS uuid), 1, DATE '2026-03-10', DATE '2026-03-10', 'realizado'
+            FROM generate_series(1, 205)
+            """)
+        .param("u", actor.user().id())
+        .param("c", actor.expenseCategoryId())
+        .param("a", actor.accountId())
+        .update();
+    jdbc.sql(
+            """
+            INSERT INTO terceiro_lancamento (lancamento_id, usuario_id, terceiro_id)
+            SELECT id, usuario_id, CAST(:t AS uuid) FROM lancamento
+            WHERE usuario_id = CAST(:u AS uuid) AND titulo = 'x'
+            """)
+        .param("t", friend)
+        .param("u", actor.user().id())
+        .update();
+
+    JsonNode entries =
+        json(send(actor.session(), get("/terceiros/" + friend + "/lancamentos"), null));
+
+    assertThat(entries).hasSize(200);
   }
 
   @Test

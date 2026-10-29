@@ -29,3 +29,9 @@ próprias visões, escolher os tipos de conta de cada uma, editar e apagar.
 
 Quem apaga a visão padrão e depois cria outras não recebe a padrão de volta:
 ela só nasce quando não existe nenhuma visão.
+
+## Revisão de 2026-10-29
+
+A visão padrão passa a nascer no cadastro (`BalanceViewSeeder`) e a V33 deu uma a
+quem já existia. O `GET /visoes-saldo` só escreve no caso de um usuário sem
+nenhuma visão, que não acontece pelo uso normal.

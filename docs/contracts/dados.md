@@ -568,7 +568,8 @@ visao_saldo
   criado_em   timestamptz not null default now()
 ```
 
-Até 10 por usuário, no `UserLimits`. A visão padrão é criada na primeira leitura.
+Até 10 por usuário, no `UserLimits`. A visão padrão nasce no cadastro, e a V33 criou
+a dela para quem já existia.
 
 ---
 
