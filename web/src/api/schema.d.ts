@@ -335,6 +335,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/carteiras/{id}/posse/desafio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede a mensagem que o usuário assina para provar a posse da carteira
+         * @description O servidor monta o texto (SIWE no EVM, texto equivalente na Solana) e o cliente assina exatamente o que recebe. Vale 5 minutos e substitui o desafio anterior. Um desafio novo a cada 5 s por carteira. Não assina transação e não custa nada.
+         */
+        post: operations["postCarteirasByIdPosseDesafio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/carteiras/{id}/posse/verificar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confere a assinatura do desafio e marca a carteira como verificada
+         * @description Consome o desafio antes de olhar a assinatura: errar queima o nonce e o usuário pede outro. A falha não diz qual parte errou.
+         */
+        post: operations["postCarteirasByIdPosseVerificar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/carteiras/{id}/sincronizar": {
         parameters: {
             query?: never;
@@ -1639,6 +1679,11 @@ export interface components {
              * @description Última leitura que deu certo; nulo se nunca leu
              */
             sincronizadaEm: string | null;
+            /**
+             * Format: date-time
+             * @description Prova de posse por assinatura (F25); nulo se nunca provou
+             */
+            verificadaEm: string | null;
         };
         CarteiraRequest: {
             /** Format: uuid */
@@ -1881,6 +1926,17 @@ export interface components {
              * @description Centavos de real, sempre positivo; o sinal vem do tipo
              */
             valorCentavos: number | null;
+        };
+        DesafioPosse: {
+            /**
+             * Format: date-time
+             * @description Cinco minutos depois da emissão
+             */
+            expiraEm: string;
+            /** @description Texto exato que o usuário assina, sem alterar nenhum caractere */
+            mensagem: string;
+            /** @example 9f2c4b7a1e3d5c6b8a0f1e2d3c4b5a69 */
+            nonce: string;
         };
         DespesaDaCategoria: {
             /** Format: uuid */
@@ -3162,6 +3218,11 @@ export interface components {
             /** Format: int64 */
             valorCentavos: number;
         };
+        VerificarPosseRequest: {
+            /** @description EVM: 0x mais 130 hexadecimais (r, s, v) do personal_sign. Solana: 64 bytes em base64 */
+            assinatura: string;
+            nonce: string;
+        };
         VisaoSaldo: {
             /** Format: uuid */
             id: string;
@@ -4437,6 +4498,126 @@ export interface operations {
                 };
             };
             /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postCarteirasByIdPosseDesafio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Desafio emitido */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesafioPosse"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Carteira de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Desafio anterior da carteira tem menos de 5 s; o anterior segue valendo */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postCarteirasByIdPosseVerificar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerificarPosseRequest"];
+            };
+        };
+        responses: {
+            /** @description Carteira com verificadaEm preenchido */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Carteira"];
+                };
+            };
+            /** @description Entrada inválida, nonce ou assinatura errados (assinatura inválida) ou desafio ausente, vencido ou já usado (desafio expirado) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Carteira de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
             503: {
                 headers: {
                     [name: string]: unknown;
