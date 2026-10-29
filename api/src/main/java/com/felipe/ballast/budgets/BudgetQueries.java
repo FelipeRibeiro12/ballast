@@ -56,7 +56,7 @@ class BudgetQueries {
   // O teto de cada categoria é a última linha com desde até o mês (ADR-043). O consumo soma a
   // categoria e as filhas dela por competência: gasto é o realizado até hoje, previsto é o que
   // ainda não aconteceu (recorrência sem confirmar e lançamento com data depois de hoje). Parcela
-  // conta no mês dela e pelo valor dela (ADR-074): é gasto se o mês dela já começou, previsto se
+  // conta no mês dela e pelo valor dela (ADR-075): é gasto se o mês dela já começou, previsto se
   // é de mês futuro, porque o mês corrente não inclui as parcelas que ainda virão.
   List<Consumption> consumption(UUID userId, YearMonth month, LocalDate today) {
     return jdbc.sql(

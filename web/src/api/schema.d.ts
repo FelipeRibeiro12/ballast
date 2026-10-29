@@ -1118,7 +1118,7 @@ export interface paths {
         };
         /**
          * Orçamento do mês por categoria
-         * @description Cada categoria com teto no mês, com o gasto por competência, o previsto e o que falta (ADR-043). Parcela de compra parcelada conta no mês dela e pelo valor dela (ADR-074). Sem mes, vale o mês corrente em America/Sao_Paulo.
+         * @description Cada categoria com teto no mês, com o gasto por competência, o previsto e o que falta (ADR-043). Parcela de compra parcelada conta no mês dela e pelo valor dela (ADR-075). Sem mes, vale o mês corrente em America/Sao_Paulo.
          */
         get: operations["getOrcamentos"];
         put?: never;
@@ -1315,7 +1315,7 @@ export interface paths {
         };
         /**
          * Despesa por categoria e receita contra despesa
-         * @description Por competência e só o realizado até hoje (ADR-046). Parcela de compra parcelada conta no mês dela e pelo valor dela (ADR-074). Sem mes, vale o mês corrente em America/Sao_Paulo.
+         * @description Por competência e só o realizado até hoje (ADR-046). Parcela de compra parcelada conta no mês dela e pelo valor dela (ADR-075). Sem mes, vale o mês corrente em America/Sao_Paulo.
          */
         get: operations["getRelatorios"];
         put?: never;

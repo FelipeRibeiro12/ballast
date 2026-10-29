@@ -1,4 +1,4 @@
-# ADR-074: Parcela conta no mês dela nas agregações por categoria
+# ADR-075: Parcela conta no mês dela nas agregações por categoria
 
 **Status:** aceito
 **Data:** 2026-10-29

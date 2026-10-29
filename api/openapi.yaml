@@ -4197,7 +4197,7 @@ paths:
     get:
       description: "Cada categoria com teto no mês, com o gasto por competência, o\
         \ previsto e o que falta (ADR-043). Parcela de compra parcelada conta no mê\
-        s dela e pelo valor dela (ADR-074). Sem mes, vale o mês corrente em America/Sao_Paulo."
+        s dela e pelo valor dela (ADR-075). Sem mes, vale o mês corrente em America/Sao_Paulo."
       operationId: getOrcamentos
       parameters:
       - in: query
@@ -4873,7 +4873,7 @@ paths:
   /relatorios:
     get:
       description: "Por competência e só o realizado até hoje (ADR-046). Parcela de\
-        \ compra parcelada conta no mês dela e pelo valor dela (ADR-074). Sem mes,\
+        \ compra parcelada conta no mês dela e pelo valor dela (ADR-075). Sem mes,\
         \ vale o mês corrente em America/Sao_Paulo."
       operationId: getRelatorios
       parameters:

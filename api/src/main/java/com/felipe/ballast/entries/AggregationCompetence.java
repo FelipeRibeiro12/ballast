@@ -1,7 +1,7 @@
 package com.felipe.ballast.entries;
 
 // Trecho de SQL compartilhado por tudo que agrega por categoria usando competência (relatório,
-// gráfico, orçamento, resumo do Início), para os números concordarem (ADR-074). O alias da tabela
+// gráfico, orçamento, resumo do Início), para os números concordarem (ADR-075). O alias da tabela
 // tem que ser "l".
 public final class AggregationCompetence {
 

@@ -38,7 +38,7 @@ class ReportController {
       summary = "Despesa por categoria e receita contra despesa",
       description =
           "Por competência e só o realizado até hoje (ADR-046). Parcela de compra parcelada conta no mês"
-              + " dela e pelo valor dela (ADR-074). Sem mes, vale o mês corrente em America/Sao_Paulo.",
+              + " dela e pelo valor dela (ADR-075). Sem mes, vale o mês corrente em America/Sao_Paulo.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",

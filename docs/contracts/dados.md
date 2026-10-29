@@ -38,7 +38,7 @@ Compra no cartão dia 03/10, fatura vence 10/11: competência 03/10, caixa 10/11
 
 Parcela de compra parcelada guarda a `data_competencia` da compra (ADR-032), mas
 toda agregação por categoria usa o mês dela: mês da `data_competencia` mais
-`parcela_num - 1` meses, só com o valor da própria parcela (ADR-074). O trecho
+`parcela_num - 1` meses, só com o valor da própria parcela (ADR-075). O trecho
 de SQL fica em `entries/AggregationCompetence`. Nada é gravado: a data, a
 `data_caixa`, o saldo e a fatura não mudam.
 

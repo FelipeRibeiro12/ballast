@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
 
 // SQL direto (ADR-017), sempre por usuario_id. Os dois gráficos leem por competência e só o
 // realizado até hoje, a mesma regra do gasto do orçamento (ADR-043). Parcela conta no mês dela e
-// pelo valor dela (ADR-074); como já foi comprada, entra mesmo em mês depois de hoje. Valor de
+// pelo valor dela (ADR-075); como já foi comprada, entra mesmo em mês depois de hoje. Valor de
 // lançamento tem 2 casas: as somas saem exatas.
 @Repository
 class ReportQueries {

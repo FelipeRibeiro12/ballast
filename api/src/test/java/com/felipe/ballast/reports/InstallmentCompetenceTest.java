@@ -23,7 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import tools.jackson.databind.JsonNode;
 
 // Hoje é 15 de outubro de 2026 em São Paulo. A parcela conta no mês dela e pelo valor dela
-// (ADR-074), no relatório, na série mensal e no orçamento.
+// (ADR-075), no relatório, na série mensal e no orçamento.
 @IntegrationTest
 class InstallmentCompetenceTest {
 
