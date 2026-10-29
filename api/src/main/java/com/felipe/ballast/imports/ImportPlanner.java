@@ -45,20 +45,25 @@ final class ImportPlanner {
 
   // O FITID só é único dentro da conta, então a conta entra no hash. Sem FITID o hash usa data,
   // valor, texto e a ordem da ocorrência entre linhas iguais, para duas compras idênticas no mesmo
-  // dia não virarem uma. Linha inválida sem FITID fica sem hash: nunca vira lançamento.
+  // dia não virarem uma. A tag entra no texto que vai para o SHA-256 (a coluna só aceita 64 hexa,
+  // então não dá para prefixar o resultado): sem ela, um FITID forjado com o formato da composição
+  // colidiria com o hash de uma linha sem FITID. Linha inválida sem FITID fica sem hash: nunca vira
+  // lançamento.
   static List<String> externalHashes(UUID accountId, List<OfxTransaction> transactions) {
     List<String> hashes = new ArrayList<>();
     Map<String, Integer> occurrences = new HashMap<>();
     for (OfxTransaction tx : transactions) {
       if (tx.fitId() != null) {
-        hashes.add(hex((accountId + "|" + tx.fitId()).getBytes(StandardCharsets.UTF_8)));
+        hashes.add(hex(("fitid:" + accountId + "|" + tx.fitId()).getBytes(StandardCharsets.UTF_8)));
       } else if (tx.invalidReason() != null) {
         hashes.add(null);
       } else {
         String key = tx.date() + "|" + tx.amount().toPlainString() + "|" + text(tx);
         int occurrence = occurrences.merge(key, 1, Integer::sum);
         hashes.add(
-            hex((accountId + "|" + key + "|" + occurrence).getBytes(StandardCharsets.UTF_8)));
+            hex(
+                ("nofitid:" + accountId + "|" + key + "|" + occurrence)
+                    .getBytes(StandardCharsets.UTF_8)));
       }
     }
     return hashes;

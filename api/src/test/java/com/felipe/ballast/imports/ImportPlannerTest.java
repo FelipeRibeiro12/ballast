@@ -129,4 +129,21 @@ class ImportPlannerTest {
       assertThat(expected).isNotNull();
     }
   }
+
+  // Um FITID forjado com o formato da composição sem FITID não pode cair no mesmo hash.
+  @Test
+  void aFitIdNeverCollidesWithTheHashOfALineWithoutFitId() {
+    UUID account = UUID.randomUUID();
+    OfxTransaction plain = tx(0, DAY, "-10.00");
+    String forged = DAY + "|-10.00|X|" + "|1";
+    OfxTransaction withFitId =
+        new OfxTransaction(
+            1, "OTHER", DAY, new BigDecimal("-10.00"), forged, "X", null, null, null, Map.of());
+
+    String noFitIdHash = ImportPlanner.externalHashes(account, List.of(plain)).get(0);
+    String fitIdHash = ImportPlanner.externalHashes(account, List.of(withFitId)).get(0);
+
+    assertThat(fitIdHash).isNotEqualTo(noFitIdHash);
+    assertThat(fitIdHash).matches("[0-9a-f]{64}");
+  }
 }
