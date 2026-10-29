@@ -175,6 +175,9 @@ Segredos:
 **Variável do repositório** `PRODUCAO_URL`: `https://<projeto>.vercel.app`, sem
 barra no fim.
 
+**Variável do repositório** `BALLAST_POSSE_DOMAIN`: o host do app, sem `https://`
+(ADR-072). O job `migracao` lê daqui. O mesmo valor vai no `api.env` da VM.
+
 ## 8. Primeiro deploy
 
 1. Na `main` com o CI verde: Actions, `deploy`, Run workflow. Aprove os jobs.
