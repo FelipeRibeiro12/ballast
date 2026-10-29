@@ -624,6 +624,67 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   reais, das posições com cotação) e `criptoValorizacaoCentavos`
   (`criptoCentavos` menos o aportado). Nulos sem a PTAX de algum movimento.
 
+## Carteira observada (ADR-071, F24)
+
+O app só observa um endereço público. Nenhuma rota pede seed, chave privada ou
+assinatura. Tudo escopado pelo dono: carteira ou movimento de outro usuário dá
+404 `não encontrado` (também id inexistente ou que não é UUID). O endereço
+aparece no corpo das respostas e em nenhum log, URL ou mensagem de erro.
+
+- `POST /carteiras` com `{contaId, rede, endereco, rotulo?}` responde 201 com a
+  `Carteira`. `rede`: `ethereum`, `base` ou `solana`. Endereço EVM: `0x` mais 40
+  hexadecimais, caixa mista exige checksum EIP-55, gravado em minúsculas.
+  Solana: base58 que decodifica em 32 bytes. `rotulo` opcional até 60
+  caracteres. Não lê a rede.
+- 400, sem repetir o valor enviado: corpo inválido ou com campo a mais,
+  `endereço inválido para a rede`, `conta não encontrada` (inexistente, de
+  outro usuário ou id malformado), `conta deve ser cripto`, `conta arquivada`.
+  409 `carteira já cadastrada` (mesmo usuário, rede e endereço, em qualquer
+  caixa) e 409 de teto (`LIMITE_CARTEIRAS`, padrão 20).
+- `GET /carteiras`, `GET /carteiras/{id}` e `DELETE /carteiras/{id}` (204; leva
+  os movimentos sincronizados dela, os digitados ficam).
+- `Carteira`: `{id, contaId, rede, endereco, rotulo, sincronizadaEm,
+  leituraFalhou, saldos: [{ativoId, simbolo, contrato, quantidade, confiavel,
+  custoPendente}]}`. `quantidade` é string decimal sem zero à direita.
+  `sincronizadaEm` é a última leitura que deu certo, nulo se nunca leu.
+  `leituraFalhou` é `true` quando a última tentativa falhou: os saldos são os
+  da `sincronizadaEm`, nunca zero.
+- `POST /carteiras/{id}/sincronizar` lê a rede e responde 200 com a `Carteira`.
+  Tudo ou nada. No máximo uma leitura por carteira a cada 60 s (a tentativa
+  conta, mesmo falha): dentro do prazo devolve o estado atual sem chamar o
+  indexador. Indexador fora do ar, sem chave ou com resposta fora do formato é
+  200 com `leituraFalhou: true`, não erro. 409 com conta arquivada ou teto de
+  movimentos de cripto.
+- A leitura grava a diferença contra os movimentos sincronizados da carteira e do
+  ativo como `entrada` (saldo subiu) ou `saida` (caiu), `origem` `sincronizada`,
+  data de hoje em `America/Sao_Paulo`, sem custo. Rodar de novo sem mudança na
+  rede não grava nada. Ativo novo nasce `confiavel: false`, menos o nativo da
+  rede. O símbolo vem do indexador, limpo e cortado em 20; no Solana são os 8
+  primeiros caracteres do mint. Passou o teto de ativos: os novos ficam de
+  fora e a leitura segue.
+- `PUT /movimentos-cripto/{id}/custo` com `{custoUsdCentavos}` (1 a
+  180143985094819) grava o custo em dólar de uma entrada ou saída sincronizada,
+  uma vez, e responde 200 com o `MovimentoCripto`. 409 `o custo já foi
+  informado`; 400 em movimento digitado.
+
+Mudanças em rotas que já existiam (campos só acrescentados):
+
+- `MovimentoCripto` ganha `origem` (`manual` | `sincronizada`), `tipo` passa a
+  poder ser `entrada` ou `saida`, e `custoUsdCentavos` e `custoCentavos` podem
+  ser `null` (entrada ou saída sem custo informado).
+- `POST /movimentos-cripto` continua só com `compra` e `venda` (400 para
+  `entrada` e `saida`). `DELETE /movimentos-cripto/{id}` de movimento
+  sincronizado dá 409 `movimento sincronizado não se apaga nem se edita`.
+- `PosicaoCripto` ganha `confiavel` e `custoPendente`. Com `custoPendente:
+  true`, `custoMedioUsd`, `custoDaPosicao*` e `ganho*` vêm `null`; o valor de
+  mercado continua. Posição de ativo não confiável aparece com `confiavel:
+  false` e não entra em `criptoCentavos`, no patrimônio, em `semCotacao` nem na
+  cotação do job.
+- `GET /patrimonio`: `criptoAportadoCentavos` e `criptoValorizacaoCentavos`
+  vêm `null` quando uma posição somada tem custo pendente.
+- `PUT /ativos-cripto/{id}` aceita `confiavel` opcional (ausente mantém):
+  `true` promove o ativo de uma leitura e ele passa a valer no patrimônio.
+
 ## Editar e apagar contas e recorrências (ADR-036)
 
 ### Editar conta (`PATCH /contas/{id}`)

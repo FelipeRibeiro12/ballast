@@ -73,6 +73,7 @@ ballast:
     balance-views: ${LIMITE_VISOES_SALDO:}
     pending-imports: ${LIMITE_IMPORTACOES_PENDENTES:}
     csv-mappings: ${LIMITE_MAPEAMENTOS_CSV:}
+    wallets: ${LIMITE_CARTEIRAS:}
     # Prazo por instrução do DELETE /contas/{id}, como 15s ou 500ms. Vazio vale 15s.
     account-delete-timeout: ${TIMEOUT_APAGAR_CONTA:}
   origins:
@@ -112,6 +113,18 @@ ballast:
     # Com os nativos e as cinco plataformas de token, no pior caso 6 pedidos por rodada:
     # a cada 30 min são uns 8.700 por mês, dentro dos 10 mil do plano Demo.
     interval: PT30M
+  carteiras:
+    # Alchemy, plano gratuito (ADR-071). Sem ALCHEMY_API_KEY o job não roda e a leitura manual
+    # responde que o indexador não está configurado. As URLs são a raiz de cada rede, sem a chave.
+    api-key: ${ALCHEMY_API_KEY:}
+    ethereum-url: ${ALCHEMY_ETHEREUM_URL:}
+    base-url: ${ALCHEMY_BASE_URL:}
+    solana-url: ${ALCHEMY_SOLANA_URL:}
+    # Desligado por padrão. Para ligar, BALLAST_CARTEIRAS_JOB_ENABLED=true.
+    job-enabled: false
+    interval: PT6H
+    # Pausa entre uma carteira e a seguinte, para não gastar a cota do plano gratuito de uma vez.
+    pause: PT1S
   seed:
     email: ${SEED_EMAIL:}
     password: ${SEED_SENHA:}

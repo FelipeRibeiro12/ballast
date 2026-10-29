@@ -97,4 +97,23 @@ class CostBasisTest {
 
     assertThat(basis.result()).isEmpty();
   }
+
+  @Test
+  void syncedEntriesAndExitsCountLikeBuysAndSellsOnceTheyHaveCost() {
+    CostBasis.Basis basis =
+        fold(new Step(MovementType.ENTRY, "2", "100"), new Step(MovementType.EXIT, "1", "80"));
+
+    assertThat(basis.quantity()).isEqualByComparingTo("1");
+    assertThat(basis.cost()).isEqualByComparingTo("50");
+    assertThat(basis.realized()).isEqualByComparingTo("30");
+  }
+
+  @Test
+  void anEntryWithoutCostLeavesTheWholeBasisUnknown() {
+    CostBasis basis = new CostBasis();
+    basis.add(MovementType.BUY, new BigDecimal("1"), new BigDecimal("10"));
+    basis.add(MovementType.ENTRY, new BigDecimal("1"), null);
+
+    assertThat(basis.result()).isEmpty();
+  }
 }

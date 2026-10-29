@@ -2,6 +2,7 @@
 export const prefixosDaApi: readonly string[] = [
   'ativos-cripto',
   'auth',
+  'carteiras',
   'categorias',
   'compras-parceladas',
   'contas',

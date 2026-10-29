@@ -290,6 +290,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/carteiras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as carteiras observadas do usuário
+         * @description Com o saldo da última leitura que deu certo e a data dela.
+         */
+        get: operations["getCarteiras"];
+        put?: never;
+        /**
+         * Cadastra um endereço público numa conta cripto
+         * @description Só observa: o app nunca pede seed, chave privada nem assinatura de transação. Não lê a rede; chame POST /carteiras/{id}/sincronizar.
+         */
+        post: operations["postCarteiras"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/carteiras/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detalha uma carteira */
+        get: operations["getCarteirasById"];
+        put?: never;
+        post?: never;
+        /**
+         * Apaga a carteira e os movimentos sincronizados dela
+         * @description Os movimentos digitados na conta ficam.
+         */
+        delete: operations["deleteCarteirasById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/carteiras/{id}/sincronizar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lê o saldo da carteira na rede
+         * @description No máximo uma leitura por carteira a cada 60 s: dentro do prazo devolve o estado atual sem chamar o indexador. Indexador fora do ar, sem chave ou com resposta fora do formato não é erro: responde 200 com leituraFalhou true e os saldos da leitura anterior. A leitura é tudo ou nada.
+         */
+        post: operations["postCarteirasByIdSincronizar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/categorias": {
         parameters: {
             query?: never;
@@ -944,6 +1009,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/movimentos-cripto/{id}/custo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Informa o custo de uma entrada ou saída sincronizada
+         * @description Em dólar (ADR-038), uma vez só. Depois disso o movimento conta como compra ou venda no custo médio. Movimento digitado não usa esta rota.
+         */
+        put: operations["putMovimentosCriptoByIdCusto"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/orcamentos": {
         parameters: {
             query?: never;
@@ -1456,6 +1541,8 @@ export interface components {
             simbolo: string;
         };
         AtivoCriptoEdicao: {
+            /** @description Ausente ou nulo mantém o valor atual. Verdadeiro promove o ativo que veio de uma leitura de carteira (ADR-071): ele passa a valer no patrimônio */
+            confiavel?: boolean | null;
             /** Format: int32 */
             decimais: number;
             nome?: string | null;
@@ -1533,6 +1620,34 @@ export interface components {
              * @description Centavos de real. Informativo: não bloqueia lançamento
              */
             limiteCentavos: number;
+        };
+        Carteira: {
+            /** Format: uuid */
+            contaId: string;
+            /** @description EVM em minúsculas; Solana como foi cadastrado */
+            endereco: string;
+            /** Format: uuid */
+            id: string;
+            /** @description A última tentativa de leitura falhou: os saldos são os de sincronizadaEm, não zero */
+            leituraFalhou: boolean;
+            /** @enum {string} */
+            rede: "ethereum" | "base" | "solana";
+            rotulo: string | null;
+            saldos: components["schemas"]["SaldoCarteira"][];
+            /**
+             * Format: date-time
+             * @description Última leitura que deu certo; nulo se nunca leu
+             */
+            sincronizadaEm: string | null;
+        };
+        CarteiraRequest: {
+            /** Format: uuid */
+            contaId: string;
+            /** @description EVM: 0x mais 40 hexadecimais, com checksum EIP-55 se tiver caixa mista, gravado em minúsculas. Solana: base58 que decodifica em 32 bytes */
+            endereco: string;
+            /** @enum {string} */
+            rede: "ethereum" | "base" | "solana";
+            rotulo?: string | null;
         };
         Categoria: {
             cor: string | null;
@@ -2300,12 +2415,12 @@ export interface components {
             contaId: string;
             /**
              * Format: int64
-             * @description Em centavos de real pela PTAX da data; nulo sem PTAX
+             * @description Em centavos de real pela PTAX da data; nulo sem PTAX, ou sem custo informado
              */
             custoCentavos: number | null;
             /**
              * Format: int64
-             * @description Em centavos de dólar; nulo no movimento antigo em reais sem PTAX
+             * @description Em centavos de dólar; nulo no movimento antigo em reais sem PTAX, ou na entrada e saída sincronizada sem custo informado
              */
             custoUsdCentavos: number | null;
             /** Format: date */
@@ -2313,12 +2428,24 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
+             * @description sincronizada vem da leitura de uma carteira observada (ADR-071): não se apaga nem se edita, só se informa o custo
+             * @enum {string}
+             */
+            origem: "manual" | "sincronizada";
+            /**
              * @description Em texto, sem zero à direita
              * @example 0.12345678
              */
             quantidade: string;
             /** @enum {string} */
-            tipo: "compra" | "venda";
+            tipo: "compra" | "venda" | "entrada" | "saida";
+        };
+        MovimentoCriptoCustoRequest: {
+            /**
+             * Format: int64
+             * @description O que pagou ou recebeu, em centavos de dólar
+             */
+            custoUsdCentavos: number;
         };
         MovimentoCriptoRequest: {
             /** Format: uuid */
@@ -2341,7 +2468,7 @@ export interface components {
              */
             quantidade: string;
             /** @enum {string} */
-            tipo: "compra" | "venda";
+            tipo: "compra" | "venda" | "entrada" | "saida";
         };
         Orcamento: {
             /** Format: uuid */
@@ -2481,6 +2608,8 @@ export interface components {
         PosicaoCripto: {
             /** Format: uuid */
             ativoId: string;
+            /** @description Falso para ativo que veio de uma leitura de carteira e o usuário ainda não promoveu: fica fora do patrimônio (ADR-071) */
+            confiavel: boolean;
             /** Format: uuid */
             contaId: string;
             /** @description Última cotação até o fim do dia em America/Sao_Paulo; nula sem cotação */
@@ -2502,6 +2631,8 @@ export interface components {
             custoDaPosicaoUsdCentavos: number | null;
             /** @description Custo médio ponderado em dólares por unidade, em texto, com 8 casas no máximo (ADR-042); nulo sem a PTAX de algum movimento em reais */
             custoMedioUsd: string | null;
+            /** @description Alguma entrada ou saída sincronizada ainda não tem custo: custo médio, custo da posição e ganho vêm nulos, o valor de mercado continua */
+            custoPendente: boolean;
             /**
              * Format: int64
              * @description Compras menos vendas em centavos de dólar; nulo sem a PTAX de algum movimento em reais
@@ -2782,6 +2913,22 @@ export interface components {
              * @description Transferências com outra conta; a perna de lá vira lançamento comum
              */
             transferencias: number;
+        };
+        SaldoCarteira: {
+            /** Format: uuid */
+            ativoId: string;
+            /** @description Falso fica fora do patrimônio até o usuário promover o ativo */
+            confiavel: boolean;
+            contrato: string | null;
+            /** @description Falta informar o custo de alguma entrada ou saída deste saldo */
+            custoPendente: boolean;
+            /**
+             * @description Em texto, sem zero à direita
+             * @example 0.12345678
+             */
+            quantidade: string;
+            /** @description Texto do indexador, limpo */
+            simbolo: string;
         };
         SaldoProjetado: {
             /**
@@ -4100,6 +4247,260 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getCarteiras: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Carteiras */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Carteira"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postCarteiras: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CarteiraRequest"];
+            };
+        };
+        responses: {
+            /** @description Carteira cadastrada, sem saldo até a primeira leitura */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Carteira"];
+                };
+            };
+            /** @description Entrada inválida, endereço que não serve para a rede (tamanho, checksum EIP-55 ou base58), conta inexistente, alheia, de outro tipo ou arquivada */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Endereço já cadastrado na rede, ou teto de carteiras do usuário atingido */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getCarteirasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Carteira */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Carteira"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Carteira de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteCarteirasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Apagada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Carteira de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postCarteirasByIdSincronizar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Carteira depois da leitura (ou como estava, se a leitura falhou) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Carteira"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Carteira de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta arquivada, ou teto de movimentos de cripto atingido */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
                 };
             };
         };
@@ -7049,6 +7450,86 @@ export interface operations {
             };
             /** @description Movimento de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Movimento sincronizado de uma carteira: só some quando a carteira é apagada */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putMovimentosCriptoByIdCusto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MovimentoCriptoCustoRequest"];
+            };
+        };
+        responses: {
+            /** @description Movimento com o custo gravado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovimentoCripto"];
+                };
+            };
+            /** @description Entrada inválida ou movimento digitado (não sincronizado) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Movimento de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description O custo já foi informado */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

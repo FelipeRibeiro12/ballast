@@ -58,7 +58,42 @@ class MovementService {
   enum DeleteResult {
     DELETED,
     NOT_FOUND,
-    WOULD_GO_NEGATIVE
+    WOULD_GO_NEGATIVE,
+    SYNCED
+  }
+
+  sealed interface CostResult {
+    record Saved(CryptoQueries.Movement movement) implements CostResult {}
+
+    enum Rejected implements CostResult {
+      NOT_FOUND,
+      NOT_SYNCED,
+      ALREADY_HAS_COST
+    }
+  }
+
+  // O custo de uma entrada ou saída sincronizada entra uma vez só (ADR-071). A conta é travada como
+  // nas outras escritas, então a leitura de uma carteira e este PUT não se cruzam.
+  CostResult setCost(UUID userId, UUID id, BigDecimal costUsd) {
+    return transaction.execute(
+        status -> {
+          Optional<CryptoQueries.Movement> found = queries.findMovement(userId, id);
+          if (found.isEmpty()) {
+            return CostResult.Rejected.NOT_FOUND;
+          }
+          queries.lockAccount(userId, found.get().accountId());
+          Optional<CryptoQueries.Movement> movement = queries.findMovement(userId, id);
+          if (movement.isEmpty()) {
+            return CostResult.Rejected.NOT_FOUND;
+          }
+          if (!"sincronizada".equals(movement.get().origin())) {
+            return CostResult.Rejected.NOT_SYNCED;
+          }
+          if (queries.setMovementCost(userId, id, costUsd) == 0) {
+            return CostResult.Rejected.ALREADY_HAS_COST;
+          }
+          return new CostResult.Saved(queries.findMovement(userId, id).orElseThrow());
+        });
   }
 
   // Só movimento antes da primeira PTAX guardada pede busca (ADR-038): o resto o job diário traz.
@@ -138,6 +173,10 @@ class MovementService {
     Optional<CryptoQueries.Movement> movement = queries.findMovement(userId, id);
     if (movement.isEmpty()) {
       return DeleteResult.NOT_FOUND;
+    }
+    // Movimento sincronizado some só com a carteira (ADR-071).
+    if ("sincronizada".equals(movement.get().origin())) {
+      return DeleteResult.SYNCED;
     }
     // O retorno não importa aqui: a conta do movimento é do dono, e se o movimento sumiu no meio o
     // DELETE abaixo apaga zero linhas.

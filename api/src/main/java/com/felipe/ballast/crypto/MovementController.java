@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -47,6 +48,13 @@ class MovementController {
   private static final ErrorResponse SALE_TOO_BIG = new ErrorResponse("venda maior que a posição");
   private static final ErrorResponse WOULD_GO_NEGATIVE =
       new ErrorResponse("apagar deixaria a posição negativa");
+  private static final ErrorResponse TYPE_NOT_TYPED =
+      new ErrorResponse("tipo deve ser compra ou venda");
+  private static final ErrorResponse SYNCED_MOVEMENT =
+      new ErrorResponse("movimento sincronizado não se apaga nem se edita");
+  private static final ErrorResponse NOT_SYNCED =
+      new ErrorResponse("só movimento sincronizado recebe custo por esta rota");
+  private static final ErrorResponse HAS_COST = new ErrorResponse("o custo já foi informado");
   private static final ErrorResponse INVALID_ACCOUNT_FILTER =
       new ErrorResponse("contaId deve ser um UUID");
   private static final ErrorResponse INVALID_ASSET_FILTER =
@@ -104,6 +112,10 @@ class MovementController {
   ResponseEntity<?> create(
       @AuthenticationPrincipal AuthenticatedUser user,
       @Valid @RequestBody MovementRequest request) {
+    // Entrada e saída só nascem da leitura de uma carteira (ADR-071).
+    if (!request.type().typed()) {
+      return ResponseEntity.badRequest().body(TYPE_NOT_TYPED);
+    }
     // Id malformado tem a mesma resposta de conta ou ativo inexistente.
     MovementService.Input input =
         new MovementService.Input(
@@ -223,6 +235,10 @@ class MovementController {
           "\"apagar deixaria a posição negativa\": a compra cobre uma venda, e nada é apagado",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   @ApiResponse(
+      responseCode = "409",
+      description = "Movimento sincronizado de uma carteira: só some quando a carteira é apagada",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
       responseCode = "401",
       description = "Sem sessão válida",
       content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -244,11 +260,72 @@ class MovementController {
     return switch (movements.delete(user.id(), movementId.get())) {
       case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case WOULD_GO_NEGATIVE -> ResponseEntity.badRequest().body(WOULD_GO_NEGATIVE);
+      case SYNCED -> ResponseEntity.status(HttpStatus.CONFLICT).body(SYNCED_MOVEMENT);
       case DELETED -> {
         log.info(
             "movimento cripto apagado usuario_id={} movimento_id={}", user.id(), movementId.get());
         yield ResponseEntity.noContent().build();
       }
+    };
+  }
+
+  @Operation(
+      operationId = "putMovimentosCriptoByIdCusto",
+      summary = "Informa o custo de uma entrada ou saída sincronizada",
+      description =
+          "Em dólar (ADR-038), uma vez só. Depois disso o movimento conta como compra ou venda no"
+              + " custo médio. Movimento digitado não usa esta rota.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Movimento com o custo gravado",
+      content = @Content(schema = @Schema(implementation = MovementResponse.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description = "Entrada inválida ou movimento digitado (não sincronizado)",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "Movimento de outro usuário, inexistente ou id que não é UUID; mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "O custo já foi informado",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível ou conta travada por mais de 2 s",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @PutMapping(
+      path = "/movimentos-cripto/{id}/custo",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> setCost(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable("id") String id,
+      @Valid @RequestBody MovementCostRequest request) {
+    Optional<UUID> movementId = CanonicalUuid.parse(id);
+    if (movementId.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    return switch (movements.setCost(user.id(), movementId.get(), request.costUsd())) {
+      case MovementService.CostResult.Saved saved -> {
+        log.info(
+            "custo de movimento sincronizado informado usuario_id={} movimento_id={}",
+            user.id(),
+            movementId.get());
+        yield ResponseEntity.ok(MovementResponse.from(saved.movement()));
+      }
+      case MovementService.CostResult.Rejected rejected ->
+          switch (rejected) {
+            case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+            case NOT_SYNCED -> ResponseEntity.badRequest().body(NOT_SYNCED);
+            case ALREADY_HAS_COST -> ResponseEntity.status(HttpStatus.CONFLICT).body(HAS_COST);
+          };
     };
   }
 }

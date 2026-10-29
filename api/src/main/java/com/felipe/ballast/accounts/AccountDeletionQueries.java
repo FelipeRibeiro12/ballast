@@ -239,6 +239,12 @@ class AccountDeletionQueries {
         .param("userId", userId)
         .param("id", accountId)
         .update();
+    // A FK da carteira com a conta é NO ACTION (V36): sem isto a conta não seria apagada. Os
+    // movimentos sincronizados já saíram acima; o CASCADE cobre qualquer resto.
+    jdbc.sql("DELETE FROM carteira_observada WHERE usuario_id = :userId AND conta_id = :id")
+        .param("userId", userId)
+        .param("id", accountId)
+        .update();
     jdbc.sql("DELETE FROM cartao WHERE usuario_id = :userId AND conta_id = :id")
         .param("userId", userId)
         .param("id", accountId)

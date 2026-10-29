@@ -923,6 +923,215 @@ paths:
       summary: Desliga o MFA
       tags:
       - auth
+  /carteiras:
+    get:
+      description: Com o saldo da última leitura que deu certo e a data dela.
+      operationId: getCarteiras
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Carteira"
+          description: Carteiras
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Lista as carteiras observadas do usuário
+      tags:
+      - carteiras
+    post:
+      description: "Só observa: o app nunca pede seed, chave privada nem assinatura\
+        \ de transação. Não lê a rede; chame POST /carteiras/{id}/sincronizar."
+      operationId: postCarteiras
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CarteiraRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Carteira"
+          description: "Carteira cadastrada, sem saldo até a primeira leitura"
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, endereço que não serve para a rede (tamanho,\
+            \ checksum EIP-55 ou base58), conta inexistente, alheia, de outro tipo\
+            \ ou arquivada"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Endereço já cadastrado na rede, ou teto de carteiras do usuá\
+            rio atingido"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Cadastra um endereço público numa conta cripto
+      tags:
+      - carteiras
+  /carteiras/{id}:
+    delete:
+      description: Os movimentos digitados na conta ficam.
+      operationId: deleteCarteirasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Apagada
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Carteira de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Apaga a carteira e os movimentos sincronizados dela
+      tags:
+      - carteiras
+    get:
+      operationId: getCarteirasById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Carteira"
+          description: Carteira
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Carteira de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Detalha uma carteira
+      tags:
+      - carteiras
+  /carteiras/{id}/sincronizar:
+    post:
+      description: "No máximo uma leitura por carteira a cada 60 s: dentro do prazo\
+        \ devolve o estado atual sem chamar o indexador. Indexador fora do ar, sem\
+        \ chave ou com resposta fora do formato não é erro: responde 200 com leituraFalhou\
+        \ true e os saldos da leitura anterior. A leitura é tudo ou nada."
+      operationId: postCarteirasByIdSincronizar
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Carteira"
+          description: "Carteira depois da leitura (ou como estava, se a leitura falhou)"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Carteira de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta arquivada, ou teto de movimentos de cripto atingido"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Lê o saldo da carteira na rede
+      tags:
+      - carteiras
   /categorias:
     get:
       description: "Ordenada por tipo (despesa antes de receita) e nome sem diferenciar\
@@ -3670,6 +3879,13 @@ paths:
                 $ref: "#/components/schemas/Erro"
           description: "Movimento de outro usuário, inexistente ou id que não é UUID;\
             \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Movimento sincronizado de uma carteira: só some quando a carteira\
+            \ é apagada"
         "503":
           content:
             application/json:
@@ -3679,6 +3895,66 @@ paths:
       security:
       - cookieAuth: []
       summary: Apaga um movimento de cripto
+      tags:
+      - cripto
+  /movimentos-cripto/{id}/custo:
+    put:
+      description: "Em dólar (ADR-038), uma vez só. Depois disso o movimento conta\
+        \ como compra ou venda no custo médio. Movimento digitado não usa esta rota."
+      operationId: putMovimentosCriptoByIdCusto
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MovimentoCriptoCustoRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MovimentoCripto"
+          description: Movimento com o custo gravado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Entrada inválida ou movimento digitado (não sincronizado)
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Movimento de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: O custo já foi informado
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Informa o custo de uma entrada ou saída sincronizada
       tags:
       - cripto
   /orcamentos:
@@ -5449,6 +5725,13 @@ components:
     AtivoCriptoEdicao:
       type: object
       properties:
+        confiavel:
+          type:
+          - boolean
+          - "null"
+          description: "Ausente ou nulo mantém o valor atual. Verdadeiro promove o\
+            \ ativo que veio de uma leitura de carteira (ADR-071): ele passa a valer\
+            \ no patrimônio"
         decimais:
           type: integer
           format: int32
@@ -5631,6 +5914,81 @@ components:
       - diaFechamento
       - diaVencimento
       - limiteCentavos
+    Carteira:
+      type: object
+      properties:
+        contaId:
+          type: string
+          format: uuid
+        endereco:
+          type: string
+          description: EVM em minúsculas; Solana como foi cadastrado
+        id:
+          type: string
+          format: uuid
+        leituraFalhou:
+          type: boolean
+          description: "A última tentativa de leitura falhou: os saldos são os de\
+            \ sincronizadaEm, não zero"
+        rede:
+          type: string
+          enum:
+          - ethereum
+          - base
+          - solana
+        rotulo:
+          type:
+          - string
+          - "null"
+          maxLength: 60
+        saldos:
+          type: array
+          items:
+            $ref: "#/components/schemas/SaldoCarteira"
+        sincronizadaEm:
+          type:
+          - string
+          - "null"
+          format: date-time
+          description: Última leitura que deu certo; nulo se nunca leu
+      required:
+      - contaId
+      - endereco
+      - id
+      - leituraFalhou
+      - rede
+      - rotulo
+      - saldos
+      - sincronizadaEm
+    CarteiraRequest:
+      type: object
+      properties:
+        contaId:
+          type: string
+          format: uuid
+        endereco:
+          type: string
+          description: "EVM: 0x mais 40 hexadecimais, com checksum EIP-55 se tiver\
+            \ caixa mista, gravado em minúsculas. Solana: base58 que decodifica em\
+            \ 32 bytes"
+          maxLength: 100
+          minLength: 1
+        rede:
+          type: string
+          enum:
+          - ethereum
+          - base
+          - solana
+          pattern: ethereum|base|solana
+        rotulo:
+          type:
+          - string
+          - "null"
+          maxLength: 60
+      required:
+      - contaId
+      - endereco
+      - rede
     Categoria:
       type: object
       properties:
@@ -7212,20 +7570,28 @@ components:
           - integer
           - "null"
           format: int64
-          description: Em centavos de real pela PTAX da data; nulo sem PTAX
+          description: "Em centavos de real pela PTAX da data; nulo sem PTAX, ou sem\
+            \ custo informado"
         custoUsdCentavos:
           type:
           - integer
           - "null"
           format: int64
-          description: Em centavos de dólar; nulo no movimento antigo em reais sem
-            PTAX
+          description: "Em centavos de dólar; nulo no movimento antigo em reais sem\
+            \ PTAX, ou na entrada e saída sincronizada sem custo informado"
         data:
           type: string
           format: date
         id:
           type: string
           format: uuid
+        origem:
+          type: string
+          description: "sincronizada vem da leitura de uma carteira observada (ADR-071):\
+            \ não se apaga nem se edita, só se informa o custo"
+          enum:
+          - manual
+          - sincronizada
         quantidade:
           type: string
           description: "Em texto, sem zero à direita"
@@ -7235,6 +7601,8 @@ components:
           enum:
           - compra
           - venda
+          - entrada
+          - saida
       required:
       - ativoId
       - contaId
@@ -7242,8 +7610,20 @@ components:
       - custoUsdCentavos
       - data
       - id
+      - origem
       - quantidade
       - tipo
+    MovimentoCriptoCustoRequest:
+      type: object
+      properties:
+        custoUsdCentavos:
+          type: integer
+          format: int64
+          description: "O que pagou ou recebeu, em centavos de dólar"
+          maximum: 180143985094819
+          minimum: 1
+      required:
+      - custoUsdCentavos
     MovimentoCriptoRequest:
       type: object
       properties:
@@ -7275,6 +7655,8 @@ components:
           enum:
           - compra
           - venda
+          - entrada
+          - saida
       required:
       - ativoId
       - contaId
@@ -7552,6 +7934,10 @@ components:
         ativoId:
           type: string
           format: uuid
+        confiavel:
+          type: boolean
+          description: "Falso para ativo que veio de uma leitura de carteira e o usuá\
+            rio ainda não promoveu: fica fora do patrimônio (ADR-071)"
         contaId:
           type: string
           format: uuid
@@ -7587,6 +7973,11 @@ components:
           - "null"
           description: "Custo médio ponderado em dólares por unidade, em texto, com\
             \ 8 casas no máximo (ADR-042); nulo sem a PTAX de algum movimento em reais"
+        custoPendente:
+          type: boolean
+          description: "Alguma entrada ou saída sincronizada ainda não tem custo:\
+            \ custo médio, custo da posição e ganho vêm nulos, o valor de mercado\
+            \ continua"
         custoUsdCentavos:
           type:
           - integer
@@ -7648,12 +8039,14 @@ components:
           format: int64
       required:
       - ativoId
+      - confiavel
       - contaId
       - cotacao
       - custoCentavos
       - custoDaPosicaoCentavos
       - custoDaPosicaoUsdCentavos
       - custoMedioUsd
+      - custoPendente
       - custoUsdCentavos
       - ganhoCentavos
       - ganhoUsdCentavos
@@ -8126,6 +8519,36 @@ components:
       - recorrencias
       - titulosRendaFixa
       - transferencias
+    SaldoCarteira:
+      type: object
+      properties:
+        ativoId:
+          type: string
+          format: uuid
+        confiavel:
+          type: boolean
+          description: Falso fica fora do patrimônio até o usuário promover o ativo
+        contrato:
+          type:
+          - string
+          - "null"
+        custoPendente:
+          type: boolean
+          description: Falta informar o custo de alguma entrada ou saída deste saldo
+        quantidade:
+          type: string
+          description: "Em texto, sem zero à direita"
+          example: "0.12345678"
+        simbolo:
+          type: string
+          description: "Texto do indexador, limpo"
+      required:
+      - ativoId
+      - confiavel
+      - contrato
+      - custoPendente
+      - quantidade
+      - simbolo
     SaldoProjetado:
       type: object
       properties:

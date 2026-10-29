@@ -59,7 +59,11 @@ public enum UserLimit {
   CSV_MAPPINGS(
       "mapeamentos de CSV",
       "SELECT count(*) FROM mapeamento_csv WHERE usuario_id = :userId",
-      LimitsProperties::csvMappings);
+      LimitsProperties::csvMappings),
+  WALLETS(
+      "carteiras",
+      "SELECT count(*) FROM carteira_observada WHERE usuario_id = :userId",
+      LimitsProperties::wallets);
 
   final String label;
   final String countSql;

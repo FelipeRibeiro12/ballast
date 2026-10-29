@@ -28,7 +28,15 @@ public record AssetUpdateRequest(
         @NotNull(message = AssetRequest.DECIMALS_MESSAGE)
         @Min(value = 0, message = AssetRequest.DECIMALS_MESSAGE)
         @Max(value = 18, message = AssetRequest.DECIMALS_MESSAGE)
-        Integer decimals) {
+        Integer decimals,
+    @JsonProperty("confiavel")
+        @Schema(
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+            nullable = true,
+            description =
+                "Ausente ou nulo mantém o valor atual. Verdadeiro promove o ativo que veio de uma"
+                    + " leitura de carteira (ADR-071): ele passa a valer no patrimônio")
+        Boolean trusted) {
 
   // Mesmo tratamento do cadastro: o CHECK do banco recusa espaço nas pontas do símbolo.
   public AssetUpdateRequest {

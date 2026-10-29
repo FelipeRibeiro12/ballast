@@ -126,7 +126,8 @@ class AssetService {
   }
 
   // Menos casas que um movimento já usa deixaria a quantidade dele impossível de digitar de novo.
-  UpdateResult update(UUID userId, UUID id, String symbol, String name, int decimals) {
+  UpdateResult update(
+      UUID userId, UUID id, String symbol, String name, int decimals, Boolean trusted) {
     return transaction.execute(
         status -> {
           if (queries.findAssetDecimals(userId, id).isEmpty()) {
@@ -136,7 +137,7 @@ class AssetService {
             return UpdateResult.Rejected.DECIMALS_TOO_FEW;
           }
           return queries
-              .updateAsset(userId, id, symbol, name, decimals)
+              .updateAsset(userId, id, symbol, name, decimals, trusted)
               .<UpdateResult>map(UpdateResult.Updated::new)
               .orElse(UpdateResult.Rejected.NOT_FOUND);
         });

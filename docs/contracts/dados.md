@@ -290,10 +290,10 @@ movimento_cripto
   usuario_id  uuid fk not null on delete cascade
   conta_id    uuid not null         -- FK composta: conta do mesmo usuário, tipo cripto
   ativo_id    uuid not null         -- FK composta: ativo do mesmo usuário
-  tipo        text not null         -- compra | venda
+  tipo        text not null         -- compra | venda | entrada | saida (V36)
   quantidade  numeric(38,18) not null   -- > 0
   data        date not null         -- 1900-01-01 a 2199-12-31
-  custo       numeric(18,2) not null    -- > 0 e até 90071992547409.91, em reais
+  custo       numeric(18,2) null        -- > 0 e até 90071992547409.91; nulo só sincronizado (V36)
   criado_em   timestamptz not null default now()
   tipo_conta  text generated always as ('cripto') stored   -- a aplicação não escreve
 
@@ -458,32 +458,61 @@ ganham `moeda text not null` (`BRL` | `USD`, sem default): as linhas da F13 são
 linha. `indice.serie` ganha `dolar` (PTAX de venda, série 1 do SGS, reais por
 dólar); a conversão usa a última PTAX até a data.
 
-### Carteira observada
+### Carteira observada (V36, ADR-071)
 
-Endereço público que alimenta uma conta do tipo `cripto`. Cadastrado digitando
-ou conectando a carteira — o resultado é o mesmo (ADR-009).
+Endereço público ligado a uma conta `cripto`. Cadastrado digitando; a F25 só
+preenche `verificada_em` (ADR-009). O saldo lido na rede vira
+`movimento_cripto` sem custo, preso à carteira.
 
 ```
 carteira_observada
-  id               uuid pk
-  usuario_id       uuid fk not null
-  conta_id         uuid fk not null
-  rede             text not null
-  endereco         text not null        -- 0x... (EVM) ou base58 (Solana)
-  rotulo           text
-  verificada_em    timestamptz null     -- assinou provando posse (opcional)
-  sincronizada_em  timestamptz null     -- última leitura da rede
-  erro_ultima_sync text null
-  ativa            bool not null default true
+  id               uuid pk (sem DEFAULT)
+  usuario_id       uuid fk not null on delete cascade
+  conta_id         uuid not null        -- FK composta: conta do mesmo usuário, tipo cripto, NO ACTION
+  rede             text not null        -- ethereum | base | solana
+  endereco         text not null        -- EVM em minúsculas (0x + 40 hex); Solana como veio (base58)
+  rotulo           text null            -- 1 a 60 caracteres, sem espaço nas pontas
+  verificada_em    timestamptz null     -- prova de posse, F25
+  sincronizada_em  timestamptz null     -- última leitura que deu certo
+  tentada_em       timestamptz null     -- última tentativa, boa ou ruim: conta o intervalo de 60 s
+  erro_ultima_sync text null            -- indexador_indisponivel | resposta_invalida | sem_chave
+  criado_em        timestamptz not null default now()
+  tipo_conta       text generated always as ('cripto') stored   -- a aplicação não escreve
   unique (usuario_id, rede, endereco)
+  unique (id, usuario_id)               -- alvo da FK composta de movimento_cripto
 ```
 
-`verificada_em` é opcional por decisão: endereço é público, observar não exige
-prova de posse. A assinatura serve para o usuário ter certeza de que cadastrou
-o endereço certo.
+A coluna `ativa` do rascunho não existe: o job pula carteira de conta
+arquivada. Apagar a conta cripto apaga as carteiras antes (a FK é NO ACTION,
+`AccountDeletionQueries`); apagar a carteira leva os movimentos sincronizados
+dela (`ON DELETE CASCADE`).
 
 `erro_ultima_sync` existe porque o indexador vai falhar, e a interface precisa
 mostrar "última leitura em tal data" em vez de um saldo silenciosamente velho.
+Leitura que falha não grava movimento e não mexe em `sincronizada_em`.
+
+**Colunas novas de `movimento_cripto` (V36).**
+
+```
+  tipo        text not null     -- agora: compra | venda | entrada | saida
+  origem      text not null default 'manual'      -- manual | sincronizada
+  carteira_id uuid null         -- FK composta (carteira_id, usuario_id), ON DELETE CASCADE
+  custo       numeric(18,2) null  -- nulo só em entrada/saida sincronizada sem custo informado
+  moeda       text null           -- nula junto com custo
+```
+
+CHECKs: `origem` e `carteira_id` andam juntos (`(origem = 'manual') = (carteira_id
+IS NULL)`); `entrada` e `saida` existem se e só se `origem = 'sincronizada'`;
+`custo` e `moeda` são nulos juntos, e só na entrada/saída sincronizada. Índice
+parcial `movimento_cripto_carteira (carteira_id, ativo_id) WHERE carteira_id IS
+NOT NULL`. A leitura compara a rede com a soma (com sinal) dos movimentos
+sincronizados da carteira e do ativo e grava a diferença com a data de hoje em
+`America/Sao_Paulo`. `PUT /movimentos-cripto/{id}/custo` preenche o custo (em
+`USD`) uma vez.
+
+`ativo_cripto.confiavel`: o ativo que nasce de uma leitura é `false`, menos o
+nativo da rede (`true`). `false` fica fora de `criptoCentavos`, do patrimônio,
+de `semCotacao` e do job de cotação até o usuário promover.
 
 Rascunho para a F24 (a F13 usa `movimento_cripto`, acima):
 
@@ -1355,8 +1384,8 @@ apenas em código:
 8. `hash_externo` único por usuário em `lancamento` (V34, deduplicação de importação); formato de 64 hexa minúsculos
 9. `hash_arquivo` único por usuário em `importacao` (V34, mesmo arquivo não reimporta); `importacao` e `importacao_linha` ligadas por FK composta ao dono da conta, da categoria e do lançamento; linha inválida só pode ser ignorada
 10. `hash_tx` único por posição (mesma transação não duplica)
-11. `carteira_observada`: endereço único por usuário e rede
-12. `posicao_cripto` com `origem = 'sincronizada'` não aceita escrita manual (F24; a F13 não tem a tabela)
+11. `carteira_observada` (V36, ADR-071): endereço único por usuário e rede, no formato da rede (EVM em minúsculas, Solana base58), conta do mesmo usuário e do tipo cripto (FK composta), erro só nos três códigos do contrato
+12. `movimento_cripto` sincronizado (V36): `origem`, `carteira_id`, tipo `entrada`/`saida` e custo nulo andam juntos pelos CHECKs; a aplicação não apaga nem edita à mão, só informa o custo
 13. Cripto (V13, ADR-035): conta `cripto` com `saldo_inicial` 0 e sem lançamento; ativo único por usuário, rede e contrato; contrato no formato da rede; movimento só em conta cripto e ativo do mesmo usuário, com quantidade e custo positivos; cotação só de ativo do mesmo usuário, com preço positivo e um valor por momento
 14. Idempotência (V23, ADR-056): uma linha por usuário e chave; chave só com letras, dígitos e `._:-` de 1 a 80 caracteres; status 2xx e resposta nulos ou preenchidos juntos
 15. `mapeamento_csv` (V35, ADR-070): nome único por usuário, de 1 a 60 caracteres sem espaço nas pontas; separador, formato de data, decimal e sinal só nos valores do contrato; colunas de 0 a 49 e diferentes entre si
