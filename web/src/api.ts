@@ -1374,7 +1374,7 @@ function isMovimentoCripto(valor: unknown): valor is MovimentoCripto {
     'ativoId' in valor &&
     typeof valor.ativoId === 'string' &&
     'tipo' in valor &&
-    (valor.tipo === 'compra' || valor.tipo === 'venda') &&
+    (valor.tipo === 'compra' || valor.tipo === 'venda' || valor.tipo === 'entrada' || valor.tipo === 'saida') &&
     'quantidade' in valor &&
     eDecimalEmTexto(valor.quantidade) &&
     'data' in valor &&
@@ -1572,6 +1572,120 @@ export async function deleteMovimentoCripto(id: string): Promise<void> {
   if (resposta.status !== 204) {
     return recusarRespostaDeInvestimento(resposta, 'DELETE /movimentos-cripto/{id}')
   }
+}
+
+export type Carteira = components['schemas']['Carteira']
+export type CarteiraRequest = components['schemas']['CarteiraRequest']
+export type SaldoCarteira = components['schemas']['SaldoCarteira']
+export type AtivoCriptoEdicao = components['schemas']['AtivoCriptoEdicao']
+
+const REDES_DA_CARTEIRA: readonly string[] = ['ethereum', 'base', 'solana']
+
+function isSaldoCarteira(valor: unknown): valor is SaldoCarteira {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'ativoId' in valor &&
+    typeof valor.ativoId === 'string' &&
+    'simbolo' in valor &&
+    typeof valor.simbolo === 'string' &&
+    'contrato' in valor &&
+    (valor.contrato === null || typeof valor.contrato === 'string') &&
+    'quantidade' in valor &&
+    eDecimalEmTexto(valor.quantidade) &&
+    'confiavel' in valor &&
+    typeof valor.confiavel === 'boolean' &&
+    'custoPendente' in valor &&
+    typeof valor.custoPendente === 'boolean'
+  )
+}
+
+function isCarteira(valor: unknown): valor is Carteira {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'rede' in valor &&
+    typeof valor.rede === 'string' &&
+    REDES_DA_CARTEIRA.includes(valor.rede) &&
+    'endereco' in valor &&
+    typeof valor.endereco === 'string' &&
+    'rotulo' in valor &&
+    (valor.rotulo === null || typeof valor.rotulo === 'string') &&
+    'sincronizadaEm' in valor &&
+    (valor.sincronizadaEm === null || typeof valor.sincronizadaEm === 'string') &&
+    'leituraFalhou' in valor &&
+    typeof valor.leituraFalhou === 'boolean' &&
+    'saldos' in valor &&
+    Array.isArray(valor.saldos) &&
+    valor.saldos.every(isSaldoCarteira)
+  )
+}
+
+// O endereço só viaja no corpo do POST e nas respostas: nenhuma rota o leva no caminho ou na query.
+export async function fetchCarteiras(): Promise<Carteira[]> {
+  const resposta = await fetch(`${baseUrl}/carteiras`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, '/carteiras')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isCarteira)) throw new ApiError('/carteiras com formato inesperado')
+  return corpo
+}
+
+export async function postCarteira(dados: CarteiraRequest, chave?: string): Promise<Carteira> {
+  const resposta = await enviarJson('/carteiras', dados, chave)
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /carteiras')
+  const corpo: unknown = await resposta.json()
+  if (!isCarteira(corpo)) throw new ApiError('POST /carteiras com formato inesperado')
+  return corpo
+}
+
+export async function deleteCarteira(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/carteiras/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeInvestimento(resposta, 'DELETE /carteiras/{id}')
+}
+
+export async function postSincronizarCarteira(id: string, chave?: string): Promise<Carteira> {
+  const resposta = await fetch(`${baseUrl}/carteiras/${encodeURIComponent(id)}/sincronizar`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(chave),
+  })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /carteiras/{id}/sincronizar')
+  const corpo: unknown = await resposta.json()
+  if (!isCarteira(corpo)) throw new ApiError('POST /carteiras/{id}/sincronizar com formato inesperado')
+  return corpo
+}
+
+export async function putCustoMovimento(id: string, custoUsdCentavos: number, chave?: string): Promise<MovimentoCripto> {
+  const resposta = await fetch(`${baseUrl}/movimentos-cripto/${encodeURIComponent(id)}/custo`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(chave),
+    body: JSON.stringify({ custoUsdCentavos }),
+  })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'PUT /movimentos-cripto/{id}/custo')
+  const corpo: unknown = await resposta.json()
+  if (!isMovimentoCripto(corpo)) throw new ApiError('PUT /movimentos-cripto/{id}/custo com formato inesperado')
+  return corpo
+}
+
+export async function putAtivoCripto(id: string, dados: AtivoCriptoEdicao, chave?: string): Promise<AtivoCripto> {
+  const resposta = await fetch(`${baseUrl}/ativos-cripto/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(chave),
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'PUT /ativos-cripto/{id}')
+  const corpo: unknown = await resposta.json()
+  if (!isAtivoCripto(corpo)) throw new ApiError('PUT /ativos-cripto/{id} com formato inesperado')
+  return corpo
 }
 
 export async function fetchPosicoesCripto(data: string): Promise<PosicoesCripto> {
