@@ -197,7 +197,7 @@ final class ImportPlanner {
     return (tx.name() == null ? "" : tx.name()) + "|" + (tx.memo() == null ? "" : tx.memo());
   }
 
-  private static String hex(byte[] bytes) {
+  static String hex(byte[] bytes) {
     try {
       return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
     } catch (NoSuchAlgorithmException e) {

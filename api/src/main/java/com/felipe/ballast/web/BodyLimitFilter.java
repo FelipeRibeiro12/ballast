@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
@@ -21,7 +22,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 // O Spring MVC lê corpo JSON sem teto. Em toda rota o maior DTO válido (em /auth/*: e-mail 254 +
 // senha 128 + nome 100 caracteres, cada um no pior caso escapado em 6 bytes) cabe em ~3 KB;
 // 4 KiB dá folga para espaço e formatação e continua pequeno para quem quer esgotar memória.
-// O envio de extrato (POST /importacoes, F22) tem exceção própria de 1 MiB; nenhuma outra rota tem.
+// O envio de extrato (POST /importacoes, F22; CSV e prévia, F23) tem exceção própria de 1 MiB;
+// nenhuma outra rota tem.
 // Sem o cabeçalho Content-Length (chunked) o tamanho só aparece lendo, então a leitura é contada
 // e aborta no estouro, sem juntar o corpo na memória.
 @Component
@@ -31,6 +33,8 @@ class BodyLimitFilter extends OncePerRequestFilter {
 
   static final int BODY_LIMIT_BYTES = 4096;
   static final int UPLOAD_LIMIT_BYTES = 1 << 20;
+  private static final Set<String> UPLOAD_PATHS =
+      Set.of("/importacoes", "/importacoes/csv", "/importacoes/csv/previa");
   static final String MESSAGE = "{\"erro\":\"corpo grande demais\"}";
 
   @Override
@@ -45,10 +49,11 @@ class BodyLimitFilter extends OncePerRequestFilter {
     chain.doFilter(new LimitedRequest(request, limit), response);
   }
 
-  // Caminho exato e só POST: /importacoes/{id}/... e as outras rotas seguem em 4 KiB.
+  // Caminho exato e só POST: /importacoes/{id}/... e as outras rotas seguem em 4 KiB. Os envios
+  // de CSV (F23) e a prévia têm o mesmo teto do OFX.
   private static int limitFor(HttpServletRequest request) {
     boolean upload =
-        "POST".equals(request.getMethod()) && "/importacoes".equals(request.getRequestURI());
+        "POST".equals(request.getMethod()) && UPLOAD_PATHS.contains(request.getRequestURI());
     return upload ? UPLOAD_LIMIT_BYTES : BODY_LIMIT_BYTES;
   }
 

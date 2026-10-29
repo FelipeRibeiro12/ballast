@@ -1135,11 +1135,13 @@ Progresso é `soma(aporte_meta.valor)`, que a aplicação nunca deixa negativo
 (trava a meta com `FOR UPDATE`). A projeção ("necessário por mês", "chega pelo
 plano", "chega no ritmo") é calculada na leitura.
 
-## Importação de extrato e fatura (V34, ADR-008, ADR-069)
+## Importação de extrato e fatura (V34 e V35, ADR-008, ADR-069)
 
 Duas etapas: a importação grava as linhas cruas e **propõe** uma decisão; o
 usuário confirma. Nada entra no extrato sem confirmação (ADR-008). A F22 entrega
-só o OFX; a CSV e a fatura em PDF usam as mesmas tabelas.
+o OFX e a F23 o CSV, pelas mesmas tabelas: o formato do arquivo só muda quem lê
+as linhas, e `importacao` não guarda de que formato veio. A fatura em PDF usará
+as mesmas tabelas.
 
 ```
 importacao
@@ -1161,8 +1163,8 @@ importacao_linha
   usuario_id       uuid fk not null
   importacao_id    uuid not null
   ordem            integer not null        -- posição no arquivo, 1 a 2000; única por importação
-  bruta            jsonb not null          -- os campos lidos, como texto (pode ter FITID)
-  hash_externo     text null               -- sha256 de `fitid:conta_id|FITID`, ou de `nofitid:` mais a composição sem FITID
+  bruta            jsonb not null          -- os campos lidos, como texto (pode ter FITID). No CSV, as células `c1`, `c2`..., já com o apóstrofo de fórmula
+  hash_externo     text null               -- sha256 de `fitid:conta_id|FITID`, ou de `nofitid:` mais a composição sem FITID (OFX); `csvid:` ou `csv:` no CSV
   data             date null               -- data, tipo e valor ficam nulos só na linha inválida
   tipo             text null               -- receita | despesa
   valor            numeric(18,2) null      -- positivo; o sinal vem do tipo
@@ -1205,6 +1207,61 @@ o Postgres só mexe no catálogo; o `CREATE INDEX` e o `ADD CONSTRAINT` leem a t
 Apagar uma conta apaga as importações dela (a FK é `NO ACTION`, então o
 `DELETE /contas/{id}` remove as importações antes da conta).
 
+### Mapeamento de CSV (V35, ADR-070)
+
+Como ler o CSV de um banco, salvo por usuário para o próximo envio. Guarda só
+as regras de leitura; o arquivo e as linhas ficam em `importacao` e
+`importacao_linha`. Apagar o mapeamento não mexe em importação já criada.
+
+```
+mapeamento_csv
+  id                uuid pk
+  usuario_id        uuid fk not null       -- ON DELETE CASCADE
+  nome              text not null          -- banco ou apelido, 1 a 60, sem espaço nas pontas
+  separador         text not null          -- ponto_e_virgula | virgula | tab | barra_vertical
+  formato_data      text not null          -- dd/MM/yyyy | yyyy-MM-dd | MM/dd/yyyy | dd-MM-yyyy
+  decimal           text not null          -- virgula (1.234,56) | ponto (1,234.56)
+  sinal             text not null          -- negativo_despesa | positivo_despesa (compra de cartão vem positiva)
+  tem_cabecalho     boolean not null
+  coluna_data       smallint not null      -- índice a partir de 0, de 0 a 49
+  coluna_valor      smallint not null
+  coluna_descricao  smallint not null
+  coluna_id         smallint null          -- identificador da transação, se o banco tiver
+  criado_em         timestamptz not null default now()
+  unique (id, usuario_id)
+  unique (usuario_id, nome)
+  check colunas distintas entre si (coluna_id só entra se não for nula)
+```
+
+Os valores de `separador` são nomes, não o caractere: `;` e TAB não viajam bem
+numa query. Até 20 por usuário, no `UserLimits` (`LIMITE_MAPEAMENTOS_CSV`).
+
+### Hash da linha de CSV
+
+O CSV não tem identificador garantido, então o hash tem dois caminhos. Ambos
+levam a tag no texto que vai para o SHA-256 (a coluna só aceita 64 hexa), para
+um id forjado com o formato da composição não colidir com outra linha.
+
+- Com `coluna_id` preenchida e a célula não vazia: `csvid:` + `conta_id` + `|` + id.
+  O mesmo id duas vezes no arquivo deixa a segunda linha em `ignorar`, motivo
+  `duplicada_no_arquivo`, como o FITID.
+- Sem id: `csv:` + `conta_id` + `|` + data ISO + `|` + valor (escala 2, sinal da
+  linha já normalizado: positivo é receita) + `|` + descrição normalizada
+  (espaços colapsados, minúsculas, sobre a célula antes do apóstrofo) + `|` +
+  ordinal entre as linhas iguais nessas três chaves, na ordem do arquivo. Dois
+  cafés iguais no mesmo dia não colapsam, e o mesmo extrato reenviado, ou um
+  sobreposto, cai em `ja_importada`.
+
+### Texto que vem do CSV
+
+Toda célula de texto (título, descrição, id, as células em `bruta`) que começa
+com `=`, `+`, `-`, `@`, TAB ou CR ganha um apóstrofo na frente (OWASP, fórmula
+injetada). Vale na gravação: nenhum lançamento nasce com fórmula crua, e uma
+exportação futura para planilha já sai segura. As colunas de data e valor leem a
+célula crua, porque `-1.234,56` é número. Cada célula é cortada em 200
+caracteres; o título é o texto cortado em 100 e, se passou disso, o texto
+inteiro vai em `descricao`.
+
 ### Conciliação
 
 O problema real da importação não é ler o arquivo: é que você já lançou o
@@ -1232,7 +1289,7 @@ lançamento sumiu ou já tem hash, a linha vira lançamento novo, porque a
 transação do banco é real.
 
 O hash sem FITID usa data, valor com sinal, nome, memo e a ordem da ocorrência
-entre linhas iguais do arquivo. O arquivo original **não é guardado** depois de
+entre linhas iguais do arquivo (o do CSV está em "Hash da linha de CSV"). O arquivo original **não é guardado** depois de
 processado. O que fica é `bruta`, suficiente para auditar.
 
 ## Orçamento
@@ -1302,6 +1359,7 @@ apenas em código:
 12. `posicao_cripto` com `origem = 'sincronizada'` não aceita escrita manual (F24; a F13 não tem a tabela)
 13. Cripto (V13, ADR-035): conta `cripto` com `saldo_inicial` 0 e sem lançamento; ativo único por usuário, rede e contrato; contrato no formato da rede; movimento só em conta cripto e ativo do mesmo usuário, com quantidade e custo positivos; cotação só de ativo do mesmo usuário, com preço positivo e um valor por momento
 14. Idempotência (V23, ADR-056): uma linha por usuário e chave; chave só com letras, dígitos e `._:-` de 1 a 80 caracteres; status 2xx e resposta nulos ou preenchidos juntos
+15. `mapeamento_csv` (V35, ADR-070): nome único por usuário, de 1 a 60 caracteres sem espaço nas pontas; separador, formato de data, decimal e sinal só nos valores do contrato; colunas de 0 a 49 e diferentes entre si
 
 ## Índices iniciais
 

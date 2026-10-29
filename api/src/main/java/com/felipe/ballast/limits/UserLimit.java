@@ -55,7 +55,11 @@ public enum UserLimit {
   PENDING_IMPORTS(
       "importações pendentes",
       "SELECT count(*) FROM importacao WHERE usuario_id = :userId AND status = 'pendente'",
-      LimitsProperties::pendingImports);
+      LimitsProperties::pendingImports),
+  CSV_MAPPINGS(
+      "mapeamentos de CSV",
+      "SELECT count(*) FROM mapeamento_csv WHERE usuario_id = :userId",
+      LimitsProperties::csvMappings);
 
   final String label;
   final String countSql;

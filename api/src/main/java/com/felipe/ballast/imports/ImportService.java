@@ -31,6 +31,7 @@ class ImportService {
   enum Failure {
     NOT_FOUND,
     ACCOUNT_NOT_FOUND,
+    MAPPING_NOT_FOUND,
     ACCOUNT_ARCHIVED,
     ACCOUNT_NOT_ACCEPTED,
     INVALID_FILE,
@@ -59,23 +60,47 @@ class ImportService {
 
   record Detail(ImportQueries.ImportRow header, List<ImportQueries.LineRow> lines) {}
 
+  // O que o leitor de cada formato entrega ao plano: as linhas e o hash de cada uma.
+  private record ParsedFile(List<OfxTransaction> transactions, List<String> hashes) {}
+
   private final ImportQueries queries;
+  private final CsvMappingQueries mappings;
   private final WriteTransaction transaction;
   private final UserLimits limits;
   private final ImportedEntries entries;
 
   ImportService(
       ImportQueries queries,
+      CsvMappingQueries mappings,
       WriteTransaction transaction,
       UserLimits limits,
       ImportedEntries entries) {
     this.queries = queries;
+    this.mappings = mappings;
     this.transaction = transaction;
     this.limits = limits;
     this.entries = entries;
   }
 
   Result<Detail> upload(UUID userId, UUID accountId, byte[] content) {
+    return store(userId, accountId, null, content);
+  }
+
+  // O CSV entra na mesma máquina do OFX: muda só o leitor do arquivo e o hash de cada linha.
+  Result<Detail> uploadCsv(UUID userId, UUID accountId, UUID mappingId, byte[] content) {
+    return store(userId, accountId, mappingId, content);
+  }
+
+  // Lê o arquivo com o mapeamento informado, sem gravar nada. Serve à prévia.
+  Result<CsvFile> previewCsv(byte[] content, CsvMapping mapping) {
+    try {
+      return new Result.Ok<>(CsvParser.parse(content, mapping));
+    } catch (CsvException e) {
+      return new Result.Failed<>(Failure.INVALID_FILE, null, e.getMessage());
+    }
+  }
+
+  private Result<Detail> store(UUID userId, UUID accountId, UUID mappingId, byte[] content) {
     Optional<ImportQueries.AccountInfo> account = queries.findAccount(userId, accountId);
     if (account.isEmpty()) {
       return failed(Failure.ACCOUNT_NOT_FOUND);
@@ -85,6 +110,14 @@ class ImportService {
     }
     if (account.get().archived()) {
       return failed(Failure.ACCOUNT_ARCHIVED);
+    }
+    CsvMapping mapping = null;
+    if (mappingId != null) {
+      Optional<CsvMappingQueries.Row> saved = mappings.find(userId, mappingId);
+      if (saved.isEmpty()) {
+        return failed(Failure.MAPPING_NOT_FOUND);
+      }
+      mapping = saved.get().mapping();
     }
     if (content == null || content.length == 0) {
       return new Result.Failed<>(Failure.INVALID_FILE, null, "arquivo vazio");
@@ -97,10 +130,10 @@ class ImportService {
     // Antes do parse e do plano: com o teto cheio o envio não gasta CPU nem memória. A conferência
     // com trava continua dentro da transação.
     limits.checkRoomEarly(userId, UserLimit.PENDING_IMPORTS);
-    OfxFile file;
+    ParsedFile file;
     try {
-      file = OfxParser.parse(content);
-    } catch (OfxException e) {
+      file = mapping == null ? readOfx(content, accountId) : readCsv(content, mapping, accountId);
+    } catch (OfxException | CsvException e) {
       return new Result.Failed<>(Failure.INVALID_FILE, null, e.getMessage());
     }
     List<ImportPlanner.PlannedLine> planned = plan(userId, accountId, file);
@@ -325,9 +358,19 @@ class ImportService {
     };
   }
 
-  private List<ImportPlanner.PlannedLine> plan(UUID userId, UUID accountId, OfxFile file) {
+  private static ParsedFile readOfx(byte[] content, UUID accountId) {
+    List<OfxTransaction> transactions = OfxParser.parse(content).transactions();
+    return new ParsedFile(transactions, ImportPlanner.externalHashes(accountId, transactions));
+  }
+
+  private static ParsedFile readCsv(byte[] content, CsvMapping mapping, UUID accountId) {
+    CsvFile file = CsvParser.parse(content, mapping);
+    return new ParsedFile(file.transactions(), file.hashes(accountId));
+  }
+
+  private List<ImportPlanner.PlannedLine> plan(UUID userId, UUID accountId, ParsedFile file) {
     List<OfxTransaction> transactions = file.transactions();
-    List<String> hashes = ImportPlanner.externalHashes(accountId, transactions);
+    List<String> hashes = file.hashes();
     Set<String> alreadyImported =
         queries.existingExternalHashes(
             userId, hashes.stream().filter(Objects::nonNull).distinct().toList());

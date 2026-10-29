@@ -154,6 +154,18 @@ class RateLimitTest {
   }
 
   @Test
+  void csvUploadAndPreviewShareTheImportLimit() throws Exception {
+    assertThat(call(post("/importacoes/csv"), "198.51.100.30").getStatus()).isEqualTo(401);
+    assertThat(call(post("/importacoes/csv/previa"), "198.51.100.30").getStatus()).isEqualTo(401);
+
+    MockHttpServletResponse refused = call(post("/importacoes"), "198.51.100.30");
+
+    assertThat(refused.getStatus()).isEqualTo(429);
+    assertThat(call(post("/importacoes/csv/previa"), "198.51.100.30").getStatus()).isEqualTo(429);
+    assertThat(call(post("/importacoes/csv"), "198.51.100.31").getStatus()).isEqualTo(401);
+  }
+
+  @Test
   void readingImportsIsNotLimitedByTheImportRule() throws Exception {
     for (int i = 0; i < 4; i++) {
       assertThat(call(get("/importacoes"), "198.51.100.22").getStatus()).isEqualTo(401);

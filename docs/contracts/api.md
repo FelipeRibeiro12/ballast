@@ -951,7 +951,8 @@ usuário responde 404, com o mesmo corpo do inexistente.
 - `POST /importacoes?conta_id=<uuid>` com o arquivo cru no corpo
   (`Content-Type: application/octet-stream`; outro tipo dá 415). Sem multipart,
   então nome de arquivo nunca chega ao servidor. Teto de 1 MiB, contado na
-  leitura (413 `corpo grande demais`); é a única rota com teto acima de 4 KiB.
+  leitura (413 `corpo grande demais`); com o envio e a prévia de CSV (abaixo), são
+  as únicas rotas com teto acima de 4 KiB.
   OFX 1.x (SGML) e 2.x (XML), em UTF-8 ou Windows-1252. 201 com o detalhe
   abaixo. Erros: 400 `conta_id` ausente ou que não é UUID, `conta arquivada`,
   `conta cripto ou de investimento não recebe lançamento`; 404 `conta não
@@ -999,13 +1000,103 @@ deixa a linha inválida. A `DTPOSTED` vale como foi escrita, sem conversão de
 fuso. `dataCompetencia` do lançamento criado é essa data e `dataCaixa` segue a
 conta (vencimento da fatura em cartão). Logs levam só ids e contagens.
 
+## Importação de extrato CSV (ADR-008, ADR-070)
+
+Entra na mesma máquina do OFX: o envio devolve a proposta por linha, e a
+revisão (`PUT /importacoes/{id}/linhas/{linhaId}`), a confirmação, o descarte, o
+`GET /importacoes` e o `GET /importacoes/{id}` são as rotas da seção anterior,
+sem mudança. O CSV só traz um mapeamento de colunas salvo por usuário e uma
+prévia. Toda rota exige sessão e filtra por dono: conta ou mapeamento de outro
+usuário responde 404, com o mesmo corpo do inexistente.
+
+### Mapeamentos (`/mapeamentos-csv`)
+
+`MapeamentoCsv`: `id`, `nome`, `separador`, `formatoData`, `decimal`, `sinal`,
+`temCabecalho`, `colunaData`, `colunaValor`, `colunaDescricao`, `colunaId`
+(nulo se o banco não tem identificador). Valores:
+
+- `separador`: `ponto_e_virgula`, `virgula`, `tab` ou `barra_vertical`
+- `formatoData`: `dd/MM/yyyy`, `yyyy-MM-dd`, `MM/dd/yyyy` ou `dd-MM-yyyy`
+- `decimal`: `virgula` (1.234,56) ou `ponto` (1,234.56)
+- `sinal`: `negativo_despesa` ou `positivo_despesa` (extrato de cartão, onde a
+  compra vem positiva)
+- colunas: índice a partir de 0, de 0 a 49, diferentes entre si
+
+- `GET /mapeamentos-csv`: do mais antigo para o mais novo.
+- `POST /mapeamentos-csv` com todos os campos menos `id` (`colunaId` é
+  opcional): 201 com o `MapeamentoCsv`. `nome` tem de 1 a 60 caracteres, sem
+  caractere de controle, e é único por usuário. 400 para entrada inválida,
+  campo não declarado ou colunas repetidas; 409 `já existe um mapeamento com
+  esse nome` ou `limite de mapeamentos de CSV atingido` (20 por usuário).
+- `PUT /mapeamentos-csv/{id}`: mesmo corpo, troca tudo. 200 com o mapeamento.
+  404 se não existe, é de outro usuário ou o id não é UUID; 409 para nome de
+  outro mapeamento seu.
+- `DELETE /mapeamentos-csv/{id}`: 204. As importações já criadas não mudam.
+
+### Envio
+
+`POST /importacoes/csv?conta_id=<uuid>&mapeamento_id=<uuid>` com o arquivo cru
+no corpo (`application/octet-stream`; outro tipo dá 415), como o OFX: sem
+multipart, sem nome de arquivo, nada em disco. Mesmo teto de 1 MiB (413), 2000
+linhas de dados (422), no máximo 50 colunas por linha (422) e célula cortada em
+200 caracteres. UTF-8 (com ou sem BOM) ou Windows-1252. Linhas totalmente
+vazias são ignoradas e não contam na `ordem`. Resposta 201 com o mesmo
+`ImportacaoDetalhe` do OFX. Mesmos erros do OFX (400 `conta_id` ou
+`mapeamento_id` ausente ou que não é UUID, parâmetro não declarado, `conta
+arquivada`, `conta cripto ou de investimento não recebe lançamento`; 404 `conta
+não encontrada` ou `mapeamento não encontrado`; 409 arquivo já importado, com
+`importacaoId`, ou 20 pendentes), mais o 422 de leitura, com mensagem fixa e
+sem trecho do arquivo: `arquivo vazio`, `o arquivo não parece um CSV de texto`
+(byte NUL), `aspas sem fechar no arquivo`, `nenhuma linha de dados encontrada`,
+`arquivo com mais de 2000 linhas`, `arquivo com mais de 50 colunas por linha`.
+
+Linha com menos colunas que o mapeamento, data ou valor ilegível entra como
+inválida (`valida: false`, `erro`, `proposta: ignorar`, `motivo: invalida`) e
+fica fora da confirmação; não derruba o arquivo. Os `erro` são `linha com menos
+colunas que o mapeamento`, `data inválida`, `valor inválido`, `valor zero`,
+`valor com mais de 2 casas decimais` e `valor fora do limite`.
+
+Leitura do valor: sinal `-` ou `+` à frente, prefixo `R$` e espaços (inclusive
+NBSP) aceitos; parênteses não. Com `decimal: virgula`, `.` é milhar (em grupos de
+3) e `,` é decimal; com `ponto`, o inverso. No máximo 2 casas, sem arredondar.
+`negativo_despesa`: valor menor que zero é despesa; `positivo_despesa`: maior que
+zero é despesa. A data segue `formatoData` de forma estrita (31/02 é inválida),
+entre os anos 1900 e 2199.
+
+Deduplicação: com `colunaId` preenchida o id da célula manda (mesmo id no
+arquivo: a segunda linha é `ignorar`, `duplicada_no_arquivo`). Sem id, vale a
+conta, a data, o valor, a descrição e a ordem entre linhas iguais, então dois
+cafés iguais no mesmo dia são dois lançamentos e um extrato reenviado, ou
+sobreposto, cai em `ja_importada`.
+
+Fórmula injetada: texto de célula (título, descrição, `bruta`) que começa com
+`=`, `+`, `-`, `@`, TAB ou CR ganha um apóstrofo na frente. O título que o
+cliente vê e o lançamento confirmado já levam o apóstrofo.
+
+### Prévia
+
+`POST /importacoes/csv/previa` com o mapeamento na query e o arquivo cru no
+corpo. Parâmetros, todos obrigatórios menos o último: `separador`,
+`formato_data`, `decimal`, `sinal`, `tem_cabecalho` (`true` ou `false`),
+`coluna_data`, `coluna_valor`, `coluna_descricao`, `coluna_id`. Os valores são os
+do mapeamento. Parâmetro ausente, inválido, repetido ou não declarado, ou colunas
+repetidas: 400. Mesmos tetos, 413 e 422 do envio. Não grava nada: não cria
+importação nem hash e não usa vaga das 20 pendentes.
+
+200 `CsvPrevia`: `totalLinhas` (do arquivo inteiro), `colunasDetectadas` (da
+primeira linha) e `linhas` (até 10). Cada `CsvPreviaLinha`: `ordem`, `celulas`
+(texto, já cortado e com o apóstrofo de fórmula), `valida`, `erro`, `data`,
+`tipo`, `valorCentavos` (centavos, sempre positivo) e `titulo`. Em linha
+inválida `data`, `tipo` e `valorCentavos` são nulos.
+
 ## Limites (ADR-049)
 
 - Por IP (IPv6 pelo `/64`): 600 requisições por minuto em qualquer rota, 10
   `POST /auth/login` por minuto e 5 `POST /auth/cadastro` por hora.
 - Login e cadastro somados, de todos os IPs: 60 por minuto.
-- `POST /importacoes` e `POST /importacoes/{id}/confirmacao`: 10 por minuto por
-  IP, somados entre as duas rotas, e fora do teto somado do argon2.
+- `POST /importacoes`, `POST /importacoes/csv`, `POST /importacoes/csv/previa` e
+  `POST /importacoes/{id}/confirmacao`: 10 por minuto por IP, somados entre as
+  quatro rotas, e fora do teto somado do argon2.
 - A recusa vem antes de qualquer outra checagem: um 429 não diz se a sessão,
   o corpo ou a rota valiam.
 - O login com atraso por e-mail e IP (ADR-053) responde 429 com a mensagem

@@ -178,6 +178,101 @@ final class ImportsApi {
     return body(response);
   }
 
+  // Mapeamento do extrato típico de banco brasileiro: data;valor;descrição, com cabeçalho.
+  static Map<String, Object> brMapping(String name) {
+    Map<String, Object> mapping = new java.util.LinkedHashMap<>();
+    mapping.put("nome", name);
+    mapping.put("separador", "ponto_e_virgula");
+    mapping.put("formatoData", "dd/MM/yyyy");
+    mapping.put("decimal", "virgula");
+    mapping.put("sinal", "negativo_despesa");
+    mapping.put("temCabecalho", true);
+    mapping.put("colunaData", 0);
+    mapping.put("colunaValor", 1);
+    mapping.put("colunaDescricao", 2);
+    return mapping;
+  }
+
+  static byte[] csv(String... lines) {
+    return String.join("\n", lines).getBytes(StandardCharsets.UTF_8);
+  }
+
+  MockHttpServletResponse createMapping(Cookie session, Object body) throws Exception {
+    return send(
+        post("/mapeamentos-csv")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(JSON.writeValueAsString(body)),
+        session);
+  }
+
+  String createMappingOk(Cookie session, Map<String, Object> body) throws Exception {
+    MockHttpServletResponse response = createMapping(session, body);
+    if (response.getStatus() != 201) {
+      throw new IllegalStateException("mapeamento de teste falhou: " + response.getStatus());
+    }
+    return body(response).get("id").asString();
+  }
+
+  MockHttpServletResponse updateMapping(Cookie session, String id, Object body) throws Exception {
+    return send(
+        put("/mapeamentos-csv/" + id)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(JSON.writeValueAsString(body)),
+        session);
+  }
+
+  MockHttpServletResponse deleteMapping(Cookie session, String id) throws Exception {
+    return send(delete("/mapeamentos-csv/" + id), session);
+  }
+
+  MockHttpServletResponse listMappings(Cookie session) throws Exception {
+    return send(get("/mapeamentos-csv"), session);
+  }
+
+  MockHttpServletResponse uploadCsv(
+      Cookie session, String accountId, String mappingId, byte[] content) throws Exception {
+    StringBuilder query = new StringBuilder();
+    if (accountId != null) {
+      query.append(query.isEmpty() ? "?" : "&").append("conta_id=").append(accountId);
+    }
+    if (mappingId != null) {
+      query.append(query.isEmpty() ? "?" : "&").append("mapeamento_id=").append(mappingId);
+    }
+    return send(
+        post("/importacoes/csv" + query)
+            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .content(content),
+        session);
+  }
+
+  JsonNode uploadCsvOk(Cookie session, String accountId, String mappingId, byte[] content)
+      throws Exception {
+    MockHttpServletResponse response = uploadCsv(session, accountId, mappingId, content);
+    if (response.getStatus() != 201) {
+      throw new IllegalStateException(
+          "envio de CSV de teste falhou: "
+              + response.getStatus()
+              + " "
+              + response.getContentAsString(StandardCharsets.UTF_8));
+    }
+    return body(response);
+  }
+
+  // A query de uma prévia com o mapeamento padrão dos testes.
+  static final String BR_PREVIEW_QUERY =
+      "separador=ponto_e_virgula&formato_data=dd/MM/yyyy&decimal=virgula"
+          + "&sinal=negativo_despesa&tem_cabecalho=true&coluna_data=0&coluna_valor=1"
+          + "&coluna_descricao=2";
+
+  MockHttpServletResponse previewCsv(Cookie session, String query, byte[] content)
+      throws Exception {
+    return send(
+        post("/importacoes/csv/previa?" + query)
+            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .content(content),
+        session);
+  }
+
   MockHttpServletResponse list(Cookie session) throws Exception {
     return send(get("/importacoes"), session);
   }

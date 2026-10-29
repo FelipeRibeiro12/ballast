@@ -380,10 +380,12 @@ class ImportController {
     return failure((ImportService.Result.Failed<?>) result);
   }
 
-  private static ResponseEntity<?> failure(ImportService.Result.Failed<?> failed) {
+  static ResponseEntity<?> failure(ImportService.Result.Failed<?> failed) {
     return switch (failed.failure()) {
       case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case ACCOUNT_NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(ACCOUNT_NOT_FOUND);
+      case MAPPING_NOT_FOUND ->
+          ResponseEntity.status(HttpStatus.NOT_FOUND).body(CsvMappingController.NOT_FOUND);
       case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
       case ACCOUNT_NOT_ACCEPTED -> ResponseEntity.badRequest().body(ACCOUNT_NOT_ACCEPTED);
       case INVALID_FILE ->

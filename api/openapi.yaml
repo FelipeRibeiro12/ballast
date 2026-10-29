@@ -2064,6 +2064,224 @@ paths:
       summary: Envia um extrato OFX e devolve a proposta por linha
       tags:
       - importacoes
+  /importacoes/csv:
+    post:
+      description: "Igual ao envio de OFX, lendo o arquivo pelo mapeamento salvo.\
+        \ O corpo é o arquivo cru (application/octet-stream), de até 1 MiB, 2000 linhas\
+        \ de dados e 50 colunas por linha. Linha com data ou valor ilegível entra\
+        \ como inválida e fica de fora da confirmação. A revisão e a confirmação sã\
+        o as de /importacoes/{id}."
+      operationId: postImportacoesCsv
+      parameters:
+      - in: query
+        name: conta_id
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: mapeamento_id
+        required: false
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportacaoDetalhe"
+          description: Importação pendente criada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "conta_id ou mapeamento_id ausente ou que não é UUID, parâ\
+            metro não declarado, \"conta arquivada\" ou \"conta cripto ou de investimento\
+            \ não recebe lançamento\""
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Conta ou mapeamento de outro usuário ou inexistente; mesmo
+            corpo
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportacaoDuplicada"
+          description: Arquivo já enviado (corpo com importacaoId) ou 20 importações
+            pendentes (corpo comum de erro)
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Arquivo maior que 1 MiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/octet-stream
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Arquivo vazio, com NUL, com aspas sem fechar, sem linhas de\
+            \ dados, com mais de 2000 linhas ou mais de 50 colunas"
+      security:
+      - cookieAuth: []
+      summary: Envia um extrato CSV e devolve a proposta por linha
+      tags:
+      - importacoes
+  /importacoes/csv/previa:
+    post:
+      description: "Recebe o mapeamento na query e o arquivo cru no corpo (mesmos\
+        \ tetos do envio). Devolve as 10 primeiras linhas, com as células e a interpretaç\
+        ão de cada uma, o total de linhas e o número de colunas da primeira linha.\
+        \ Não cria importação, não grava hash e não usa vaga das 20 pendentes. Mesmo\
+        \ limite de requisições do envio."
+      operationId: postImportacoesCsvPrevia
+      parameters:
+      - in: query
+        name: separador
+        required: false
+        schema:
+          type: string
+          enum:
+          - ponto_e_virgula
+          - virgula
+          - tab
+          - barra_vertical
+      - in: query
+        name: formato_data
+        required: false
+        schema:
+          type: string
+          enum:
+          - dd/MM/yyyy
+          - yyyy-MM-dd
+          - MM/dd/yyyy
+          - dd-MM-yyyy
+      - in: query
+        name: decimal
+        required: false
+        schema:
+          type: string
+          enum:
+          - virgula
+          - ponto
+      - in: query
+        name: sinal
+        required: false
+        schema:
+          type: string
+          enum:
+          - negativo_despesa
+          - positivo_despesa
+      - in: query
+        name: tem_cabecalho
+        required: false
+        schema:
+          type: string
+          enum:
+          - "true"
+          - "false"
+      - in: query
+        name: coluna_data
+        required: false
+        schema:
+          type: integer
+          maximum: 49
+          minimum: 0
+      - in: query
+        name: coluna_valor
+        required: false
+        schema:
+          type: integer
+          maximum: 49
+          minimum: 0
+      - in: query
+        name: coluna_descricao
+        required: false
+        schema:
+          type: integer
+          maximum: 49
+          minimum: 0
+      - in: query
+        name: coluna_id
+        required: false
+        schema:
+          type: integer
+          maximum: 49
+          minimum: 0
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvPrevia"
+          description: Prévia das primeiras linhas
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Parâmetro ausente, inválido, repetido ou não declarado; colunas\
+            \ repetidas"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Arquivo maior que 1 MiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/octet-stream
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Mesmos casos do envio
+      security:
+      - cookieAuth: []
+      summary: "Mostra como um CSV seria lido, sem gravar nada"
+      tags:
+      - importacoes
   /importacoes/{id}:
     delete:
       description: Libera o arquivo para um novo envio. A confirmada não se descarta.
@@ -2792,6 +3010,156 @@ paths:
       summary: Liga o lançamento a um terceiro ou solta o vínculo
       tags:
       - terceiros
+  /mapeamentos-csv:
+    get:
+      operationId: getMapeamentosCsv
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MapeamentoCsv"
+          description: "Mapeamentos, do mais antigo para o mais novo"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+      security:
+      - cookieAuth: []
+      summary: Lista os mapeamentos de CSV do usuário
+      tags:
+      - importacoes
+    post:
+      description: Até 20 por usuário. O nome é único por usuário.
+      operationId: postMapeamentosCsv
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MapeamentoCsvRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MapeamentoCsv"
+          description: Mapeamento criado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado e colunas\
+            \ repetidas"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Nome já usado ou limite de mapeamentos atingido
+      security:
+      - cookieAuth: []
+      summary: Salva um mapeamento de colunas de CSV
+      tags:
+      - importacoes
+  /mapeamentos-csv/{id}:
+    delete:
+      description: As importações já criadas com ele não mudam.
+      operationId: deleteMapeamentosCsvById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Mapeamento apagado
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Mapeamento de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+      security:
+      - cookieAuth: []
+      summary: Apaga o mapeamento
+      tags:
+      - importacoes
+    put:
+      operationId: putMapeamentosCsvById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MapeamentoCsvRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MapeamentoCsv"
+          description: Mapeamento atualizado
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, inclusive campo não declarado e colunas\
+            \ repetidas"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Mapeamento de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Nome já usado por outro mapeamento do usuário
+      security:
+      - cookieAuth: []
+      summary: Troca todos os campos do mapeamento
+      tags:
+      - importacoes
   /metas:
     get:
       description: Pelo título sem diferenciar caixa (ADR-045).
@@ -5681,6 +6049,83 @@ components:
       required:
       - nome
       - tipo
+    CsvPrevia:
+      type: object
+      properties:
+        colunasDetectadas:
+          type: integer
+          format: int32
+          description: Colunas da primeira linha do arquivo
+          maximum: 50
+          minimum: 1
+        linhas:
+          type: array
+          description: As 10 primeiras linhas
+          items:
+            $ref: "#/components/schemas/CsvPreviaLinha"
+        totalLinhas:
+          type: integer
+          format: int32
+          description: "Linhas de dados do arquivo inteiro, sem o cabeçalho"
+          maximum: 2000
+          minimum: 1
+      required:
+      - colunasDetectadas
+      - linhas
+      - totalLinhas
+    CsvPreviaLinha:
+      type: object
+      properties:
+        celulas:
+          type: array
+          description: "Células da linha, cortadas em 200 caracteres e com apóstrofo\
+            \ na frente das que começam como fórmula"
+          items:
+            type: string
+        data:
+          type:
+          - string
+          - "null"
+          format: date
+        erro:
+          type:
+          - string
+          - "null"
+          description: "Por que a linha é inválida; texto fixo, sem trecho do arquivo"
+        ordem:
+          type: integer
+          format: int32
+          minimum: 1
+        tipo:
+          type:
+          - string
+          - "null"
+          enum:
+          - receita
+          - despesa
+        titulo:
+          type: string
+          maxLength: 100
+          minLength: 1
+        valida:
+          type: boolean
+        valorCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Centavos de real, sempre positivo; o sinal vem do tipo"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - celulas
+      - data
+      - erro
+      - ordem
+      - tipo
+      - titulo
+      - valida
+      - valorCentavos
     DespesaDaCategoria:
       type: object
       properties:
@@ -6420,6 +6865,147 @@ components:
       required:
       - email
       - senha
+    MapeamentoCsv:
+      type: object
+      properties:
+        colunaData:
+          type: integer
+          format: int32
+          maximum: 49
+          minimum: 0
+        colunaDescricao:
+          type: integer
+          format: int32
+          maximum: 49
+          minimum: 0
+        colunaId:
+          type:
+          - integer
+          - "null"
+          format: int32
+          maximum: 49
+          minimum: 0
+        colunaValor:
+          type: integer
+          format: int32
+          maximum: 49
+          minimum: 0
+        decimal:
+          type: string
+          enum:
+          - virgula
+          - ponto
+        formatoData:
+          type: string
+          enum:
+          - dd/MM/yyyy
+          - yyyy-MM-dd
+          - MM/dd/yyyy
+          - dd-MM-yyyy
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+          maxLength: 60
+          minLength: 1
+        separador:
+          type: string
+          enum:
+          - ponto_e_virgula
+          - virgula
+          - tab
+          - barra_vertical
+        sinal:
+          type: string
+          enum:
+          - negativo_despesa
+          - positivo_despesa
+        temCabecalho:
+          type: boolean
+      required:
+      - colunaData
+      - colunaDescricao
+      - colunaId
+      - colunaValor
+      - decimal
+      - formatoData
+      - id
+      - nome
+      - separador
+      - sinal
+      - temCabecalho
+    MapeamentoCsvRequest:
+      type: object
+      properties:
+        colunaData:
+          type: integer
+          format: int32
+          description: "Índice da coluna, a partir de 0, de 0 a 49"
+          maximum: 49
+          minimum: 0
+        colunaDescricao:
+          type: integer
+          format: int32
+          description: "Índice da coluna, a partir de 0, de 0 a 49"
+          maximum: 49
+          minimum: 0
+        colunaId:
+          type:
+          - integer
+          - "null"
+          format: int32
+          description: "Índice da coluna, a partir de 0, de 0 a 49. Coluna com o identificador\
+            \ da transação, se o banco tiver"
+          maximum: 49
+          minimum: 0
+        colunaValor:
+          type: integer
+          format: int32
+          description: "Índice da coluna, a partir de 0, de 0 a 49"
+          maximum: 49
+          minimum: 0
+        decimal:
+          type: string
+          enum:
+          - virgula
+          - ponto
+        formatoData:
+          type: string
+          enum:
+          - dd/MM/yyyy
+          - yyyy-MM-dd
+          - MM/dd/yyyy
+          - dd-MM-yyyy
+        nome:
+          type: string
+          description: Banco ou apelido; único por usuário
+          maxLength: 60
+          minLength: 1
+        separador:
+          type: string
+          enum:
+          - ponto_e_virgula
+          - virgula
+          - tab
+          - barra_vertical
+        sinal:
+          type: string
+          enum:
+          - negativo_despesa
+          - positivo_despesa
+        temCabecalho:
+          type: boolean
+      required:
+      - colunaData
+      - colunaDescricao
+      - colunaValor
+      - decimal
+      - formatoData
+      - nome
+      - separador
+      - sinal
+      - temCabecalho
     MenorSaldo:
       type: object
       description: Menor saldo da série e o primeiro dia em que ocorre

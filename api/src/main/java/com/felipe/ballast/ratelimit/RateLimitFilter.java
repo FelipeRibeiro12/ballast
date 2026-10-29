@@ -87,7 +87,11 @@ class RateLimitFilter extends OncePerRequestFilter {
       return null;
     }
     String uri = request.getRequestURI();
-    if ("/importacoes".equals(uri) || IMPORT_CONFIRMATION.matcher(uri).matches()) {
+    // O CSV e a prévia gastam o mesmo parse e a mesma memória do OFX: entram na mesma regra.
+    if ("/importacoes".equals(uri)
+        || "/importacoes/csv".equals(uri)
+        || "/importacoes/csv/previa".equals(uri)
+        || IMPORT_CONFIRMATION.matcher(uri).matches()) {
       return imports;
     }
     return switch (uri) {

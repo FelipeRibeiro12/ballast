@@ -163,6 +163,76 @@ class ImportAuthorizationTest {
   }
 
   @Test
+  void anotherUsersMappingAndAccountAreNotFoundInTheCsvRoutes() throws Exception {
+    String ownersMapping = api.createMappingOk(owner.session(), ImportsApi.brMapping("Do dono"));
+    String intrudersMapping =
+        api.createMappingOk(intruder.session(), ImportsApi.brMapping("Do intruso"));
+    byte[] file = ImportsApi.csv("D;V;X", "03/10/2026;-1,00;A");
+
+    // Mapeamento do dono com a conta do intruso, e conta do dono com o mapeamento do intruso.
+    assertThat(
+            api.uploadCsv(intruder.session(), intruder.accountId(), ownersMapping, file)
+                .getStatus())
+        .isEqualTo(404);
+    assertThat(
+            api.uploadCsv(intruder.session(), owner.accountId(), intrudersMapping, file)
+                .getStatus())
+        .isEqualTo(404);
+    assertThat(
+            api.uploadCsv(intruder.session(), owner.accountId(), ownersMapping, file).getStatus())
+        .isEqualTo(404);
+    assertThat(body(api.list(intruder.session()))).isEmpty();
+  }
+
+  @Test
+  void anotherUsersMappingCannotBeListedChangedOrDeleted() throws Exception {
+    String ownersMapping = api.createMappingOk(owner.session(), ImportsApi.brMapping("Do dono"));
+
+    assertThat(body(api.listMappings(intruder.session()))).isEmpty();
+    assertThat(
+            api.updateMapping(intruder.session(), ownersMapping, ImportsApi.brMapping("Roubado"))
+                .getStatus())
+        .isEqualTo(404);
+    assertThat(api.deleteMapping(intruder.session(), ownersMapping).getStatus()).isEqualTo(404);
+
+    JsonNode kept = body(api.listMappings(owner.session()));
+    assertThat(kept).hasSize(1);
+    assertThat(kept.get(0).get("nome").asString()).isEqualTo("Do dono");
+  }
+
+  @Test
+  void sameMappingNameOfTwoUsersAndTheSameCsvDoNotCollide() throws Exception {
+    String ownersMapping = api.createMappingOk(owner.session(), ImportsApi.brMapping("Banco"));
+    String intrudersMapping =
+        api.createMappingOk(intruder.session(), ImportsApi.brMapping("Banco"));
+    byte[] file = ImportsApi.csv("D;V;X", "03/10/2026;-1,00;A");
+
+    JsonNode mine = api.uploadCsvOk(owner.session(), owner.accountId(), ownersMapping, file);
+    JsonNode theirs =
+        api.uploadCsvOk(intruder.session(), intruder.accountId(), intrudersMapping, file);
+
+    assertThat(api.confirm(intruder.session(), theirs.get("id").asString(), null).getStatus())
+        .isEqualTo(200);
+    assertThat(api.confirm(owner.session(), mine.get("id").asString(), null).getStatus())
+        .isEqualTo(200);
+    assertThat(ownerEntryCount()).isEqualTo(1);
+  }
+
+  @Test
+  void everyCsvRouteRequiresALogin() throws Exception {
+    String anyId = UUID.randomUUID().toString();
+    byte[] file = ImportsApi.csv("D;V;X", "03/10/2026;-1,00;A");
+
+    assertThat(api.listMappings(null).getStatus()).isEqualTo(401);
+    assertThat(api.createMapping(null, ImportsApi.brMapping("A")).getStatus()).isEqualTo(401);
+    assertThat(api.updateMapping(null, anyId, ImportsApi.brMapping("A")).getStatus())
+        .isEqualTo(401);
+    assertThat(api.deleteMapping(null, anyId).getStatus()).isEqualTo(401);
+    assertThat(api.uploadCsv(null, owner.accountId(), anyId, file).getStatus()).isEqualTo(401);
+    assertThat(api.previewCsv(null, ImportsApi.BR_PREVIEW_QUERY, file).getStatus()).isEqualTo(401);
+  }
+
+  @Test
   void everyRouteRequiresALogin() throws Exception {
     assertThat(api.list(null).getStatus()).isEqualTo(401);
     assertThat(api.find(null, importId).getStatus()).isEqualTo(401);

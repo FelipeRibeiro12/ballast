@@ -211,7 +211,7 @@ final class OfxParser {
   }
 
   // Mesmo critério do @NoControlCharacters: o título importado passa pelas mesmas regras do manual.
-  private static boolean isControl(int point) {
+  static boolean isControl(int point) {
     int type = Character.getType(point);
     return type == Character.CONTROL
         || (type == Character.FORMAT && point != 0x200C && point != 0x200D)
@@ -223,7 +223,7 @@ final class OfxParser {
     return value == null || value.isEmpty() ? null : value;
   }
 
-  private static String decode(byte[] content) {
+  static String decode(byte[] content) {
     try {
       return StandardCharsets.UTF_8
           .newDecoder()

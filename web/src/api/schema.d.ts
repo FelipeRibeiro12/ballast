@@ -567,6 +567,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/importacoes/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Envia um extrato CSV e devolve a proposta por linha
+         * @description Igual ao envio de OFX, lendo o arquivo pelo mapeamento salvo. O corpo é o arquivo cru (application/octet-stream), de até 1 MiB, 2000 linhas de dados e 50 colunas por linha. Linha com data ou valor ilegível entra como inválida e fica de fora da confirmação. A revisão e a confirmação são as de /importacoes/{id}.
+         */
+        post: operations["postImportacoesCsv"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/importacoes/csv/previa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mostra como um CSV seria lido, sem gravar nada
+         * @description Recebe o mapeamento na query e o arquivo cru no corpo (mesmos tetos do envio). Devolve as 10 primeiras linhas, com as células e a interpretação de cada uma, o total de linhas e o número de colunas da primeira linha. Não cria importação, não grava hash e não usa vaga das 20 pendentes. Mesmo limite de requisições do envio.
+         */
+        post: operations["postImportacoesCsvPrevia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/importacoes/{id}": {
         parameters: {
             query?: never;
@@ -733,6 +773,48 @@ export interface paths {
         put: operations["putLancamentosByIdTerceiro"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mapeamentos-csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista os mapeamentos de CSV do usuário */
+        get: operations["getMapeamentosCsv"];
+        put?: never;
+        /**
+         * Salva um mapeamento de colunas de CSV
+         * @description Até 20 por usuário. O nome é único por usuário.
+         */
+        post: operations["postMapeamentosCsv"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mapeamentos-csv/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Troca todos os campos do mapeamento */
+        put: operations["putMapeamentosCsvById"];
+        post?: never;
+        /**
+         * Apaga o mapeamento
+         * @description As importações já criadas com ele não mudam.
+         */
+        delete: operations["deleteMapeamentosCsvById"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1652,6 +1734,39 @@ export interface components {
             /** @enum {string} */
             tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto" | "investimento" | "cofrinho";
         };
+        CsvPrevia: {
+            /**
+             * Format: int32
+             * @description Colunas da primeira linha do arquivo
+             */
+            colunasDetectadas: number;
+            /** @description As 10 primeiras linhas */
+            linhas: components["schemas"]["CsvPreviaLinha"][];
+            /**
+             * Format: int32
+             * @description Linhas de dados do arquivo inteiro, sem o cabeçalho
+             */
+            totalLinhas: number;
+        };
+        CsvPreviaLinha: {
+            /** @description Células da linha, cortadas em 200 caracteres e com apóstrofo na frente das que começam como fórmula */
+            celulas: string[];
+            /** Format: date */
+            data: string | null;
+            /** @description Por que a linha é inválida; texto fixo, sem trecho do arquivo */
+            erro: string | null;
+            /** Format: int32 */
+            ordem: number;
+            /** @enum {string|null} */
+            tipo: "receita" | "despesa" | null;
+            titulo: string;
+            valida: boolean;
+            /**
+             * Format: int64
+             * @description Centavos de real, sempre positivo; o sinal vem do tipo
+             */
+            valorCentavos: number | null;
+        };
         DespesaDaCategoria: {
             /** Format: uuid */
             categoriaId: string;
@@ -2037,6 +2152,61 @@ export interface components {
         LoginRequest: {
             email: string;
             senha: string;
+        };
+        MapeamentoCsv: {
+            /** Format: int32 */
+            colunaData: number;
+            /** Format: int32 */
+            colunaDescricao: number;
+            /** Format: int32 */
+            colunaId: number | null;
+            /** Format: int32 */
+            colunaValor: number;
+            /** @enum {string} */
+            decimal: "virgula" | "ponto";
+            /** @enum {string} */
+            formatoData: "dd/MM/yyyy" | "yyyy-MM-dd" | "MM/dd/yyyy" | "dd-MM-yyyy";
+            /** Format: uuid */
+            id: string;
+            nome: string;
+            /** @enum {string} */
+            separador: "ponto_e_virgula" | "virgula" | "tab" | "barra_vertical";
+            /** @enum {string} */
+            sinal: "negativo_despesa" | "positivo_despesa";
+            temCabecalho: boolean;
+        };
+        MapeamentoCsvRequest: {
+            /**
+             * Format: int32
+             * @description Índice da coluna, a partir de 0, de 0 a 49
+             */
+            colunaData: number;
+            /**
+             * Format: int32
+             * @description Índice da coluna, a partir de 0, de 0 a 49
+             */
+            colunaDescricao: number;
+            /**
+             * Format: int32
+             * @description Índice da coluna, a partir de 0, de 0 a 49. Coluna com o identificador da transação, se o banco tiver
+             */
+            colunaId?: number | null;
+            /**
+             * Format: int32
+             * @description Índice da coluna, a partir de 0, de 0 a 49
+             */
+            colunaValor: number;
+            /** @enum {string} */
+            decimal: "virgula" | "ponto";
+            /** @enum {string} */
+            formatoData: "dd/MM/yyyy" | "yyyy-MM-dd" | "MM/dd/yyyy" | "dd-MM-yyyy";
+            /** @description Banco ou apelido; único por usuário */
+            nome: string;
+            /** @enum {string} */
+            separador: "ponto_e_virgula" | "virgula" | "tab" | "barra_vertical";
+            /** @enum {string} */
+            sinal: "negativo_despesa" | "positivo_despesa";
+            temCabecalho: boolean;
         };
         /** @description Menor saldo da série e o primeiro dia em que ocorre */
         MenorSaldo: {
@@ -5232,6 +5402,175 @@ export interface operations {
             };
         };
     };
+    postImportacoesCsv: {
+        parameters: {
+            query?: {
+                conta_id?: string;
+                mapeamento_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Importação pendente criada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDetalhe"];
+                };
+            };
+            /** @description conta_id ou mapeamento_id ausente ou que não é UUID, parâmetro não declarado, "conta arquivada" ou "conta cripto ou de investimento não recebe lançamento" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta ou mapeamento de outro usuário ou inexistente; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo já enviado (corpo com importacaoId) ou 20 importações pendentes (corpo comum de erro) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDuplicada"];
+                };
+            };
+            /** @description Arquivo maior que 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/octet-stream */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo vazio, com NUL, com aspas sem fechar, sem linhas de dados, com mais de 2000 linhas ou mais de 50 colunas */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postImportacoesCsvPrevia: {
+        parameters: {
+            query?: {
+                separador?: "ponto_e_virgula" | "virgula" | "tab" | "barra_vertical";
+                formato_data?: "dd/MM/yyyy" | "yyyy-MM-dd" | "MM/dd/yyyy" | "dd-MM-yyyy";
+                decimal?: "virgula" | "ponto";
+                sinal?: "negativo_despesa" | "positivo_despesa";
+                tem_cabecalho?: "true" | "false";
+                coluna_data?: number;
+                coluna_valor?: number;
+                coluna_descricao?: number;
+                coluna_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Prévia das primeiras linhas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CsvPrevia"];
+                };
+            };
+            /** @description Parâmetro ausente, inválido, repetido ou não declarado; colunas repetidas */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo maior que 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/octet-stream */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Mesmos casos do envio */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     getImportacoesById: {
         parameters: {
             query?: never;
@@ -5976,6 +6315,188 @@ export interface operations {
                 };
             };
             /** @description Lançamento ou terceiro de outro usuário ou inexistente; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getMapeamentosCsv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mapeamentos, do mais antigo para o mais novo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapeamentoCsv"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postMapeamentosCsv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapeamentoCsvRequest"];
+            };
+        };
+        responses: {
+            /** @description Mapeamento criado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapeamentoCsv"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado e colunas repetidas */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Nome já usado ou limite de mapeamentos atingido */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putMapeamentosCsvById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapeamentoCsvRequest"];
+            };
+        };
+        responses: {
+            /** @description Mapeamento atualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapeamentoCsv"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado e colunas repetidas */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Mapeamento de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Nome já usado por outro mapeamento do usuário */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteMapeamentosCsvById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mapeamento apagado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Mapeamento de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
             404: {
                 headers: {
                     [name: string]: unknown;
