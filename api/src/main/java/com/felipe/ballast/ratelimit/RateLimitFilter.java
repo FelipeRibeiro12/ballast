@@ -91,6 +91,7 @@ class RateLimitFilter extends OncePerRequestFilter {
     if ("/importacoes".equals(uri)
         || "/importacoes/csv".equals(uri)
         || "/importacoes/csv/previa".equals(uri)
+        || "/importacoes/pdf".equals(uri)
         || IMPORT_CONFIRMATION.matcher(uri).matches()) {
       return imports;
     }

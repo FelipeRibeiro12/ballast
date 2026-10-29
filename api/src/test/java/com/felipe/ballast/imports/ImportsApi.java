@@ -258,6 +258,27 @@ final class ImportsApi {
     return body(response);
   }
 
+  MockHttpServletResponse uploadPdf(Cookie session, String accountId, byte[] content)
+      throws Exception {
+    return send(
+        post("/importacoes/pdf" + (accountId == null ? "" : "?conta_id=" + accountId))
+            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .content(content),
+        session);
+  }
+
+  JsonNode uploadPdfOk(Cookie session, String accountId, byte[] content) throws Exception {
+    MockHttpServletResponse response = uploadPdf(session, accountId, content);
+    if (response.getStatus() != 201) {
+      throw new IllegalStateException(
+          "envio de PDF de teste falhou: "
+              + response.getStatus()
+              + " "
+              + response.getContentAsString(StandardCharsets.UTF_8));
+    }
+    return body(response);
+  }
+
   // A query de uma prévia com o mapeamento padrão dos testes.
   static final String BR_PREVIEW_QUERY =
       "separador=ponto_e_virgula&formato_data=dd/MM/yyyy&decimal=virgula"

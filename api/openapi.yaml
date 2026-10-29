@@ -2597,6 +2597,87 @@ paths:
       summary: "Mostra como um CSV seria lido, sem gravar nada"
       tags:
       - importacoes
+  /importacoes/pdf:
+    post:
+      description: "O corpo é o PDF cru (application/octet-stream), de até 5 MiB e\
+        \ 30 páginas, com texto (sem OCR) e sem senha. A leitura é por heurística\
+        \ e pode errar ou não achar linhas: o que não foi reconhecido entra como linha\
+        \ inválida, com o texto cru, e só aceita ignorar. Nada vira lançamento antes\
+        \ da confirmação em /importacoes/{id}/confirmacao. A conta precisa ser de\
+        \ cartão de crédito. O arquivo não é guardado."
+      operationId: postImportacoesPdf
+      parameters:
+      - in: query
+        name: conta_id
+        required: false
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportacaoDetalhe"
+          description: Importação pendente criada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "conta_id ausente, repetido ou que não é UUID, parâmetro nã\
+            o declarado, conta que não é de cartão de crédito ou conta arquivada"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Conta de outro usuário ou inexistente; mesmo corpo
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportacaoDuplicada"
+          description: Arquivo já enviado (corpo com importacaoId) ou 20 importações
+            pendentes (corpo comum de erro)
+        "413":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Arquivo maior que 5 MiB
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Content-Type diferente de application/octet-stream
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Arquivo vazio, que não é PDF, ilegível, com senha, sem texto,\
+            \ com mais de 30 páginas, lento demais ou sem nenhuma transação reconhecida"
+      security:
+      - cookieAuth: []
+      summary: Envia o PDF de uma fatura de cartão e devolve a proposta por linha
+        (melhor esforço)
+      tags:
+      - importacoes
   /importacoes/{id}:
     delete:
       description: Libera o arquivo para um novo envio. A confirmada não se descarta.

@@ -6,6 +6,7 @@ import com.felipe.ballast.limits.UserLimits;
 import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -34,6 +35,7 @@ class ImportService {
     MAPPING_NOT_FOUND,
     ACCOUNT_ARCHIVED,
     ACCOUNT_NOT_ACCEPTED,
+    ACCOUNT_NOT_CARD,
     INVALID_FILE,
     DUPLICATE_FILE,
     ALREADY_CONFIRMED,
@@ -83,12 +85,18 @@ class ImportService {
   }
 
   Result<Detail> upload(UUID userId, UUID accountId, byte[] content) {
-    return store(userId, accountId, null, content);
+    return store(userId, accountId, null, content, false);
+  }
+
+  // O PDF de fatura entra na mesma máquina de revisão: muda o leitor, o hash e a exigência de que a
+  // conta seja de cartão (ADR-073).
+  Result<Detail> uploadPdf(UUID userId, UUID accountId, byte[] content) {
+    return store(userId, accountId, null, content, true);
   }
 
   // O CSV entra na mesma máquina do OFX: muda só o leitor do arquivo e o hash de cada linha.
   Result<Detail> uploadCsv(UUID userId, UUID accountId, UUID mappingId, byte[] content) {
-    return store(userId, accountId, mappingId, content);
+    return store(userId, accountId, mappingId, content, false);
   }
 
   // Lê o arquivo com o mapeamento informado, sem gravar nada. Serve à prévia.
@@ -100,7 +108,8 @@ class ImportService {
     }
   }
 
-  private Result<Detail> store(UUID userId, UUID accountId, UUID mappingId, byte[] content) {
+  private Result<Detail> store(
+      UUID userId, UUID accountId, UUID mappingId, byte[] content, boolean pdf) {
     Optional<ImportQueries.AccountInfo> account = queries.findAccount(userId, accountId);
     if (account.isEmpty()) {
       return failed(Failure.ACCOUNT_NOT_FOUND);
@@ -110,6 +119,9 @@ class ImportService {
     }
     if (account.get().archived()) {
       return failed(Failure.ACCOUNT_ARCHIVED);
+    }
+    if (pdf && !"cartao_credito".equals(account.get().type())) {
+      return failed(Failure.ACCOUNT_NOT_CARD);
     }
     CsvMapping mapping = null;
     if (mappingId != null) {
@@ -132,8 +144,13 @@ class ImportService {
     limits.checkRoomEarly(userId, UserLimit.PENDING_IMPORTS);
     ParsedFile file;
     try {
-      file = mapping == null ? readOfx(content, accountId) : readCsv(content, mapping, accountId);
-    } catch (OfxException | CsvException e) {
+      file =
+          pdf
+              ? readPdf(content, accountId)
+              : mapping == null
+                  ? readOfx(content, accountId)
+                  : readCsv(content, mapping, accountId);
+    } catch (OfxException | CsvException | PdfException e) {
       return new Result.Failed<>(Failure.INVALID_FILE, null, e.getMessage());
     }
     List<ImportPlanner.PlannedLine> planned = plan(userId, accountId, file);
@@ -361,6 +378,11 @@ class ImportService {
   private static ParsedFile readOfx(byte[] content, UUID accountId) {
     List<OfxTransaction> transactions = OfxParser.parse(content).transactions();
     return new ParsedFile(transactions, ImportPlanner.externalHashes(accountId, transactions));
+  }
+
+  private static ParsedFile readPdf(byte[] content, UUID accountId) {
+    PdfFile file = PdfParser.parse(content, LocalDate.now(ZoneId.of("America/Sao_Paulo")));
+    return new ParsedFile(file.transactions(), file.hashes(accountId));
   }
 
   private static ParsedFile readCsv(byte[] content, CsvMapping mapping, UUID accountId) {

@@ -388,6 +388,9 @@ class ImportController {
           ResponseEntity.status(HttpStatus.NOT_FOUND).body(CsvMappingController.NOT_FOUND);
       case ACCOUNT_ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
       case ACCOUNT_NOT_ACCEPTED -> ResponseEntity.badRequest().body(ACCOUNT_NOT_ACCEPTED);
+      case ACCOUNT_NOT_CARD ->
+          ResponseEntity.badRequest()
+              .body(new ErrorResponse("o PDF de fatura só vale para conta de cartão de crédito"));
       case INVALID_FILE ->
           ResponseEntity.unprocessableEntity().body(new ErrorResponse(failed.message()));
       case DUPLICATE_FILE ->

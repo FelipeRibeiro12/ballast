@@ -46,6 +46,19 @@
 			<artifactId>bcprov-jdk18on</artifactId>
 			<version>1.86</version>
 		</dependency>
+		<!-- Só extração de texto da fatura em PDF, sem OCR nem renderização (ADR-073) -->
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>3.0.8</version>
+			<!-- spring-jcl já fornece a API org.apache.commons.logging; as duas juntas duplicam a classe -->
+			<exclusions>
+				<exclusion>
+					<groupId>commons-logging</groupId>
+					<artifactId>commons-logging</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>

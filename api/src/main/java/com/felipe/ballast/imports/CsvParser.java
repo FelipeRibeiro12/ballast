@@ -203,7 +203,7 @@ final class CsvParser {
 
   // Controle vira espaço (o título passa pelas mesmas regras do lançamento manual), as pontas saem
   // e o corte é por code point para não partir um par substituto.
-  private static String clean(String raw) {
+  static String clean(String raw) {
     StringBuilder builder = new StringBuilder(raw.length());
     raw.codePoints()
         .forEach(point -> builder.appendCodePoint(OfxParser.isControl(point) ? ' ' : point));
@@ -214,7 +214,7 @@ final class CsvParser {
   // apóstrofo na frente. Vale na gravação, então nenhum lançamento nasce com fórmula crua e uma
   // exportação futura para planilha já sai segura. A coluna de valor e a de data leem a célula
   // crua (clean), não esta: "-1.234,56" é número, não fórmula.
-  private static String neutralize(String raw) {
+  static String neutralize(String raw) {
     String cleaned = clean(raw);
     boolean formula =
         !raw.isEmpty() && "=+-@\t\r".indexOf(raw.charAt(0)) >= 0
@@ -224,11 +224,11 @@ final class CsvParser {
 
   // Chave do hash sem id: dois extratos do mesmo banco escrevem a mesma compra com espaço e caixa
   // diferentes. É a célula limpa, antes do apóstrofo.
-  private static String normalize(String cleaned) {
+  static String normalize(String cleaned) {
     return cleaned.strip().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
   }
 
-  private static String cut(String text, int maxChars) {
+  static String cut(String text, int maxChars) {
     if (text.codePointCount(0, text.length()) <= maxChars) {
       return text;
     }
