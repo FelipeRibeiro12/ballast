@@ -85,3 +85,17 @@ Mesmo extrato em dois bancos de formatos diferentes não se reconhece, porque o
 hash depende de conta, data, valor e texto. Descrição que o banco muda de um mês
 para outro gera linha nova (a conciliação por valor e data ajuda). Descrição que
 começa com `-` ou `+` aparece com apóstrofo no título.
+
+## Detalhes de implementação
+
+- **Web.** O seletor OFX/CSV fica no formulário de envio. Colunas aparecem de 1 a
+  50 e a conversão para o índice 0 da API mora só em `mapeamentoCsv.ts`. "Enviar
+  extrato" salva o mapeamento novo ou alterado antes de enviar, para o servidor
+  ler como a prévia mostrou. A prévia espera 600 ms, cancela a chamada anterior e
+  gasta uma das 10 requisições por minuto do IP (auditoria B4). Texto de célula
+  vai sempre como texto do React.
+- **Erros.** 404 das rotas de CSV tem erro próprio ("conta ou mapeamento").
+  Mensagens saem do status, nunca do corpo.
+- **Não coberto no web.** 401 no fluxo CSV, corrida real entre prévias, teclado e
+  foco, e o visual da tabela no navegador.
+- **Auditoria (security).** 0 crítico, alto e médio; 4 baixos no backlog.
