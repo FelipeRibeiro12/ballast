@@ -14,11 +14,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 ### F21 — Alerta de conta a vencer
 Notificação no PWA. No iOS só funciona se instalado na tela inicial.
 
-### F23 — Importação de CSV
-Mapeamento de coluna salvável por banco, sobre a mesma máquina de revisão da
-F22. Entrada não confiável: limite de tamanho, limite de linhas, tratamento de
-fórmula injetada.
-
 ### F24 — Observar endereço de carteira
 Cadastro de endereço digitado, por rede. Sincronização de saldo via
 indexador, `confiavel = false` por padrão para ativo desconhecido, data da
@@ -111,3 +106,7 @@ entre pessoas, saldo automático de corretora. Motivos em `visao.md`.
 - **DÍVIDA** — Cada `PUT /contas/{id}/cofrinho` pede a busca do CDI ao Banco Central, sem intervalo mínimo (auditoria, B2). Dono: backend.
 - **DÍVIDA** — Importação de OFX: pendentes esquecidas ficam para sempre e a `bruta` das confirmadas nunca é limpa (ADR-069, auditoria da F22, B3). Apagar pendente por idade e a `bruta` de confirmada antiga. Dono: backend. Fatia: rodada de dívidas após a F22.
 - **DÍVIDA** — Sem teto de lançamentos por usuário: uma importação de 2000 linhas por arquivo, repetida, enche a tabela (auditoria da F22, B1). Definir o teto no padrão do ADR-055. Dono: backend. Fatia: rodada de dívidas após a F22.
+- **DÍVIDA** — CSV: id da coluna de identificador passa por `clean()` antes do hash, então ids que só diferem depois do 200º caractere ou por controle ou espaço nas pontas colidem (auditoria da F23, B1). Hashear a célula crua truncada só no armazenamento. Dono: backend. Fatia: rodada de dívidas após a F23.
+- **DÍVIDA** — JSON de `/mapeamentos-csv` pode aceitar `"3"` ou `1.9` como índice e `"true"` como booleano, mais frouxo que a query da prévia (auditoria da F23, B2). Desligar coerção do Jackson nesse DTO e testar. Dono: backend. Fatia: rodada de dívidas após a F23.
+- **DÍVIDA** — Neutralização de fórmula não cobre NBSP, U+2007 e U+202F antes do gatilho (auditoria da F23, B3). Sem exportação para planilha hoje; resolver junto de qualquer exportação. Dono: backend. Fatia: a que criar exportação.
+- **DÍVIDA** — Prévia e envio de CSV dividem o limite de 10 por minuto por IP (auditoria da F23, B4). Separar as regras se atrapalhar o uso. Dono: backend.

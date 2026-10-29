@@ -487,3 +487,12 @@ Dívida registrada: limpeza por idade das pendentes e da `bruta`, teto de lança
 Achados do revisor: security 0 crítico, 1 alto, 2 médios e 4 baixos; alto e médios corrigidos na fatia, baixos corrigidos ou no backlog; reviewer não rodou (decisão de economia)
 Pipeline: local verde (make test e web); CI a preencher no PR
 Em aberto: abrir o PR; ordem das branches empilhadas do dono (ADR-059 está na `feat/onda7-front`)
+
+## 2026-10-29 — F23: Importação de CSV
+
+O que entrou: envio de CSV em corpo cru sobre a mesma revisão da F22, mapeamento de colunas salvável por usuário (V35, `mapeamento_csv`, CRUD com teto de 20), prévia sem gravar, parser RFC 4180 à mão, valor por String em `BigDecimal`, apóstrofo em célula que começa com fórmula, hash com ordinal para linhas idênticas e telas de mapeamento, prévia e envio no web.
+Decisões: ADR-070
+Dívida registrada: id longo colidindo no hash, JSON do mapeamento mais frouxo que a query da prévia, NBSP antes do gatilho de fórmula, limite de 10 por minuto dividido entre prévia e envio
+Achados do revisor: security 0 crítico, 0 alto, 0 médio e 4 baixos, todos no backlog; reviewer não rodou (decisão de economia)
+Pipeline: local verde (make test e web); CI a preencher no PR
+Em aberto: abrir o PR; a branch fica empilhada sobre `feat/f22-importacao-ofx`
