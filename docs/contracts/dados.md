@@ -558,6 +558,32 @@ estiver faltando, em vez de inventar.
 todo tipo, menos no cofrinho, e nele pode ficar nulo até o usuário informar.
 `conta_percentual_cdi_so_no_cofrinho`: só no tipo `cofrinho` e entre 0 e 1000.
 
+### Rendimento diário do cofrinho (V38, ADR-074)
+
+Marcador de cada dia de crédito do cofrinho. O job diário e o
+`POST /contas/{id}/cofrinho/rendimento` lançam o rendimento estimado como
+receita `realizado` na categoria Rendimento e gravam uma linha aqui. Id sem
+`DEFAULT`, gerado na aplicação.
+
+```
+rendimento_cofrinho
+  id             uuid pk (sem DEFAULT)
+  usuario_id     uuid fk not null on delete cascade
+  conta_id       uuid not null        -- FK composta (conta_id, usuario_id) -> conta, ON DELETE CASCADE
+  data           date not null        -- dia de crédito D (data_caixa = data_competencia do lançamento)
+  lancamento_id  uuid null            -- FK composta (lancamento_id, usuario_id), ON DELETE SET NULL (lancamento_id)
+  criado_em      timestamptz not null default now()
+```
+
+- `unique (conta_id, data)`: duas rodadas no mesmo dia não duplicam.
+- A maior `data` da conta é o `L` do ADR-074, o último dia creditado. É a janela
+  de rendimento da próxima rodada.
+- `lancamento_id` nulo: o dia só avançou a janela (saldo zero ou negativo) ou o
+  usuário apagou o lançamento. O marcador continua, então o job não recria o dia.
+- `SET NULL (lancamento_id)` com lista de colunas (Postgres 15+): sem a lista,
+  a FK composta anularia `usuario_id`, que é `NOT NULL`.
+- Índice `(usuario_id, conta_id, data desc)` para ler o `L` da conta.
+
 ---
 
 ### Terceiro (V29, ADR-062)
@@ -1407,6 +1433,7 @@ apenas em código:
 13. Cripto (V13, ADR-035): conta `cripto` com `saldo_inicial` 0 e sem lançamento; ativo único por usuário, rede e contrato; contrato no formato da rede; movimento só em conta cripto e ativo do mesmo usuário, com quantidade e custo positivos; cotação só de ativo do mesmo usuário, com preço positivo e um valor por momento
 14. Idempotência (V23, ADR-056): uma linha por usuário e chave; chave só com letras, dígitos e `._:-` de 1 a 80 caracteres; status 2xx e resposta nulos ou preenchidos juntos
 15. `mapeamento_csv` (V35, ADR-070): nome único por usuário, de 1 a 60 caracteres sem espaço nas pontas; separador, formato de data, decimal e sinal só nos valores do contrato; colunas de 0 a 49 e diferentes entre si
+16. `rendimento_cofrinho` (V38, ADR-074): um marcador por conta e dia; conta e lançamento do mesmo usuário (FK composta); apagar o lançamento anula só `lancamento_id`
 
 ## Índices iniciais
 
