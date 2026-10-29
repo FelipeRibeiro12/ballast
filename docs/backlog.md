@@ -14,14 +14,12 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 ### F21 — Alerta de conta a vencer
 Notificação no PWA. No iOS só funciona se instalado na tela inicial.
 
-### F25 — Conectar carteira
-Botão que preenche o endereço automaticamente. EVM com `wagmi` v2 e descoberta
-por **EIP-6963** — Rabby aparece na lista junto com as outras. Solana por
-**Wallet Standard** — Phantom aparece na lista. Rabby e Phantom em primeiro na
-ordem de exibição.
-Assinatura opcional de posse (SIWE). **Nunca** assinatura de transação.
-Teste obrigatório: o fluxo de digitar o endereço continua funcionando sem
-nenhuma extensão instalada.
+### Dívidas da F25 (ADR-072)
+- Teste de que o `OriginFilter` barra `POST /carteiras/{id}/posse/desafio` com Origin alheio. Dono: qa.
+- Teto de desafios por usuário, hoje o limite de 5 s é por carteira. Dono: backend.
+- Teste com assinatura de hardware wallet (a API rejeita `s` alto). Dono: qa.
+- Documentar `BALLAST_POSSE_DOMAIN` em `docs/runbook-producao.md`. Dono: devops.
+- Testar com Rabby e Phantom reais; só providers falsos foram exercitados. Dono: dono do projeto.
 
 ## Mais adiante
 

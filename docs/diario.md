@@ -505,3 +505,12 @@ Dívida registrada: cota da Alchemy sem teto por usuário, airdrop de token-lixo
 Achados do revisor: security 0 bloqueantes, 3 médios e 4 baixos, todos no backlog; reviewer não rodou (decisão de economia)
 Pipeline: local verde (make test, lint e web); CI a preencher no PR
 Em aberto: abrir o PR; a branch fica empilhada sobre `feat/f23-importacao-csv`; Alchemy real nunca foi chamada
+
+## 2026-10-29 — F25: Conectar carteira
+
+O que entrou: botão "Conectar carteira" que só preenche o campo de endereço (EVM por EIP-6963 com `@wagmi/core` v2 e viem, Solana por Wallet Standard), lista com Rabby e Phantom primeiro, tudo em chunk carregado só no clique. Prova de posse opcional: desafio com nonce de uso único (V37, `posse_desafio`, 5 min, consumo atômico), mensagem SIWE no EVM e texto equivalente no Solana montada no servidor, verificação EIP-191 (secp256k1 com Bouncy Castle) e Ed25519 do JDK, grava só `verificada_em`. Selo "Posse verificada" na tela. Nenhuma assinatura de transação.
+Decisões: ADR-072
+Dívida registrada: teto de desafios por usuário (hoje por carteira), teste de que o OriginFilter barra o POST do desafio com Origin alheio, teste com assinatura de hardware wallet (s alto é rejeitado), transporte `http()` do wagmi sem URL (endereço nunca deve passar por ele), `BALLAST_POSSE_DOMAIN` no runbook de produção
+Achados do revisor: security 0 bloqueantes, 4 baixos viraram dívida; reviewer não rodou (decisão de economia)
+Pipeline: local verde (make test, lint e web: test, tsc, lint, build); CI a preencher no PR
+Em aberto: `BALLAST_POSSE_DOMAIN` precisa ser definido no deploy de produção (a API não sobe sem ele fora de `APP_ENV=development`); runbook não atualizado; carteira real (Rabby, Phantom) nunca foi exercitada, só providers falsos; branch empilhada sobre `feat/f24-observar-endereco`

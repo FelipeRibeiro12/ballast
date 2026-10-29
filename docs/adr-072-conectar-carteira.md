@@ -125,3 +125,7 @@ usuário: o servidor nunca sabe qual carteira ele usa.
 - Dependência: `org.bouncycastle:bcprov-jdk18on` 1.86 (última estável no Maven Central em 2026-10-29; já estava no pom desde o ADR-015, sem dependência nova).
 - Domínio da mensagem: `BALLAST_POSSE_DOMAIN`. Fora de `APP_ENV=development` a API não sobe sem ele (`PosseEnvironmentValidator`); em desenvolvimento vale `localhost:5173`.
 - A hora de emissão do desafio não tem coluna: é `expira_em` menos 5 min. O limite de 5 s por carteira é o `WHERE` do `ON CONFLICT` na gravação do desafio, e responde 429 `muitas tentativas, tente mais tarde`.
+- Web (versões exatas, lockfile commitado): `@wagmi/core` 2.22.1 (MIT, última 2.x; a 3.x foi evitada por pedido do dono), `viem` 2.57.10 (MIT; a 2.57.13 foi barrada pela idade mínima de release do pnpm), `@wallet-standard/app` 1.1.1 (Apache-2.0). Peer opcional `@tanstack/query-core` fora.
+- Bundle: as três bibliotecas ficam num chunk à parte (`conexaoDeCarteira`, 93 kB, 29 kB gzip) carregado por `import()` no clique. O `index` cresceu 5 kB só com a tela. O service worker pré-cacheia o chunk.
+- A assinatura EVM usa `signMessage` do `@wagmi/core` e confere a conta ativa contra o endereço da carteira. O desafio é pedido antes de abrir a carteira; conta errada gasta o desafio e um novo pedido em menos de 5 s volta 429.
+- O endereço EVM vem da carteira com checksum e o servidor normaliza para minúsculas no cadastro (ADR-071).
