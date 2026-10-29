@@ -100,6 +100,8 @@ jobs:
           DB_MIGRATION_PASSWORD: ${{ secrets.DB_MIGRATION_PASSWORD }}
           DB_USER: ${{ secrets.DB_USER }}
           APP_ENV: production
+          # O mesmo jar da API valida o domínio da prova de posse ao subir, também neste perfil (ADR-072).
+          BALLAST_POSSE_DOMAIN: ${{ vars.BALLAST_POSSE_DOMAIN }}
         run: java -jar api/target/ballast-*.jar --spring.profiles.active=migracao
 
   api:
