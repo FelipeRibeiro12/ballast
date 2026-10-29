@@ -1,6 +1,6 @@
 # ADR-043: Orçamento por categoria na F16
 
-**Status:** aceito
+**Status:** aceito (parcela passa a contar no mês dela, ADR-074)
 **Data:** 2026-10-23
 
 ## Contexto

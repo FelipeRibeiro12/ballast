@@ -37,8 +37,8 @@ class ReportController {
       operationId = "getRelatorios",
       summary = "Despesa por categoria e receita contra despesa",
       description =
-          "Por competência e só o realizado até hoje (ADR-046). Sem mes, vale o mês corrente em"
-              + " America/Sao_Paulo.",
+          "Por competência e só o realizado até hoje (ADR-046). Parcela de compra parcelada conta no mês"
+              + " dela e pelo valor dela (ADR-074). Sem mes, vale o mês corrente em America/Sao_Paulo.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",

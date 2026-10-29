@@ -794,7 +794,9 @@ Mudanças em rotas que já existiam (campos só acrescentados):
   `tetoCentavos`, `desde` (AAAA-MM em que esse teto começou), `gastoCentavos`
   (realizado com competência no mês até hoje), `previstoCentavos` (previsto e
   realizado com data depois de hoje) e `restanteCentavos` (teto menos gasto,
-  negativo quando passou). Soma a categoria e as filhas. 400 para `mes` fora do
+  negativo quando passou). Soma a categoria e as filhas. Parcela de compra
+  parcelada conta no mês dela e pelo valor dela: é gasto se o mês dela já
+  começou e previsto se é de mês futuro (ADR-074). 400 para `mes` fora do
   formato ou "orçamento fora do limite".
 - `PUT /orcamentos/{categoriaId}` com `{tetoCentavos, aPartirDe}`: o teto vale
   de `aPartirDe` até a próxima mudança. No mesmo mês, troca. 204.
@@ -869,7 +871,9 @@ Mudanças em rotas que já existiam (campos só acrescentados):
 ## Relatórios (ADR-046)
 
 - `GET /relatorios?mes=AAAA-MM`: sem `mes`, o mês corrente em
-  `America/Sao_Paulo`. Conta só o realizado com competência até hoje.
+  `America/Sao_Paulo`. Conta só o realizado com competência até hoje. Parcela de
+  compra parcelada conta no mês dela (mês da compra mais `parcelaNum - 1`) e só
+  pelo valor dela, inclusive em mês depois de hoje (ADR-074).
   Previsto, cancelado, data depois de hoje e transferência ficam fora.
 - Responde:
   - `mes`;

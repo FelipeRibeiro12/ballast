@@ -1,5 +1,6 @@
 package com.felipe.ballast.budgets;
 
+import com.felipe.ballast.entries.AggregationCompetence;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -54,10 +55,12 @@ class BudgetQueries {
 
   // O teto de cada categoria é a última linha com desde até o mês (ADR-043). O consumo soma a
   // categoria e as filhas dela por competência: gasto é o realizado até hoje, previsto é o que
-  // ainda não aconteceu (recorrência sem confirmar e lançamento com data depois de hoje).
+  // ainda não aconteceu (recorrência sem confirmar e lançamento com data depois de hoje). Parcela
+  // conta no mês dela e pelo valor dela (ADR-074): é gasto se o mês dela já começou, previsto se
+  // é de mês futuro, porque o mês corrente não inclui as parcelas que ainda virão.
   List<Consumption> consumption(UUID userId, YearMonth month, LocalDate today) {
     return jdbc.sql(
-            """
+            ("""
             WITH vigente AS (
               SELECT DISTINCT ON (categoria_id) categoria_id, teto, desde FROM orcamento
               WHERE usuario_id = :userId AND desde <= :start
@@ -70,16 +73,21 @@ class BudgetQueries {
             ), consumo AS (
               SELECT a.orcada,
                 SUM(l.valor) FILTER (
-                  WHERE l.status = 'realizado' AND l.data_competencia <= :today) AS gasto,
+                  WHERE l.status = 'realizado'
+                    AND (%2$s) <= CASE WHEN l.parcela_num IS NULL THEN CAST(:today AS date)
+                      ELSE CAST(:todayMonth AS date) END) AS gasto,
                 SUM(l.valor) FILTER (
                   WHERE l.status = 'previsto'
-                    OR (l.status = 'realizado' AND l.data_competencia > :today)) AS previsto
+                    OR (l.status = 'realizado'
+                      AND (%2$s) > CASE WHEN l.parcela_num IS NULL THEN CAST(:today AS date)
+                        ELSE CAST(:todayMonth AS date) END)) AS previsto
               FROM alvo a
               JOIN lancamento l ON l.usuario_id = :userId AND l.categoria_id = a.categoria_id
                 AND l.tipo = 'despesa'
                 AND NOT EXISTS (SELECT 1 FROM terceiro_lancamento tl
                   WHERE tl.lancamento_id = l.id AND tl.usuario_id = l.usuario_id)
-                AND l.data_competencia >= :start AND l.data_competencia < :end
+                AND %1$s
+                AND (%2$s) >= :start AND (%2$s) < :end
               GROUP BY a.orcada
             )
             SELECT v.categoria_id, c.nome, v.teto, v.desde,
@@ -90,10 +98,12 @@ class BudgetQueries {
             WHERE v.teto IS NOT NULL
             ORDER BY lower(c.nome), c.id
             """)
+                .formatted(AggregationCompetence.INDEX_RANGE, AggregationCompetence.DATE))
         .param("userId", userId)
         .param("start", month.atDay(1))
         .param("end", month.plusMonths(1).atDay(1))
         .param("today", today)
+        .param("todayMonth", today.withDayOfMonth(1))
         .query(
             (rs, row) ->
                 new Consumption(

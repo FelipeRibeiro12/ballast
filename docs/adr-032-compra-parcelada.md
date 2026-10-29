@@ -1,6 +1,6 @@
 # ADR-032: Compra parcelada na F11
 
-**Status:** aceito
+**Status:** aceito (o trecho da competência das parcelas ganhou emenda para agregação no ADR-074)
 **Data:** 2026-10-20
 
 ## Contexto
