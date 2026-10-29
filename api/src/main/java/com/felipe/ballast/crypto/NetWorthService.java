@@ -156,6 +156,10 @@ class NetWorthService {
     BigDecimal contribution = BigDecimal.ZERO;
     List<Unquoted> unquoted = new ArrayList<>();
     for (ValuedPosition valued : positions.positions()) {
+      // Ativo não confiável (spam de uma leitura de carteira) não entra em nada até ser promovido.
+      if (!valued.position().trusted()) {
+        continue;
+      }
       if (valued.valueBrl() == null) {
         unquoted.add(
             new Unquoted(
@@ -223,6 +227,12 @@ class NetWorthService {
           bases.computeIfAbsent(
               new PositionKey(movement.accountId(), movement.assetId()),
               key -> new Bases(new CostBasis(), new CostBasis()));
+      // Sem custo (entrada ou saída sincronizada), o valor nulo deixa o custo médio nulo.
+      if (movement.cost() == null) {
+        basis.usd().add(movement.type(), movement.quantity(), null);
+        basis.brl().add(movement.type(), movement.quantity(), null);
+        continue;
+      }
       boolean inUsd = "USD".equals(movement.currency());
       basis
           .usd()

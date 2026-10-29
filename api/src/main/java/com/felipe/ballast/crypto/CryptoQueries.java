@@ -29,13 +29,13 @@ class CryptoQueries {
   // O custo nas duas moedas, exato: quem lê arredonda uma vez. Nulo quando falta o dólar da data.
   private static final String MOVEMENT_COLUMNS =
       "SELECT m.id, m.conta_id, m.ativo_id, m.tipo, m.quantidade, m.data, m.custo, m.moeda,"
-          + " m.criado_em, d.dolar FROM movimento_cripto m"
+          + " m.criado_em, m.origem, d.dolar FROM movimento_cripto m"
           + " LEFT JOIN LATERAL (SELECT "
           + String.format(DOLLAR_AT, "m.data")
           + " AS dolar) d ON true";
 
   private static final String SIGNED_QUANTITY =
-      "CASE tipo WHEN 'compra' THEN quantidade ELSE -quantidade END";
+      "CASE WHEN tipo IN ('compra', 'entrada') THEN quantidade ELSE -quantidade END";
 
   record Asset(
       UUID id,
@@ -46,7 +46,8 @@ class CryptoQueries {
       int decimals,
       boolean trusted) {}
 
-  // cost está em currency; dollar é a PTAX da data, nula se ainda não há.
+  // cost e currency são nulos na entrada ou saída sincronizada sem custo informado (ADR-071).
+  // dollar é a PTAX da data, nula se ainda não há. origin é manual ou sincronizada.
   record Movement(
       UUID id,
       UUID accountId,
@@ -57,10 +58,12 @@ class CryptoQueries {
       BigDecimal cost,
       String currency,
       Instant createdAt,
+      String origin,
       BigDecimal dollar) {}
 
-  // Custos exatos nas duas moedas (nulo quando falta o dólar de algum movimento). price, quotedAt e
-  // quoteSource são nulos sem cotação até a data; priceCurrency diz a moeda do preço.
+  // Custos exatos nas duas moedas (nulo quando falta o dólar de algum movimento, ou o custo de uma
+  // entrada ou saída sincronizada: costPending). price, quotedAt e quoteSource são nulos sem
+  // cotação até a data; priceCurrency diz a moeda do preço. trusted é o confiavel do ativo.
   record Position(
       UUID accountId,
       UUID assetId,
@@ -70,7 +73,9 @@ class CryptoQueries {
       BigDecimal price,
       String priceCurrency,
       Instant quotedAt,
-      String quoteSource) {}
+      String quoteSource,
+      boolean trusted,
+      boolean costPending) {}
 
   record LockedAccount(boolean crypto, boolean archived) {}
 
@@ -116,10 +121,13 @@ class CryptoQueries {
   }
 
   // Rede e contrato não mudam. Vazio para ativo de outro usuário ou inexistente.
-  Optional<Asset> updateAsset(UUID userId, UUID id, String symbol, String name, int decimals) {
+  // trusted nulo mantém o confiavel de hoje; a promoção do ativo de uma carteira passa por aqui.
+  Optional<Asset> updateAsset(
+      UUID userId, UUID id, String symbol, String name, int decimals, Boolean trusted) {
     return jdbc.sql(
             """
-            UPDATE ativo_cripto SET simbolo = :symbol, nome = :name, decimais = :decimals
+            UPDATE ativo_cripto SET simbolo = :symbol, nome = :name, decimais = :decimals,
+                                    confiavel = COALESCE(CAST(:trusted AS boolean), confiavel)
             WHERE usuario_id = :userId AND id = :id
             RETURNING id, rede, contrato, simbolo, nome, decimais, confiavel
             """)
@@ -128,6 +136,7 @@ class CryptoQueries {
         .param("symbol", symbol)
         .param("name", name)
         .param("decimals", decimals)
+        .param("trusted", trusted)
         .query(CryptoQueries::mapAsset)
         .optional();
   }
@@ -392,6 +401,19 @@ class CryptoQueries {
         .optional();
   }
 
+  // Grava o custo uma vez: o WHERE custo IS NULL faz o segundo PUT afetar zero linhas. Só o
+  // movimento sincronizado pode estar sem custo, então o filtro de origem é cinto e suspensório.
+  int setMovementCost(UUID userId, UUID id, BigDecimal costUsd) {
+    return jdbc.sql(
+            "UPDATE movimento_cripto SET custo = :cost, moeda = 'USD'"
+                + " WHERE usuario_id = :userId AND id = :id AND custo IS NULL"
+                + " AND origem = 'sincronizada'")
+        .param("cost", costUsd)
+        .param("userId", userId)
+        .param("id", id)
+        .update();
+  }
+
   int deleteMovement(UUID userId, UUID id) {
     return jdbc.sql("DELETE FROM movimento_cripto WHERE usuario_id = :userId AND id = :id")
         .param("userId", userId)
@@ -432,7 +454,7 @@ class CryptoQueries {
             MOVEMENT_COLUMNS
                 + " WHERE m.usuario_id = :userId AND m.data <= :date"
                 + " ORDER BY m.conta_id, m.ativo_id, m.data,"
-                + " CASE m.tipo WHEN 'compra' THEN 0 ELSE 1 END, m.criado_em, m.id")
+                + " CASE WHEN m.tipo IN ('compra', 'entrada') THEN 0 ELSE 1 END, m.criado_em, m.id")
         .param("userId", userId)
         .param("date", date)
         .query(CryptoQueries::mapMovement)
@@ -446,7 +468,8 @@ class CryptoQueries {
     return jdbc.sql(
             "WITH movimento AS ("
                 + " SELECT m.conta_id, m.ativo_id, m.moeda,"
-                + " CASE m.tipo WHEN 'compra' THEN 1 ELSE -1 END AS sinal, m.quantidade, m.custo,"
+                + " CASE WHEN m.tipo IN ('compra', 'entrada') THEN 1 ELSE -1 END AS sinal,"
+                + " m.quantidade, m.custo,"
                 + String.format(DOLLAR_AT, "m.data")
                 + " AS dolar"
                 + " FROM movimento_cripto m"
@@ -454,16 +477,19 @@ class CryptoQueries {
                 + "), posicao AS ("
                 + " SELECT conta_id, ativo_id,"
                 + " SUM(sinal * quantidade) AS quantidade,"
-                + " CASE WHEN bool_or(moeda = 'USD' AND dolar IS NULL) THEN NULL ELSE"
+                + " bool_or(custo IS NULL) AS custo_pendente,"
+                + " CASE WHEN bool_or(custo IS NULL OR (moeda = 'USD' AND dolar IS NULL))"
+                + "   THEN NULL ELSE"
                 + "   SUM(sinal * CASE moeda WHEN 'BRL' THEN custo ELSE custo * dolar END) END"
                 + "   AS custo_brl,"
-                + " CASE WHEN bool_or(moeda = 'BRL' AND dolar IS NULL) THEN NULL ELSE"
+                + " CASE WHEN bool_or(custo IS NULL OR (moeda = 'BRL' AND dolar IS NULL))"
+                + "   THEN NULL ELSE"
                 + "   SUM(sinal * CASE moeda WHEN 'USD' THEN custo ELSE custo / dolar END) END"
                 + "   AS custo_usd"
                 + " FROM movimento GROUP BY conta_id, ativo_id"
                 + ")"
                 + " SELECT p.conta_id, p.ativo_id, p.quantidade, p.custo_brl, p.custo_usd,"
-                + " q.preco, q.moeda, q.momento, q.fonte"
+                + " q.preco, q.moeda, q.momento, q.fonte, a.confiavel, p.custo_pendente"
                 + " FROM posicao p"
                 + " JOIN conta c ON c.id = p.conta_id AND c.usuario_id = :userId"
                 + " JOIN ativo_cripto a ON a.id = p.ativo_id AND a.usuario_id = :userId"
@@ -488,7 +514,9 @@ class CryptoQueries {
                     rs.getBigDecimal("preco"),
                     rs.getString("moeda"),
                     instantOrNull(rs, "momento"),
-                    rs.getString("fonte")))
+                    rs.getString("fonte"),
+                    rs.getBoolean("confiavel"),
+                    rs.getBoolean("custo_pendente")))
         .list();
   }
 
@@ -569,6 +597,7 @@ class CryptoQueries {
         rs.getBigDecimal("custo"),
         rs.getString("moeda"),
         rs.getObject("criado_em", OffsetDateTime.class).toInstant(),
+        rs.getString("origem"),
         rs.getBigDecimal("dolar"));
   }
 }

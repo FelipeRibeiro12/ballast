@@ -127,4 +127,12 @@ describe('Topo: menu Mais', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Terceiros' }))
     expect(window.location.hash).toBe('#/terceiros')
   })
+
+  it('leva a Importar extrato', async () => {
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Importar extrato' }))
+    expect(window.location.hash).toBe('#/importar')
+  })
 })

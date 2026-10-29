@@ -23,28 +23,43 @@ public record MovementResponse(
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
-            description = "Em centavos de dólar; nulo no movimento antigo em reais sem PTAX")
+            description =
+                "Em centavos de dólar; nulo no movimento antigo em reais sem PTAX, ou na entrada"
+                    + " e saída sincronizada sem custo informado")
         Long custoUsdCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
-            description = "Em centavos de real pela PTAX da data; nulo sem PTAX")
-        Long custoCentavos) {
+            description =
+                "Em centavos de real pela PTAX da data; nulo sem PTAX, ou sem custo informado")
+        Long custoCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            allowableValues = {"manual", "sincronizada"},
+            description =
+                "sincronizada vem da leitura de uma carteira observada (ADR-071): não se apaga"
+                    + " nem se edita, só se informa o custo")
+        String origem) {
 
   // Movimento novo é em dólar; o da F13 é em reais (ADR-038). A outra moeda vem pela PTAX da
   // data do movimento, arredondada uma vez com HALF_EVEN.
   static MovementResponse from(CryptoQueries.Movement movement) {
     boolean inUsd = "USD".equals(movement.currency());
+    boolean noCost = movement.cost() == null;
     BigDecimal usd =
-        inUsd
-            ? movement.cost()
-            : movement.dollar() == null
-                ? null
-                : movement.cost().divide(movement.dollar(), MathContext.DECIMAL128);
+        noCost
+            ? null
+            : inUsd
+                ? movement.cost()
+                : movement.dollar() == null
+                    ? null
+                    : movement.cost().divide(movement.dollar(), MathContext.DECIMAL128);
     BigDecimal brl =
-        inUsd
-            ? movement.dollar() == null ? null : movement.cost().multiply(movement.dollar())
-            : movement.cost();
+        noCost
+            ? null
+            : inUsd
+                ? movement.dollar() == null ? null : movement.cost().multiply(movement.dollar())
+                : movement.cost();
     return new MovementResponse(
         movement.id(),
         movement.accountId(),
@@ -53,7 +68,8 @@ public record MovementResponse(
         Decimals.format(movement.quantity()),
         movement.date(),
         cents(usd),
-        cents(brl));
+        cents(brl),
+        movement.origin());
   }
 
   private static Long cents(BigDecimal amount) {

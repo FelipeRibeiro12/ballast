@@ -1374,7 +1374,7 @@ function isMovimentoCripto(valor: unknown): valor is MovimentoCripto {
     'ativoId' in valor &&
     typeof valor.ativoId === 'string' &&
     'tipo' in valor &&
-    (valor.tipo === 'compra' || valor.tipo === 'venda') &&
+    (valor.tipo === 'compra' || valor.tipo === 'venda' || valor.tipo === 'entrada' || valor.tipo === 'saida') &&
     'quantidade' in valor &&
     eDecimalEmTexto(valor.quantidade) &&
     'data' in valor &&
@@ -1572,6 +1572,165 @@ export async function deleteMovimentoCripto(id: string): Promise<void> {
   if (resposta.status !== 204) {
     return recusarRespostaDeInvestimento(resposta, 'DELETE /movimentos-cripto/{id}')
   }
+}
+
+export type Carteira = components['schemas']['Carteira']
+export type CarteiraRequest = components['schemas']['CarteiraRequest']
+export type SaldoCarteira = components['schemas']['SaldoCarteira']
+export type AtivoCriptoEdicao = components['schemas']['AtivoCriptoEdicao']
+
+const REDES_DA_CARTEIRA: readonly string[] = ['ethereum', 'base', 'solana']
+
+function isSaldoCarteira(valor: unknown): valor is SaldoCarteira {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'ativoId' in valor &&
+    typeof valor.ativoId === 'string' &&
+    'simbolo' in valor &&
+    typeof valor.simbolo === 'string' &&
+    'contrato' in valor &&
+    (valor.contrato === null || typeof valor.contrato === 'string') &&
+    'quantidade' in valor &&
+    eDecimalEmTexto(valor.quantidade) &&
+    'confiavel' in valor &&
+    typeof valor.confiavel === 'boolean' &&
+    'custoPendente' in valor &&
+    typeof valor.custoPendente === 'boolean'
+  )
+}
+
+function isCarteira(valor: unknown): valor is Carteira {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'rede' in valor &&
+    typeof valor.rede === 'string' &&
+    REDES_DA_CARTEIRA.includes(valor.rede) &&
+    'endereco' in valor &&
+    typeof valor.endereco === 'string' &&
+    'rotulo' in valor &&
+    (valor.rotulo === null || typeof valor.rotulo === 'string') &&
+    'sincronizadaEm' in valor &&
+    (valor.sincronizadaEm === null || typeof valor.sincronizadaEm === 'string') &&
+    'leituraFalhou' in valor &&
+    typeof valor.leituraFalhou === 'boolean' &&
+    'verificadaEm' in valor &&
+    (valor.verificadaEm === null || typeof valor.verificadaEm === 'string') &&
+    'saldos' in valor &&
+    Array.isArray(valor.saldos) &&
+    valor.saldos.every(isSaldoCarteira)
+  )
+}
+
+// O endereço só viaja no corpo do POST e nas respostas: nenhuma rota o leva no caminho ou na query.
+export async function fetchCarteiras(): Promise<Carteira[]> {
+  const resposta = await fetch(`${baseUrl}/carteiras`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, '/carteiras')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isCarteira)) throw new ApiError('/carteiras com formato inesperado')
+  return corpo
+}
+
+export async function postCarteira(dados: CarteiraRequest, chave?: string): Promise<Carteira> {
+  const resposta = await enviarJson('/carteiras', dados, chave)
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /carteiras')
+  const corpo: unknown = await resposta.json()
+  if (!isCarteira(corpo)) throw new ApiError('POST /carteiras com formato inesperado')
+  return corpo
+}
+
+export async function deleteCarteira(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/carteiras/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeInvestimento(resposta, 'DELETE /carteiras/{id}')
+}
+
+export async function postSincronizarCarteira(id: string, chave?: string): Promise<Carteira> {
+  const resposta = await fetch(`${baseUrl}/carteiras/${encodeURIComponent(id)}/sincronizar`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(chave),
+  })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /carteiras/{id}/sincronizar')
+  const corpo: unknown = await resposta.json()
+  if (!isCarteira(corpo)) throw new ApiError('POST /carteiras/{id}/sincronizar com formato inesperado')
+  return corpo
+}
+
+export type DesafioPosse = components['schemas']['DesafioPosse']
+export type VerificarPosseRequest = components['schemas']['VerificarPosseRequest']
+
+function isDesafioPosse(valor: unknown): valor is DesafioPosse {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'nonce' in valor &&
+    typeof valor.nonce === 'string' &&
+    'mensagem' in valor &&
+    typeof valor.mensagem === 'string' &&
+    'expiraEm' in valor &&
+    typeof valor.expiraEm === 'string'
+  )
+}
+
+// Sem Idempotency-Key: cada pedido tem que gerar um desafio novo, repetir a chave devolveria o antigo.
+// 400, 404 e 429 saem como CriptoInvalidoError, InvestimentoNaoEncontradoError e LimiteTentativasError.
+export async function postDesafioPosse(id: string): Promise<DesafioPosse> {
+  const resposta = await fetch(`${baseUrl}/carteiras/${encodeURIComponent(id)}/posse/desafio`, {
+    method: 'POST',
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /carteiras/{id}/posse/desafio')
+  const corpo: unknown = await resposta.json()
+  if (!isDesafioPosse(corpo)) throw new ApiError('POST /carteiras/{id}/posse/desafio com formato inesperado')
+  return corpo
+}
+
+// A assinatura viaja só no corpo; o servidor consome o desafio mesmo quando ela falha.
+export async function postVerificarPosse(id: string, dados: VerificarPosseRequest): Promise<Carteira> {
+  const resposta = await fetch(`${baseUrl}/carteiras/${encodeURIComponent(id)}/posse/verificar`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /carteiras/{id}/posse/verificar')
+  const corpo: unknown = await resposta.json()
+  if (!isCarteira(corpo)) throw new ApiError('POST /carteiras/{id}/posse/verificar com formato inesperado')
+  return corpo
+}
+
+export async function putCustoMovimento(id: string, custoUsdCentavos: number, chave?: string): Promise<MovimentoCripto> {
+  const resposta = await fetch(`${baseUrl}/movimentos-cripto/${encodeURIComponent(id)}/custo`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(chave),
+    body: JSON.stringify({ custoUsdCentavos }),
+  })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'PUT /movimentos-cripto/{id}/custo')
+  const corpo: unknown = await resposta.json()
+  if (!isMovimentoCripto(corpo)) throw new ApiError('PUT /movimentos-cripto/{id}/custo com formato inesperado')
+  return corpo
+}
+
+export async function putAtivoCripto(id: string, dados: AtivoCriptoEdicao, chave?: string): Promise<AtivoCripto> {
+  const resposta = await fetch(`${baseUrl}/ativos-cripto/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: cabecalhosDeEscrita(chave),
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'PUT /ativos-cripto/{id}')
+  const corpo: unknown = await resposta.json()
+  if (!isAtivoCripto(corpo)) throw new ApiError('PUT /ativos-cripto/{id} com formato inesperado')
+  return corpo
 }
 
 export async function fetchPosicoesCripto(data: string): Promise<PosicoesCripto> {
@@ -2472,4 +2631,414 @@ export async function deleteVisaoSaldo(id: string): Promise<void> {
     credentials: 'same-origin',
   })
   if (resposta.status !== 204) return recusarRespostaDeVisao(resposta, 'DELETE /visoes-saldo/{id}')
+}
+
+export type Importacao = components['schemas']['Importacao']
+export type ImportacaoDetalhe = components['schemas']['ImportacaoDetalhe']
+export type ImportacaoLinha = components['schemas']['ImportacaoLinha']
+export type ImportacaoLinhaRequest = components['schemas']['ImportacaoLinhaRequest']
+export type ImportacaoConfirmacao = components['schemas']['ImportacaoConfirmacao']
+
+export class ImportacaoNaoEncontradaError extends ApiError {}
+
+// O mesmo arquivo já foi enviado: o servidor devolve o id da importação que o recebeu.
+export class ArquivoJaImportadoError extends ApiError {
+  readonly importacaoId: string
+
+  constructor(importacaoId: string) {
+    super('arquivo já importado')
+    this.importacaoId = importacaoId
+  }
+}
+
+// 400, 409, 413, 415 e 422 das rotas de importação. O status fica para a tela escolher o texto.
+export class ImportacaoRecusadaError extends ApiError {
+  readonly status: number
+  readonly mensagemServidor: string | null
+
+  constructor(status: number, mensagemServidor: string | null) {
+    super('importação recusada')
+    this.status = status
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+const ACOES_DE_IMPORTACAO: readonly unknown[] = ['importar', 'ignorar', 'conciliar']
+
+function isTextoOuNulo(valor: unknown): boolean {
+  return valor === null || typeof valor === 'string'
+}
+
+function isImportacaoLinha(valor: unknown): valor is ImportacaoLinha {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'ordem' in valor &&
+    Number.isSafeInteger(valor.ordem) &&
+    'titulo' in valor &&
+    typeof valor.titulo === 'string' &&
+    'valida' in valor &&
+    typeof valor.valida === 'boolean' &&
+    'acao' in valor &&
+    ACOES_DE_IMPORTACAO.includes(valor.acao) &&
+    'proposta' in valor &&
+    ACOES_DE_IMPORTACAO.includes(valor.proposta) &&
+    'data' in valor &&
+    isTextoOuNulo(valor.data) &&
+    'tipo' in valor &&
+    (valor.tipo === null || valor.tipo === 'receita' || valor.tipo === 'despesa') &&
+    'valorCentavos' in valor &&
+    (valor.valorCentavos === null || Number.isSafeInteger(valor.valorCentavos)) &&
+    'categoriaId' in valor &&
+    isTextoOuNulo(valor.categoriaId) &&
+    'lancamentoId' in valor &&
+    isTextoOuNulo(valor.lancamentoId) &&
+    'motivo' in valor &&
+    isTextoOuNulo(valor.motivo) &&
+    'resultado' in valor &&
+    isTextoOuNulo(valor.resultado)
+  )
+}
+
+function isImportacao(valor: unknown): valor is Importacao {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'status' in valor &&
+    (valor.status === 'pendente' || valor.status === 'confirmada') &&
+    'criadoEm' in valor &&
+    typeof valor.criadoEm === 'string' &&
+    'totalLinhas' in valor &&
+    Number.isSafeInteger(valor.totalLinhas) &&
+    'totalInvalidas' in valor &&
+    Number.isSafeInteger(valor.totalInvalidas) &&
+    'totalImportar' in valor &&
+    Number.isSafeInteger(valor.totalImportar) &&
+    'totalConciliar' in valor &&
+    Number.isSafeInteger(valor.totalConciliar) &&
+    'totalIgnorar' in valor &&
+    Number.isSafeInteger(valor.totalIgnorar)
+  )
+}
+
+function isImportacaoDetalhe(valor: unknown): valor is ImportacaoDetalhe {
+  return isImportacao(valor) && 'linhas' in valor && Array.isArray(valor.linhas) && valor.linhas.every(isImportacaoLinha)
+}
+
+function isImportacaoConfirmacao(valor: unknown): valor is ImportacaoConfirmacao {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'criadas' in valor &&
+    Number.isSafeInteger(valor.criadas) &&
+    'conciliadas' in valor &&
+    Number.isSafeInteger(valor.conciliadas) &&
+    'ignoradas' in valor &&
+    Number.isSafeInteger(valor.ignoradas) &&
+    'duplicadas' in valor &&
+    Number.isSafeInteger(valor.duplicadas)
+  )
+}
+
+async function recusarRespostaDeImportacao(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 401) throw new SessaoExpiradaError('sessão expirada')
+  if (resposta.status === 503) throw new ServicoIndisponivelError('serviço indisponível')
+  if (resposta.status === 404) throw new ImportacaoNaoEncontradaError('importação não encontrada')
+  if (resposta.status === 429) throw new LimiteTentativasError(lerRetryAfter(resposta))
+  if ([400, 409, 413, 415, 422].includes(resposta.status)) {
+    const corpo: unknown = await resposta.json().catch(() => null)
+    // O 409 com importacaoId é "mesmo arquivo"; sem ele é limite, importação confirmada ou chave em andamento.
+    if (
+      resposta.status === 409 &&
+      typeof corpo === 'object' &&
+      corpo !== null &&
+      'importacaoId' in corpo &&
+      typeof corpo.importacaoId === 'string'
+    ) {
+      throw new ArquivoJaImportadoError(corpo.importacaoId)
+    }
+    const mensagem =
+      typeof corpo === 'object' && corpo !== null && 'erro' in corpo && typeof corpo.erro === 'string' && corpo.erro !== ''
+        ? corpo.erro
+        : null
+    throw new ImportacaoRecusadaError(resposta.status, mensagem)
+  }
+  throw new ApiError(`${origem} respondeu ${resposta.status}`)
+}
+
+// O arquivo vai cru no corpo (ADR-069): sem multipart, o nome dele nunca sai do aparelho.
+export async function postImportacao(contaId: string, arquivo: Blob): Promise<ImportacaoDetalhe> {
+  const resposta = await fetch(`${baseUrl}/importacoes?conta_id=${encodeURIComponent(contaId)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: arquivo,
+  })
+  if (resposta.status !== 201) return recusarRespostaDeImportacao(resposta, 'POST /importacoes')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoDetalhe(corpo)) throw new ApiError('POST /importacoes com formato inesperado')
+  return corpo
+}
+
+// PDF de fatura (ADR-073): mesmo corpo cru do OFX, rota própria. A conta precisa ser de cartão.
+export async function postImportacaoPdf(contaId: string, arquivo: Blob): Promise<ImportacaoDetalhe> {
+  const resposta = await fetch(`${baseUrl}/importacoes/pdf?conta_id=${encodeURIComponent(contaId)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: arquivo,
+  })
+  if (resposta.status !== 201) return recusarRespostaDeImportacao(resposta, 'POST /importacoes/pdf')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoDetalhe(corpo)) throw new ApiError('POST /importacoes/pdf com formato inesperado')
+  return corpo
+}
+
+export async function fetchImportacoes(): Promise<Importacao[]> {
+  const resposta = await fetch(`${baseUrl}/importacoes`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeImportacao(resposta, '/importacoes')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isImportacao)) throw new ApiError('/importacoes com formato inesperado')
+  return corpo
+}
+
+export async function fetchImportacao(id: string): Promise<ImportacaoDetalhe> {
+  const resposta = await fetch(`${baseUrl}/importacoes/${encodeURIComponent(id)}`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeImportacao(resposta, '/importacoes/{id}')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoDetalhe(corpo)) throw new ApiError('/importacoes/{id} com formato inesperado')
+  return corpo
+}
+
+export async function putImportacaoLinha(
+  id: string,
+  linhaId: string,
+  dados: ImportacaoLinhaRequest,
+): Promise<ImportacaoLinha> {
+  const resposta = await fetch(`${baseUrl}/importacoes/${encodeURIComponent(id)}/linhas/${encodeURIComponent(linhaId)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeImportacao(resposta, 'PUT /importacoes/{id}/linhas/{linhaId}')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoLinha(corpo)) throw new ApiError('PUT /importacoes/{id}/linhas/{linhaId} com formato inesperado')
+  return corpo
+}
+
+export async function deleteImportacao(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/importacoes/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeImportacao(resposta, 'DELETE /importacoes/{id}')
+}
+
+// A chave identifica a tentativa de confirmar: quem repete o pedido (rede caiu) manda a mesma (ADR-056).
+export async function postConfirmacaoDeImportacao(id: string, chave: string): Promise<ImportacaoConfirmacao> {
+  const resposta = await fetch(`${baseUrl}/importacoes/${encodeURIComponent(id)}/confirmacao`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Idempotency-Key': chave },
+  })
+  if (!resposta.ok) return recusarRespostaDeImportacao(resposta, 'POST /importacoes/{id}/confirmacao')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoConfirmacao(corpo)) throw new ApiError('POST /importacoes/{id}/confirmacao com formato inesperado')
+  return corpo
+}
+
+export type MapeamentoCsv = components['schemas']['MapeamentoCsv']
+export type MapeamentoCsvRequest = components['schemas']['MapeamentoCsvRequest']
+export type CsvPrevia = components['schemas']['CsvPrevia']
+export type CsvPreviaLinha = components['schemas']['CsvPreviaLinha']
+
+// Colunas do mapeamento, sem o nome: é o que a prévia recebe na query.
+export type ParametrosDoCsv = Omit<MapeamentoCsvRequest, 'nome'>
+
+export const SEPARADORES_DE_CSV: readonly MapeamentoCsv['separador'][] = ['ponto_e_virgula', 'virgula', 'tab', 'barra_vertical']
+export const FORMATOS_DE_DATA_DE_CSV: readonly MapeamentoCsv['formatoData'][] = [
+  'dd/MM/yyyy',
+  'yyyy-MM-dd',
+  'MM/dd/yyyy',
+  'dd-MM-yyyy',
+]
+export const DECIMAIS_DE_CSV: readonly MapeamentoCsv['decimal'][] = ['virgula', 'ponto']
+export const SINAIS_DE_CSV: readonly MapeamentoCsv['sinal'][] = ['negativo_despesa', 'positivo_despesa']
+
+// 404 das rotas de CSV: conta ou mapeamento que não existe ou é de outro usuário (mesmo corpo).
+export class MapeamentoNaoEncontradoError extends ApiError {}
+
+// Compara por string para o guarda não precisar de cast para o tipo literal.
+function isUmDe(valor: unknown, lista: readonly string[]): boolean {
+  return typeof valor === 'string' && lista.includes(valor)
+}
+
+function isColuna(valor: unknown): boolean {
+  return typeof valor === 'number' && Number.isInteger(valor) && valor >= 0 && valor <= 49
+}
+
+function isMapeamentoCsv(valor: unknown): valor is MapeamentoCsv {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'nome' in valor &&
+    typeof valor.nome === 'string' &&
+    'separador' in valor &&
+    isUmDe(valor.separador, SEPARADORES_DE_CSV) &&
+    'formatoData' in valor &&
+    isUmDe(valor.formatoData, FORMATOS_DE_DATA_DE_CSV) &&
+    'decimal' in valor &&
+    isUmDe(valor.decimal, DECIMAIS_DE_CSV) &&
+    'sinal' in valor &&
+    isUmDe(valor.sinal, SINAIS_DE_CSV) &&
+    'temCabecalho' in valor &&
+    typeof valor.temCabecalho === 'boolean' &&
+    'colunaData' in valor &&
+    isColuna(valor.colunaData) &&
+    'colunaValor' in valor &&
+    isColuna(valor.colunaValor) &&
+    'colunaDescricao' in valor &&
+    isColuna(valor.colunaDescricao) &&
+    'colunaId' in valor &&
+    (valor.colunaId === null || isColuna(valor.colunaId))
+  )
+}
+
+function isCsvPreviaLinha(valor: unknown): valor is CsvPreviaLinha {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'ordem' in valor &&
+    Number.isSafeInteger(valor.ordem) &&
+    'celulas' in valor &&
+    Array.isArray(valor.celulas) &&
+    valor.celulas.every((celula) => typeof celula === 'string') &&
+    'valida' in valor &&
+    typeof valor.valida === 'boolean' &&
+    'erro' in valor &&
+    isTextoOuNulo(valor.erro) &&
+    'data' in valor &&
+    isTextoOuNulo(valor.data) &&
+    'tipo' in valor &&
+    (valor.tipo === null || valor.tipo === 'receita' || valor.tipo === 'despesa') &&
+    'valorCentavos' in valor &&
+    (valor.valorCentavos === null || Number.isSafeInteger(valor.valorCentavos)) &&
+    'titulo' in valor &&
+    typeof valor.titulo === 'string'
+  )
+}
+
+function isCsvPrevia(valor: unknown): valor is CsvPrevia {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'totalLinhas' in valor &&
+    Number.isSafeInteger(valor.totalLinhas) &&
+    'colunasDetectadas' in valor &&
+    Number.isSafeInteger(valor.colunasDetectadas) &&
+    'linhas' in valor &&
+    Array.isArray(valor.linhas) &&
+    valor.linhas.every(isCsvPreviaLinha)
+  )
+}
+
+async function recusarRespostaDeCsv(resposta: Response, origem: string): Promise<never> {
+  if (resposta.status === 404) throw new MapeamentoNaoEncontradoError('conta ou mapeamento não encontrado')
+  return recusarRespostaDeImportacao(resposta, origem)
+}
+
+export async function fetchMapeamentosCsv(): Promise<MapeamentoCsv[]> {
+  const resposta = await fetch(`${baseUrl}/mapeamentos-csv`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeCsv(resposta, '/mapeamentos-csv')
+  const corpo: unknown = await resposta.json()
+  if (!Array.isArray(corpo) || !corpo.every(isMapeamentoCsv)) throw new ApiError('/mapeamentos-csv com formato inesperado')
+  return corpo
+}
+
+export async function postMapeamentoCsv(dados: MapeamentoCsvRequest): Promise<MapeamentoCsv> {
+  const resposta = await fetch(`${baseUrl}/mapeamentos-csv`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (resposta.status !== 201) return recusarRespostaDeCsv(resposta, 'POST /mapeamentos-csv')
+  const corpo: unknown = await resposta.json()
+  if (!isMapeamentoCsv(corpo)) throw new ApiError('POST /mapeamentos-csv com formato inesperado')
+  return corpo
+}
+
+export async function putMapeamentoCsv(id: string, dados: MapeamentoCsvRequest): Promise<MapeamentoCsv> {
+  const resposta = await fetch(`${baseUrl}/mapeamentos-csv/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeCsv(resposta, 'PUT /mapeamentos-csv/{id}')
+  const corpo: unknown = await resposta.json()
+  if (!isMapeamentoCsv(corpo)) throw new ApiError('PUT /mapeamentos-csv/{id} com formato inesperado')
+  return corpo
+}
+
+export async function deleteMapeamentoCsv(id: string): Promise<void> {
+  const resposta = await fetch(`${baseUrl}/mapeamentos-csv/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  })
+  if (resposta.status !== 204) return recusarRespostaDeCsv(resposta, 'DELETE /mapeamentos-csv/{id}')
+}
+
+// Mesmo corpo cru do OFX; o mapeamento salvo diz como ler as colunas (ADR-070).
+export async function postImportacaoCsv(contaId: string, mapeamentoId: string, arquivo: Blob): Promise<ImportacaoDetalhe> {
+  const consulta = `conta_id=${encodeURIComponent(contaId)}&mapeamento_id=${encodeURIComponent(mapeamentoId)}`
+  const resposta = await fetch(`${baseUrl}/importacoes/csv?${consulta}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: arquivo,
+  })
+  if (resposta.status !== 201) return recusarRespostaDeCsv(resposta, 'POST /importacoes/csv')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoDetalhe(corpo)) throw new ApiError('POST /importacoes/csv com formato inesperado')
+  return corpo
+}
+
+// Não grava nada no servidor. A coluna do identificador só vai na query quando existe.
+export async function postPreviaCsv(parametros: ParametrosDoCsv, arquivo: Blob, sinal?: AbortSignal): Promise<CsvPrevia> {
+  const consulta = new URLSearchParams({
+    separador: parametros.separador,
+    formato_data: parametros.formatoData,
+    decimal: parametros.decimal,
+    sinal: parametros.sinal,
+    tem_cabecalho: String(parametros.temCabecalho),
+    coluna_data: String(parametros.colunaData),
+    coluna_valor: String(parametros.colunaValor),
+    coluna_descricao: String(parametros.colunaDescricao),
+  })
+  if (parametros.colunaId !== null && parametros.colunaId !== undefined) {
+    consulta.set('coluna_id', String(parametros.colunaId))
+  }
+  const resposta = await fetch(`${baseUrl}/importacoes/csv/previa?${consulta.toString()}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: arquivo,
+    signal: sinal,
+  })
+  if (resposta.status !== 200) return recusarRespostaDeCsv(resposta, 'POST /importacoes/csv/previa')
+  const corpo: unknown = await resposta.json()
+  if (!isCsvPrevia(corpo)) throw new ApiError('POST /importacoes/csv/previa com formato inesperado')
+  return corpo
 }

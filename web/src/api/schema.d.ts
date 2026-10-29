@@ -290,6 +290,111 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/carteiras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as carteiras observadas do usuário
+         * @description Com o saldo da última leitura que deu certo e a data dela.
+         */
+        get: operations["getCarteiras"];
+        put?: never;
+        /**
+         * Cadastra um endereço público numa conta cripto
+         * @description Só observa: o app nunca pede seed, chave privada nem assinatura de transação. Não lê a rede; chame POST /carteiras/{id}/sincronizar.
+         */
+        post: operations["postCarteiras"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/carteiras/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detalha uma carteira */
+        get: operations["getCarteirasById"];
+        put?: never;
+        post?: never;
+        /**
+         * Apaga a carteira e os movimentos sincronizados dela
+         * @description Os movimentos digitados na conta ficam.
+         */
+        delete: operations["deleteCarteirasById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/carteiras/{id}/posse/desafio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede a mensagem que o usuário assina para provar a posse da carteira
+         * @description O servidor monta o texto (SIWE no EVM, texto equivalente na Solana) e o cliente assina exatamente o que recebe. Vale 5 minutos e substitui o desafio anterior. Um desafio novo a cada 5 s por carteira. Não assina transação e não custa nada.
+         */
+        post: operations["postCarteirasByIdPosseDesafio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/carteiras/{id}/posse/verificar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confere a assinatura do desafio e marca a carteira como verificada
+         * @description Consome o desafio antes de olhar a assinatura: errar queima o nonce e o usuário pede outro. A falha não diz qual parte errou.
+         */
+        post: operations["postCarteirasByIdPosseVerificar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/carteiras/{id}/sincronizar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lê o saldo da carteira na rede
+         * @description No máximo uma leitura por carteira a cada 60 s: dentro do prazo devolve o estado atual sem chamar o indexador. Indexador fora do ar, sem chave ou com resposta fora do formato não é erro: responde 200 com leituraFalhou true e os saldos da leitura anterior. A leitura é tudo ou nada.
+         */
+        post: operations["postCarteirasByIdSincronizar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/categorias": {
         parameters: {
             query?: never;
@@ -543,6 +648,151 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/importacoes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista as importações do usuário, da mais nova para a mais antiga
+         * @description No máximo 100, sem as linhas.
+         */
+        get: operations["getImportacoes"];
+        put?: never;
+        /**
+         * Envia um extrato OFX e devolve a proposta por linha
+         * @description O corpo é o arquivo cru (application/octet-stream), de até 1 MiB e 2000 transações. Nada vira lançamento até a confirmação. O mesmo arquivo duas vezes devolve 409 com o importacaoId da primeira; descartar a pendente libera o arquivo.
+         */
+        post: operations["postImportacoes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/importacoes/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Envia um extrato CSV e devolve a proposta por linha
+         * @description Igual ao envio de OFX, lendo o arquivo pelo mapeamento salvo. O corpo é o arquivo cru (application/octet-stream), de até 1 MiB, 2000 linhas de dados e 50 colunas por linha. Linha com data ou valor ilegível entra como inválida e fica de fora da confirmação. A revisão e a confirmação são as de /importacoes/{id}.
+         */
+        post: operations["postImportacoesCsv"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/importacoes/csv/previa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mostra como um CSV seria lido, sem gravar nada
+         * @description Recebe o mapeamento na query e o arquivo cru no corpo (mesmos tetos do envio). Devolve as 10 primeiras linhas, com as células e a interpretação de cada uma, o total de linhas e o número de colunas da primeira linha. Não cria importação, não grava hash e não usa vaga das 20 pendentes. Mesmo limite de requisições do envio.
+         */
+        post: operations["postImportacoesCsvPrevia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/importacoes/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Envia o PDF de uma fatura de cartão e devolve a proposta por linha (melhor esforço)
+         * @description O corpo é o PDF cru (application/octet-stream), de até 5 MiB e 30 páginas, com texto (sem OCR) e sem senha. A leitura é por heurística e pode errar ou não achar linhas: o que não foi reconhecido entra como linha inválida, com o texto cru, e só aceita ignorar. Nada vira lançamento antes da confirmação em /importacoes/{id}/confirmacao. A conta precisa ser de cartão de crédito. O arquivo não é guardado.
+         */
+        post: operations["postImportacoesPdf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/importacoes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Importação com todas as linhas e a proposta de cada uma */
+        get: operations["getImportacoesById"];
+        put?: never;
+        post?: never;
+        /**
+         * Descarta uma importação pendente
+         * @description Libera o arquivo para um novo envio. A confirmada não se descarta.
+         */
+        delete: operations["deleteImportacoesById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/importacoes/{id}/confirmacao": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirma a importação e cria os lançamentos
+         * @description Sem corpo. Cada linha vale pela decisão ou, sem ela, pela proposta: importar cria o lançamento pelas mesmas regras do POST /lancamentos (dataCompetencia é a data do arquivo; dataCaixa segue a conta), conciliar só grava o vínculo no lançamento existente e ignorar não grava nada. Linha cujo FITID entrou no meio-tempo conta como duplicada. Tudo numa transação: uma recusa de regra desfaz a confirmação inteira. Aceita Idempotency-Key (ADR-056).
+         */
+        post: operations["postImportacoesByIdConfirmacao"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/importacoes/{id}/linhas/{linhaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Muda a decisão de uma linha da importação pendente
+         * @description acao importar aceita categoriaId e titulo; conciliar exige lancamentoId de um lançamento realizado da mesma conta, ainda sem vínculo de importação; ignorar não leva nada. Sem decisão vale a proposta. Linha que a proposta já ignorou (inválida, repetida no arquivo ou já importada) só aceita ignorar.
+         */
+        put: operations["putImportacoesByIdLinhasByLinhaId"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/indices": {
         parameters: {
             query?: never;
@@ -648,6 +898,48 @@ export interface paths {
         put: operations["putLancamentosByIdTerceiro"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mapeamentos-csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lista os mapeamentos de CSV do usuário */
+        get: operations["getMapeamentosCsv"];
+        put?: never;
+        /**
+         * Salva um mapeamento de colunas de CSV
+         * @description Até 20 por usuário. O nome é único por usuário.
+         */
+        post: operations["postMapeamentosCsv"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mapeamentos-csv/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Troca todos os campos do mapeamento */
+        put: operations["putMapeamentosCsvById"];
+        post?: never;
+        /**
+         * Apaga o mapeamento
+         * @description As importações já criadas com ele não mudam.
+         */
+        delete: operations["deleteMapeamentosCsvById"];
         options?: never;
         head?: never;
         patch?: never;
@@ -772,6 +1064,26 @@ export interface paths {
         post?: never;
         /** Apaga um movimento de cripto */
         delete: operations["deleteMovimentosCriptoById"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/movimentos-cripto/{id}/custo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Informa o custo de uma entrada ou saída sincronizada
+         * @description Em dólar (ADR-038), uma vez só. Depois disso o movimento conta como compra ou venda no custo médio. Movimento digitado não usa esta rota.
+         */
+        put: operations["putMovimentosCriptoByIdCusto"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1289,6 +1601,8 @@ export interface components {
             simbolo: string;
         };
         AtivoCriptoEdicao: {
+            /** @description Ausente ou nulo mantém o valor atual. Verdadeiro promove o ativo que veio de uma leitura de carteira (ADR-071): ele passa a valer no patrimônio */
+            confiavel?: boolean | null;
             /** Format: int32 */
             decimais: number;
             nome?: string | null;
@@ -1366,6 +1680,39 @@ export interface components {
              * @description Centavos de real. Informativo: não bloqueia lançamento
              */
             limiteCentavos: number;
+        };
+        Carteira: {
+            /** Format: uuid */
+            contaId: string;
+            /** @description EVM em minúsculas; Solana como foi cadastrado */
+            endereco: string;
+            /** Format: uuid */
+            id: string;
+            /** @description A última tentativa de leitura falhou: os saldos são os de sincronizadaEm, não zero */
+            leituraFalhou: boolean;
+            /** @enum {string} */
+            rede: "ethereum" | "base" | "solana";
+            rotulo: string | null;
+            saldos: components["schemas"]["SaldoCarteira"][];
+            /**
+             * Format: date-time
+             * @description Última leitura que deu certo; nulo se nunca leu
+             */
+            sincronizadaEm: string | null;
+            /**
+             * Format: date-time
+             * @description Prova de posse por assinatura (F25); nulo se nunca provou
+             */
+            verificadaEm: string | null;
+        };
+        CarteiraRequest: {
+            /** Format: uuid */
+            contaId: string;
+            /** @description EVM: 0x mais 40 hexadecimais, com checksum EIP-55 se tiver caixa mista, gravado em minúsculas. Solana: base58 que decodifica em 32 bytes */
+            endereco: string;
+            /** @enum {string} */
+            rede: "ethereum" | "base" | "solana";
+            rotulo?: string | null;
         };
         Categoria: {
             cor: string | null;
@@ -1567,6 +1914,50 @@ export interface components {
             /** @enum {string} */
             tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto" | "investimento" | "cofrinho";
         };
+        CsvPrevia: {
+            /**
+             * Format: int32
+             * @description Colunas da primeira linha do arquivo
+             */
+            colunasDetectadas: number;
+            /** @description As 10 primeiras linhas */
+            linhas: components["schemas"]["CsvPreviaLinha"][];
+            /**
+             * Format: int32
+             * @description Linhas de dados do arquivo inteiro, sem o cabeçalho
+             */
+            totalLinhas: number;
+        };
+        CsvPreviaLinha: {
+            /** @description Células da linha, cortadas em 200 caracteres e com apóstrofo na frente das que começam como fórmula */
+            celulas: string[];
+            /** Format: date */
+            data: string | null;
+            /** @description Por que a linha é inválida; texto fixo, sem trecho do arquivo */
+            erro: string | null;
+            /** Format: int32 */
+            ordem: number;
+            /** @enum {string|null} */
+            tipo: "receita" | "despesa" | null;
+            titulo: string;
+            valida: boolean;
+            /**
+             * Format: int64
+             * @description Centavos de real, sempre positivo; o sinal vem do tipo
+             */
+            valorCentavos: number | null;
+        };
+        DesafioPosse: {
+            /**
+             * Format: date-time
+             * @description Cinco minutos depois da emissão
+             */
+            expiraEm: string;
+            /** @description Texto exato que o usuário assina, sem alterar nenhum caractere */
+            mensagem: string;
+            /** @example 9f2c4b7a1e3d5c6b8a0f1e2d3c4b5a69 */
+            nonce: string;
+        };
         DespesaDaCategoria: {
             /** Format: uuid */
             categoriaId: string;
@@ -1655,6 +2046,162 @@ export interface components {
         };
         HealthResponse: {
             mensagem: string;
+        };
+        Importacao: {
+            /** Format: date-time */
+            confirmadaEm: string | null;
+            /** Format: uuid */
+            contaId: string;
+            /** Format: date-time */
+            criadoEm: string;
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "pendente" | "confirmada";
+            /** Format: int32 */
+            totalConciliar: number;
+            /** Format: int32 */
+            totalIgnorar: number;
+            /**
+             * Format: int32
+             * @description Linhas cuja ação vigente (decisão, ou a proposta sem decisão) é importar
+             */
+            totalImportar: number;
+            /**
+             * Format: int32
+             * @description Linhas que o app não conseguiu ler; ficam de fora da confirmação
+             */
+            totalInvalidas: number;
+            /** Format: int32 */
+            totalLinhas: number;
+        };
+        ImportacaoConfirmacao: {
+            /**
+             * Format: int32
+             * @description Lançamentos existentes que ganharam o vínculo com o extrato
+             */
+            conciliadas: number;
+            /**
+             * Format: int32
+             * @description Lançamentos criados
+             */
+            criadas: number;
+            /**
+             * Format: int32
+             * @description Linhas cujo FITID já tinha entrado quando a confirmação rodou
+             */
+            duplicadas: number;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            ignoradas: number;
+            /** @enum {string} */
+            status: "confirmada";
+        };
+        ImportacaoDetalhe: {
+            /** Format: date-time */
+            confirmadaEm: string | null;
+            /** Format: uuid */
+            contaId: string;
+            /** Format: date-time */
+            criadoEm: string;
+            /** Format: uuid */
+            id: string;
+            linhas: components["schemas"]["ImportacaoLinha"][];
+            /** @enum {string} */
+            status: "pendente" | "confirmada";
+            /** Format: int32 */
+            totalConciliar: number;
+            /** Format: int32 */
+            totalIgnorar: number;
+            /** Format: int32 */
+            totalImportar: number;
+            /** Format: int32 */
+            totalInvalidas: number;
+            /** Format: int32 */
+            totalLinhas: number;
+        };
+        ImportacaoDuplicada: {
+            erro: string;
+            /**
+             * Format: uuid
+             * @description Importação que já recebeu este arquivo
+             */
+            importacaoId: string;
+        };
+        ImportacaoLinha: {
+            /**
+             * @description Ação vigente: a decisão, ou a proposta quando não há decisão
+             * @enum {string}
+             */
+            acao: "importar" | "ignorar" | "conciliar";
+            /**
+             * Format: uuid
+             * @description Categoria com que a linha vira lançamento: a escolhida, ou Outros / Outras receitas. Nulo em linha inválida
+             */
+            categoriaId: string | null;
+            /** Format: date */
+            data: string | null;
+            /**
+             * @description Escolha do usuário; nulo enquanto vale a proposta
+             * @enum {string|null}
+             */
+            decisao: "importar" | "ignorar" | "conciliar" | null;
+            descricao: string | null;
+            /** @description Por que a linha é inválida; texto fixo, sem trecho do arquivo */
+            erro: string | null;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Lançamento existente com que a linha concilia; depois da confirmação, o lançamento criado
+             */
+            lancamentoId: string | null;
+            /**
+             * @description Por que a proposta é ignorar; nulo nas outras
+             * @enum {string|null}
+             */
+            motivo: "ja_importada" | "invalida" | "duplicada_no_arquivo" | null;
+            /**
+             * Format: int32
+             * @description Posição da transação no arquivo, a partir de 1
+             */
+            ordem: number;
+            /** @enum {string} */
+            proposta: "importar" | "ignorar" | "conciliar";
+            /**
+             * @description O que a confirmação fez com a linha; nulo antes dela
+             * @enum {string|null}
+             */
+            resultado: "criada" | "conciliada" | "ignorada" | "duplicada" | null;
+            /**
+             * @description Nulo só em linha inválida
+             * @enum {string|null}
+             */
+            tipo: "receita" | "despesa" | null;
+            titulo: string;
+            valida: boolean;
+            /**
+             * Format: int64
+             * @description Centavos de real, sempre positivo; o sinal vem do tipo. Nulo em linha inválida
+             */
+            valorCentavos: number | null;
+        };
+        ImportacaoLinhaRequest: {
+            /** @enum {string} */
+            acao: "importar" | "ignorar" | "conciliar";
+            /**
+             * Format: uuid
+             * @description Só com importar. Sem ela vale Outros (despesa) ou Outras receitas (receita)
+             */
+            categoriaId?: string | null;
+            /**
+             * Format: uuid
+             * @description Obrigatório com conciliar e proibido nas outras ações
+             */
+            lancamentoId?: string | null;
+            /** @description Só com importar. Sem ele fica o título que veio do arquivo */
+            titulo?: string | null;
         };
         Indices: {
             /**
@@ -1797,6 +2344,61 @@ export interface components {
             email: string;
             senha: string;
         };
+        MapeamentoCsv: {
+            /** Format: int32 */
+            colunaData: number;
+            /** Format: int32 */
+            colunaDescricao: number;
+            /** Format: int32 */
+            colunaId: number | null;
+            /** Format: int32 */
+            colunaValor: number;
+            /** @enum {string} */
+            decimal: "virgula" | "ponto";
+            /** @enum {string} */
+            formatoData: "dd/MM/yyyy" | "yyyy-MM-dd" | "MM/dd/yyyy" | "dd-MM-yyyy";
+            /** Format: uuid */
+            id: string;
+            nome: string;
+            /** @enum {string} */
+            separador: "ponto_e_virgula" | "virgula" | "tab" | "barra_vertical";
+            /** @enum {string} */
+            sinal: "negativo_despesa" | "positivo_despesa";
+            temCabecalho: boolean;
+        };
+        MapeamentoCsvRequest: {
+            /**
+             * Format: int32
+             * @description Índice da coluna, a partir de 0, de 0 a 49
+             */
+            colunaData: number;
+            /**
+             * Format: int32
+             * @description Índice da coluna, a partir de 0, de 0 a 49
+             */
+            colunaDescricao: number;
+            /**
+             * Format: int32
+             * @description Índice da coluna, a partir de 0, de 0 a 49. Coluna com o identificador da transação, se o banco tiver
+             */
+            colunaId?: number | null;
+            /**
+             * Format: int32
+             * @description Índice da coluna, a partir de 0, de 0 a 49
+             */
+            colunaValor: number;
+            /** @enum {string} */
+            decimal: "virgula" | "ponto";
+            /** @enum {string} */
+            formatoData: "dd/MM/yyyy" | "yyyy-MM-dd" | "MM/dd/yyyy" | "dd-MM-yyyy";
+            /** @description Banco ou apelido; único por usuário */
+            nome: string;
+            /** @enum {string} */
+            separador: "ponto_e_virgula" | "virgula" | "tab" | "barra_vertical";
+            /** @enum {string} */
+            sinal: "negativo_despesa" | "positivo_despesa";
+            temCabecalho: boolean;
+        };
         /** @description Menor saldo da série e o primeiro dia em que ocorre */
         MenorSaldo: {
             /** Format: date */
@@ -1889,12 +2491,12 @@ export interface components {
             contaId: string;
             /**
              * Format: int64
-             * @description Em centavos de real pela PTAX da data; nulo sem PTAX
+             * @description Em centavos de real pela PTAX da data; nulo sem PTAX, ou sem custo informado
              */
             custoCentavos: number | null;
             /**
              * Format: int64
-             * @description Em centavos de dólar; nulo no movimento antigo em reais sem PTAX
+             * @description Em centavos de dólar; nulo no movimento antigo em reais sem PTAX, ou na entrada e saída sincronizada sem custo informado
              */
             custoUsdCentavos: number | null;
             /** Format: date */
@@ -1902,12 +2504,24 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
+             * @description sincronizada vem da leitura de uma carteira observada (ADR-071): não se apaga nem se edita, só se informa o custo
+             * @enum {string}
+             */
+            origem: "manual" | "sincronizada";
+            /**
              * @description Em texto, sem zero à direita
              * @example 0.12345678
              */
             quantidade: string;
             /** @enum {string} */
-            tipo: "compra" | "venda";
+            tipo: "compra" | "venda" | "entrada" | "saida";
+        };
+        MovimentoCriptoCustoRequest: {
+            /**
+             * Format: int64
+             * @description O que pagou ou recebeu, em centavos de dólar
+             */
+            custoUsdCentavos: number;
         };
         MovimentoCriptoRequest: {
             /** Format: uuid */
@@ -1930,7 +2544,7 @@ export interface components {
              */
             quantidade: string;
             /** @enum {string} */
-            tipo: "compra" | "venda";
+            tipo: "compra" | "venda" | "entrada" | "saida";
         };
         Orcamento: {
             /** Format: uuid */
@@ -2070,6 +2684,8 @@ export interface components {
         PosicaoCripto: {
             /** Format: uuid */
             ativoId: string;
+            /** @description Falso para ativo que veio de uma leitura de carteira e o usuário ainda não promoveu: fica fora do patrimônio (ADR-071) */
+            confiavel: boolean;
             /** Format: uuid */
             contaId: string;
             /** @description Última cotação até o fim do dia em America/Sao_Paulo; nula sem cotação */
@@ -2091,6 +2707,8 @@ export interface components {
             custoDaPosicaoUsdCentavos: number | null;
             /** @description Custo médio ponderado em dólares por unidade, em texto, com 8 casas no máximo (ADR-042); nulo sem a PTAX de algum movimento em reais */
             custoMedioUsd: string | null;
+            /** @description Alguma entrada ou saída sincronizada ainda não tem custo: custo médio, custo da posição e ganho vêm nulos, o valor de mercado continua */
+            custoPendente: boolean;
             /**
              * Format: int64
              * @description Compras menos vendas em centavos de dólar; nulo sem a PTAX de algum movimento em reais
@@ -2372,6 +2990,22 @@ export interface components {
              */
             transferencias: number;
         };
+        SaldoCarteira: {
+            /** Format: uuid */
+            ativoId: string;
+            /** @description Falso fica fora do patrimônio até o usuário promover o ativo */
+            confiavel: boolean;
+            contrato: string | null;
+            /** @description Falta informar o custo de alguma entrada ou saída deste saldo */
+            custoPendente: boolean;
+            /**
+             * @description Em texto, sem zero à direita
+             * @example 0.12345678
+             */
+            quantidade: string;
+            /** @description Texto do indexador, limpo */
+            simbolo: string;
+        };
         SaldoProjetado: {
             /**
              * Format: uuid
@@ -2603,6 +3237,11 @@ export interface components {
             data: string;
             /** Format: int64 */
             valorCentavos: number;
+        };
+        VerificarPosseRequest: {
+            /** @description EVM: 0x mais 130 hexadecimais (r, s, v) do personal_sign. Solana: 64 bytes em base64 */
+            assinatura: string;
+            nonce: string;
         };
         VisaoSaldo: {
             /** Format: uuid */
@@ -3689,6 +4328,380 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getCarteiras: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Carteiras */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Carteira"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postCarteiras: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CarteiraRequest"];
+            };
+        };
+        responses: {
+            /** @description Carteira cadastrada, sem saldo até a primeira leitura */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Carteira"];
+                };
+            };
+            /** @description Entrada inválida, endereço que não serve para a rede (tamanho, checksum EIP-55 ou base58), conta inexistente, alheia, de outro tipo ou arquivada */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Endereço já cadastrado na rede, ou teto de carteiras do usuário atingido */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getCarteirasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Carteira */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Carteira"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Carteira de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteCarteirasById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Apagada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Carteira de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postCarteirasByIdPosseDesafio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Desafio emitido */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesafioPosse"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Carteira de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Desafio anterior da carteira tem menos de 5 s; o anterior segue valendo */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postCarteirasByIdPosseVerificar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerificarPosseRequest"];
+            };
+        };
+        responses: {
+            /** @description Carteira com verificadaEm preenchido */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Carteira"];
+                };
+            };
+            /** @description Entrada inválida, nonce ou assinatura errados (assinatura inválida) ou desafio ausente, vencido ou já usado (desafio expirado) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Carteira de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postCarteirasByIdSincronizar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Carteira depois da leitura (ou como estava, se a leitura falhou) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Carteira"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Carteira de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta arquivada, ou teto de movimentos de cripto atingido */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
                 };
             };
         };
@@ -4873,6 +5886,604 @@ export interface operations {
             };
         };
     };
+    getImportacoes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Importações do usuário */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Importacao"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postImportacoes: {
+        parameters: {
+            query?: {
+                conta_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Importação pendente criada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDetalhe"];
+                };
+            };
+            /** @description conta_id ausente ou que não é UUID, "conta arquivada" ou "conta cripto ou de investimento não recebe lançamento" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário ou inexistente; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo já enviado (corpo com importacaoId) ou 20 importações pendentes (corpo comum de erro) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDuplicada"];
+                };
+            };
+            /** @description Arquivo maior que 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/octet-stream */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo vazio, que não é OFX, com DOCTYPE ou ENTITY, sem transações ou com mais de 2000 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postImportacoesCsv: {
+        parameters: {
+            query?: {
+                conta_id?: string;
+                mapeamento_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Importação pendente criada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDetalhe"];
+                };
+            };
+            /** @description conta_id ou mapeamento_id ausente ou que não é UUID, parâmetro não declarado, "conta arquivada" ou "conta cripto ou de investimento não recebe lançamento" */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta ou mapeamento de outro usuário ou inexistente; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo já enviado (corpo com importacaoId) ou 20 importações pendentes (corpo comum de erro) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDuplicada"];
+                };
+            };
+            /** @description Arquivo maior que 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/octet-stream */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo vazio, com NUL, com aspas sem fechar, sem linhas de dados, com mais de 2000 linhas ou mais de 50 colunas */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postImportacoesCsvPrevia: {
+        parameters: {
+            query?: {
+                separador?: "ponto_e_virgula" | "virgula" | "tab" | "barra_vertical";
+                formato_data?: "dd/MM/yyyy" | "yyyy-MM-dd" | "MM/dd/yyyy" | "dd-MM-yyyy";
+                decimal?: "virgula" | "ponto";
+                sinal?: "negativo_despesa" | "positivo_despesa";
+                tem_cabecalho?: "true" | "false";
+                coluna_data?: number;
+                coluna_valor?: number;
+                coluna_descricao?: number;
+                coluna_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Prévia das primeiras linhas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CsvPrevia"];
+                };
+            };
+            /** @description Parâmetro ausente, inválido, repetido ou não declarado; colunas repetidas */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo maior que 1 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/octet-stream */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Mesmos casos do envio */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postImportacoesPdf: {
+        parameters: {
+            query?: {
+                conta_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Importação pendente criada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDetalhe"];
+                };
+            };
+            /** @description conta_id ausente, repetido ou que não é UUID, parâmetro não declarado, conta que não é de cartão de crédito ou conta arquivada */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário ou inexistente; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo já enviado (corpo com importacaoId) ou 20 importações pendentes (corpo comum de erro) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDuplicada"];
+                };
+            };
+            /** @description Arquivo maior que 5 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/octet-stream */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo vazio, que não é PDF, ilegível, com senha, sem texto, com mais de 30 páginas, lento demais ou sem nenhuma transação reconhecida */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getImportacoesById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Importação com as linhas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDetalhe"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteImportacoesById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Importação descartada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação já confirmada */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postImportacoesByIdConfirmacao: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Chave de idempotência, de 1 a 80 caracteres entre letras, dígitos e . _ : -. Mesma chave, usuário, rota e corpo devolve a resposta 2xx original (cabeçalho Idempotent-Replayed: true) sem gravar de novo; vale por 24 h. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Importação confirmada, com a contagem por resultado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoConfirmacao"];
+                };
+            };
+            /** @description Recusa de regra ao criar um lançamento (conta arquivada, categoria não encontrada, categoria não permitida nesta conta, saldo da conta fora do limite) ou Idempotency-Key inválida. Nada é criado */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação já confirmada */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Idempotency-Key já usada com outra rota ou outro corpo */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putImportacoesByIdLinhasByLinhaId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                linhaId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportacaoLinhaRequest"];
+            };
+        };
+        responses: {
+            /** @description Linha com a decisão nova */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoLinha"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado; campos que não pertencem à ação; categoria de outro tipo; linha que só aceita ignorar */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação, linha, lançamento ou categoria de outro usuário, inexistente ou id que não é UUID; mesmo corpo para os três casos de cada um */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Importação já confirmada */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
     getIndices: {
         parameters: {
             query?: never;
@@ -5395,6 +7006,188 @@ export interface operations {
                 };
             };
             /** @description Lançamento ou terceiro de outro usuário ou inexistente; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getMapeamentosCsv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mapeamentos, do mais antigo para o mais novo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapeamentoCsv"][];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postMapeamentosCsv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapeamentoCsvRequest"];
+            };
+        };
+        responses: {
+            /** @description Mapeamento criado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapeamentoCsv"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado e colunas repetidas */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Nome já usado ou limite de mapeamentos atingido */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putMapeamentosCsvById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MapeamentoCsvRequest"];
+            };
+        };
+        responses: {
+            /** @description Mapeamento atualizado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapeamentoCsv"];
+                };
+            };
+            /** @description Entrada inválida, inclusive campo não declarado e colunas repetidas */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Mapeamento de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Nome já usado por outro mapeamento do usuário */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteMapeamentosCsvById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mapeamento apagado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Mapeamento de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5947,6 +7740,86 @@ export interface operations {
             };
             /** @description Movimento de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Movimento sincronizado de uma carteira: só some quando a carteira é apagada */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putMovimentosCriptoByIdCusto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MovimentoCriptoCustoRequest"];
+            };
+        };
+        responses: {
+            /** @description Movimento com o custo gravado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MovimentoCripto"];
+                };
+            };
+            /** @description Entrada inválida ou movimento digitado (não sincronizado) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Movimento de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description O custo já foi informado */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

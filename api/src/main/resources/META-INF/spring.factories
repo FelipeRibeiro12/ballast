@@ -1,1 +1,2 @@
-org.springframework.boot.EnvironmentPostProcessor=com.felipe.ballast.identity.IdentityEnvironmentValidator
+org.springframework.boot.EnvironmentPostProcessor=com.felipe.ballast.identity.IdentityEnvironmentValidator,\
+  com.felipe.ballast.wallets.PosseEnvironmentValidator

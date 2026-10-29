@@ -1252,37 +1252,6 @@ p[role='status'] {
   font-weight: 650;
 }
 
-.beneficios-valor {
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.beneficios-lista {
-  margin-top: var(--esp-3);
-}
-
-.beneficios-lista li {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--esp-3);
-  padding: var(--esp-2) 0;
-  border-top: 1px solid var(--borda);
-  font-size: 0.9375rem;
-  color: var(--texto-suave);
-  overflow-wrap: anywhere;
-}
-
-.beneficios-saldo {
-  flex: none;
-  color: var(--texto);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
 .cartao-rodape {
   margin-top: var(--esp-3);
   text-align: right;
@@ -2859,4 +2828,25 @@ button.relatorio-mes:hover:not(:disabled) {
   border-radius: var(--raio-md);
   background: var(--superficie-2);
   text-align: center;
+}
+
+/* Revisão de importação: campos de decisão empilhados no celular, lado a lado quando cabe. */
+.linha-importacao-campos {
+  display: grid;
+  gap: var(--esp-2);
+  margin-top: var(--esp-2);
+}
+
+@media (min-width: 768px) {
+  .linha-importacao-campos {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.previa-csv th,
+.previa-csv td {
+  max-width: 14rem;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

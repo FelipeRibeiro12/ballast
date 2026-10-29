@@ -22,7 +22,7 @@ final class CostBasis {
       missingCost = true;
       return;
     }
-    if (type == MovementType.BUY) {
+    if (type.adds()) {
       quantity = quantity.add(movedQuantity);
       cost = cost.add(amount);
       return;

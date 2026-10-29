@@ -111,6 +111,7 @@ function mockFetch(rotas: Rotas = {}): void {
       const rota = rotas[chave]
       if (rota) return rota(corpo)
       if (chave === 'GET /ativos-cripto') return Promise.resolve(jsonResponse([bitcoin, usdc], 200))
+      if (chave === 'GET /carteiras') return Promise.resolve(jsonResponse([], 200))
       if (chave === 'GET /movimentos-cripto') return Promise.resolve(jsonResponse([compra], 200))
       if (chave.startsWith('GET /posicoes-cripto?')) return Promise.resolve(jsonResponse(posicoes, 200))
       return Promise.reject(new Error(`rota sem mock: ${chave}`))

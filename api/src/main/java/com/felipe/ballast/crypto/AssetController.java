@@ -281,7 +281,12 @@ class AssetController {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
     }
     return switch (assets.update(
-        user.id(), assetId.get(), request.symbol(), request.name(), request.decimals())) {
+        user.id(),
+        assetId.get(),
+        request.symbol(),
+        request.name(),
+        request.decimals(),
+        request.trusted())) {
       case AssetService.UpdateResult.Updated updated -> {
         log.info("ativo cripto editado usuario_id={} ativo_id={}", user.id(), assetId.get());
         yield ResponseEntity.ok(AssetResponse.from(updated.asset()));

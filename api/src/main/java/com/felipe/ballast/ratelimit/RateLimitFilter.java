@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -29,6 +30,9 @@ class RateLimitFilter extends OncePerRequestFilter {
 
   static final String MESSAGE = "{\"erro\":\"muitas requisições, tente mais tarde\"}";
 
+  private static final Pattern IMPORT_CONFIRMATION =
+      Pattern.compile("/importacoes/[^/;]+/confirmacao");
+
   private static final String ALL_CLIENTS = "todos";
 
   private record Rule(String name, FixedWindowLimiter limiter) {}
@@ -37,6 +41,7 @@ class RateLimitFilter extends OncePerRequestFilter {
   private final Rule login;
   private final Rule registration;
   private final Rule auth;
+  private final Rule imports;
   private final Clock clock;
 
   RateLimitFilter(RateLimitProperties properties, Clock clock) {
@@ -51,6 +56,8 @@ class RateLimitFilter extends OncePerRequestFilter {
             "cadastro",
             new FixedWindowLimiter(properties.registrationPerHour(), Duration.ofHours(1), max));
     this.auth = new Rule("auth", new FixedWindowLimiter(properties.authPerMinute(), minute, 1));
+    this.imports =
+        new Rule("importacao", new FixedWindowLimiter(properties.importsPerMinute(), minute, max));
     this.clock = clock;
   }
 
@@ -66,7 +73,8 @@ class RateLimitFilter extends OncePerRequestFilter {
     if (refused(general, client, now, response)
         || (route != null
             && (refused(route, client, now, response)
-                || refused(auth, ALL_CLIENTS, now, response)))) {
+                // O teto somado é do argon2; importação não gasta argon2 e não entra nele.
+                || (route != imports && refused(auth, ALL_CLIENTS, now, response))))) {
       return;
     }
     chain.doFilter(request, response);
@@ -78,7 +86,16 @@ class RateLimitFilter extends OncePerRequestFilter {
     if (!"POST".equals(request.getMethod())) {
       return null;
     }
-    return switch (request.getRequestURI()) {
+    String uri = request.getRequestURI();
+    // O CSV e a prévia gastam o mesmo parse e a mesma memória do OFX: entram na mesma regra.
+    if ("/importacoes".equals(uri)
+        || "/importacoes/csv".equals(uri)
+        || "/importacoes/csv/previa".equals(uri)
+        || "/importacoes/pdf".equals(uri)
+        || IMPORT_CONFIRMATION.matcher(uri).matches()) {
+      return imports;
+    }
+    return switch (uri) {
       // O código do MFA e as rotas que pedem senha contam como login: cada uma é uma tentativa
       // de adivinhar um segredo, e as de senha gastam argon2 (ADR-050).
       case "/auth/login",
@@ -118,5 +135,6 @@ class RateLimitFilter extends OncePerRequestFilter {
     login.limiter().clear();
     registration.limiter().clear();
     auth.limiter().clear();
+    imports.limiter().clear();
   }
 }

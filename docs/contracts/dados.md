@@ -290,10 +290,10 @@ movimento_cripto
   usuario_id  uuid fk not null on delete cascade
   conta_id    uuid not null         -- FK composta: conta do mesmo usuário, tipo cripto
   ativo_id    uuid not null         -- FK composta: ativo do mesmo usuário
-  tipo        text not null         -- compra | venda
+  tipo        text not null         -- compra | venda | entrada | saida (V36)
   quantidade  numeric(38,18) not null   -- > 0
   data        date not null         -- 1900-01-01 a 2199-12-31
-  custo       numeric(18,2) not null    -- > 0 e até 90071992547409.91, em reais
+  custo       numeric(18,2) null        -- > 0 e até 90071992547409.91; nulo só sincronizado (V36)
   criado_em   timestamptz not null default now()
   tipo_conta  text generated always as ('cripto') stored   -- a aplicação não escreve
 
@@ -458,32 +458,76 @@ ganham `moeda text not null` (`BRL` | `USD`, sem default): as linhas da F13 são
 linha. `indice.serie` ganha `dolar` (PTAX de venda, série 1 do SGS, reais por
 dólar); a conversão usa a última PTAX até a data.
 
-### Carteira observada
+### Carteira observada (V36, ADR-071)
 
-Endereço público que alimenta uma conta do tipo `cripto`. Cadastrado digitando
-ou conectando a carteira — o resultado é o mesmo (ADR-009).
+Endereço público ligado a uma conta `cripto`. Cadastrado digitando; a F25 só
+preenche `verificada_em` pela prova de posse (ADR-009, ADR-072). O saldo lido na rede vira
+`movimento_cripto` sem custo, preso à carteira.
 
 ```
 carteira_observada
-  id               uuid pk
-  usuario_id       uuid fk not null
-  conta_id         uuid fk not null
-  rede             text not null
-  endereco         text not null        -- 0x... (EVM) ou base58 (Solana)
-  rotulo           text
-  verificada_em    timestamptz null     -- assinou provando posse (opcional)
-  sincronizada_em  timestamptz null     -- última leitura da rede
-  erro_ultima_sync text null
-  ativa            bool not null default true
+  id               uuid pk (sem DEFAULT)
+  usuario_id       uuid fk not null on delete cascade
+  conta_id         uuid not null        -- FK composta: conta do mesmo usuário, tipo cripto, NO ACTION
+  rede             text not null        -- ethereum | base | solana
+  endereco         text not null        -- EVM em minúsculas (0x + 40 hex); Solana como veio (base58)
+  rotulo           text null            -- 1 a 60 caracteres, sem espaço nas pontas
+  verificada_em    timestamptz null     -- prova de posse por assinatura (F25, POST /carteiras/{id}/posse/verificar)
+  sincronizada_em  timestamptz null     -- última leitura que deu certo
+  tentada_em       timestamptz null     -- última tentativa, boa ou ruim: conta o intervalo de 60 s
+  erro_ultima_sync text null            -- indexador_indisponivel | resposta_invalida | sem_chave
+  criado_em        timestamptz not null default now()
+  tipo_conta       text generated always as ('cripto') stored   -- a aplicação não escreve
   unique (usuario_id, rede, endereco)
+  unique (id, usuario_id)               -- alvo da FK composta de movimento_cripto
 ```
 
-`verificada_em` é opcional por decisão: endereço é público, observar não exige
-prova de posse. A assinatura serve para o usuário ter certeza de que cadastrou
-o endereço certo.
+A coluna `ativa` do rascunho não existe: o job pula carteira de conta
+arquivada. Apagar a conta cripto apaga as carteiras antes (a FK é NO ACTION,
+`AccountDeletionQueries`); apagar a carteira leva os movimentos sincronizados
+dela (`ON DELETE CASCADE`).
+
+**Desafio de posse (V37, ADR-072).**
+
+```
+posse_desafio
+  carteira_id uuid pk            -- uma linha por carteira: novo desafio substitui o anterior
+  usuario_id  uuid not null      -- FK composta (carteira_id, usuario_id) -> carteira_observada, ON DELETE CASCADE
+  nonce       text not null      -- 32 hexadecimais minúsculos (16 bytes de SecureRandom)
+  mensagem    text not null      -- texto exato que o cliente assina, montado no servidor
+  expira_em   timestamptz not null  -- emissão + 5 min; a emissão é expira_em menos o TTL
+```
+
+A verificação apaga a linha (`DELETE ... RETURNING`) antes de checar a assinatura:
+nonce de uso único, e assinatura errada também o queima. Depois do consumo só
+`carteira_observada.verificada_em` fica; assinatura e mensagem não são guardadas.
 
 `erro_ultima_sync` existe porque o indexador vai falhar, e a interface precisa
 mostrar "última leitura em tal data" em vez de um saldo silenciosamente velho.
+Leitura que falha não grava movimento e não mexe em `sincronizada_em`.
+
+**Colunas novas de `movimento_cripto` (V36).**
+
+```
+  tipo        text not null     -- agora: compra | venda | entrada | saida
+  origem      text not null default 'manual'      -- manual | sincronizada
+  carteira_id uuid null         -- FK composta (carteira_id, usuario_id), ON DELETE CASCADE
+  custo       numeric(18,2) null  -- nulo só em entrada/saida sincronizada sem custo informado
+  moeda       text null           -- nula junto com custo
+```
+
+CHECKs: `origem` e `carteira_id` andam juntos (`(origem = 'manual') = (carteira_id
+IS NULL)`); `entrada` e `saida` existem se e só se `origem = 'sincronizada'`;
+`custo` e `moeda` são nulos juntos, e só na entrada/saída sincronizada. Índice
+parcial `movimento_cripto_carteira (carteira_id, ativo_id) WHERE carteira_id IS
+NOT NULL`. A leitura compara a rede com a soma (com sinal) dos movimentos
+sincronizados da carteira e do ativo e grava a diferença com a data de hoje em
+`America/Sao_Paulo`. `PUT /movimentos-cripto/{id}/custo` preenche o custo (em
+`USD`) uma vez.
+
+`ativo_cripto.confiavel`: o ativo que nasce de uma leitura é `false`, menos o
+nativo da rede (`true`). `false` fica fora de `criptoCentavos`, do patrimônio,
+de `semCotacao` e do job de cotação até o usuário promover.
 
 Rascunho para a F24 (a F13 usa `movimento_cripto`, acima):
 
@@ -1135,44 +1179,135 @@ Progresso é `soma(aporte_meta.valor)`, que a aplicação nunca deixa negativo
 (trava a meta com `FOR UPDATE`). A projeção ("necessário por mês", "chega pelo
 plano", "chega no ritmo") é calculada na leitura.
 
-## Importação de extrato e fatura
+## Importação de extrato e fatura (V34 e V35, ADR-008, ADR-069)
 
 Duas etapas: a importação grava as linhas cruas e **propõe** uma decisão; o
-usuário confirma. Nada entra no extrato sem confirmação (ADR-008).
+usuário confirma. Nada entra no extrato sem confirmação (ADR-008). A F22 entrega
+o OFX e a F23 o CSV, pelas mesmas tabelas: o formato do arquivo só muda quem lê
+as linhas, e `importacao` não guarda de que formato veio. A F26 (fatura em PDF,
+ADR-073) usa as mesmas tabelas, sem migration: só o `hash_externo` ganha a tag
+`pdf:` (conta, data, valor com sinal, descrição normalizada e ordinal) e a
+`bruta` leva `texto` e, em parcela, `parcela` (`n/m`). Parcela da fatura vira
+lançamento comum, nunca `parcela_de_id`.
 
 ```
 importacao
-  id             uuid pk
-  usuario_id     uuid fk not null
-  conta_id       uuid fk not null       -- destino dos lançamentos
-  formato        text not null          -- ofx | csv | pdf_fatura
-  nome_arquivo   text not null
-  hash_arquivo   text not null          -- sha256 do conteúdo
-  periodo_inicio date null
-  periodo_fim    date null
-  status         text not null          -- processando | revisao | concluida | falhou
-  erro           text null
-  criada_em      timestamptz not null
+  id               uuid pk
+  usuario_id       uuid fk not null
+  conta_id         uuid not null           -- destino dos lançamentos
+  hash_arquivo     text not null           -- sha256 do conteúdo, 64 hexa minúsculos
+  status           text not null default 'pendente'   -- pendente | confirmada
+  total_linhas     integer not null        -- 1 a 2000
+  total_invalidas  integer not null        -- 0 a total_linhas
+  criado_em        timestamptz not null default now()
+  confirmada_em    timestamptz null        -- preenchida se, e só se, confirmada
+  unique (id, usuario_id)
   unique (usuario_id, hash_arquivo)
+  fk (conta_id, usuario_id) -> conta (id, usuario_id) ON DELETE NO ACTION
 
 importacao_linha
-  id              uuid pk
-  importacao_id   uuid fk not null
-  linha_bruta     jsonb not null         -- o que veio, cru, para auditoria
-  hash_externo    text null              -- FITID, ou hash de (data, valor, descrição)
-  data            date null              -- campos já interpretados
-  valor           numeric(18,2) null
-  descricao       text null
-  decisao         text not null default 'pendente'
-                  -- pendente | importar | ignorar | conciliar
-  lancamento_id   uuid fk null           -- criado a partir dela
-  conciliado_com  uuid fk null           -- lançamento manual que já existia
+  id               uuid pk
+  usuario_id       uuid fk not null
+  importacao_id    uuid not null
+  ordem            integer not null        -- posição no arquivo, 1 a 2000; única por importação
+  bruta            jsonb not null          -- os campos lidos, como texto (pode ter FITID). No CSV, as células `c1`, `c2`..., já com o apóstrofo de fórmula
+  hash_externo     text null               -- sha256 de `fitid:conta_id|FITID`, ou de `nofitid:` mais a composição sem FITID (OFX); `csvid:` ou `csv:` no CSV, `pdf:` no PDF
+  data             date null               -- data, tipo e valor ficam nulos só na linha inválida
+  tipo             text null               -- receita | despesa
+  valor            numeric(18,2) null      -- positivo; o sinal vem do tipo
+  titulo           text not null           -- 1 a 100, sem espaço nas pontas
+  descricao        text null               -- até 500
+  invalida_motivo  text null               -- texto fixo; preenchido = linha inválida
+  proposta         text not null           -- importar | ignorar | conciliar
+  proposta_motivo  text null               -- ja_importada | invalida | duplicada_no_arquivo
+  decisao          text null               -- escolha do usuário; nula = vale a proposta
+  lancamento_id    uuid null               -- vínculo: alvo da conciliação, ou o lançamento criado
+  categoria_id     uuid null               -- escolhida; nula = Outros / Outras receitas
+  resultado        text null               -- criada | conciliada | ignorada | duplicada
+  unique (id, usuario_id)
+  unique (importacao_id, ordem)
+  fk (importacao_id, usuario_id) -> importacao (id, usuario_id) ON DELETE CASCADE
+  fk (lancamento_id, usuario_id) -> lancamento (id, usuario_id) ON DELETE SET NULL (lancamento_id)
+  fk (categoria_id, usuario_id, tipo) -> categoria (id, usuario_id, tipo) ON DELETE SET NULL (categoria_id)
+
+lancamento (colunas da V34)
+  hash_externo         text null           -- 64 hexa minúsculos
+  importacao_linha_id  uuid null
+  fk (importacao_linha_id, usuario_id) -> importacao_linha (id, usuario_id)
+     ON DELETE SET NULL (importacao_linha_id)
+  unique parcial (usuario_id, hash_externo) where hash_externo is not null
 ```
 
-`unique (usuario_id, hash_arquivo)` impede reimportar o mesmo arquivo.
-`unique (usuario_id, hash_externo)` em `lancamento` impede a mesma transação
-entrar duas vezes por arquivos diferentes que se sobrepõem — extrato de
-setembro e de outubro costumam repetir os dias da virada.
+`unique (usuario_id, hash_arquivo)` impede reimportar o mesmo arquivo; descartar
+a importação pendente apaga a linha e libera o hash. O unique parcial em
+`lancamento` impede a mesma transação entrar duas vezes por arquivos diferentes
+que se sobrepõem: extrato de setembro e de outubro costumam repetir os dias da
+virada. O `SET NULL` com lista de colunas (Postgres 15+) solta só o vínculo e
+deixa `usuario_id`, que é `NOT NULL`, em paz.
+
+A V34 também cria `lancamento_por_importacao_linha` (alvo do `SET NULL`),
+`lancamento_usuario_conta_competencia` (candidatos da conciliação),
+`importacao_usuario_criado_em`, `importacao_usuario_conta` e dois parciais em
+`importacao_linha`. As colunas novas de `lancamento` são nulas e sem `DEFAULT`, então
+o Postgres só mexe no catálogo; o `CREATE INDEX` e o `ADD CONSTRAINT` leem a tabela.
+
+Apagar uma conta apaga as importações dela (a FK é `NO ACTION`, então o
+`DELETE /contas/{id}` remove as importações antes da conta).
+
+### Mapeamento de CSV (V35, ADR-070)
+
+Como ler o CSV de um banco, salvo por usuário para o próximo envio. Guarda só
+as regras de leitura; o arquivo e as linhas ficam em `importacao` e
+`importacao_linha`. Apagar o mapeamento não mexe em importação já criada.
+
+```
+mapeamento_csv
+  id                uuid pk
+  usuario_id        uuid fk not null       -- ON DELETE CASCADE
+  nome              text not null          -- banco ou apelido, 1 a 60, sem espaço nas pontas
+  separador         text not null          -- ponto_e_virgula | virgula | tab | barra_vertical
+  formato_data      text not null          -- dd/MM/yyyy | yyyy-MM-dd | MM/dd/yyyy | dd-MM-yyyy
+  decimal           text not null          -- virgula (1.234,56) | ponto (1,234.56)
+  sinal             text not null          -- negativo_despesa | positivo_despesa (compra de cartão vem positiva)
+  tem_cabecalho     boolean not null
+  coluna_data       smallint not null      -- índice a partir de 0, de 0 a 49
+  coluna_valor      smallint not null
+  coluna_descricao  smallint not null
+  coluna_id         smallint null          -- identificador da transação, se o banco tiver
+  criado_em         timestamptz not null default now()
+  unique (id, usuario_id)
+  unique (usuario_id, nome)
+  check colunas distintas entre si (coluna_id só entra se não for nula)
+```
+
+Os valores de `separador` são nomes, não o caractere: `;` e TAB não viajam bem
+numa query. Até 20 por usuário, no `UserLimits` (`LIMITE_MAPEAMENTOS_CSV`).
+
+### Hash da linha de CSV
+
+O CSV não tem identificador garantido, então o hash tem dois caminhos. Ambos
+levam a tag no texto que vai para o SHA-256 (a coluna só aceita 64 hexa), para
+um id forjado com o formato da composição não colidir com outra linha.
+
+- Com `coluna_id` preenchida e a célula não vazia: `csvid:` + `conta_id` + `|` + id.
+  O mesmo id duas vezes no arquivo deixa a segunda linha em `ignorar`, motivo
+  `duplicada_no_arquivo`, como o FITID.
+- Sem id: `csv:` + `conta_id` + `|` + data ISO + `|` + valor (escala 2, sinal da
+  linha já normalizado: positivo é receita) + `|` + descrição normalizada
+  (espaços colapsados, minúsculas, sobre a célula antes do apóstrofo) + `|` +
+  ordinal entre as linhas iguais nessas três chaves, na ordem do arquivo. Dois
+  cafés iguais no mesmo dia não colapsam, e o mesmo extrato reenviado, ou um
+  sobreposto, cai em `ja_importada`.
+
+### Texto que vem do CSV
+
+Toda célula de texto (título, descrição, id, as células em `bruta`) que começa
+com `=`, `+`, `-`, `@`, TAB ou CR ganha um apóstrofo na frente (OWASP, fórmula
+injetada). Vale na gravação: nenhum lançamento nasce com fórmula crua, e uma
+exportação futura para planilha já sai segura. As colunas de data e valor leem a
+célula crua, porque `-1.234,56` é número. Cada célula é cortada em 200
+caracteres; o título é o texto cortado em 100 e, se passou disso, o texto
+inteiro vai em `descricao`.
 
 ### Conciliação
 
@@ -1181,19 +1316,28 @@ almoço de ontem na mão e o extrato traz o mesmo almoço.
 
 A proposta de decisão por linha, em ordem:
 
-1. `hash_externo` bate com lançamento existente → **ignorar** (já está lá)
-2. Mesma conta, valor exatamente igual, data a até 3 dias de distância →
-   **conciliar**, propondo o lançamento candidato
-3. Nada bateu → **importar**
+1. Linha que o app não leu (data, valor ou tipo ausente) → **ignorar**, motivo
+   `invalida`
+2. `hash_externo` repetido dentro do mesmo arquivo → **ignorar**, motivo
+   `duplicada_no_arquivo`
+3. `hash_externo` bate com lançamento existente → **ignorar**, motivo
+   `ja_importada`
+4. Mesma conta, mesmo tipo, valor igual por `compareTo`, `data_competencia` a
+   até 3 dias, lançamento realizado e sem `hash_externo`, um para um (vale o de
+   data mais próxima) → **conciliar**, propondo o lançamento candidato
+5. Nada bateu → **importar**
 
-O passo 2 é heurística e vai errar. É exatamente por isso que existe a etapa de
+O passo 4 é heurística e vai errar. É exatamente por isso que existe a etapa de
 revisão: errar sozinho no saldo é inaceitável.
 
-Conciliar não cria lançamento novo: preenche `hash_externo` no lançamento que
-já existia e marca a linha como resolvida.
+Conciliar não cria lançamento novo: preenche `hash_externo` e
+`importacao_linha_id` no lançamento que já existia. Se na confirmação o
+lançamento sumiu ou já tem hash, a linha vira lançamento novo, porque a
+transação do banco é real.
 
-O arquivo original **não é guardado** depois de processado. O que fica é
-`linha_bruta`, suficiente para auditar.
+O hash sem FITID usa data, valor com sinal, nome, memo e a ordem da ocorrência
+entre linhas iguais do arquivo (o do CSV está em "Hash da linha de CSV"). O arquivo original **não é guardado** depois de
+processado. O que fica é `bruta`, suficiente para auditar.
 
 ## Orçamento
 
@@ -1255,13 +1399,14 @@ apenas em código:
 5. Compra parcelada (V11, ADR-032): `parcela_num` entre 1 e `parcela_total`, `parcela_total` entre 2 e 48, as três colunas juntas, parcela só em cartão, só despesa realizada, e toda parcela aponta para uma primeira do mesmo usuário e do mesmo total (FK composta)
 6. `regra_recorrencia`: `fim` e `ocorrencias_max` não coexistem
 7. Transferência: `saida_id` e `entrada_id` em contas diferentes (V7, `CHECK` mais FKs compostas)
-8. `hash_externo` único por usuário (deduplicação de importação)
-9. `hash_arquivo` único por usuário (mesmo arquivo não reimporta)
+8. `hash_externo` único por usuário em `lancamento` (V34, deduplicação de importação); formato de 64 hexa minúsculos
+9. `hash_arquivo` único por usuário em `importacao` (V34, mesmo arquivo não reimporta); `importacao` e `importacao_linha` ligadas por FK composta ao dono da conta, da categoria e do lançamento; linha inválida só pode ser ignorada
 10. `hash_tx` único por posição (mesma transação não duplica)
-11. `carteira_observada`: endereço único por usuário e rede
-12. `posicao_cripto` com `origem = 'sincronizada'` não aceita escrita manual (F24; a F13 não tem a tabela)
+11. `carteira_observada` (V36, ADR-071): endereço único por usuário e rede, no formato da rede (EVM em minúsculas, Solana base58), conta do mesmo usuário e do tipo cripto (FK composta), erro só nos três códigos do contrato
+12. `movimento_cripto` sincronizado (V36): `origem`, `carteira_id`, tipo `entrada`/`saida` e custo nulo andam juntos pelos CHECKs; a aplicação não apaga nem edita à mão, só informa o custo
 13. Cripto (V13, ADR-035): conta `cripto` com `saldo_inicial` 0 e sem lançamento; ativo único por usuário, rede e contrato; contrato no formato da rede; movimento só em conta cripto e ativo do mesmo usuário, com quantidade e custo positivos; cotação só de ativo do mesmo usuário, com preço positivo e um valor por momento
 14. Idempotência (V23, ADR-056): uma linha por usuário e chave; chave só com letras, dígitos e `._:-` de 1 a 80 caracteres; status 2xx e resposta nulos ou preenchidos juntos
+15. `mapeamento_csv` (V35, ADR-070): nome único por usuário, de 1 a 60 caracteres sem espaço nas pontas; separador, formato de data, decimal e sinal só nos valores do contrato; colunas de 0 a 49 e diferentes entre si
 
 ## Índices iniciais
 
@@ -1274,11 +1419,11 @@ create index on transferencia (usuario_id);
 create index on lancamento (template_id) where template_id is not null;
 create index on lancamento (parcela_de_id) where parcela_de_id is not null;
 create index on cotacao (ativo_id, momento desc);
-create index on lancamento (usuario_id, hash_externo) where hash_externo is not null;
-create index on importacao_linha (importacao_id, decisao);
+create unique index on lancamento (usuario_id, hash_externo) where hash_externo is not null;
+create index on lancamento (usuario_id, conta_id, data_competencia);
 ```
 
-Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`. A `V12` não acrescenta nenhum (a PK de `conta_categoria_permitida` serve, conferido com `EXPLAIN`). A `V13` cria `movimento_cripto (usuario_id, conta_id, data)` e dispensa o índice descendente de `cotacao`, porque a PK serve (seção Cripto). A `V18` cria o de `(usuario_id, data_competencia, categoria_id)` para o orçamento. A `V23` cria `idempotencia (criada_em)` para a limpeza diária.
+Na `V6` só o primeiro existe e a `V7` acrescenta o de `transferencia`; os outros chegam com as fatias que têm a query. A `V10` não acrescenta nenhum. A `V11` cria o parcial em `parcela_de_id`. A `V12` não acrescenta nenhum (a PK de `conta_categoria_permitida` serve, conferido com `EXPLAIN`). A `V13` cria `movimento_cripto (usuario_id, conta_id, data)` e dispensa o índice descendente de `cotacao`, porque a PK serve (seção Cripto). A `V18` cria o de `(usuario_id, data_competencia, categoria_id)` para o orçamento. A `V23` cria `idempotencia (criada_em)` para a limpeza diária. A `V34` cria o unique parcial em `hash_externo` e `(usuario_id, conta_id, data_competencia)`, que lê os candidatos da conciliação.
 O primeiro serve saldo e fluxo de caixa; o segundo, gráfico por categoria e
 orçamento. Antes de adicionar qualquer outro, rode `EXPLAIN ANALYZE` e mostre o
 antes e o depois.

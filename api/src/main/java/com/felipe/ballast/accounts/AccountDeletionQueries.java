@@ -169,6 +169,15 @@ class AccountDeletionQueries {
         .update();
   }
 
+  // As linhas saem em cascata. A FK da importação com a conta é NO ACTION: sem isto a conta não
+  // seria apagada.
+  void deleteImports(UUID userId, UUID accountId) {
+    jdbc.sql("DELETE FROM importacao WHERE usuario_id = :userId AND conta_id = :id")
+        .param("userId", userId)
+        .param("id", accountId)
+        .update();
+  }
+
   void deleteEntries(UUID userId, UUID accountId) {
     jdbc.sql("DELETE FROM lancamento WHERE usuario_id = :userId AND conta_id = :id")
         .param("userId", userId)
@@ -227,6 +236,12 @@ class AccountDeletionQueries {
         .param("id", accountId)
         .update();
     jdbc.sql("DELETE FROM movimento_cripto WHERE usuario_id = :userId AND conta_id = :id")
+        .param("userId", userId)
+        .param("id", accountId)
+        .update();
+    // A FK da carteira com a conta é NO ACTION (V36): sem isto a conta não seria apagada. Os
+    // movimentos sincronizados já saíram acima; o CASCADE cobre qualquer resto.
+    jdbc.sql("DELETE FROM carteira_observada WHERE usuario_id = :userId AND conta_id = :id")
         .param("userId", userId)
         .param("id", accountId)
         .update();

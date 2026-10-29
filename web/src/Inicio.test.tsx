@@ -182,32 +182,12 @@ describe('Início', () => {
     const vr = conta({ id: 'b1', nome: 'VR', tipo: 'beneficio', saldoCentavos: 80000, categoriasPermitidas: ['cd1'] })
     const va = conta({ id: 'b2', nome: 'VA', tipo: 'beneficio', saldoCentavos: 25050, categoriasPermitidas: [] })
 
-    it('conta o benefício no total da visão e mantém o cartão de benefícios', async () => {
+    it('conta o benefício no total da visão e não repete o valor em outro cartão', async () => {
       mockFetch({ 'GET /contas': responde([conta(), vr, va]) })
       render(<App />)
       // 1.000,00 da corrente mais 800,00 do VR e 250,50 do VA.
       expect((await screen.findByText('Total sem cartão')).parentElement).toHaveTextContent(texto('R$ 2.050,50'))
-      const beneficios = within(screen.getByRole('region', { name: 'Benefícios' }))
-      expect(beneficios.getByText(texto('R$ 1.050,50'), { selector: 'p' })).toBeVisible()
-      const itens = beneficios.getAllByRole('listitem')
-      expect(itens[0]).toHaveTextContent('VR')
-      expect(itens[0]).toHaveTextContent(texto('R$ 800,00'))
-      expect(itens[1]).toHaveTextContent('VA')
-      expect(itens[1]).toHaveTextContent(texto('R$ 250,50'))
-    })
-
-    it('sem conta de benefício não mostra o cartão', async () => {
-      mockFetch({ 'GET /contas': responde([conta()]) })
-      render(<App />)
-      expect((await screen.findByText('Total sem cartão')).parentElement).toHaveTextContent(texto('R$ 1.000,00'))
       expect(screen.queryByRole('region', { name: 'Benefícios' })).toBeNull()
-    })
-
-    it('benefício com saldo negativo aparece com o sinal', async () => {
-      mockFetch({ 'GET /contas': responde([conta(), conta({ id: 'b3', nome: 'VR', tipo: 'beneficio', saldoCentavos: -1000, categoriasPermitidas: [] })]) })
-      render(<App />)
-      const beneficios = within(await screen.findByRole('region', { name: 'Benefícios' }))
-      expect(beneficios.getByText(texto('-R$ 10,00'), { selector: 'p' })).toBeVisible()
     })
   })
 

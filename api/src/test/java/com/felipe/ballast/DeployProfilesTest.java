@@ -42,6 +42,7 @@ class DeployProfilesTest {
     args.add("--ballast.recurrence.job-enabled=false");
     args.add("--ballast.indices.job-enabled=false");
     args.add("--ballast.cotacoes.job-enabled=false");
+    args.add("--ballast.carteiras.job-enabled=false");
     args.add("--ballast.password.memory-kib=8");
     args.add("--ballast.password.iterations=1");
     args.add("--ballast.password.parallelism=1");

@@ -105,6 +105,7 @@ class AccountService {
     }
     deletion.turnForeignLegsIntoPlainEntries(userId, id);
     deletion.deleteEntries(userId, id);
+    deletion.deleteImports(userId, id);
     deletion.detachOccurrencesOfAccountTemplates(userId, id);
     deletion.deleteTemplates(userId, id);
     return deletion.deleteAccountRows(userId, id) == 0

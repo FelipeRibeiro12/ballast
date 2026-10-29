@@ -18,7 +18,8 @@ import org.springframework.context.annotation.Import;
   TestcontainersConfiguration.class,
   TestClock.Config.class,
   FakeIndexSource.Config.class,
-  FakeQuoteSource.Config.class
+  FakeQuoteSource.Config.class,
+  FakeWalletIndexer.Config.class
 })
 @SpringBootTest(
     properties = {
@@ -28,6 +29,7 @@ import org.springframework.context.annotation.Import;
       "ballast.recurrence.job-enabled=false",
       "ballast.indices.job-enabled=false",
       "ballast.cotacoes.job-enabled=false",
+      "ballast.carteiras.job-enabled=false",
       "ballast.password.memory-kib=8",
       "ballast.password.iterations=1",
       "ballast.password.parallelism=1"

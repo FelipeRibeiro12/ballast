@@ -14,44 +14,35 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 ### F21 — Alerta de conta a vencer
 Notificação no PWA. No iOS só funciona se instalado na tela inicial.
 
-### F22 — Importação de OFX
-Envio de arquivo, parse, linhas cruas, proposta de decisão por linha, tela de
-revisão, conciliação contra lançamento manual (ADR-008).
-A fatia mais valiosa depois do MVP: elimina digitação.
-Teste obrigatório: importar o mesmo arquivo duas vezes não duplica nada;
-extratos com dias sobrepostos não duplicam; conciliação não cria lançamento
-novo.
+### Dívidas da F25 (ADR-072)
+- Teste de que o `OriginFilter` barra `POST /carteiras/{id}/posse/desafio` com Origin alheio. Dono: qa.
+- Teto de desafios por usuário, hoje o limite de 5 s é por carteira. Dono: backend.
+- Teste com assinatura de hardware wallet (a API rejeita `s` alto). Dono: qa.
+- Documentar `BALLAST_POSSE_DOMAIN` em `docs/runbook-producao.md`. Dono: devops.
+- Testar com Rabby e Phantom reais; só providers falsos foram exercitados. Dono: dono do projeto.
 
-### F23 — Importação de CSV
-Mapeamento de coluna salvável por banco, sobre a mesma máquina de revisão da
-F22. Entrada não confiável: limite de tamanho, limite de linhas, tratamento de
-fórmula injetada.
-
-### F24 — Observar endereço de carteira
-Cadastro de endereço digitado, por rede. Sincronização de saldo via
-indexador, `confiavel = false` por padrão para ativo desconhecido, data da
-última leitura visível (ADR-009).
-Redes do MVP: Ethereum, Base, Solana.
-Teste obrigatório: indexador fora do ar mostra saldo antigo com a data, não
-erro nem zero; token de spam não entra no patrimônio.
-Movimento sincronizado chega sem custo: o custo médio da posição fica nulo e a
-tela pede o custo em vez de inventar (ADR-042).
-
-### F25 — Conectar carteira
-Botão que preenche o endereço automaticamente. EVM com `wagmi` v2 e descoberta
-por **EIP-6963** — Rabby aparece na lista junto com as outras. Solana por
-**Wallet Standard** — Phantom aparece na lista. Rabby e Phantom em primeiro na
-ordem de exibição.
-Assinatura opcional de posse (SIWE). **Nunca** assinatura de transação.
-Teste obrigatório: o fluxo de digitar o endereço continua funcionando sem
-nenhuma extensão instalada.
+### Dívidas da F26 (ADR-073)
+- Leitores por emissor (Nubank, Itaú, Inter etc.) quando o genérico falhar na fatura real do dono; só vale se a frustração for pequena, senão remover o recurso (ADR-008). Dono: backend.
+- Fatura em duas colunas ou com valor na linha de baixo não é lida. Dono: backend, junto com o primeiro leitor por emissor.
+- Parcela cuja data na fatura difere da compra parcelada já lançada vem como "importar" e não concilia sozinha. Dono: backend, conciliar por `parcela_num` e valor.
+- Teste com PDF real de banco (só PDFs gerados no teste foram lidos). Dono: dono do produto.
+- Teto de heap da JVM em produção como defesa contra fluxo Flate que expande, e conferir restart e alerta de OOM (ADR-073). Dono: devops.
+- Rate limit próprio e mais baixo para `/importacoes/pdf`, por usuário além de por IP (hoje divide a regra com OFX e CSV). Dono: backend.
+- Extração do PDF em processo separado que se possa matar, se o residual de heap preocupar. Dono: backend e devops.
+- Teste que fixe o corte de 200 caracteres por linha (regex do `GenericStatementReader` é quadrática e roda fora do timeout). Dono: qa.
 
 ## Mais adiante
 
-- **F26** — Importação de PDF de fatura (melhor esforço, revisão obrigatória)
 - **F27** — Previsão de gasto e detecção de anomalia (serviço Python, ADR-007)
 - **F28** — Classificação automática de categoria pela descrição
 - **F29** — Capacitor para publicar nas lojas
+- **DÍVIDA** — Sincronização de carteira sem teto por usuário nem orçamento global: 20 carteiras a cada 60 s esgotam a cota gratuita da Alchemy para todos (F24, ADR-071). Dono: backend, limite de leituras por usuário por hora.
+- **DÍVIDA** — Airdrop de token-lixo: leitura parcial nunca zera o que saiu do endereço e cada leitura cria até 100 ativos não confiáveis, enchendo o teto de 200 (F24). Dono: backend, limitar ativos novos por leitura e não criar ativo em leitura parcial.
+- **DÍVIDA** — Leitura lenta pode aplicar delta antigo sobre estado mais novo; comparar `tentada_em` ao aplicar se `TIMEOUT` ou `MAX_TOKENS` subirem (F24). Dono: backend.
+- **DÍVIDA** — Corpo da resposta da Alchemy sem teto de tamanho; `org.springframework.web.client` não pode ir a DEBUG em produção porque o log mostraria a chave na URL (F24). Dono: backend e devops.
+- **DÍVIDA** — Antes do primeiro deploy: conferir que o log do Postgres e qualquer proxy não gravam endereço (`Key (...)=(...)`, corpo do POST /carteiras), e restringir a chave da Alchemy no painel (F24). Dono: devops e dba.
+- **DÍVIDA** — Sem teste do `WalletJob`, de sincronizações simultâneas, de saída sincronizada com posição negativa por venda manual e de quantidade no limite de 18 casas (F24). Dono: qa.
+- **DÍVIDA** — Termos e licença do plano gratuito da Alchemy não conferidos (sem rede na sessão); conferir ao criar a chave (ADR-071). Dono: dono do produto.
 - **DÍVIDA** — O web ainda não usa o que a API de renda fixa e cripto ganhou no ADR-058: desfazer resgate (`DELETE /titulos-renda-fixa/{id}/resgate`), `vencido`, `avisoIndice` e `motivoSemValor` do título, `rendaFixaSemValor` do patrimônio, e editar ou apagar ativo e cotação. Dono: frontend.
 - **DÍVIDA** — Movimento em dólar gravado antes da primeira PTAX volta com `custoCentavos` nulo até a busca em segundo plano terminar (ADR-058). Dono: frontend, mostrar "calculando" em vez de vazio.
 - **DÍVIDA** — A V25 pode derrubar a migration se duas filhas de pais diferentes, com tipo divergente, tiverem o mesmo nome: o rename para raiz colide com `categoria_pai_nome_unico` (revisão da onda 5). Só com dado que nenhuma rota cria; desempatar com o id no sufixo antes do CRUD de categoria. Dono: dba.
@@ -117,3 +108,9 @@ entre pessoas, saldo automático de corretora. Motivos em `visao.md`.
 
 - **DÍVIDA** — Apagar categoria só soma o teto da Outros quando o mês de vigência coincide, e descarta a linha com teto nulo (auditoria da rodada pós uso real, M1). Somar pela linha vigente de cada mês em que uma das duas muda. Dono: backend.
 - **DÍVIDA** — Cada `PUT /contas/{id}/cofrinho` pede a busca do CDI ao Banco Central, sem intervalo mínimo (auditoria, B2). Dono: backend.
+- **DÍVIDA** — Importação de OFX: pendentes esquecidas ficam para sempre e a `bruta` das confirmadas nunca é limpa (ADR-069, auditoria da F22, B3). Apagar pendente por idade e a `bruta` de confirmada antiga. Dono: backend. Fatia: rodada de dívidas após a F22.
+- **DÍVIDA** — Sem teto de lançamentos por usuário: uma importação de 2000 linhas por arquivo, repetida, enche a tabela (auditoria da F22, B1). Definir o teto no padrão do ADR-055. Dono: backend. Fatia: rodada de dívidas após a F22.
+- **DÍVIDA** — CSV: id da coluna de identificador passa por `clean()` antes do hash, então ids que só diferem depois do 200º caractere ou por controle ou espaço nas pontas colidem (auditoria da F23, B1). Hashear a célula crua truncada só no armazenamento. Dono: backend. Fatia: rodada de dívidas após a F23.
+- **DÍVIDA** — JSON de `/mapeamentos-csv` pode aceitar `"3"` ou `1.9` como índice e `"true"` como booleano, mais frouxo que a query da prévia (auditoria da F23, B2). Desligar coerção do Jackson nesse DTO e testar. Dono: backend. Fatia: rodada de dívidas após a F23.
+- **DÍVIDA** — Neutralização de fórmula não cobre NBSP, U+2007 e U+202F antes do gatilho (auditoria da F23, B3). Sem exportação para planilha hoje; resolver junto de qualquer exportação. Dono: backend. Fatia: a que criar exportação.
+- **DÍVIDA** — Prévia e envio de CSV dividem o limite de 10 por minuto por IP (auditoria da F23, B4). Separar as regras se atrapalhar o uso. Dono: backend.

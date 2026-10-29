@@ -18,6 +18,7 @@ import { formatarCentavos, formatarCentavosEmDolar, lerValorPositivo } from './d
 import { IconeMais } from './icones'
 import { carregar, mensagemDeEscrita } from './leitura'
 import type { Estado } from './leitura'
+import Carteiras from './Carteiras'
 import Painel from './Painel'
 import { Carregando, EstadoVazio, Selo } from './ui'
 
@@ -44,6 +45,15 @@ const DECIMAIS_DO_NATIVO: Record<Rede, number> = {
   polygon: 18,
   solana: 9,
 }
+
+const ROTULO_DO_TIPO: Record<MovimentoCripto['tipo'], string> = {
+  compra: 'Compra',
+  venda: 'Venda',
+  entrada: 'Entrada sincronizada',
+  saida: 'Saída sincronizada',
+}
+
+const LETRA_DO_TIPO: Record<MovimentoCripto['tipo'], string> = { compra: 'C', venda: 'V', entrada: 'E', saida: 'S' }
 
 type Abertura = { tipo: 'movimento' } | { tipo: 'ativo' } | { tipo: 'cotacao'; ativo: AtivoCripto }
 
@@ -568,6 +578,9 @@ export default function Cripto({
                       <small>Compras menos vendas {formatarCentavos(posicao.custoCentavos)}</small>
                     )
                   )}
+                  {posicao.custoPendente && (
+                    <small>Custo pendente: informe o custo das entradas e saídas sincronizadas para ver o custo médio e o ganho.</small>
+                  )}
                   {posicao.custoMedioUsd !== null && (
                     <small>
                       Custo médio US$ {formatarDecimal(posicao.custoMedioUsd)} por {ativo?.simbolo ?? 'unidade'}
@@ -580,6 +593,11 @@ export default function Cripto({
                     <small>
                       {descreverResultado('nas vendas', posicao.realizadoUsdCentavos, posicao.realizadoCentavos)}
                     </small>
+                  )}
+                  {posicao.confiavel === false && (
+                    <div className="item-selos">
+                      <Selo tom="neutro">Não confiável</Selo>
+                    </div>
                   )}
                   {posicao.cotacao === null ? (
                     <div className="item-selos">
@@ -633,11 +651,13 @@ export default function Cripto({
         <ul className="lancamentos lista-cartao" aria-label="Movimentos">
           {movimentos.dados.map((movimento) => {
             const ativo = ativosPorId.get(movimento.ativoId)
-            const descricao = `${movimento.tipo === 'compra' ? 'Compra' : 'Venda'} de ${formatarDecimal(movimento.quantidade)} ${ativo?.simbolo ?? ''}`
+            const descricao = `${ROTULO_DO_TIPO[movimento.tipo]} de ${formatarDecimal(movimento.quantidade)} ${ativo?.simbolo ?? ''}`
             return (
               <li key={movimento.id}>
-                <span className={`item-icone ${movimento.tipo === 'compra' ? 'despesa' : 'receita'}`}>
-                  {movimento.tipo === 'compra' ? 'C' : 'V'}
+                <span
+                  className={`item-icone ${movimento.tipo === 'compra' ? 'despesa' : movimento.tipo === 'venda' ? 'receita' : ''}`}
+                >
+                  {LETRA_DO_TIPO[movimento.tipo]}
                 </span>
                 <div className="item-corpo">
                   <strong className="item-titulo">{descricao}</strong>
@@ -650,7 +670,7 @@ export default function Cripto({
                     {movimento.custoUsdCentavos === null ? '—' : formatarCentavosEmDolar(movimento.custoUsdCentavos)}
                   </span>
                   {movimento.custoCentavos !== null && <small>{formatarCentavos(movimento.custoCentavos)}</small>}
-                  {confirmando === movimento.id ? (
+                  {movimento.origem === 'sincronizada' ? null : confirmando === movimento.id ? (
                     <div className="item-botoes">
                       <button
                         type="button"
@@ -686,6 +706,14 @@ export default function Cripto({
           })}
         </ul>
       )}
+
+      <Carteiras
+        contas={contas}
+        ativos={listaDeAtivos}
+        movimentos={movimentos.tipo === 'ok' ? movimentos.dados : []}
+        aoMudar={depoisDeMudar}
+        aoSessaoExpirar={aoSessaoExpirar}
+      />
 
       <h3 className="titulo-cartao">Ativos</h3>
       {ativos.tipo === 'carregando' && <Carregando texto="Carregando ativos..." linhas={2} />}

@@ -12,6 +12,8 @@ record RateLimitProperties(
     @DefaultValue("5") int registrationPerHour,
     // Login e cadastro somados, de todos os IPs: cada um gasta 64 MiB de argon2.
     @DefaultValue("60") int authPerMinute,
+    // Upload e confirmação de importação, por IP: cada uma lê e grava centenas de linhas.
+    @DefaultValue("10") int importsPerMinute,
     // Uns 100 bytes por IP: 20 mil cabem em 2 MB.
     @DefaultValue("20000") int maxClients) {
 
@@ -20,6 +22,7 @@ record RateLimitProperties(
         || loginPerMinute < 1
         || registrationPerHour < 1
         || authPerMinute < 1
+        || importsPerMinute < 1
         || maxClients < 1) {
       throw new IllegalArgumentException("os limites de ballast.rate-limit devem ser positivos");
     }

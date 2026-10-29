@@ -624,6 +624,94 @@ e sai da anterior. O contrato de `GET /contas/{id}/faturas` não muda.
   reais, das posições com cotação) e `criptoValorizacaoCentavos`
   (`criptoCentavos` menos o aportado). Nulos sem a PTAX de algum movimento.
 
+## Carteira observada (ADR-071, F24)
+
+O app só observa um endereço público. Nenhuma rota pede seed, chave privada ou
+assinatura. Tudo escopado pelo dono: carteira ou movimento de outro usuário dá
+404 `não encontrado` (também id inexistente ou que não é UUID). O endereço
+aparece no corpo das respostas e em nenhum log, URL ou mensagem de erro.
+
+- `POST /carteiras` com `{contaId, rede, endereco, rotulo?}` responde 201 com a
+  `Carteira`. `rede`: `ethereum`, `base` ou `solana`. Endereço EVM: `0x` mais 40
+  hexadecimais, caixa mista exige checksum EIP-55, gravado em minúsculas.
+  Solana: base58 que decodifica em 32 bytes. `rotulo` opcional até 60
+  caracteres. Não lê a rede.
+- 400, sem repetir o valor enviado: corpo inválido ou com campo a mais,
+  `endereço inválido para a rede`, `conta não encontrada` (inexistente, de
+  outro usuário ou id malformado), `conta deve ser cripto`, `conta arquivada`.
+  409 `carteira já cadastrada` (mesmo usuário, rede e endereço, em qualquer
+  caixa) e 409 de teto (`LIMITE_CARTEIRAS`, padrão 20).
+- `GET /carteiras`, `GET /carteiras/{id}` e `DELETE /carteiras/{id}` (204; leva
+  os movimentos sincronizados dela, os digitados ficam).
+- `Carteira`: `{id, contaId, rede, endereco, rotulo, verificadaEm, sincronizadaEm,
+  leituraFalhou, saldos: [{ativoId, simbolo, contrato, quantidade, confiavel,
+  custoPendente}]}`. `quantidade` é string decimal sem zero à direita.
+  `verificadaEm` é o instante da prova de posse (F25, abaixo), nulo se nunca
+  provou; só informa, não condiciona nada. `sincronizadaEm` é a última leitura
+  que deu certo, nulo se nunca leu.
+  `leituraFalhou` é `true` quando a última tentativa falhou: os saldos são os
+  da `sincronizadaEm`, nunca zero.
+- `POST /carteiras/{id}/sincronizar` lê a rede e responde 200 com a `Carteira`.
+  Tudo ou nada. No máximo uma leitura por carteira a cada 60 s (a tentativa
+  conta, mesmo falha): dentro do prazo devolve o estado atual sem chamar o
+  indexador. Indexador fora do ar, sem chave ou com resposta fora do formato é
+  200 com `leituraFalhou: true`, não erro. 409 com conta arquivada ou teto de
+  movimentos de cripto.
+- A leitura grava a diferença contra os movimentos sincronizados da carteira e do
+  ativo como `entrada` (saldo subiu) ou `saida` (caiu), `origem` `sincronizada`,
+  data de hoje em `America/Sao_Paulo`, sem custo. Rodar de novo sem mudança na
+  rede não grava nada. Ativo novo nasce `confiavel: false`, menos o nativo da
+  rede. O símbolo vem do indexador, limpo e cortado em 20; no Solana são os 8
+  primeiros caracteres do mint. Passou o teto de ativos: os novos ficam de
+  fora e a leitura segue.
+- `PUT /movimentos-cripto/{id}/custo` com `{custoUsdCentavos}` (1 a
+  180143985094819) grava o custo em dólar de uma entrada ou saída sincronizada,
+  uma vez, e responde 200 com o `MovimentoCripto`. 409 `o custo já foi
+  informado`; 400 em movimento digitado.
+
+### Prova de posse (ADR-072, F25)
+
+Opcional, sobre carteira já cadastrada. Não assina transação e não custa nada.
+Escopo e 404 como as demais rotas de carteira.
+
+- `POST /carteiras/{id}/posse/desafio`, sem corpo, responde 200 com
+  `{nonce, mensagem, expiraEm}`. `nonce`: 32 hexadecimais. `mensagem`: o texto
+  exato a assinar, montado no servidor (EVM em formato SIWE com `Chain ID` 1
+  ou 8453; Solana em texto equivalente com `Rede`), com o domínio da config
+  (`BALLAST_POSSE_DOMAIN`), nunca o do cabeçalho `Host`. Vale 5 minutos e
+  substitui o desafio anterior da carteira. Um desafio novo a cada 5 s por
+  carteira: antes disso 429 `muitas tentativas, tente mais tarde` (com
+  `Retry-After: 5`), e o desafio anterior segue valendo.
+- `POST /carteiras/{id}/posse/verificar` com `{nonce, assinatura}` (campos
+  obrigatórios, nenhum a mais, `nonce` até 64 e `assinatura` até 200
+  caracteres) responde 200 com a `Carteira` e `verificadaEm` preenchido.
+  `assinatura`: EVM é `0x` mais 130 hexadecimais (`r`, `s`, `v` do
+  `personal_sign`, `v` 0, 1, 27 ou 28, `s` alto recusado); Solana são os 64 bytes
+  do `signMessage` em base64.
+- 400 `assinatura inválida` (nonce, assinatura ou endereço não conferem) ou 400
+  `desafio expirado` (sem desafio, vencido ou já usado). O desafio é consumido
+  antes de conferir a assinatura: qualquer 400 aqui exige pedir outro. Corpo
+  inválido ou com campo a mais é 400 com texto fixo (`nonce e assinatura são
+  obrigatórios e têm tamanho limitado` para campo ausente ou grande). Endereço, assinatura, mensagem e nonce não vão para log.
+
+Mudanças em rotas que já existiam (campos só acrescentados):
+
+- `MovimentoCripto` ganha `origem` (`manual` | `sincronizada`), `tipo` passa a
+  poder ser `entrada` ou `saida`, e `custoUsdCentavos` e `custoCentavos` podem
+  ser `null` (entrada ou saída sem custo informado).
+- `POST /movimentos-cripto` continua só com `compra` e `venda` (400 para
+  `entrada` e `saida`). `DELETE /movimentos-cripto/{id}` de movimento
+  sincronizado dá 409 `movimento sincronizado não se apaga nem se edita`.
+- `PosicaoCripto` ganha `confiavel` e `custoPendente`. Com `custoPendente:
+  true`, `custoMedioUsd`, `custoDaPosicao*` e `ganho*` vêm `null`; o valor de
+  mercado continua. Posição de ativo não confiável aparece com `confiavel:
+  false` e não entra em `criptoCentavos`, no patrimônio, em `semCotacao` nem na
+  cotação do job.
+- `GET /patrimonio`: `criptoAportadoCentavos` e `criptoValorizacaoCentavos`
+  vêm `null` quando uma posição somada tem custo pendente.
+- `PUT /ativos-cripto/{id}` aceita `confiavel` opcional (ausente mantém):
+  `true` promove o ativo de uma leitura e ele passa a valer no patrimônio.
+
 ## Editar e apagar contas e recorrências (ADR-036)
 
 ### Editar conta (`PATCH /contas/{id}`)
@@ -921,8 +1009,9 @@ sem paginar: contas, recorrências, títulos e ativos têm teto por usuário (AD
 
 Cabeçalho opcional em `POST /contas`, `/lancamentos`, `/transferencias`,
 `/compras-parceladas`, `/recorrencias`, `/metas`, `/metas/{id}/aportes`,
-`/movimentos-cripto`, `/titulos-renda-fixa` e
-`/titulos-renda-fixa/{id}/marcacoes` e `/resgate`. Nas outras rotas é ignorado.
+`/movimentos-cripto`, `/titulos-renda-fixa`,
+`/titulos-renda-fixa/{id}/marcacoes` e `/resgate`, e em
+`/importacoes/{id}/confirmacao`. Nas outras rotas é ignorado.
 
 - Formato: 1 a 80 caracteres entre letras, dígitos e `. _ : -` (um UUID serve).
   Fora do formato, ou repetido no mesmo pedido, dá 400
@@ -940,11 +1029,188 @@ Cabeçalho opcional em `POST /contas`, `/lancamentos`, `/transferencias`,
 - O cliente deve gerar uma chave por intenção do usuário (um clique em salvar) e
   reusá-la só no retry daquela mesma requisição.
 
+## Importação de extrato OFX (ADR-008, ADR-069)
+
+Duas etapas: enviar o arquivo devolve uma proposta por linha, e a confirmação
+cria os lançamentos. Nada entra no extrato antes dela. Toda rota exige sessão e
+filtra por dono: importação, linha, conta, lançamento ou categoria de outro
+usuário responde 404, com o mesmo corpo do inexistente.
+
+- `POST /importacoes?conta_id=<uuid>` com o arquivo cru no corpo
+  (`Content-Type: application/octet-stream`; outro tipo dá 415). Sem multipart,
+  então nome de arquivo nunca chega ao servidor. Teto de 1 MiB, contado na
+  leitura (413 `corpo grande demais`); com o envio e a prévia de CSV (abaixo), são
+  as únicas rotas com teto acima de 4 KiB.
+  OFX 1.x (SGML) e 2.x (XML), em UTF-8 ou Windows-1252. 201 com o detalhe
+  abaixo. Erros: 400 `conta_id` ausente ou que não é UUID, `conta arquivada`,
+  `conta cripto ou de investimento não recebe lançamento`; 404 `conta não
+  encontrada`; 409 `{"erro":"arquivo já importado","importacaoId":"..."}` para
+  o mesmo arquivo (descartar a pendente libera) ou `limite de importações
+  pendentes atingido` (20); 422 para arquivo vazio, que não é OFX, com
+  `DOCTYPE` ou `ENTITY`, sem transação ou com mais de 2000.
+- `GET /importacoes`: até 100, da mais nova para a mais antiga, sem as linhas.
+  Cada item: `id`, `contaId`, `status` (`pendente` ou `confirmada`),
+  `totalLinhas`, `totalInvalidas`, `totalImportar`, `totalConciliar`,
+  `totalIgnorar` (pela ação vigente de cada linha), `criadoEm`, `confirmadaEm`.
+- `GET /importacoes/{id}`: os mesmos campos mais `linhas`, em ordem do arquivo.
+- `DELETE /importacoes/{id}`: descarta a pendente (204). Confirmada: 409
+  `importação já confirmada`.
+- `PUT /importacoes/{id}/linhas/{linhaId}` com `{acao, lancamentoId?,
+  categoriaId?, titulo?}`. `acao` é `importar`, `ignorar` ou `conciliar`.
+  `conciliar` exige `lancamentoId` (realizado, da mesma conta, sem vínculo de
+  importação); `categoriaId` (do mesmo tipo da linha) e `titulo` (1 a 100) só
+  valem com `importar`. Campo que não pertence à ação dá 400. Linha que a
+  proposta já ignorou só aceita `ignorar` (400). Devolve a linha. Importação
+  confirmada: 409.
+- `POST /importacoes/{id}/confirmacao`, sem corpo, com `Idempotency-Key`
+  opcional. Cria os lançamentos pelas mesmas regras do `POST /lancamentos` e
+  responde 200 `{id, status: "confirmada", criadas, conciliadas, ignoradas,
+  duplicadas}`. Uma recusa de regra (`conta arquivada`, `categoria não
+  encontrada`, `categoria não permitida nesta conta`, `saldo da conta fora do
+  limite`) é 400 e desfaz tudo; a importação segue pendente. Segunda
+  confirmação: 409. Outra confirmação do mesmo usuário em andamento: 409
+  `outra confirmação está em andamento, tente de novo`, sem esperar; repetir
+  depois. Envio e confirmação têm limite próprio de 429 por IP (10 por minuto,
+  somados), além do limite geral.
+
+Linha (`ImportacaoLinha`): `id`, `ordem`, `data`, `tipo` (`receita` ou
+`despesa`), `valorCentavos` (inteiro de centavos, sempre positivo), `titulo`,
+`descricao`, `valida`, `erro`, `proposta`, `motivo` (`ja_importada`,
+`invalida` ou `duplicada_no_arquivo` quando a proposta é ignorar), `decisao`
+(nula enquanto vale a proposta), `acao` (a vigente), `categoriaId` (a escolhida
+ou Outros / Outras receitas), `lancamentoId` (alvo da conciliação; depois da
+confirmação, o lançamento criado) e `resultado` (`criada`, `conciliada`,
+`ignorada` ou `duplicada`, nulo antes da confirmação). Em linha inválida `data`,
+`tipo`, `valorCentavos` e `categoriaId` são nulos.
+
+Detalhes: o `TRNAMT` aceita ponto ou vírgula e no máximo 2 casas; mais que isso
+deixa a linha inválida. A `DTPOSTED` vale como foi escrita, sem conversão de
+fuso. `dataCompetencia` do lançamento criado é essa data e `dataCaixa` segue a
+conta (vencimento da fatura em cartão). Logs levam só ids e contagens.
+
+## Importação de extrato CSV (ADR-008, ADR-070)
+
+Entra na mesma máquina do OFX: o envio devolve a proposta por linha, e a
+revisão (`PUT /importacoes/{id}/linhas/{linhaId}`), a confirmação, o descarte, o
+`GET /importacoes` e o `GET /importacoes/{id}` são as rotas da seção anterior,
+sem mudança. O CSV só traz um mapeamento de colunas salvo por usuário e uma
+prévia. Toda rota exige sessão e filtra por dono: conta ou mapeamento de outro
+usuário responde 404, com o mesmo corpo do inexistente.
+
+### Mapeamentos (`/mapeamentos-csv`)
+
+`MapeamentoCsv`: `id`, `nome`, `separador`, `formatoData`, `decimal`, `sinal`,
+`temCabecalho`, `colunaData`, `colunaValor`, `colunaDescricao`, `colunaId`
+(nulo se o banco não tem identificador). Valores:
+
+- `separador`: `ponto_e_virgula`, `virgula`, `tab` ou `barra_vertical`
+- `formatoData`: `dd/MM/yyyy`, `yyyy-MM-dd`, `MM/dd/yyyy` ou `dd-MM-yyyy`
+- `decimal`: `virgula` (1.234,56) ou `ponto` (1,234.56)
+- `sinal`: `negativo_despesa` ou `positivo_despesa` (extrato de cartão, onde a
+  compra vem positiva)
+- colunas: índice a partir de 0, de 0 a 49, diferentes entre si
+
+- `GET /mapeamentos-csv`: do mais antigo para o mais novo.
+- `POST /mapeamentos-csv` com todos os campos menos `id` (`colunaId` é
+  opcional): 201 com o `MapeamentoCsv`. `nome` tem de 1 a 60 caracteres, sem
+  caractere de controle, e é único por usuário. 400 para entrada inválida,
+  campo não declarado ou colunas repetidas; 409 `já existe um mapeamento com
+  esse nome` ou `limite de mapeamentos de CSV atingido` (20 por usuário).
+- `PUT /mapeamentos-csv/{id}`: mesmo corpo, troca tudo. 200 com o mapeamento.
+  404 se não existe, é de outro usuário ou o id não é UUID; 409 para nome de
+  outro mapeamento seu.
+- `DELETE /mapeamentos-csv/{id}`: 204. As importações já criadas não mudam.
+
+### Envio
+
+`POST /importacoes/csv?conta_id=<uuid>&mapeamento_id=<uuid>` com o arquivo cru
+no corpo (`application/octet-stream`; outro tipo dá 415), como o OFX: sem
+multipart, sem nome de arquivo, nada em disco. Mesmo teto de 1 MiB (413), 2000
+linhas de dados (422), no máximo 50 colunas por linha (422) e célula cortada em
+200 caracteres. UTF-8 (com ou sem BOM) ou Windows-1252. Linhas totalmente
+vazias são ignoradas e não contam na `ordem`. Resposta 201 com o mesmo
+`ImportacaoDetalhe` do OFX. Mesmos erros do OFX (400 `conta_id` ou
+`mapeamento_id` ausente ou que não é UUID, parâmetro não declarado, `conta
+arquivada`, `conta cripto ou de investimento não recebe lançamento`; 404 `conta
+não encontrada` ou `mapeamento não encontrado`; 409 arquivo já importado, com
+`importacaoId`, ou 20 pendentes), mais o 422 de leitura, com mensagem fixa e
+sem trecho do arquivo: `arquivo vazio`, `o arquivo não parece um CSV de texto`
+(byte NUL), `aspas sem fechar no arquivo`, `nenhuma linha de dados encontrada`,
+`arquivo com mais de 2000 linhas`, `arquivo com mais de 50 colunas por linha`.
+
+Linha com menos colunas que o mapeamento, data ou valor ilegível entra como
+inválida (`valida: false`, `erro`, `proposta: ignorar`, `motivo: invalida`) e
+fica fora da confirmação; não derruba o arquivo. Os `erro` são `linha com menos
+colunas que o mapeamento`, `data inválida`, `valor inválido`, `valor zero`,
+`valor com mais de 2 casas decimais` e `valor fora do limite`.
+
+Leitura do valor: sinal `-` ou `+` à frente, prefixo `R$` e espaços (inclusive
+NBSP) aceitos; parênteses não. Com `decimal: virgula`, `.` é milhar (em grupos de
+3) e `,` é decimal; com `ponto`, o inverso. No máximo 2 casas, sem arredondar.
+`negativo_despesa`: valor menor que zero é despesa; `positivo_despesa`: maior que
+zero é despesa. A data segue `formatoData` de forma estrita (31/02 é inválida),
+entre os anos 1900 e 2199.
+
+Deduplicação: com `colunaId` preenchida o id da célula manda (mesmo id no
+arquivo: a segunda linha é `ignorar`, `duplicada_no_arquivo`). Sem id, vale a
+conta, a data, o valor, a descrição e a ordem entre linhas iguais, então dois
+cafés iguais no mesmo dia são dois lançamentos e um extrato reenviado, ou
+sobreposto, cai em `ja_importada`.
+
+Fórmula injetada: texto de célula (título, descrição, `bruta`) que começa com
+`=`, `+`, `-`, `@`, TAB ou CR ganha um apóstrofo na frente. O título que o
+cliente vê e o lançamento confirmado já levam o apóstrofo.
+
+### Envio de PDF de fatura (ADR-073)
+
+`POST /importacoes/pdf?conta_id=<uuid>` com o PDF cru no corpo
+(`application/octet-stream`). Melhor esforço: a leitura é heurística e a revisão
+é obrigatória; nada vira lançamento antes de `POST /importacoes/{id}/confirmacao`.
+A conta precisa ser de cartão de crédito. Resposta 201 com o mesmo
+`ImportacaoDetalhe`. Erros: 400 (`conta_id` ausente, repetido ou fora do formato
+UUID, parâmetro não declarado, `conta arquivada`, `o PDF de fatura só vale para
+conta de cartão de crédito`); 404 conta de outro usuário ou inexistente; 409
+arquivo já importado (`importacaoId`) ou 20 pendentes; 413 acima de 5 MiB; 415
+outro Content-Type; 422 com mensagem fixa: `arquivo vazio`, `o arquivo não parece
+um PDF`, `não foi possível ler o PDF`, `PDF protegido por senha ou criptografado
+não é aceito`, `PDF com mais de 30 páginas`, `PDF com texto demais para uma
+fatura`, `o PDF demorou demais para ser lido`, `o PDF não tem texto para ler...`,
+`nenhuma transação reconhecida nesta fatura`, `fatura com mais de 2000 linhas`.
+Mesmo limite de 10 por minuto por IP do OFX.
+
+Linha reconhecida: `data` (a da compra), `tipo` (`despesa`, ou `receita` para
+`CR` e sinal de menos), `valorCentavos`, `titulo` (descrição cortada em 100) e a
+parcela `n/m` no texto. Linha que começa com data ou termina em valor e não foi
+lida vem com `valida: false`, `erro: linha não reconhecida` (ou `data inválida`,
+`valor zero` etc.), `proposta: ignorar` e o texto cru em `titulo`; só aceita
+`ignorar`. Crédito de pagamento da fatura vem inválido (`pagamento da fatura:
+registre como transferência`). Na confirmação, `data_competencia` é a data da
+linha e `data_caixa` é o vencimento da fatura pela regra do cartão (ADR-031).
+
+### Prévia
+
+`POST /importacoes/csv/previa` com o mapeamento na query e o arquivo cru no
+corpo. Parâmetros, todos obrigatórios menos o último: `separador`,
+`formato_data`, `decimal`, `sinal`, `tem_cabecalho` (`true` ou `false`),
+`coluna_data`, `coluna_valor`, `coluna_descricao`, `coluna_id`. Os valores são os
+do mapeamento. Parâmetro ausente, inválido, repetido ou não declarado, ou colunas
+repetidas: 400. Mesmos tetos, 413 e 422 do envio. Não grava nada: não cria
+importação nem hash e não usa vaga das 20 pendentes.
+
+200 `CsvPrevia`: `totalLinhas` (do arquivo inteiro), `colunasDetectadas` (da
+primeira linha) e `linhas` (até 10). Cada `CsvPreviaLinha`: `ordem`, `celulas`
+(texto, já cortado e com o apóstrofo de fórmula), `valida`, `erro`, `data`,
+`tipo`, `valorCentavos` (centavos, sempre positivo) e `titulo`. Em linha
+inválida `data`, `tipo` e `valorCentavos` são nulos.
+
 ## Limites (ADR-049)
 
 - Por IP (IPv6 pelo `/64`): 600 requisições por minuto em qualquer rota, 10
   `POST /auth/login` por minuto e 5 `POST /auth/cadastro` por hora.
 - Login e cadastro somados, de todos os IPs: 60 por minuto.
+- `POST /importacoes`, `POST /importacoes/csv`, `POST /importacoes/csv/previa` e
+  `POST /importacoes/{id}/confirmacao`: 10 por minuto por IP, somados entre as
+  quatro rotas, e fora do teto somado do argon2.
 - A recusa vem antes de qualquer outra checagem: um 429 não diz se a sessão,
   o corpo ou a rota valiam.
 - O login com atraso por e-mail e IP (ADR-053) responde 429 com a mensagem
@@ -959,7 +1225,8 @@ Cabeçalho opcional em `POST /contas`, `/lancamentos`, `/transferencias`,
   de cripto ou cotação manual além do teto responde 409
   `{"erro":"limite de X atingido"}`, com X em `contas`, `recorrências ativas`,
   `compras parceladas`, `títulos de renda fixa`, `movimentos de cripto`,
-  `ativos de cripto` ou `cotações`. Nada é gravado. O teto vale por usuário, e
+  `ativos de cripto`, `cotações` ou `importações pendentes` (20, variável
+  `LIMITE_IMPORTACOES_PENDENTES`). Nada é gravado. O teto vale por usuário, e
   os padrões e as variáveis estão no `.env.example`. Os 409 que já existiam
   (nome repetido, ativo repetido, cotação repetida) mantêm a mensagem.
 - `DELETE /contas/{id}` que passa do prazo por instrução (`TIMEOUT_APAGAR_CONTA`,

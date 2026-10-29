@@ -340,8 +340,8 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
   await test.step('capturas das seções', async () => {
     await irPara(page, 'Início')
     await expect(page.getByRole('list', { name: 'Próximas previstas' })).toBeVisible()
-    // O vale tem cartão próprio, e o total sem cartão da visão padrão também soma o saldo dele.
-    await expect(page.getByRole('region', { name: 'Benefícios' })).toContainText(reais('450,00'))
+    // O vale aparece dentro do Posso gastar, sem cartão próprio.
+    await expect(page.getByRole('list', { name: 'Benefícios' })).toBeVisible()
     await capturar(page, projeto, '12-inicio')
     await irPara(page, 'Lançamentos')
     await expect(page.getByRole('region', { name: 'Lançamentos' })).toContainText('Mercado')

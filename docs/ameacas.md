@@ -147,6 +147,10 @@ usuário enviando.
   Prefixe com apóstrofo na exportação.
 - **Zip bomb e PDF malformado.** Parser de PDF roda com limite de tempo e de
   memória, e falha fechando, não travando.
+  Na F26 (ADR-073): 5 MiB, 30 páginas, 1 milhão de caracteres, 10 s por thread
+  abandonada no estouro, PDF com senha recusado, cache só em memória e erro
+  genérico. Risco residual: fluxo Flate que expande muito dentro dos 10 s; o
+  teto de heap da JVM em produção segura.
 - **XXE em formato XML.** OFX tem variante XML: desabilitar entidade externa
   no parser. É a falha clássica desse formato.
 - **Caminho de arquivo.** Nome do arquivo enviado nunca compõe caminho de

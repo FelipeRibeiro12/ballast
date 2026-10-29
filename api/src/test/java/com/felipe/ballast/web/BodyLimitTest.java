@@ -181,4 +181,60 @@ class BodyLimitTest {
     assertThat(response.statusCode()).isEqualTo(413);
     assertThat(response.body()).isEqualTo(TOO_LARGE);
   }
+
+  // O envio de extrato (ADR-069) é a única rota com teto acima de 4 KiB: 1 MiB.
+  @Test
+  void theUploadRouteAllowsUpToOneMebibyteAndNoMore() throws Exception {
+    HttpResponse<String> above =
+        client.send(
+            request("/importacoes?conta_id=" + java.util.UUID.randomUUID())
+                .POST(BodyPublishers.ofByteArray(new byte[(1 << 20) + 1]))
+                .build(),
+            BodyHandlers.ofString(StandardCharsets.UTF_8));
+    HttpResponse<String> inside =
+        client.send(
+            request("/importacoes?conta_id=" + java.util.UUID.randomUUID())
+                .POST(BodyPublishers.ofByteArray(new byte[1 << 20]))
+                .build(),
+            BodyHandlers.ofString(StandardCharsets.UTF_8));
+
+    assertThat(above.statusCode()).isEqualTo(413);
+    assertThat(above.body()).isEqualTo(TOO_LARGE);
+    // Passou do filtro e parou na autenticação.
+    assertThat(inside.statusCode()).isEqualTo(401);
+  }
+
+  @Test
+  void theCsvUploadAndPreviewRoutesHaveTheSameOneMebibyteLimit() throws Exception {
+    for (String path :
+        new String[] {
+          "/importacoes/csv?conta_id=" + java.util.UUID.randomUUID(),
+          "/importacoes/csv/previa?separador=tab"
+        }) {
+      HttpResponse<String> above =
+          client.send(
+              request(path).POST(BodyPublishers.ofByteArray(new byte[(1 << 20) + 1])).build(),
+              BodyHandlers.ofString(StandardCharsets.UTF_8));
+      HttpResponse<String> inside =
+          client.send(
+              request(path).POST(BodyPublishers.ofByteArray(new byte[1 << 20])).build(),
+              BodyHandlers.ofString(StandardCharsets.UTF_8));
+
+      assertThat(above.statusCode()).as(path).isEqualTo(413);
+      assertThat(above.body()).isEqualTo(TOO_LARGE);
+      assertThat(inside.statusCode()).as(path).isEqualTo(401);
+    }
+  }
+
+  @Test
+  void theUploadExceptionDoesNotReachOtherImportRoutes() throws Exception {
+    String path = "/importacoes/" + java.util.UUID.randomUUID() + "/confirmacao";
+
+    HttpResponse<String> response =
+        client.send(
+            request(path).POST(BodyPublishers.ofString(loginBodyOfSize(LIMIT + 1))).build(),
+            BodyHandlers.ofString(StandardCharsets.UTF_8));
+
+    assertThat(response.statusCode()).isEqualTo(413);
+  }
 }

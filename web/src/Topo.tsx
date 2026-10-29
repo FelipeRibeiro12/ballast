@@ -105,6 +105,9 @@ export default function Topo({ secao, aoSair }: { secao: Secao; aoSair: () => vo
             <button type="button" onClick={() => irPara('terceiros')}>
               Terceiros
             </button>
+            <button type="button" onClick={() => irPara('importar')}>
+              Importar extrato
+            </button>
             <button type="button" onClick={() => irPara('seguranca')}>
               Segurança
             </button>

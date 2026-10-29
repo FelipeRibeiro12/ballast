@@ -89,6 +89,18 @@ public record PositionResponse(
                     + " nulo sem a PTAX de algum movimento em dólar")
         Long realizadoCentavos,
     @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description =
+                "Falso para ativo que veio de uma leitura de carteira e o usuário ainda não"
+                    + " promoveu: fica fora do patrimônio (ADR-071)")
+        boolean confiavel,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description =
+                "Alguma entrada ou saída sincronizada ainda não tem custo: custo médio, custo da"
+                    + " posição e ganho vêm nulos, o valor de mercado continua")
+        boolean custoPendente,
+    @Schema(
             requiredMode = Schema.RequiredMode.NOT_REQUIRED,
             nullable = true,
             allowableValues = "fora do limite",
@@ -144,6 +156,8 @@ public record PositionResponse(
         cents(valued.gainBrl()),
         cents(valued.realizedUsd()),
         cents(valued.realizedBrl()),
+        position.trusted(),
+        position.costPending(),
         valued.outOfRange() ? NetWorthService.OUT_OF_RANGE_REASON : null);
   }
 

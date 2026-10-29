@@ -24,6 +24,7 @@ import Recorrencias from './Recorrencias'
 import { useRota } from './rota'
 import Investimentos from './Investimentos'
 import Categorias from './Categorias'
+import Importar from './Importar'
 import Metas from './Metas'
 import Terceiros from './Terceiros'
 import Orcamento from './Orcamento'
@@ -635,6 +636,17 @@ function App() {
             aoSessaoExpirar={aoSessaoExpirar}
             aoMudarLancamentos={() => {
               // O reembolso é um lançamento novo: a lista e os saldos das telas montadas ficam velhos.
+              setVersaoDaLista((n) => n + 1)
+              setVersaoDeSaldo((n) => n + 1)
+            }}
+          />
+        )}
+        {rota === 'importar' && (
+          <Importar
+            contas={contasEmReais}
+            aoSessaoExpirar={aoSessaoExpirar}
+            aoMudarLancamentos={() => {
+              // A confirmação cria lançamentos e concilia outros: lista e saldos das telas montadas ficam velhos.
               setVersaoDaLista((n) => n + 1)
               setVersaoDeSaldo((n) => n + 1)
             }}

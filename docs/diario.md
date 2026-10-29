@@ -478,3 +478,48 @@ Dívida registrada: o vínculo de terceiro e o reembolso são duas chamadas no w
 Achados do revisor: security 0 crítico, 0 alto, 1 médio e 1 baixo viraram dívida; reviewer não rodou (decisão de economia)
 Pipeline: a preencher no PR
 Em aberto: item 1 (Safari iOS), subir as branches e abrir os PRs, security na rota de terceiros e categorias.
+
+## 2026-10-29 — F22: Importação de OFX
+
+O que entrou: envio de OFX em corpo cru (1 MiB, 2000 linhas, sem XML parser, arquivo não guardado), tabelas `importacao` e `importacao_linha` (V34), dedupe por hash do arquivo e por FITID da conta, proposta importar, ignorar ou conciliar (mesma conta, valor igual, até 3 dias), revisão por linha, confirmação atômica com Idempotency-Key e tela "Importar extrato" no web.
+Decisões: ADR-069
+Dívida registrada: limpeza por idade das pendentes e da `bruta`, teto de lançamentos por usuário, rate limit só por IP, trocar de candidato na conciliação (a API não lista candidatos), histórico de importações confirmadas, mensagem de recusa na confirmação sem a linha culpada, desempenho da confirmação de 2000 linhas sem medição
+Achados do revisor: security 0 crítico, 1 alto, 2 médios e 4 baixos; alto e médios corrigidos na fatia, baixos corrigidos ou no backlog; reviewer não rodou (decisão de economia)
+Pipeline: local verde (make test e web); CI a preencher no PR
+Em aberto: abrir o PR; ordem das branches empilhadas do dono (ADR-059 está na `feat/onda7-front`)
+
+## 2026-10-29 — F23: Importação de CSV
+
+O que entrou: envio de CSV em corpo cru sobre a mesma revisão da F22, mapeamento de colunas salvável por usuário (V35, `mapeamento_csv`, CRUD com teto de 20), prévia sem gravar, parser RFC 4180 à mão, valor por String em `BigDecimal`, apóstrofo em célula que começa com fórmula, hash com ordinal para linhas idênticas e telas de mapeamento, prévia e envio no web.
+Decisões: ADR-070
+Dívida registrada: id longo colidindo no hash, JSON do mapeamento mais frouxo que a query da prévia, NBSP antes do gatilho de fórmula, limite de 10 por minuto dividido entre prévia e envio
+Achados do revisor: security 0 crítico, 0 alto, 0 médio e 4 baixos, todos no backlog; reviewer não rodou (decisão de economia)
+Pipeline: local verde (make test e web); CI a preencher no PR
+Em aberto: abrir o PR; a branch fica empilhada sobre `feat/f22-importacao-ofx`
+
+## 2026-10-29 — F24: Observar endereço de carteira
+
+O que entrou: cadastro de endereço digitado (Ethereum, Base, Solana) numa conta cripto, com EIP-55 (Keccak-256 à mão) e base58 de 32 bytes, unique por usuário, rede e endereço. Indexador Alchemy atrás da interface `WalletIndexer`, sincronização tudo ou nada que grava a diferença como `entrada`/`saida` sem custo (V36), `PUT /movimentos-cripto/{id}/custo`, teto de 20 carteiras, job de 6 h desligado por padrão. Ativo novo nasce `confiavel=false` e fica fora do patrimônio. Falha do indexador mantém o saldo antigo com a data. Tela com cadastro sem extensão, lista com última leitura, selo de não confiável e pedido de custo.
+Decisões: ADR-071. Além dele: promoção por `PUT /ativos-cripto/{id}` com `confiavel` opcional, conta alheia no cadastro responde 400 como nos movimentos.
+Dívida registrada: cota da Alchemy sem teto por usuário, airdrop de token-lixo, leitura lenta sobre estado novo, teto de corpo, conferências de deploy, testes do job e de concorrência, termos da Alchemy (7 linhas no backlog)
+Achados do revisor: security 0 bloqueantes, 3 médios e 4 baixos, todos no backlog; reviewer não rodou (decisão de economia)
+Pipeline: local verde (make test, lint e web); CI a preencher no PR
+Em aberto: abrir o PR; a branch fica empilhada sobre `feat/f23-importacao-csv`; Alchemy real nunca foi chamada
+
+## 2026-10-29 — F25: Conectar carteira
+
+O que entrou: botão "Conectar carteira" que só preenche o campo de endereço (EVM por EIP-6963 com `@wagmi/core` v2 e viem, Solana por Wallet Standard), lista com Rabby e Phantom primeiro, tudo em chunk carregado só no clique. Prova de posse opcional: desafio com nonce de uso único (V37, `posse_desafio`, 5 min, consumo atômico), mensagem SIWE no EVM e texto equivalente no Solana montada no servidor, verificação EIP-191 (secp256k1 com Bouncy Castle) e Ed25519 do JDK, grava só `verificada_em`. Selo "Posse verificada" na tela. Nenhuma assinatura de transação.
+Decisões: ADR-072
+Dívida registrada: teto de desafios por usuário (hoje por carteira), teste de que o OriginFilter barra o POST do desafio com Origin alheio, teste com assinatura de hardware wallet (s alto é rejeitado), transporte `http()` do wagmi sem URL (endereço nunca deve passar por ele), `BALLAST_POSSE_DOMAIN` no runbook de produção
+Achados do revisor: security 0 bloqueantes, 4 baixos viraram dívida; reviewer não rodou (decisão de economia)
+Pipeline: local verde (make test, lint e web: test, tsc, lint, build); CI a preencher no PR
+Em aberto: `BALLAST_POSSE_DOMAIN` precisa ser definido no deploy de produção (a API não sobe sem ele fora de `APP_ENV=development`); runbook não atualizado; carteira real (Rabby, Phantom) nunca foi exercitada, só providers falsos; branch empilhada sobre `feat/f24-observar-endereco`
+
+## 2026-10-29 — F26: Importação de PDF de fatura
+
+O que entrou: `POST /importacoes/pdf` (corpo cru, 5 MiB, 30 páginas, 10 s, sem senha, só memória) que extrai texto com PDFBox 3.0.8 e lê data, descrição, valor, `CR` e parcela `n/m` por heurística, atrás da interface `BankStatementReader`. Sempre cai na revisão da F22, linha não reconhecida vira linha para ignorar com o texto cru, pagamento da fatura vem inválido, parcela vira lançamento comum (sem compra parcelada), `data_caixa` pela regra do cartão. Aba PDF na tela Importar extrato com aviso de melhor esforço. Sem migration.
+Decisões: ADR-073
+Dívida registrada: leitores por emissor, fatura em duas colunas, conciliação de parcela de compra parcelada já lançada, teste com PDF real, teto de heap em produção
+Achados do revisor: reviewer não rodou (decisão de economia); security 0 crítico, 2 altos (heap e threads abandonadas) corrigidos na fatia, 2 médios e 2 baixos no backlog
+Pipeline: local verde (make test, lint e web); CI a preencher no PR
+Em aberto: abrir o PR; a branch fica empilhada sobre `feat/f25-conectar-carteira`; nenhuma fatura real testada
