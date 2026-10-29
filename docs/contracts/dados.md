@@ -1162,7 +1162,7 @@ importacao_linha
   importacao_id    uuid not null
   ordem            integer not null        -- posição no arquivo, 1 a 2000; única por importação
   bruta            jsonb not null          -- os campos lidos, como texto (pode ter FITID)
-  hash_externo     text null               -- sha256 de conta_id|FITID, ou da composição sem FITID
+  hash_externo     text null               -- sha256 de `fitid:conta_id|FITID`, ou de `nofitid:` mais a composição sem FITID
   data             date null               -- data, tipo e valor ficam nulos só na linha inválida
   tipo             text null               -- receita | despesa
   valor            numeric(18,2) null      -- positivo; o sinal vem do tipo

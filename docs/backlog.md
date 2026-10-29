@@ -117,3 +117,5 @@ entre pessoas, saldo automático de corretora. Motivos em `visao.md`.
 
 - **DÍVIDA** — Apagar categoria só soma o teto da Outros quando o mês de vigência coincide, e descarta a linha com teto nulo (auditoria da rodada pós uso real, M1). Somar pela linha vigente de cada mês em que uma das duas muda. Dono: backend.
 - **DÍVIDA** — Cada `PUT /contas/{id}/cofrinho` pede a busca do CDI ao Banco Central, sem intervalo mínimo (auditoria, B2). Dono: backend.
+- **DÍVIDA** — Importação de OFX: pendentes esquecidas ficam para sempre e a `bruta` das confirmadas nunca é limpa (ADR-069, auditoria da F22, B3). Apagar pendente por idade e a `bruta` de confirmada antiga. Dono: backend. Fatia: rodada de dívidas após a F22.
+- **DÍVIDA** — Sem teto de lançamentos por usuário: uma importação de 2000 linhas por arquivo, repetida, enche a tabela (auditoria da F22, B1). Definir o teto no padrão do ADR-055. Dono: backend. Fatia: rodada de dívidas após a F22.

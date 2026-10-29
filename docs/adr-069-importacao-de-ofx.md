@@ -41,9 +41,9 @@ unique parcial `(usuario_id, hash_externo)`.
 **Dedupe, em ordem.**
 1. Mesmo `hash_arquivo`: 409 com o `importacao_id` existente. Descartar a
    importação pendente libera o hash.
-2. `hash_externo` = SHA-256 de `conta_id|FITID`. O FITID só é único dentro da
+2. `hash_externo` = SHA-256 de `fitid:conta_id|FITID`. O FITID só é único dentro da
    conta, então a conta entra no hash. Sem FITID, o hash usa data, valor, texto
-   e a ordem da ocorrência no arquivo. Linha cujo hash já está em `lancamento`
+   e a ordem da ocorrência no arquivo, com a tag `nofitid:` na frente do texto. Linha cujo hash já está em `lancamento`
    (importada ou conciliada antes) vira proposta `ignorar`, motivo
    `ja_importada`. É isso que cobre extratos com dias sobrepostos.
 3. Conciliação: lançamento da mesma conta, mesmo tipo, valor igual
@@ -128,3 +128,29 @@ Escolhas da F22 que o texto acima deixou abertas.
   pendente.
 - **Apagar conta** apaga as importações dela antes (a FK é `NO ACTION`).
 - **Teto de pendentes.** Conta só a `pendente`; a confirmada libera a vaga.
+- **Tag no hash.** `fitid:` e `nofitid:` entram no texto que vai para o SHA-256,
+  não no resultado, porque a coluna só aceita 64 hexa minúsculos. Sem a tag, um
+  FITID forjado com o formato da composição sem FITID colidia com o hash de
+  outra linha. A feature ainda não foi para produção, então nenhum hash antigo
+  precisou de migração.
+- **Conciliação sem produto cartesiano.** O pareamento guloso indexa os
+  candidatos por (tipo, valor) e por data, e para cada distância de 0 a 3 dias
+  cada linha só olha as duas datas à sua volta. O resultado é o mesmo do
+  pareamento de todos os pares (mais próximo primeiro, depois ordem do arquivo,
+  data e id do candidato), sem materializar linhas x candidatos.
+- **Custo antes do trabalho.** O teto de 20 pendentes é conferido sem trava logo
+  depois da checagem de arquivo repetido, antes do parse. A conferência com
+  trava dentro da transação continua como defesa final. Envio e confirmação têm
+  limite de 10 por minuto por IP. A confirmação usa `pg_try_advisory_xact_lock`:
+  se outra do mesmo usuário roda, responde 409 na hora, sem prender conexão. As
+  linhas do envio entram em lote.
+- **Conciliação que não pega (`stampEntry` devolve 0).** Se o lançamento sumiu,
+  mudou de conta ou já recebeu outro hash entre a revisão e a confirmação, a
+  linha vira `criada` em vez de `conciliada`, sem erro e sem aviso na resposta.
+  É de propósito: a transação do banco é real e não pode sumir. O efeito visível
+  é `criadas` maior e `conciliadas` menor que a revisão mostrava. Se isso
+  incomodar, o caminho é um campo `rebaixadas` na confirmação.
+- **`bruta` fica.** A coluna `bruta` (campos do OFX como lidos) permanece depois
+  da confirmação, para auditoria (ADR-008): mostra de onde veio cada lançamento.
+  A limpeza por idade das pendentes esquecidas e da `bruta` de importações
+  confirmadas está no `docs/backlog.md`.
