@@ -58,6 +58,8 @@ class ImportController {
       new ErrorResponse(
           "conciliar exige lancamentoId; categoriaId e titulo só valem com importar;"
               + " lancamentoId só vale com conciliar");
+  private static final ErrorResponse CONFIRMATION_RUNNING =
+      new ErrorResponse("outra confirmação está em andamento, tente de novo");
   private static final ErrorResponse ALREADY_CONFIRMED =
       new ErrorResponse("importação já confirmada");
 
@@ -397,6 +399,8 @@ class ImportController {
       case CATEGORY_TYPE_MISMATCH -> ResponseEntity.badRequest().body(CATEGORY_TYPE_MISMATCH);
       case LINE_NOT_EDITABLE -> ResponseEntity.badRequest().body(LINE_NOT_EDITABLE);
       case ENTRY_REFUSED -> ResponseEntity.badRequest().body(new ErrorResponse(failed.message()));
+      case CONFIRMATION_RUNNING ->
+          ResponseEntity.status(HttpStatus.CONFLICT).body(CONFIRMATION_RUNNING);
     };
   }
 }

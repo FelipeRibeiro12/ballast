@@ -979,7 +979,10 @@ usuário responde 404, com o mesmo corpo do inexistente.
   duplicadas}`. Uma recusa de regra (`conta arquivada`, `categoria não
   encontrada`, `categoria não permitida nesta conta`, `saldo da conta fora do
   limite`) é 400 e desfaz tudo; a importação segue pendente. Segunda
-  confirmação: 409.
+  confirmação: 409. Outra confirmação do mesmo usuário em andamento: 409
+  `outra confirmação está em andamento, tente de novo`, sem esperar; repetir
+  depois. Envio e confirmação têm limite próprio de 429 por IP (10 por minuto,
+  somados), além do limite geral.
 
 Linha (`ImportacaoLinha`): `id`, `ordem`, `data`, `tipo` (`receita` ou
 `despesa`), `valorCentavos` (inteiro de centavos, sempre positivo), `titulo`,
@@ -1001,6 +1004,8 @@ conta (vencimento da fatura em cartão). Logs levam só ids e contagens.
 - Por IP (IPv6 pelo `/64`): 600 requisições por minuto em qualquer rota, 10
   `POST /auth/login` por minuto e 5 `POST /auth/cadastro` por hora.
 - Login e cadastro somados, de todos os IPs: 60 por minuto.
+- `POST /importacoes` e `POST /importacoes/{id}/confirmacao`: 10 por minuto por
+  IP, somados entre as duas rotas, e fora do teto somado do argon2.
 - A recusa vem antes de qualquer outra checagem: um 429 não diz se a sessão,
   o corpo ou a rota valiam.
 - O login com atraso por e-mail e IP (ADR-053) responde 429 com a mensagem

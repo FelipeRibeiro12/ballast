@@ -30,6 +30,7 @@ class ImportConfirmTest {
 
   @Autowired MockMvc mvc;
   @Autowired JdbcClient jdbc;
+  @Autowired javax.sql.DataSource dataSource;
   private ImportsApi api;
   private ImportsApi.Actor actor;
 
@@ -213,6 +214,41 @@ class ImportConfirmTest {
     } finally {
       pool.shutdownNow();
     }
+  }
+
+  // Outra confirmação do mesmo usuário segurando a trava: a requisição responde 409 na hora em
+  // vez de prender uma conexão do pool esperando.
+  @Test
+  void answers409WithoutWaitingWhenAnotherConfirmationHoldsTheLock() throws Exception {
+    String id =
+        api.uploadOk(
+                actor.session(),
+                actor.accountId(),
+                ofx(new Tx("20261003", "-35.90", "F1", "PADARIA")))
+            .get("id")
+            .asString();
+    try (java.sql.Connection holder = dataSource.getConnection()) {
+      holder.setAutoCommit(false);
+      try (java.sql.PreparedStatement lock =
+          holder.prepareStatement("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))")) {
+        lock.setString(1, actor.user().id() + ":importacao-confirmacao");
+        lock.execute();
+      }
+
+      long started = System.nanoTime();
+      MockHttpServletResponse blocked = api.confirm(actor.session(), id, null);
+      long millis = (System.nanoTime() - started) / 1_000_000;
+
+      assertThat(blocked.getStatus()).isEqualTo(409);
+      assertThat(body(blocked).get("erro").asString())
+          .isEqualTo("outra confirmação está em andamento, tente de novo");
+      assertThat(millis).isLessThan(3000);
+      assertThat(entryCount()).isZero();
+      holder.rollback();
+    }
+
+    assertThat(api.confirm(actor.session(), id, null).getStatus()).isEqualTo(200);
+    assertThat(entryCount()).isEqualTo(1);
   }
 
   @Test

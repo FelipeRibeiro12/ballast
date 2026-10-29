@@ -13,6 +13,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.hibernate.id.uuid.UuidVersion7Strategy;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -85,9 +88,11 @@ class ImportQueries {
       """;
 
   private final JdbcClient jdbc;
+  private final NamedParameterJdbcTemplate batchJdbc;
 
-  ImportQueries(JdbcClient jdbc) {
+  ImportQueries(JdbcClient jdbc, NamedParameterJdbcTemplate batchJdbc) {
     this.jdbc = jdbc;
+    this.batchJdbc = batchJdbc;
   }
 
   UUID newId() {
@@ -168,32 +173,40 @@ class ImportQueries {
         .update();
   }
 
-  void insertLine(UUID userId, UUID importId, ImportPlanner.PlannedLine line, String rawJson) {
-    OfxTransaction tx = line.transaction();
-    jdbc.sql(
-            """
-            INSERT INTO importacao_linha (id, usuario_id, importacao_id, ordem, bruta, hash_externo,
-                data, tipo, valor, titulo, descricao, invalida_motivo, proposta, proposta_motivo,
-                lancamento_id)
-            VALUES (:id, :userId, :importId, :order, CAST(:raw AS jsonb), :hash, :date, :type,
-                :amount, :title, :description, :invalid, :proposal, :reason, :entryId)
-            """)
-        .param("id", newId())
-        .param("userId", userId)
-        .param("importId", importId)
-        .param("order", tx.order())
-        .param("raw", rawJson)
-        .param("hash", line.externalHash())
-        .param("date", tx.date())
-        .param("type", line.type())
-        .param("amount", line.amount())
-        .param("title", line.title())
-        .param("description", line.description())
-        .param("invalid", tx.invalidReason())
-        .param("proposal", line.proposal())
-        .param("reason", line.reason())
-        .param("entryId", line.entryId())
-        .update();
+  // Em lote: um arquivo de milhares de linhas não vira milhares de idas ao banco.
+  void insertLines(
+      UUID userId, UUID importId, List<ImportPlanner.PlannedLine> lines, List<String> rawJsons) {
+    SqlParameterSource[] batch = new SqlParameterSource[lines.size()];
+    for (int i = 0; i < batch.length; i++) {
+      ImportPlanner.PlannedLine line = lines.get(i);
+      OfxTransaction tx = line.transaction();
+      batch[i] =
+          new MapSqlParameterSource()
+              .addValue("id", newId())
+              .addValue("userId", userId)
+              .addValue("importId", importId)
+              .addValue("order", tx.order())
+              .addValue("raw", rawJsons.get(i))
+              .addValue("hash", line.externalHash())
+              .addValue("date", tx.date())
+              .addValue("type", line.type())
+              .addValue("amount", line.amount())
+              .addValue("title", line.title())
+              .addValue("description", line.description())
+              .addValue("invalid", tx.invalidReason())
+              .addValue("proposal", line.proposal())
+              .addValue("reason", line.reason())
+              .addValue("entryId", line.entryId());
+    }
+    batchJdbc.batchUpdate(
+        """
+        INSERT INTO importacao_linha (id, usuario_id, importacao_id, ordem, bruta, hash_externo,
+            data, tipo, valor, titulo, descricao, invalida_motivo, proposta, proposta_motivo,
+            lancamento_id)
+        VALUES (:id, :userId, :importId, :order, CAST(:raw AS jsonb), :hash, :date, :type,
+            :amount, :title, :description, :invalid, :proposal, :reason, :entryId)
+        """,
+        batch);
   }
 
   Optional<ImportRow> findImport(UUID userId, UUID id) {
@@ -303,11 +316,12 @@ class ImportQueries {
   // Uma confirmação por usuário de cada vez. Duas importações com o mesmo FITID confirmadas em
   // corrida se enxergariam sem o hash um do outro e bateriam no unique de lancamento; com a trava,
   // a segunda já lê o hash da primeira e marca a linha como duplicada. A trava vale até o commit.
-  void lockConfirmations(UUID userId) {
-    jdbc.sql("SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(:key, 0))")
+  // Tenta sem esperar: quem perde responde 409 em vez de prender uma conexão do pool.
+  boolean tryLockConfirmations(UUID userId) {
+    return jdbc.sql("SELECT pg_try_advisory_xact_lock(hashtextextended(:key, 0))")
         .param("key", userId + ":importacao-confirmacao")
-        .query()
-        .singleRow();
+        .query(Boolean.class)
+        .single();
   }
 
   // Grava o hash no lançamento que já existia e devolve 0 se ele sumiu, mudou de conta ou já

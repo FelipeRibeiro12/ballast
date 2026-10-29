@@ -41,7 +41,8 @@ class ImportService {
     CATEGORY_NOT_FOUND,
     CATEGORY_TYPE_MISMATCH,
     LINE_NOT_EDITABLE,
-    ENTRY_REFUSED
+    ENTRY_REFUSED,
+    CONFIRMATION_RUNNING
   }
 
   sealed interface Result<T> {
@@ -116,9 +117,11 @@ class ImportService {
                 planned.size(),
                 (int)
                     planned.stream().filter(l -> l.transaction().invalidReason() != null).count());
-            for (ImportPlanner.PlannedLine line : planned) {
-              queries.insertLine(userId, importId, line, rawJson(line.transaction()));
-            }
+            queries.insertLines(
+                userId,
+                importId,
+                planned,
+                planned.stream().map(line -> rawJson(line.transaction())).toList());
             return null;
           });
     } catch (DataIntegrityViolationException e) {
@@ -229,7 +232,9 @@ class ImportService {
   }
 
   private Result<Confirmation> confirmLocked(TransactionStatus status, UUID userId, UUID importId) {
-    queries.lockConfirmations(userId);
+    if (!queries.tryLockConfirmations(userId)) {
+      return failed(Failure.CONFIRMATION_RUNNING);
+    }
     Optional<ImportQueries.LockedImport> locked = queries.lockImport(userId, importId, true);
     if (locked.isEmpty()) {
       return failed(Failure.NOT_FOUND);
