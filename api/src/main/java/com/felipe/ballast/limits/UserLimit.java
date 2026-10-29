@@ -50,7 +50,12 @@ public enum UserLimit {
   BALANCE_VIEWS(
       "visões de saldo",
       "SELECT count(*) FROM visao_saldo WHERE usuario_id = :userId",
-      LimitsProperties::balanceViews);
+      LimitsProperties::balanceViews),
+  // Só a pendente conta: a confirmada é histórico e libera a vaga (ADR-069).
+  PENDING_IMPORTS(
+      "importações pendentes",
+      "SELECT count(*) FROM importacao WHERE usuario_id = :userId AND status = 'pendente'",
+      LimitsProperties::pendingImports);
 
   final String label;
   final String countSql;

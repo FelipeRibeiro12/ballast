@@ -71,6 +71,7 @@ ballast:
     categories: ${LIMITE_CATEGORIAS:}
     third-parties: ${LIMITE_TERCEIROS:}
     balance-views: ${LIMITE_VISOES_SALDO:}
+    pending-imports: ${LIMITE_IMPORTACOES_PENDENTES:}
     # Prazo por instrução do DELETE /contas/{id}, como 15s ou 500ms. Vazio vale 15s.
     account-delete-timeout: ${TIMEOUT_APAGAR_CONTA:}
   origins:
