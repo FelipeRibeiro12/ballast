@@ -59,3 +59,20 @@ export function mensagemDeMapeamento(erro: unknown, padrao: string): string {
   }
   return mensagemDeImportacao(erro, padrao)
 }
+
+// Teto do PDF de fatura no servidor (ADR-073).
+export const TETO_DO_PDF_EM_BYTES = 5 * 1024 * 1024
+
+export const MENSAGEM_PDF_GRANDE = 'O PDF passa de 5 MiB. Baixe a fatura de novo no app do banco.'
+
+// Envio de PDF. O 422 junta as causas conhecidas porque o corpo do servidor nunca vai para a tela.
+export function mensagemDePdf(erro: unknown, padrao: string): string {
+  if (erro instanceof ImportacaoRecusadaError) {
+    if (erro.status === 413) return MENSAGEM_PDF_GRANDE
+    if (erro.status === 422) {
+      return 'Não consegui ler esta fatura. O PDF precisa ter texto (não pode ser imagem escaneada), não ter senha e ter até 30 páginas. A leitura é melhor esforço e pode falhar. Se o banco oferece OFX ou CSV, use um deles.'
+    }
+    if (erro.status === 400) return 'O servidor não aceitou a conta. Escolha uma conta de cartão de crédito.'
+  }
+  return mensagemDeImportacao(erro, padrao)
+}

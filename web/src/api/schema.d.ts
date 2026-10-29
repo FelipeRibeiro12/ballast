@@ -712,6 +712,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/importacoes/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Envia o PDF de uma fatura de cartão e devolve a proposta por linha (melhor esforço)
+         * @description O corpo é o PDF cru (application/octet-stream), de até 5 MiB e 30 páginas, com texto (sem OCR) e sem senha. A leitura é por heurística e pode errar ou não achar linhas: o que não foi reconhecido entra como linha inválida, com o texto cru, e só aceita ignorar. Nada vira lançamento antes da confirmação em /importacoes/{id}/confirmacao. A conta precisa ser de cartão de crédito. O arquivo não é guardado.
+         */
+        post: operations["postImportacoesPdf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/importacoes/{id}": {
         parameters: {
             query?: never;
@@ -6143,6 +6163,95 @@ export interface operations {
                 };
             };
             /** @description Mesmos casos do envio */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    postImportacoesPdf: {
+        parameters: {
+            query?: {
+                conta_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Importação pendente criada */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDetalhe"];
+                };
+            };
+            /** @description conta_id ausente, repetido ou que não é UUID, parâmetro não declarado, conta que não é de cartão de crédito ou conta arquivada */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário ou inexistente; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo já enviado (corpo com importacaoId) ou 20 importações pendentes (corpo comum de erro) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportacaoDuplicada"];
+                };
+            };
+            /** @description Arquivo maior que 5 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Content-Type diferente de application/octet-stream */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Arquivo vazio, que não é PDF, ilegível, com senha, sem texto, com mais de 30 páginas, lento demais ou sem nenhuma transação reconhecida */
             422: {
                 headers: {
                     [name: string]: unknown;

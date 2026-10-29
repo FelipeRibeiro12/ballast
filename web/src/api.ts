@@ -2788,6 +2788,20 @@ export async function postImportacao(contaId: string, arquivo: Blob): Promise<Im
   return corpo
 }
 
+// PDF de fatura (ADR-073): mesmo corpo cru do OFX, rota própria. A conta precisa ser de cartão.
+export async function postImportacaoPdf(contaId: string, arquivo: Blob): Promise<ImportacaoDetalhe> {
+  const resposta = await fetch(`${baseUrl}/importacoes/pdf?conta_id=${encodeURIComponent(contaId)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: arquivo,
+  })
+  if (resposta.status !== 201) return recusarRespostaDeImportacao(resposta, 'POST /importacoes/pdf')
+  const corpo: unknown = await resposta.json()
+  if (!isImportacaoDetalhe(corpo)) throw new ApiError('POST /importacoes/pdf com formato inesperado')
+  return corpo
+}
+
 export async function fetchImportacoes(): Promise<Importacao[]> {
   const resposta = await fetch(`${baseUrl}/importacoes`, { credentials: 'same-origin' })
   if (!resposta.ok) return recusarRespostaDeImportacao(resposta, '/importacoes')

@@ -11,6 +11,7 @@ import {
   mensagemDeImportacao,
 } from './mensagensDeImportacao'
 import ImportarCsv from './ImportarCsv'
+import ImportarPdf from './ImportarPdf'
 import RevisaoDeImportacao from './RevisaoDeImportacao'
 import { Carregando, EstadoVazio } from './ui'
 
@@ -94,7 +95,7 @@ function FormularioDeEnvio({
   )
 }
 
-// Enviar o extrato (OFX ou CSV), retomar uma importação pendente e revisar linha a linha (ADR-008, ADR-069).
+// Enviar o extrato (OFX, CSV) ou a fatura (PDF), retomar uma importação pendente e revisar linha a linha (ADR-008, ADR-069).
 export default function Importar({
   contas,
   aoSessaoExpirar,
@@ -107,7 +108,7 @@ export default function Importar({
   const [versao, setVersao] = useState(0)
   const [estado, setEstado] = useState<Estado<Importacao[]>>({ tipo: 'carregando' })
   const [aberta, setAberta] = useState<Aberta | null>(null)
-  const [formato, setFormato] = useState<'ofx' | 'csv'>('ofx')
+  const [formato, setFormato] = useState<'ofx' | 'csv' | 'pdf'>('ofx')
 
   useEffect(() => {
     let vale = true
@@ -161,12 +162,18 @@ export default function Importar({
             <label>
               <input type="radio" name="formato-do-extrato" checked={formato === 'csv'} onChange={() => setFormato('csv')} />{' '}
               CSV (planilha)
+            </label>{' '}
+            <label>
+              <input type="radio" name="formato-do-extrato" checked={formato === 'pdf'} onChange={() => setFormato('pdf')} />{' '}
+              PDF (fatura do cartão, melhor esforço)
             </label>
           </fieldset>
           {formato === 'ofx' ? (
             <FormularioDeEnvio contas={contas} aoAbrir={setAberta} aoSessaoExpirar={aoSessaoExpirar} />
-          ) : (
+          ) : formato === 'csv' ? (
             <ImportarCsv contas={contas} aoAbrir={setAberta} aoSessaoExpirar={aoSessaoExpirar} />
+          ) : (
+            <ImportarPdf contas={contas} aoAbrir={setAberta} aoSessaoExpirar={aoSessaoExpirar} />
           )}
         </>
       )}
