@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   InvestimentoNaoEncontradoError,
+  LimiteTentativasError,
   SessaoExpiradaError,
   deleteCarteira,
   fetchCarteiras,
   postCarteira,
+  postDesafioPosse,
   postSincronizarCarteira,
+  postVerificarPosse,
   putAtivoCripto,
   putCustoMovimento,
 } from './api'
@@ -14,7 +17,9 @@ import type { AtivoCripto, Carteira, Conta, MovimentoCripto } from './api'
 import { formatarDecimal } from './decimais'
 import { diaEmSaoPaulo, formatarDataCompleta, horaEmSaoPaulo } from './datas'
 import { lerValorPositivo } from './dinheiro'
-import { carregar, mensagemDeEscrita } from './leitura'
+import type { CarteiraDescoberta, FamiliaDeCarteira } from './conexaoDeCarteira'
+import { EnderecoDiferenteError, ehRecusaDoUsuario } from './errosDeCarteira'
+import { MENSAGEM_LIMITE, carregar, mensagemDeEscrita } from './leitura'
 import type { Estado } from './leitura'
 import Painel from './Painel'
 import { Carregando, EstadoVazio, Selo } from './ui'
@@ -41,6 +46,101 @@ function descreverInstante(instante: string): string {
   return `${formatarDataCompleta(diaEmSaoPaulo(instante))} às ${horaEmSaoPaulo(instante)}`
 }
 
+function familiaDaRede(rede: RedeDaCarteira): FamiliaDeCarteira {
+  return rede === 'solana' ? 'solana' : 'evm'
+}
+
+// No EVM a mesma conta vale em Ethereum e Base: mantém a escolha do usuário entre as duas.
+function redeAposConectar(familia: FamiliaDeCarteira, atual: RedeDaCarteira): RedeDaCarteira {
+  if (familia === 'solana') return 'solana'
+  return atual === 'solana' ? 'ethereum' : atual
+}
+
+function mensagemDeFalha(erro: unknown, padrao: string): string {
+  if (ehRecusaDoUsuario(erro)) return 'Você recusou o pedido na carteira. Nada foi feito.'
+  if (erro instanceof EnderecoDiferenteError) {
+    return 'A conta ativa na carteira não é a deste endereço. Troque de conta na carteira e tente de novo.'
+  }
+  if (erro instanceof LimiteTentativasError) return MENSAGEM_LIMITE
+  return mensagemDeEscrita(erro, padrao)
+}
+
+type EstadoDaDescoberta =
+  | { tipo: 'carregando' }
+  | { tipo: 'erro' }
+  | { tipo: 'ok'; carteiras: CarteiraDescoberta[] }
+
+const ROTULO_DA_FAMILIA: Record<FamiliaDeCarteira, string> = {
+  evm: 'Ethereum e Base',
+  solana: 'Solana',
+}
+
+// O módulo com wagmi, viem e wallet-standard só é baixado quando este componente aparece, ou seja,
+// depois do clique do usuário (ADR-072).
+function EscolhaDeCarteira({
+  familia,
+  mensagemVazia,
+  ocupada,
+  aoEscolher,
+  aoCancelar,
+}: {
+  familia: FamiliaDeCarteira | null
+  mensagemVazia: string
+  ocupada: boolean
+  aoEscolher: (carteira: CarteiraDescoberta) => void
+  aoCancelar: () => void
+}) {
+  const [estado, setEstado] = useState<EstadoDaDescoberta>({ tipo: 'carregando' })
+
+  useEffect(() => {
+    let vale = true
+    import('./conexaoDeCarteira')
+      .then((modulo) => modulo.descobrirCarteiras())
+      .then(
+        (encontradas) => {
+          if (vale) {
+            setEstado({
+              tipo: 'ok',
+              carteiras: encontradas.filter((item) => familia === null || item.familia === familia),
+            })
+          }
+        },
+        () => {
+          if (vale) setEstado({ tipo: 'erro' })
+        },
+      )
+    return () => {
+      vale = false
+    }
+  }, [familia])
+
+  return (
+    <div className="escolha-carteira">
+      {estado.tipo === 'carregando' && <Carregando texto="Procurando carteiras no navegador..." linhas={1} />}
+      {estado.tipo === 'erro' && (
+        <p role="alert" className="erro">
+          Não foi possível procurar as carteiras no navegador. Digite o endereço, funciona igual.
+        </p>
+      )}
+      {estado.tipo === 'ok' && estado.carteiras.length === 0 && <p role="status">{mensagemVazia}</p>}
+      {estado.tipo === 'ok' && estado.carteiras.length > 0 && (
+        <ul aria-label="Carteiras encontradas no navegador">
+          {estado.carteiras.map((item) => (
+            <li key={item.chave}>
+              <button type="button" className="pequeno" disabled={ocupada} onClick={() => aoEscolher(item)}>
+                {item.nome} · {ROTULO_DA_FAMILIA[item.familia]}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button type="button" className="pequeno discreto" onClick={aoCancelar}>
+        Cancelar
+      </button>
+    </div>
+  )
+}
+
 function NovaCarteira({
   contas,
   aoCriar,
@@ -56,8 +156,32 @@ function NovaCarteira({
   const [rotulo, setRotulo] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
+  const [escolhendo, setEscolhendo] = useState(false)
+  const [conectando, setConectando] = useState(false)
+  const [avisoDaCarteira, setAvisoDaCarteira] = useState<string | null>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
   const emVoo = useRef(false)
+
+  // Só preenche o formulário: quem salva é o envio, que continua sendo do usuário.
+  async function conectar(carteira: CarteiraDescoberta): Promise<void> {
+    setConectando(true)
+    setAvisoDaCarteira(null)
+    try {
+      const modulo = await import('./conexaoDeCarteira')
+      const enderecoLido = await modulo.conectarCarteira(carteira)
+      setEndereco(enderecoLido)
+      setRede((atual) => redeAposConectar(carteira.familia, atual))
+      setEscolhendo(false)
+    } catch (erro) {
+      setAvisoDaCarteira(
+        ehRecusaDoUsuario(erro)
+          ? 'Você recusou o pedido na carteira. Nada foi preenchido.'
+          : 'Não foi possível ler a carteira. Digite o endereço, funciona igual.',
+      )
+    } finally {
+      setConectando(false)
+    }
+  }
 
   async function enviar(evento: FormEvent<HTMLFormElement>): Promise<void> {
     evento.preventDefault()
@@ -136,6 +260,33 @@ function NovaCarteira({
           onChange={(evento) => setEndereco(evento.target.value)}
         />
         <small>Digite ou cole o endereço. Não precisa de extensão nem de conexão com a carteira.</small>
+        {!escolhendo && (
+          <button
+            type="button"
+            className="pequeno"
+            onClick={() => {
+              setAvisoDaCarteira(null)
+              setEscolhendo(true)
+            }}
+          >
+            Conectar carteira
+          </button>
+        )}
+        {escolhendo && (
+          <EscolhaDeCarteira
+            familia={null}
+            mensagemVazia="Nenhuma carteira encontrada no navegador. Digite o endereço abaixo, funciona igual."
+            ocupada={conectando}
+            aoEscolher={(carteira) => void conectar(carteira)}
+            aoCancelar={() => setEscolhendo(false)}
+          />
+        )}
+        <small>A conexão só lê o endereço público. O app nunca pede seed, chave privada nem assinatura de transação.</small>
+        {avisoDaCarteira !== null && (
+          <p role="status" className="aviso-cripto">
+            {avisoDaCarteira}
+          </p>
+        )}
       </div>
       <div className="campo">
         <label htmlFor="carteira-rotulo">Rótulo (opcional)</label>
@@ -252,6 +403,7 @@ function CartaoDaCarteira({
 }) {
   const [completo, setCompleto] = useState(false)
   const [confirmando, setConfirmando] = useState(false)
+  const [provando, setProvando] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   const emVoo = useRef(false)
@@ -274,7 +426,7 @@ function CartaoDaCarteira({
         aoMudar()
         return
       }
-      setMensagem(mensagemDeEscrita(erro, padrao))
+      setMensagem(mensagemDeFalha(erro, padrao))
     } finally {
       emVoo.current = false
       setOcupado(false)
@@ -309,7 +461,46 @@ function CartaoDaCarteira({
           >
             {completo ? 'Ocultar endereço' : 'Endereço completo'}
           </button>
+          {carteira.verificadaEm === null && (
+            <button
+              type="button"
+              className="pequeno discreto"
+              aria-expanded={provando}
+              aria-label={`Provar posse de ${titulo}`}
+              onClick={() => setProvando((atual) => !atual)}
+            >
+              Provar posse
+            </button>
+          )}
         </div>
+        {carteira.verificadaEm !== null && (
+          <div className="item-selos">
+            <Selo tom="paga">Posse verificada</Selo>
+          </div>
+        )}
+        {provando && carteira.verificadaEm === null && (
+          <div role="group" aria-label={`Prova de posse de ${titulo}`}>
+            <p className="aviso-cripto">
+              Opcional. Você assina um texto na sua carteira para mostrar que o endereço é seu. Assinar a mensagem é
+              grátis e não é transação: nada sai da carteira. O Ballast nunca pede seed nem chave privada.
+            </p>
+            <EscolhaDeCarteira
+              familia={familiaDaRede(carteira.rede)}
+              mensagemVazia="Nenhuma carteira compatível encontrada no navegador. A prova de posse é opcional."
+              ocupada={ocupado}
+              aoEscolher={(escolhida) =>
+                void executar(async () => {
+                  const modulo = await import('./conexaoDeCarteira')
+                  const desafio = await postDesafioPosse(carteira.id)
+                  const assinatura = await modulo.assinarMensagem(escolhida, carteira.endereco, desafio.mensagem)
+                  aoAtualizar(await postVerificarPosse(carteira.id, { nonce: desafio.nonce, assinatura }))
+                  setProvando(false)
+                }, 'Não foi possível provar a posse. Tente de novo.')
+              }
+              aoCancelar={() => setProvando(false)}
+            />
+          </div>
+        )}
         <small>
           {carteira.sincronizadaEm === null
             ? 'Ainda não lida'
