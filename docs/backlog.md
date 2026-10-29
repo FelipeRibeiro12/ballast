@@ -14,16 +14,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 ### F21 — Alerta de conta a vencer
 Notificação no PWA. No iOS só funciona se instalado na tela inicial.
 
-### F24 — Observar endereço de carteira
-Cadastro de endereço digitado, por rede. Sincronização de saldo via
-indexador, `confiavel = false` por padrão para ativo desconhecido, data da
-última leitura visível (ADR-009).
-Redes do MVP: Ethereum, Base, Solana.
-Teste obrigatório: indexador fora do ar mostra saldo antigo com a data, não
-erro nem zero; token de spam não entra no patrimônio.
-Movimento sincronizado chega sem custo: o custo médio da posição fica nulo e a
-tela pede o custo em vez de inventar (ADR-042).
-
 ### F25 — Conectar carteira
 Botão que preenche o endereço automaticamente. EVM com `wagmi` v2 e descoberta
 por **EIP-6963** — Rabby aparece na lista junto com as outras. Solana por
@@ -39,6 +29,13 @@ nenhuma extensão instalada.
 - **F27** — Previsão de gasto e detecção de anomalia (serviço Python, ADR-007)
 - **F28** — Classificação automática de categoria pela descrição
 - **F29** — Capacitor para publicar nas lojas
+- **DÍVIDA** — Sincronização de carteira sem teto por usuário nem orçamento global: 20 carteiras a cada 60 s esgotam a cota gratuita da Alchemy para todos (F24, ADR-071). Dono: backend, limite de leituras por usuário por hora.
+- **DÍVIDA** — Airdrop de token-lixo: leitura parcial nunca zera o que saiu do endereço e cada leitura cria até 100 ativos não confiáveis, enchendo o teto de 200 (F24). Dono: backend, limitar ativos novos por leitura e não criar ativo em leitura parcial.
+- **DÍVIDA** — Leitura lenta pode aplicar delta antigo sobre estado mais novo; comparar `tentada_em` ao aplicar se `TIMEOUT` ou `MAX_TOKENS` subirem (F24). Dono: backend.
+- **DÍVIDA** — Corpo da resposta da Alchemy sem teto de tamanho; `org.springframework.web.client` não pode ir a DEBUG em produção porque o log mostraria a chave na URL (F24). Dono: backend e devops.
+- **DÍVIDA** — Antes do primeiro deploy: conferir que o log do Postgres e qualquer proxy não gravam endereço (`Key (...)=(...)`, corpo do POST /carteiras), e restringir a chave da Alchemy no painel (F24). Dono: devops e dba.
+- **DÍVIDA** — Sem teste do `WalletJob`, de sincronizações simultâneas, de saída sincronizada com posição negativa por venda manual e de quantidade no limite de 18 casas (F24). Dono: qa.
+- **DÍVIDA** — Termos e licença do plano gratuito da Alchemy não conferidos (sem rede na sessão); conferir ao criar a chave (ADR-071). Dono: dono do produto.
 - **DÍVIDA** — O web ainda não usa o que a API de renda fixa e cripto ganhou no ADR-058: desfazer resgate (`DELETE /titulos-renda-fixa/{id}/resgate`), `vencido`, `avisoIndice` e `motivoSemValor` do título, `rendaFixaSemValor` do patrimônio, e editar ou apagar ativo e cotação. Dono: frontend.
 - **DÍVIDA** — Movimento em dólar gravado antes da primeira PTAX volta com `custoCentavos` nulo até a busca em segundo plano terminar (ADR-058). Dono: frontend, mostrar "calculando" em vez de vazio.
 - **DÍVIDA** — A V25 pode derrubar a migration se duas filhas de pais diferentes, com tipo divergente, tiverem o mesmo nome: o rename para raiz colide com `categoria_pai_nome_unico` (revisão da onda 5). Só com dado que nenhuma rota cria; desempatar com o id no sufixo antes do CRUD de categoria. Dono: dba.

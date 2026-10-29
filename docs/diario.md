@@ -496,3 +496,12 @@ Dívida registrada: id longo colidindo no hash, JSON do mapeamento mais frouxo q
 Achados do revisor: security 0 crítico, 0 alto, 0 médio e 4 baixos, todos no backlog; reviewer não rodou (decisão de economia)
 Pipeline: local verde (make test e web); CI a preencher no PR
 Em aberto: abrir o PR; a branch fica empilhada sobre `feat/f22-importacao-ofx`
+
+## 2026-10-29 — F24: Observar endereço de carteira
+
+O que entrou: cadastro de endereço digitado (Ethereum, Base, Solana) numa conta cripto, com EIP-55 (Keccak-256 à mão) e base58 de 32 bytes, unique por usuário, rede e endereço. Indexador Alchemy atrás da interface `WalletIndexer`, sincronização tudo ou nada que grava a diferença como `entrada`/`saida` sem custo (V36), `PUT /movimentos-cripto/{id}/custo`, teto de 20 carteiras, job de 6 h desligado por padrão. Ativo novo nasce `confiavel=false` e fica fora do patrimônio. Falha do indexador mantém o saldo antigo com a data. Tela com cadastro sem extensão, lista com última leitura, selo de não confiável e pedido de custo.
+Decisões: ADR-071. Além dele: promoção por `PUT /ativos-cripto/{id}` com `confiavel` opcional, conta alheia no cadastro responde 400 como nos movimentos.
+Dívida registrada: cota da Alchemy sem teto por usuário, airdrop de token-lixo, leitura lenta sobre estado novo, teto de corpo, conferências de deploy, testes do job e de concorrência, termos da Alchemy (7 linhas no backlog)
+Achados do revisor: security 0 bloqueantes, 3 médios e 4 baixos, todos no backlog; reviewer não rodou (decisão de economia)
+Pipeline: local verde (make test, lint e web); CI a preencher no PR
+Em aberto: abrir o PR; a branch fica empilhada sobre `feat/f23-importacao-csv`; Alchemy real nunca foi chamada
