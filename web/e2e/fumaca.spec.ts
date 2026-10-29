@@ -254,7 +254,7 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await expect(painel).toHaveCount(0)
     // O valor em reais depende da PTAX do dia (ADR-038); o em dólar não.
     await expect(posicoes).toContainText(/US\$\s40\.000,00/)
-    await expect(page.getByRole('region', { name: 'Patrimônio' })).toContainText('Cripto')
+    await expect(page.getByRole('region', { name: 'Investimentos' })).toContainText('Cripto')
     await capturar(page, projeto, '11b-cripto')
   })
 
@@ -281,7 +281,7 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     // Aplicado hoje: sem dia útil corrido, o valor ainda é o aplicado.
     await expect(titulos).toContainText('CDB E2E')
     await expect(titulos).toContainText(reais('1.000,00'))
-    await expect(page.getByRole('region', { name: 'Patrimônio' })).toContainText('Renda fixa')
+    await expect(page.getByRole('region', { name: 'Investimentos' })).toContainText('Renda fixa')
     await capturar(page, projeto, '11e-renda-fixa')
   })
 
