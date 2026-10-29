@@ -461,7 +461,7 @@ dólar); a conversão usa a última PTAX até a data.
 ### Carteira observada (V36, ADR-071)
 
 Endereço público ligado a uma conta `cripto`. Cadastrado digitando; a F25 só
-preenche `verificada_em` (ADR-009). O saldo lido na rede vira
+preenche `verificada_em` pela prova de posse (ADR-009, ADR-072). O saldo lido na rede vira
 `movimento_cripto` sem custo, preso à carteira.
 
 ```
@@ -472,7 +472,7 @@ carteira_observada
   rede             text not null        -- ethereum | base | solana
   endereco         text not null        -- EVM em minúsculas (0x + 40 hex); Solana como veio (base58)
   rotulo           text null            -- 1 a 60 caracteres, sem espaço nas pontas
-  verificada_em    timestamptz null     -- prova de posse, F25
+  verificada_em    timestamptz null     -- prova de posse por assinatura (F25, POST /carteiras/{id}/posse/verificar)
   sincronizada_em  timestamptz null     -- última leitura que deu certo
   tentada_em       timestamptz null     -- última tentativa, boa ou ruim: conta o intervalo de 60 s
   erro_ultima_sync text null            -- indexador_indisponivel | resposta_invalida | sem_chave
@@ -486,6 +486,21 @@ A coluna `ativa` do rascunho não existe: o job pula carteira de conta
 arquivada. Apagar a conta cripto apaga as carteiras antes (a FK é NO ACTION,
 `AccountDeletionQueries`); apagar a carteira leva os movimentos sincronizados
 dela (`ON DELETE CASCADE`).
+
+**Desafio de posse (V37, ADR-072).**
+
+```
+posse_desafio
+  carteira_id uuid pk            -- uma linha por carteira: novo desafio substitui o anterior
+  usuario_id  uuid not null      -- FK composta (carteira_id, usuario_id) -> carteira_observada, ON DELETE CASCADE
+  nonce       text not null      -- 32 hexadecimais minúsculos (16 bytes de SecureRandom)
+  mensagem    text not null      -- texto exato que o cliente assina, montado no servidor
+  expira_em   timestamptz not null  -- emissão + 5 min; a emissão é expira_em menos o TTL
+```
+
+A verificação apaga a linha (`DELETE ... RETURNING`) antes de checar a assinatura:
+nonce de uso único, e assinatura errada também o queima. Depois do consumo só
+`carteira_observada.verificada_em` fica; assinatura e mensagem não são guardadas.
 
 `erro_ultima_sync` existe porque o indexador vai falhar, e a interface precisa
 mostrar "última leitura em tal data" em vez de um saldo silenciosamente velho.
