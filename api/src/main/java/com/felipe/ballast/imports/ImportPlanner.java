@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -103,37 +103,56 @@ final class ImportPlanner {
     return List.of(planned);
   }
 
-  // Pares (linha, candidato) do mais próximo ao mais distante, e cada lado entra uma vez só. A
-  // ordem do arquivo e a data desempatam, para o resultado não depender de ordem do banco.
+  private record Key(String type, BigDecimal amount) {}
+
+  // Pareamento guloso: do mais próximo ao mais distante, e cada lado entra uma vez só. A ordem do
+  // arquivo e depois a data e o id do candidato desempatam, para o resultado não depender da
+  // ordem do banco. Não monta o produto linha x candidato: por distância (0 a 3), cada linha só
+  // olha as duas datas à sua volta, e a fila de cada data já está em ordem de id.
   private static Map<Integer, UUID> reconcile(
       List<OfxTransaction> transactions, List<Integer> open, List<Candidate> candidates) {
-    record Pair(int line, Candidate candidate, long distance) {}
-    List<Pair> pairs = new ArrayList<>();
-    for (int index : open) {
-      OfxTransaction tx = transactions.get(index);
-      String type = tx.amount().signum() > 0 ? "receita" : "despesa";
-      for (Candidate candidate : candidates) {
-        long distance = Math.abs(ChronoUnit.DAYS.between(tx.date(), candidate.date()));
-        if (candidate.type().equals(type)
-            && candidate.amount().compareTo(tx.amount().abs()) == 0
-            && distance <= RECONCILE_DAYS) {
-          pairs.add(new Pair(index, candidate, distance));
+    // stripTrailingZeros porque 10.0 e 10.00 são o mesmo valor (compareTo) e têm de cair na
+    // mesma chave.
+    Map<Key, Map<LocalDate, ArrayDeque<Candidate>>> pool = new HashMap<>();
+    candidates.stream()
+        .sorted(Comparator.comparing(Candidate::id))
+        .forEach(
+            c ->
+                pool.computeIfAbsent(
+                        new Key(c.type(), c.amount().stripTrailingZeros()), k -> new HashMap<>())
+                    .computeIfAbsent(c.date(), d -> new ArrayDeque<>())
+                    .add(c));
+    Map<Integer, UUID> matched = new HashMap<>();
+    for (int distance = 0; distance <= RECONCILE_DAYS; distance++) {
+      for (int index : open) {
+        if (matched.containsKey(index)) {
+          continue;
+        }
+        OfxTransaction tx = transactions.get(index);
+        Map<LocalDate, ArrayDeque<Candidate>> byDate =
+            pool.get(
+                new Key(
+                    tx.amount().signum() > 0 ? "receita" : "despesa",
+                    tx.amount().abs().stripTrailingZeros()));
+        if (byDate == null) {
+          continue;
+        }
+        // A data anterior primeiro, que é a que a ordenação por data escolheria.
+        Candidate found = take(byDate, tx.date().minusDays(distance));
+        if (found == null && distance > 0) {
+          found = take(byDate, tx.date().plusDays(distance));
+        }
+        if (found != null) {
+          matched.put(index, found.id());
         }
       }
     }
-    pairs.sort(
-        Comparator.comparingLong(Pair::distance)
-            .thenComparingInt(Pair::line)
-            .thenComparing(pair -> pair.candidate().date())
-            .thenComparing(pair -> pair.candidate().id()));
-    Map<Integer, UUID> matched = new HashMap<>();
-    Set<UUID> used = new HashSet<>();
-    for (Pair pair : pairs) {
-      if (!matched.containsKey(pair.line()) && used.add(pair.candidate().id())) {
-        matched.put(pair.line(), pair.candidate().id());
-      }
-    }
     return matched;
+  }
+
+  private static Candidate take(Map<LocalDate, ArrayDeque<Candidate>> byDate, LocalDate date) {
+    ArrayDeque<Candidate> queue = byDate.get(date);
+    return queue == null ? null : queue.pollFirst();
   }
 
   private static PlannedLine line(
