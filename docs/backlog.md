@@ -14,14 +14,6 @@ Uma fatia por sessão, com `/sdlc-fatia`. Se uma não couber numa sessão, quebr
 ### F21 — Alerta de conta a vencer
 Notificação no PWA. No iOS só funciona se instalado na tela inicial.
 
-### F22 — Importação de OFX
-Envio de arquivo, parse, linhas cruas, proposta de decisão por linha, tela de
-revisão, conciliação contra lançamento manual (ADR-008).
-A fatia mais valiosa depois do MVP: elimina digitação.
-Teste obrigatório: importar o mesmo arquivo duas vezes não duplica nada;
-extratos com dias sobrepostos não duplicam; conciliação não cria lançamento
-novo.
-
 ### F23 — Importação de CSV
 Mapeamento de coluna salvável por banco, sobre a mesma máquina de revisão da
 F22. Entrada não confiável: limite de tamanho, limite de linhas, tratamento de

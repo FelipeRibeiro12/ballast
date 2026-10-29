@@ -478,3 +478,12 @@ Dívida registrada: o vínculo de terceiro e o reembolso são duas chamadas no w
 Achados do revisor: security 0 crítico, 0 alto, 1 médio e 1 baixo viraram dívida; reviewer não rodou (decisão de economia)
 Pipeline: a preencher no PR
 Em aberto: item 1 (Safari iOS), subir as branches e abrir os PRs, security na rota de terceiros e categorias.
+
+## 2026-10-29 — F22: Importação de OFX
+
+O que entrou: envio de OFX em corpo cru (1 MiB, 2000 linhas, sem XML parser, arquivo não guardado), tabelas `importacao` e `importacao_linha` (V34), dedupe por hash do arquivo e por FITID da conta, proposta importar, ignorar ou conciliar (mesma conta, valor igual, até 3 dias), revisão por linha, confirmação atômica com Idempotency-Key e tela "Importar extrato" no web.
+Decisões: ADR-069
+Dívida registrada: limpeza por idade das pendentes e da `bruta`, teto de lançamentos por usuário, rate limit só por IP, trocar de candidato na conciliação (a API não lista candidatos), histórico de importações confirmadas, mensagem de recusa na confirmação sem a linha culpada, desempenho da confirmação de 2000 linhas sem medição
+Achados do revisor: security 0 crítico, 1 alto, 2 médios e 4 baixos; alto e médios corrigidos na fatia, baixos corrigidos ou no backlog; reviewer não rodou (decisão de economia)
+Pipeline: local verde (make test e web); CI a preencher no PR
+Em aberto: abrir o PR; ordem das branches empilhadas do dono (ADR-059 está na `feat/onda7-front`)
