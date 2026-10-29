@@ -643,10 +643,12 @@ aparece no corpo das respostas e em nenhum log, URL ou mensagem de erro.
   caixa) e 409 de teto (`LIMITE_CARTEIRAS`, padrão 20).
 - `GET /carteiras`, `GET /carteiras/{id}` e `DELETE /carteiras/{id}` (204; leva
   os movimentos sincronizados dela, os digitados ficam).
-- `Carteira`: `{id, contaId, rede, endereco, rotulo, sincronizadaEm,
+- `Carteira`: `{id, contaId, rede, endereco, rotulo, verificadaEm, sincronizadaEm,
   leituraFalhou, saldos: [{ativoId, simbolo, contrato, quantidade, confiavel,
   custoPendente}]}`. `quantidade` é string decimal sem zero à direita.
-  `sincronizadaEm` é a última leitura que deu certo, nulo se nunca leu.
+  `verificadaEm` é o instante da prova de posse (F25, abaixo), nulo se nunca
+  provou; só informa, não condiciona nada. `sincronizadaEm` é a última leitura
+  que deu certo, nulo se nunca leu.
   `leituraFalhou` é `true` quando a última tentativa falhou: os saldos são os
   da `sincronizadaEm`, nunca zero.
 - `POST /carteiras/{id}/sincronizar` lê a rede e responde 200 com a `Carteira`.
@@ -666,6 +668,31 @@ aparece no corpo das respostas e em nenhum log, URL ou mensagem de erro.
   180143985094819) grava o custo em dólar de uma entrada ou saída sincronizada,
   uma vez, e responde 200 com o `MovimentoCripto`. 409 `o custo já foi
   informado`; 400 em movimento digitado.
+
+### Prova de posse (ADR-072, F25)
+
+Opcional, sobre carteira já cadastrada. Não assina transação e não custa nada.
+Escopo e 404 como as demais rotas de carteira.
+
+- `POST /carteiras/{id}/posse/desafio`, sem corpo, responde 200 com
+  `{nonce, mensagem, expiraEm}`. `nonce`: 32 hexadecimais. `mensagem`: o texto
+  exato a assinar, montado no servidor (EVM em formato SIWE com `Chain ID` 1
+  ou 8453; Solana em texto equivalente com `Rede`), com o domínio da config
+  (`BALLAST_POSSE_DOMAIN`), nunca o do cabeçalho `Host`. Vale 5 minutos e
+  substitui o desafio anterior da carteira. Um desafio novo a cada 5 s por
+  carteira: antes disso 429 `muitas tentativas, tente mais tarde` (com
+  `Retry-After: 5`), e o desafio anterior segue valendo.
+- `POST /carteiras/{id}/posse/verificar` com `{nonce, assinatura}` (campos
+  obrigatórios, nenhum a mais, `nonce` até 64 e `assinatura` até 200
+  caracteres) responde 200 com a `Carteira` e `verificadaEm` preenchido.
+  `assinatura`: EVM é `0x` mais 130 hexadecimais (`r`, `s`, `v` do
+  `personal_sign`, `v` 0, 1, 27 ou 28, `s` alto recusado); Solana são os 64 bytes
+  do `signMessage` em base64.
+- 400 `assinatura inválida` (nonce, assinatura ou endereço não conferem) ou 400
+  `desafio expirado` (sem desafio, vencido ou já usado). O desafio é consumido
+  antes de conferir a assinatura: qualquer 400 aqui exige pedir outro. Corpo
+  inválido ou com campo a mais é 400 com texto fixo (`nonce e assinatura são
+  obrigatórios e têm tamanho limitado` para campo ausente ou grande). Endereço, assinatura, mensagem e nonce não vão para log.
 
 Mudanças em rotas que já existiam (campos só acrescentados):
 

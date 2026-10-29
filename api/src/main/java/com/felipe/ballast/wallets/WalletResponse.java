@@ -19,6 +19,11 @@ public record WalletResponse(
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
+            description = "Prova de posse por assinatura (F25); nulo se nunca provou")
+        Instant verificadaEm,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
             description = "Última leitura que deu certo; nulo se nunca leu")
         Instant sincronizadaEm,
     @Schema(
@@ -58,6 +63,7 @@ public record WalletResponse(
         wallet.network(),
         wallet.address(),
         wallet.label(),
+        wallet.verifiedAt(),
         wallet.syncedAt(),
         wallet.lastError() != null,
         view.balances().stream()

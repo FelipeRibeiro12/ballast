@@ -28,6 +28,7 @@ class WalletQueries {
       WalletNetwork network,
       String address,
       String label,
+      Instant verifiedAt,
       Instant syncedAt,
       Instant attemptedAt,
       String lastError) {}
@@ -47,7 +48,8 @@ class WalletQueries {
   record Asset(UUID id, boolean trusted) {}
 
   private static final String WALLET_COLUMNS =
-      "SELECT id, conta_id, rede, endereco, rotulo, sincronizada_em, tentada_em, erro_ultima_sync"
+      "SELECT id, conta_id, rede, endereco, rotulo, verificada_em, sincronizada_em, tentada_em,"
+          + " erro_ultima_sync"
           + " FROM carteira_observada";
 
   private final JdbcClient jdbc;
@@ -295,6 +297,7 @@ class WalletQueries {
         WalletNetwork.fromValue(rs.getString("rede")).orElseThrow(),
         rs.getString("endereco"),
         rs.getString("rotulo"),
+        instantOrNull(rs, "verificada_em"),
         instantOrNull(rs, "sincronizada_em"),
         instantOrNull(rs, "tentada_em"),
         rs.getString("erro_ultima_sync"));

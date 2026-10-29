@@ -1082,6 +1082,112 @@ paths:
       summary: Detalha uma carteira
       tags:
       - carteiras
+  /carteiras/{id}/posse/desafio:
+    post:
+      description: "O servidor monta o texto (SIWE no EVM, texto equivalente na Solana)\
+        \ e o cliente assina exatamente o que recebe. Vale 5 minutos e substitui o\
+        \ desafio anterior. Um desafio novo a cada 5 s por carteira. Não assina transaç\
+        ão e não custa nada."
+      operationId: postCarteirasByIdPosseDesafio
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DesafioPosse"
+          description: Desafio emitido
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Carteira de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Desafio anterior da carteira tem menos de 5 s; o anterior segue
+            valendo
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Pede a mensagem que o usuário assina para provar a posse da carteira
+      tags:
+      - carteiras
+  /carteiras/{id}/posse/verificar:
+    post:
+      description: "Consome o desafio antes de olhar a assinatura: errar queima o\
+        \ nonce e o usuário pede outro. A falha não diz qual parte errou."
+      operationId: postCarteirasByIdPosseVerificar
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerificarPosseRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Carteira"
+          description: Carteira com verificadaEm preenchido
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Entrada inválida, nonce ou assinatura errados (assinatura\
+            \ inválida) ou desafio ausente, vencido ou já usado (desafio expirado)"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Carteira de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Confere a assinatura do desafio e marca a carteira como verificada
+      tags:
+      - carteiras
   /carteiras/{id}/sincronizar:
     post:
       description: "No máximo uma leitura por carteira a cada 60 s: dentro do prazo\
@@ -5951,6 +6057,12 @@ components:
           - "null"
           format: date-time
           description: Última leitura que deu certo; nulo se nunca leu
+        verificadaEm:
+          type:
+          - string
+          - "null"
+          format: date-time
+          description: Prova de posse por assinatura (F25); nulo se nunca provou
       required:
       - contaId
       - endereco
@@ -5960,6 +6072,7 @@ components:
       - rotulo
       - saldos
       - sincronizadaEm
+      - verificadaEm
     CarteiraRequest:
       type: object
       properties:
@@ -6484,6 +6597,23 @@ components:
       - titulo
       - valida
       - valorCentavos
+    DesafioPosse:
+      type: object
+      properties:
+        expiraEm:
+          type: string
+          format: date-time
+          description: Cinco minutos depois da emissão
+        mensagem:
+          type: string
+          description: "Texto exato que o usuário assina, sem alterar nenhum caractere"
+        nonce:
+          type: string
+          example: 9f2c4b7a1e3d5c6b8a0f1e2d3c4b5a69
+      required:
+      - expiraEm
+      - mensagem
+      - nonce
     DespesaDaCategoria:
       type: object
       properties:
@@ -9005,6 +9135,22 @@ components:
       required:
       - data
       - valorCentavos
+    VerificarPosseRequest:
+      type: object
+      properties:
+        assinatura:
+          type: string
+          description: "EVM: 0x mais 130 hexadecimais (r, s, v) do personal_sign.\
+            \ Solana: 64 bytes em base64"
+          maxLength: 200
+          minLength: 1
+        nonce:
+          type: string
+          maxLength: 64
+          minLength: 1
+      required:
+      - assinatura
+      - nonce
     VisaoSaldo:
       type: object
       properties:

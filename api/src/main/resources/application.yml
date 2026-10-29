@@ -113,6 +113,10 @@ ballast:
     # Com os nativos e as cinco plataformas de token, no pior caso 6 pedidos por rodada:
     # a cada 30 min são uns 8.700 por mês, dentro dos 10 mil do plano Demo.
     interval: PT30M
+  posse:
+    # Domínio que entra na mensagem assinada na prova de posse (ADR-072). Obrigatório fora de
+    # APP_ENV=development; lá o padrão é localhost:5173.
+    domain: ${BALLAST_POSSE_DOMAIN:}
   carteiras:
     # Alchemy, plano gratuito (ADR-071). Sem ALCHEMY_API_KEY o job não roda e a leitura manual
     # responde que o indexador não está configurado. As URLs são a raiz de cada rede, sem a chave.
