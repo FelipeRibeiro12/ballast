@@ -12,6 +12,8 @@ spring:
 ballast:
   recurrence:
     job-enabled: false
+  cofrinho:
+    job-enabled: false
   indices:
     job-enabled: false
   cotacoes:
