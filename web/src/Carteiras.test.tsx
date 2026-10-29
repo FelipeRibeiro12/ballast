@@ -42,6 +42,7 @@ const carteira = {
   // 12:30 em São Paulo.
   sincronizadaEm: '2026-10-22T15:30:00Z',
   leituraFalhou: false,
+  verificadaEm: null,
   saldos: [
     { ativoId: 'a1', simbolo: 'ETH', contrato: null, quantidade: '1.5', confiavel: true, custoPendente: true },
     { ativoId: 'a2', simbolo: 'SCAM', contrato: golpe.contrato, quantidade: '1000000.000001', confiavel: false, custoPendente: false },

@@ -1619,6 +1619,8 @@ function isCarteira(valor: unknown): valor is Carteira {
     (valor.sincronizadaEm === null || typeof valor.sincronizadaEm === 'string') &&
     'leituraFalhou' in valor &&
     typeof valor.leituraFalhou === 'boolean' &&
+    'verificadaEm' in valor &&
+    (valor.verificadaEm === null || typeof valor.verificadaEm === 'string') &&
     'saldos' in valor &&
     Array.isArray(valor.saldos) &&
     valor.saldos.every(isSaldoCarteira)
@@ -1659,6 +1661,49 @@ export async function postSincronizarCarteira(id: string, chave?: string): Promi
   if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /carteiras/{id}/sincronizar')
   const corpo: unknown = await resposta.json()
   if (!isCarteira(corpo)) throw new ApiError('POST /carteiras/{id}/sincronizar com formato inesperado')
+  return corpo
+}
+
+export type DesafioPosse = components['schemas']['DesafioPosse']
+export type VerificarPosseRequest = components['schemas']['VerificarPosseRequest']
+
+function isDesafioPosse(valor: unknown): valor is DesafioPosse {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'nonce' in valor &&
+    typeof valor.nonce === 'string' &&
+    'mensagem' in valor &&
+    typeof valor.mensagem === 'string' &&
+    'expiraEm' in valor &&
+    typeof valor.expiraEm === 'string'
+  )
+}
+
+// Sem Idempotency-Key: cada pedido tem que gerar um desafio novo, repetir a chave devolveria o antigo.
+// 400, 404 e 429 saem como CriptoInvalidoError, InvestimentoNaoEncontradoError e LimiteTentativasError.
+export async function postDesafioPosse(id: string): Promise<DesafioPosse> {
+  const resposta = await fetch(`${baseUrl}/carteiras/${encodeURIComponent(id)}/posse/desafio`, {
+    method: 'POST',
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /carteiras/{id}/posse/desafio')
+  const corpo: unknown = await resposta.json()
+  if (!isDesafioPosse(corpo)) throw new ApiError('POST /carteiras/{id}/posse/desafio com formato inesperado')
+  return corpo
+}
+
+// A assinatura viaja só no corpo; o servidor consome o desafio mesmo quando ela falha.
+export async function postVerificarPosse(id: string, dados: VerificarPosseRequest): Promise<Carteira> {
+  const resposta = await fetch(`${baseUrl}/carteiras/${encodeURIComponent(id)}/posse/verificar`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dados),
+  })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, 'POST /carteiras/{id}/posse/verificar')
+  const corpo: unknown = await resposta.json()
+  if (!isCarteira(corpo)) throw new ApiError('POST /carteiras/{id}/posse/verificar com formato inesperado')
   return corpo
 }
 
