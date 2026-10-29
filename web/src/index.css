@@ -469,6 +469,16 @@ form > button + button {
   box-shadow: var(--sombra-1);
 }
 
+/* A faixa de atalhos entre telas vem logo depois do título: precisa de folga embaixo e quebra de linha
+   quando as cinco opções não cabem. */
+nav.segmentos {
+  display: flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: var(--esp-4);
+}
+
 .segmentos.cheio {
   display: flex;
   width: 100%;
@@ -605,6 +615,35 @@ p[role='status'] {
   }
 }
 
+/* Em celular estreito a marca fica só com o logo e o escudo some: a Segurança segue no menu Mais.
+   Sem isso, tema + Mais + escudo + Sair não cabem na linha. O nome continua para o leitor de tela. */
+@media (max-width: 26.25rem) {
+  .marca-texto {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 21.875rem) {
+  .topo-acoes .topo-link-icone {
+    display: none;
+  }
+}
+
+/* Barra de baixo em 320px: cinco colunas de 64px, e "Investimentos" não cabe no corpo 11px. */
+@media (max-width: 23.75rem) {
+  .nav a {
+    min-width: 0;
+    padding-right: 0;
+    padding-left: 0;
+    font-size: 0.625rem;
+  }
+}
+
 /* Segurança (ADR-050): só o ícone, ao lado do tema e do Sair. */
 .topo-link-icone {
   display: inline-flex;
@@ -632,7 +671,7 @@ p[role='status'] {
 /* Celular: quem rola é o .app, não a página. Com a página rolando, a barra do Safari do iOS encolhe e
    cresce, a barra fixa de baixo flutua com conteúdo aparecendo por baixo e o toque cai no botão
    vizinho. Sem rolagem da página a barra do navegador fica parada. */
-@media (max-width: 47.99rem) {
+@media (max-width: 63.99rem) {
   html:has(.app),
   body:has(.app) {
     height: 100%;
@@ -725,12 +764,29 @@ p[role='status'] {
     padding: 0 var(--esp-8);
   }
 
+  /* Entre 48rem e 64rem as cinco seções + marca + ações não cabem numa linha (768px transbordava
+     388px): a barra de baixo continua, e o conteúdo mantém a folga dela. */
+  .conteudo {
+    padding: var(--esp-8) var(--esp-8) calc(var(--altura-nav) + var(--esp-8) + env(safe-area-inset-bottom));
+  }
+
+  h2 {
+    font-size: 1.75rem;
+  }
+}
+
+/* Menu no topo só quando cabe. Até 80rem os atalhos ficam mais justos e o Sair vira só o ícone. */
+@media (min-width: 64rem) {
+  .topo-interno {
+    padding: 0 var(--esp-4);
+  }
+
   .nav {
     position: static;
     display: flex;
     flex: 1;
-    gap: var(--esp-1);
-    margin-left: var(--esp-6);
+    gap: 0;
+    margin-left: var(--esp-2);
     padding: 0;
     border: 0;
     background: transparent;
@@ -741,7 +797,7 @@ p[role='status'] {
     flex-direction: row;
     gap: var(--esp-2);
     min-height: 40px;
-    padding: 0 var(--esp-4);
+    padding: 0 10px;
     border-radius: 999px;
     font-size: 0.9375rem;
   }
@@ -763,11 +819,50 @@ p[role='status'] {
   }
 
   .conteudo {
-    padding: var(--esp-8) var(--esp-8) var(--esp-8);
+    padding: var(--esp-8);
   }
 
-  h2 {
-    font-size: 1.75rem;
+  .topo-acoes > button .topo-rotulo {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .topo-acoes > button {
+    width: 38px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+@media (min-width: 80rem) {
+  .topo-interno {
+    padding: 0 var(--esp-8);
+  }
+
+  .nav {
+    gap: var(--esp-1);
+    margin-left: var(--esp-6);
+  }
+
+  .nav a {
+    padding: 0 var(--esp-4);
+  }
+
+  .topo-acoes > button .topo-rotulo {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+  }
+
+  .topo-acoes > button {
+    width: auto;
+    padding: 0 var(--esp-3);
   }
 }
 
@@ -798,6 +893,9 @@ p[role='status'] {
 
 .pagina-topo .legenda {
   flex-basis: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   margin-top: calc(var(--esp-2) * -1);
   color: var(--texto-fraco);
   font-size: 0.9375rem;
@@ -1503,6 +1601,12 @@ p[role='status'] {
   border-bottom: 1px solid var(--borda);
 }
 
+.lancamentos > li:not(:has(> .item-icone)):not(:has(> :nth-child(3))) {
+  /* Item sem ícone, só texto e ações (Categorias, Terceiros, Orçamento, visões): sem esta regra o texto
+     cai na coluna do ícone, que tem largura do conteúdo, e passa por baixo do botão de ações. */
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .lancamentos > li:last-child {
   border-bottom: 0;
 }
@@ -2107,8 +2211,13 @@ button.relatorio-mes:hover:not(:disabled) {
   }
 }
 
-.saldo-tipos {
+.saldo-tipos,
+.saldo-visao p[role='status'] {
   margin: var(--esp-3) 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
   font-size: 0.8125rem;
   opacity: 0.85;
 }

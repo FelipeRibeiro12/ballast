@@ -82,7 +82,7 @@ export default function Topo({ secao, aoSair }: { secao: Secao; aoSair: () => vo
       <div className="topo-interno">
         <h1 className="marca-app">
           <Logo />
-          Ballast
+          <span className="marca-texto">Ballast</span>
         </h1>
         <nav className="nav" aria-label="Seções">
           {SECOES.map((destino) => (
@@ -104,6 +104,9 @@ export default function Topo({ secao, aoSair }: { secao: Secao; aoSair: () => vo
             </button>
             <button type="button" onClick={() => irPara('terceiros')}>
               Terceiros
+            </button>
+            <button type="button" onClick={() => irPara('seguranca')}>
+              Segurança
             </button>
           </MenuDeAcoes>
           <a
