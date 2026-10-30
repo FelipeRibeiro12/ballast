@@ -481,7 +481,7 @@ carteira_observada
   verificada_em    timestamptz null     -- prova de posse por assinatura (F25, POST /carteiras/{id}/posse/verificar)
   sincronizada_em  timestamptz null     -- última leitura que deu certo
   tentada_em       timestamptz null     -- última tentativa, boa ou ruim: conta o intervalo de 60 s
-  erro_ultima_sync text null            -- indexador_indisponivel | resposta_invalida | sem_chave
+  erro_ultima_sync text null            -- indexador_indisponivel | resposta_invalida | sem_chave | indexador_recusou | indexador_limite (V41)
   criado_em        timestamptz not null default now()
   tipo_conta       text generated always as ('cripto') stored   -- a aplicação não escreve
   unique (usuario_id, rede, endereco)

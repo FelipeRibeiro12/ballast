@@ -651,6 +651,25 @@ aparece no corpo das respostas e em nenhum log, URL ou mensagem de erro.
   que deu certo, nulo se nunca leu.
   `leituraFalhou` é `true` quando a última tentativa falhou: os saldos são os
   da `sincronizadaEm`, nunca zero.
+  Campos de diagnóstico (acrescentados, nenhum existente mudou): `motivo` (enum
+  `MotivoLeitura` ou `null`), `ultimaTentativaEm` (instante ou `null`),
+  `proximaLeituraEm` (instante ou `null`; quando a leitura manual volta a ser
+  aceita), `indexadorConfigurado` (boolean; falso quando o servidor está sem
+  `ALCHEMY_API_KEY`) e `sincronizacaoAutomatica` (boolean; job de 6 em 6 horas
+  ligado e indexador configurado). `motivo` vem preenchido quando
+  `leituraFalhou` é `true`: `INDEXADOR_NAO_CONFIGURADO` (sem chave),
+  `INDEXADOR_FORA_DO_AR` (rede, timeout, 5xx ou erro de RPC),
+  `INDEXADOR_RECUSOU_A_CHAVE` (401 ou 403: chave errada ou rede não habilitada
+  no app da Alchemy), `INDEXADOR_COTA_ESGOTADA` (429) ou `RESPOSTA_INVALIDA`.
+  Nunca traz URL, chave ou texto do indexador. `LIMITE_DE_60S` só aparece na
+  resposta de sincronizar barrada pelo intervalo e só quando não há falha
+  gravada; havendo, vale o motivo da falha e `proximaLeituraEm` diz quando
+  tentar de novo. Carteira nunca tentada tem os três campos de instante e
+  motivo nulos.
+- `POST /carteiras` agenda, depois do commit e fora da requisição, uma primeira
+  leitura em segundo plano (só com o indexador configurado). A resposta 201 vem
+  sem saldo; o `GET /carteiras/{id}` seguinte mostra `ultimaTentativaEm` e o
+  resultado. Falha dela não afeta o cadastro. Conta como a tentativa dos 60 s.
 - `POST /carteiras/{id}/sincronizar` lê a rede e responde 200 com a `Carteira`.
   Tudo ou nada. No máximo uma leitura por carteira a cada 60 s (a tentativa
   conta, mesmo falha): dentro do prazo devolve o estado atual sem chamar o
