@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import Cripto from './Cripto'
 import type { Conta } from './api'
 import type { CarteiraDescoberta } from './conexaoDeCarteira'
@@ -57,13 +57,18 @@ const carteira = {
   sincronizadaEm: '2026-10-22T15:30:00Z',
   leituraFalhou: false,
   verificadaEm: null,
+  motivo: null,
+  ultimaTentativaEm: '2026-10-22T15:30:00Z',
+  proximaLeituraEm: null,
+  indexadorConfigurado: true,
+  sincronizacaoAutomatica: true,
   saldos: [
     { ativoId: 'a1', simbolo: 'ETH', contrato: null, quantidade: '1.5', confiavel: true, custoPendente: true },
     { ativoId: 'a2', simbolo: 'SCAM', contrato: golpe.contrato, quantidade: '1000000.000001', confiavel: false, custoPendente: false },
   ],
 }
 
-const posicoesVazias = { data: '2026-10-22', dolar: null, posicoes: [] }
+const posicoesVazias = { data: '2026-10-22', dolar: null, posicoes: [], contas: [] }
 
 function json(corpo: unknown, status = 200): Response {
   return new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } })
@@ -202,19 +207,19 @@ describe('Carteiras', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('sincroniza e troca a carteira pela resposta', async () => {
+  it('atualiza e troca a carteira pela resposta', async () => {
     const lida = { ...carteira, sincronizadaEm: '2026-10-22T18:00:00Z' }
     mockFetch({ 'POST /carteiras/w1/sincronizar': () => json(lida) })
     renderizar()
-    fireEvent.click(await screen.findByRole('button', { name: 'Sincronizar Cofre' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Atualizar Cofre' }))
     expect(await screen.findByText('Última leitura em 22/10/2026 às 15:00')).toBeVisible()
   })
 
   it('mostra erro quando a sincronização falha de verdade', async () => {
     mockFetch({ 'POST /carteiras/w1/sincronizar': () => json({ erro: 'x' }, 500) })
     renderizar()
-    fireEvent.click(await screen.findByRole('button', { name: 'Sincronizar Cofre' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível sincronizar')
+    fireEvent.click(await screen.findByRole('button', { name: 'Atualizar Cofre' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível atualizar')
   })
 
   it('remove só depois de confirmar', async () => {
@@ -307,6 +312,194 @@ describe('Carteiras', () => {
     mockFetch({ 'GET /carteiras': () => json({ erro: 'x' }, 401) })
     const { aoSessaoExpirar } = renderizar()
     await waitFor(() => expect(aoSessaoExpirar).toHaveBeenCalled())
+  })
+})
+
+const nuncaTentada = { ...carteira, sincronizadaEm: null, ultimaTentativaEm: null, saldos: [] }
+
+describe('Motivo da leitura', () => {
+  const casos: [string, Record<string, unknown>, RegExp][] = [
+    [
+      'INDEXADOR_NAO_CONFIGURADO',
+      { indexadorConfigurado: false },
+      /O indexador não está configurado\. O dono precisa pôr ALCHEMY_API_KEY no api\.env do servidor\./,
+    ],
+    ['INDEXADOR_FORA_DO_AR', {}, /O indexador está fora do ar agora\./],
+    ['INDEXADOR_RECUSOU_A_CHAVE', {}, /O indexador recusou a chave\. A chave está errada ou a rede não foi habilitada no app da Alchemy\./],
+    ['INDEXADOR_COTA_ESGOTADA', {}, /A cota do indexador esgotou/],
+    ['RESPOSTA_INVALIDA', {}, /O indexador respondeu num formato inesperado/],
+  ]
+
+  it.each(casos)('mostra o motivo %s sem chave nem URL', async (motivo, extra, esperado) => {
+    mockFetch({
+      'GET /carteiras': () =>
+        json([{ ...nuncaTentada, leituraFalhou: true, motivo, ultimaTentativaEm: '2026-10-22T15:30:00Z', ...extra }]),
+    })
+    renderizar()
+    const lista = await screen.findByRole('list', { name: 'Carteiras' })
+    const aviso = within(lista).getByText(esperado)
+    expect(aviso).toBeVisible()
+    expect(aviso.textContent).not.toMatch(/https?:\/\//)
+    expect(within(lista).queryByText(/Não consegui atualizar agora\. Ainda não há leitura anterior/)).toBeNull()
+  })
+
+  it('limite de 60 s diz a hora em que dá para tentar de novo', async () => {
+    mockFetch({
+      'GET /carteiras': () =>
+        json([{ ...carteira, motivo: 'LIMITE_DE_60S', proximaLeituraEm: '2026-10-22T15:31:10Z' }]),
+    })
+    renderizar()
+    expect(await screen.findByText(/Dá para atualizar de novo às 12:31\./)).toBeVisible()
+  })
+
+  it('limite de 60 s sem horário pede para tentar em instantes', async () => {
+    mockFetch({ 'GET /carteiras': () => json([{ ...carteira, motivo: 'LIMITE_DE_60S', proximaLeituraEm: null }]) })
+    renderizar()
+    expect(await screen.findByText(/Tente de novo em instantes\./)).toBeVisible()
+  })
+
+  it('falha com leitura anterior mantém a data do saldo junto do motivo', async () => {
+    mockFetch({
+      'GET /carteiras': () => json([{ ...carteira, leituraFalhou: true, motivo: 'INDEXADOR_FORA_DO_AR' }]),
+    })
+    renderizar()
+    const lista = await screen.findByRole('list', { name: 'Carteiras' })
+    expect(within(lista).getByText(/O indexador está fora do ar agora\./)).toBeVisible()
+    expect(within(lista).getByText(/Mostrando o saldo de 22\/10\/2026 às 12:30\./)).toBeVisible()
+  })
+
+  it('lida e sem saldo diz Lida, sem saldo nesta rede', async () => {
+    mockFetch({ 'GET /carteiras': () => json([{ ...carteira, saldos: [] }]) })
+    renderizar()
+    expect(await screen.findByText('Lida, sem saldo nesta rede')).toBeVisible()
+  })
+
+  it('avisa sem alarme quando a sincronização automática está desligada', async () => {
+    mockFetch({ 'GET /carteiras': () => json([{ ...carteira, sincronizacaoAutomatica: false }]) })
+    renderizar()
+    const aviso = await screen.findByText(/A sincronização de 6 em 6 horas está desligada/)
+    expect(aviso).toBeVisible()
+    expect(aviso).not.toHaveAttribute('role', 'alert')
+  })
+
+  it('não avisa de job desligado quando ele está ligado', async () => {
+    mockFetch()
+    renderizar()
+    await screen.findByRole('list', { name: 'Carteiras' })
+    expect(screen.queryByText(/está desligada/)).toBeNull()
+  })
+
+  it('carteira nunca tentada fora da espera mostra só Ainda não lida', async () => {
+    mockFetch({ 'GET /carteiras': () => json([nuncaTentada]) })
+    renderizar()
+    expect(await screen.findByText('Ainda não lida')).toBeVisible()
+    expect(screen.queryByText('Lendo a carteira pela primeira vez...')).toBeNull()
+  })
+})
+
+describe('Atualizar', () => {
+  it('desabilita o botão, mostra Atualizando... com aria-busy e depois troca pelo resultado', async () => {
+    let terminar: (resposta: Response) => void = () => {}
+    mockFetch({
+      'POST /carteiras/w1/sincronizar': () => {
+        throw new Error('substituído abaixo')
+      },
+    })
+    const original = vi.mocked(fetch).getMockImplementation()
+    vi.mocked(fetch).mockImplementation((url, init) => {
+      if (`${init?.method ?? 'GET'} ${String(url)}` === 'POST /carteiras/w1/sincronizar') {
+        return new Promise<Response>((resolver) => {
+          terminar = resolver
+        })
+      }
+      return (original as typeof fetch)(url, init)
+    })
+    renderizar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Atualizar Cofre' }))
+
+    const ocupado = await screen.findByRole('button', { name: 'Atualizar Cofre' })
+    expect(ocupado).toHaveTextContent('Atualizando...')
+    expect(ocupado).toBeDisabled()
+    expect(ocupado).toHaveAttribute('aria-busy', 'true')
+
+    terminar(json({ ...carteira, sincronizadaEm: '2026-10-22T18:00:00Z' }))
+    expect(await screen.findByText('Última leitura em 22/10/2026 às 15:00')).toBeVisible()
+    const livre = screen.getByRole('button', { name: 'Atualizar Cofre' })
+    expect(livre).toHaveTextContent('Atualizar')
+    expect(livre).toBeEnabled()
+    expect(livre).toHaveAttribute('aria-busy', 'false')
+  })
+
+  it('mostra o motivo que a resposta trouxe', async () => {
+    const falhou = { ...carteira, leituraFalhou: true, motivo: 'INDEXADOR_COTA_ESGOTADA' }
+    mockFetch({ 'POST /carteiras/w1/sincronizar': () => json(falhou), 'GET /carteiras': () => json([falhou]) })
+    renderizar()
+    fireEvent.click(await screen.findByRole('button', { name: 'Atualizar Cofre' }))
+    expect(await screen.findByText(/A cota do indexador esgotou/)).toBeVisible()
+  })
+})
+
+describe('Primeira leitura depois de cadastrar', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function cadastrar(): Promise<void> {
+    const formulario = await abrirCadastro()
+    fireEvent.change(within(formulario).getByLabelText('Endereço'), { target: { value: ENDERECO } })
+    fireEvent.click(within(formulario).getByRole('button', { name: 'Observar carteira' }))
+    await waitFor(() => expect(chamadas('POST /carteiras')).toHaveLength(1))
+  }
+
+  it('busca a carteira de novo após 3 s e após 10 s e mostra a leitura quando chega', async () => {
+    let leituras = 0
+    mockFetch({
+      'POST /carteiras': () => json(nuncaTentada, 201),
+      'GET /carteiras': () => {
+        leituras += 1
+        return json([leituras < 3 ? nuncaTentada : carteira])
+      },
+    })
+    renderizar()
+    await cadastrar()
+    expect(await screen.findByText('Lendo a carteira pela primeira vez...')).toBeVisible()
+    const antes = chamadas('GET /carteiras').length
+
+    await act(() => vi.advanceTimersByTimeAsync(3000))
+    expect(chamadas('GET /carteiras')).toHaveLength(antes + 1)
+    await waitFor(() => expect(screen.queryByText('Lendo a carteira pela primeira vez...')).toBeNull())
+    expect(await screen.findByText('Última leitura em 22/10/2026 às 12:30')).toBeVisible()
+
+    await act(() => vi.advanceTimersByTimeAsync(7000))
+    expect(chamadas('GET /carteiras')).toHaveLength(antes + 2)
+    await act(() => vi.advanceTimersByTimeAsync(20000))
+    expect(chamadas('GET /carteiras')).toHaveLength(antes + 2)
+  })
+
+  it('depois dos 10 s sem leitura nem motivo para de dizer que está lendo', async () => {
+    mockFetch({ 'POST /carteiras': () => json(nuncaTentada, 201), 'GET /carteiras': () => json([nuncaTentada]) })
+    renderizar()
+    await cadastrar()
+    expect(await screen.findByText('Lendo a carteira pela primeira vez...')).toBeVisible()
+    await act(() => vi.advanceTimersByTimeAsync(10000))
+    await waitFor(() => expect(screen.queryByText('Lendo a carteira pela primeira vez...')).toBeNull())
+    expect(screen.getByText('Ainda não lida')).toBeVisible()
+  })
+
+  it('cancela as buscas ao sair da tela', async () => {
+    mockFetch({ 'POST /carteiras': () => json(nuncaTentada, 201), 'GET /carteiras': () => json([nuncaTentada]) })
+    const { unmount } = render(
+      <Cripto contas={[exchange]} data="2026-10-22" aoMudar={vi.fn()} aoSessaoExpirar={vi.fn()} />,
+    )
+    await cadastrar()
+    await screen.findByText('Lendo a carteira pela primeira vez...')
+    const antes = chamadas('GET /carteiras').length
+    unmount()
+    await act(() => vi.advanceTimersByTimeAsync(15000))
+    expect(chamadas('GET /carteiras')).toHaveLength(antes)
   })
 })
 

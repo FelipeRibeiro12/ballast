@@ -1485,7 +1485,24 @@ function isDolar(valor: unknown): boolean {
     'valor' in valor &&
     eDecimalEmTexto(valor.valor) &&
     'data' in valor &&
-    eDataIso(valor.data)
+    eDataIso(valor.data) &&
+    'fonte' in valor &&
+    (valor.fonte === 'USDC' || valor.fonte === 'PTAX') &&
+    'momento' in valor &&
+    (valor.momento === null || typeof valor.momento === 'string')
+  )
+}
+
+function isContaCriptoValor(valor: unknown): boolean {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'valorCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.valorCentavos) &&
+    'valorUsdCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.valorUsdCentavos)
   )
 }
 
@@ -1499,7 +1516,10 @@ function isPosicoesCripto(valor: unknown): valor is PosicoesCripto {
     (valor.dolar === null || isDolar(valor.dolar)) &&
     'posicoes' in valor &&
     Array.isArray(valor.posicoes) &&
-    valor.posicoes.every(isPosicaoCripto)
+    valor.posicoes.every(isPosicaoCripto) &&
+    'contas' in valor &&
+    Array.isArray(valor.contas) &&
+    valor.contas.every(isContaCriptoValor)
   )
 }
 
@@ -1539,6 +1559,8 @@ function isPatrimonio(valor: unknown): valor is Patrimonio {
     Number.isSafeInteger(valor.contasCentavos) &&
     'criptoCentavos' in valor &&
     Number.isSafeInteger(valor.criptoCentavos) &&
+    'criptoUsdCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.criptoUsdCentavos) &&
     'criptoAportadoCentavos' in valor &&
     inteiroSeguroOuNulo(valor.criptoAportadoCentavos) &&
     'criptoValorizacaoCentavos' in valor &&
@@ -1637,6 +1659,19 @@ export type AtivoCriptoEdicao = components['schemas']['AtivoCriptoEdicao']
 
 const REDES_DA_CARTEIRA: readonly string[] = ['ethereum', 'base', 'solana']
 
+const MOTIVOS_DE_LEITURA: readonly string[] = [
+  'INDEXADOR_NAO_CONFIGURADO',
+  'INDEXADOR_FORA_DO_AR',
+  'INDEXADOR_RECUSOU_A_CHAVE',
+  'INDEXADOR_COTA_ESGOTADA',
+  'RESPOSTA_INVALIDA',
+  'LIMITE_DE_60S',
+]
+
+function textoOuNulo(valor: unknown): boolean {
+  return valor === null || typeof valor === 'string'
+}
+
 function isSaldoCarteira(valor: unknown): valor is SaldoCarteira {
   return (
     typeof valor === 'object' &&
@@ -1677,6 +1712,16 @@ function isCarteira(valor: unknown): valor is Carteira {
     typeof valor.leituraFalhou === 'boolean' &&
     'verificadaEm' in valor &&
     (valor.verificadaEm === null || typeof valor.verificadaEm === 'string') &&
+    'motivo' in valor &&
+    (valor.motivo === null || (typeof valor.motivo === 'string' && MOTIVOS_DE_LEITURA.includes(valor.motivo))) &&
+    'ultimaTentativaEm' in valor &&
+    textoOuNulo(valor.ultimaTentativaEm) &&
+    'proximaLeituraEm' in valor &&
+    textoOuNulo(valor.proximaLeituraEm) &&
+    'indexadorConfigurado' in valor &&
+    typeof valor.indexadorConfigurado === 'boolean' &&
+    'sincronizacaoAutomatica' in valor &&
+    typeof valor.sincronizacaoAutomatica === 'boolean' &&
     'saldos' in valor &&
     Array.isArray(valor.saldos) &&
     valor.saldos.every(isSaldoCarteira)

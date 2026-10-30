@@ -9,6 +9,7 @@ const patrimonio = {
   data: '2026-10-22',
   contasCentavos: 500_000,
   criptoCentavos: 4_320_000,
+  criptoUsdCentavos: 864_000,
   criptoAportadoCentavos: 4_000_000,
   criptoValorizacaoCentavos: 320_000,
   rendaFixaCentavos: 1_050_000,
@@ -27,7 +28,7 @@ function mockFetch(): void {
       if (url.startsWith('/patrimonio?')) return Promise.resolve(jsonResponse({ ...patrimonio, data: url.slice(-10) }, 200))
       if (url.startsWith('/titulos-renda-fixa?')) return Promise.resolve(jsonResponse(vazio, 200))
       if (url === '/ativos-cripto' || url === '/movimentos-cripto') return Promise.resolve(jsonResponse([], 200))
-      if (url.startsWith('/posicoes-cripto?')) return Promise.resolve(jsonResponse({ data: '2026-10-22', posicoes: [] }, 200))
+      if (url.startsWith('/posicoes-cripto?')) return Promise.resolve(jsonResponse({ data: '2026-10-22', dolar: null, posicoes: [], contas: [] }, 200))
       return Promise.reject(new Error(`rota sem mock: ${url}`))
     }),
   )

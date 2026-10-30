@@ -72,6 +72,21 @@ function descreverResultado(onde: string, usdCentavos: number, centavos: number 
   return `${usdCentavos < 0 ? 'Perda' : 'Ganho'} ${onde} ${formatarCentavosEmDolar(Math.abs(usdCentavos))}${reais}`
 }
 
+// "5" vira "5,00" e "5.4" vira "5,40": a cotação do dólar sempre aparece com duas casas, no texto.
+function formatarReaisPorDolar(valor: string): string {
+  const [inteiro, fracao = ''] = valor.split('.')
+  return formatarDecimal(`${inteiro}.${fracao.padEnd(2, '0')}`)
+}
+
+function descreverDolar(dolar: NonNullable<PosicoesCripto['dolar']>): string {
+  if (dolar.fonte === 'PTAX') return `Sem USDC/BRL; usando a PTAX de ${formatarDataCompleta(dolar.data)}.`
+  const quando =
+    dolar.momento === null
+      ? formatarDataCompleta(dolar.data)
+      : `${formatarDataCompleta(diaEmSaoPaulo(dolar.momento))} às ${horaEmSaoPaulo(dolar.momento)}`
+  return `Dólar do cripto (USDC/BRL) R$ ${formatarReaisPorDolar(dolar.valor)}, lido em ${quando}.`
+}
+
 function NovoAtivo({ aoCriar, aoSessaoExpirar }: { aoCriar: () => void; aoSessaoExpirar: () => void }) {
   const [rede, setRede] = useState<Rede>('bitcoin')
   const [contrato, setContrato] = useState('')
@@ -549,9 +564,26 @@ export default function Cripto({
       {posicoes.tipo === 'ok' && posicoes.dados.posicoes.length > 0 && (
         <p className="aviso-cripto">
           {posicoes.dados.dolar === null
-            ? 'Ainda sem dólar do Banco Central: os valores ficam só em US$ e fora do patrimônio.'
-            : `Dólar (PTAX) R$ ${formatarDecimal(posicoes.dados.dolar.valor)} em ${formatarDataCompleta(posicoes.dados.dolar.data)}.`}
+            ? 'Sem cotação do dólar; valores em dólar ou em reais podem faltar.'
+            : descreverDolar(posicoes.dados.dolar)}
         </p>
+      )}
+      {posicoes.tipo === 'ok' && posicoes.dados.contas.length > 0 && (
+        <ul className="lancamentos lista-cartao" aria-label="Valor por conta">
+          {posicoes.dados.contas.map((valor) => (
+            <li key={valor.contaId}>
+              <div className="item-corpo">
+                <strong className="item-titulo">{nomesDeConta.get(valor.contaId) ?? 'Conta'}</strong>
+              </div>
+              <div className="item-lado">
+                <span className="item-valor">
+                  {valor.valorCentavos === null ? '—' : formatarCentavos(valor.valorCentavos)}
+                </span>
+                <small>{valor.valorUsdCentavos === null ? '—' : formatarCentavosEmDolar(valor.valorUsdCentavos)}</small>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
       {posicoes.tipo === 'ok' && posicoes.dados.posicoes.length > 0 && (
         <ul className="lancamentos lista-cartao" aria-label="Posições">
@@ -612,14 +644,12 @@ export default function Cripto({
                       {posicao.cotacao.fonte === 'coingecko' ? 'CoinGecko' : 'digitada'}
                     </small>
                   )}
-                  {posicao.valorUsdCentavos !== null && (
-                    <small>Vale {formatarCentavosEmDolar(posicao.valorUsdCentavos)}</small>
-                  )}
                 </div>
                 <div className="item-lado">
                   <span className="item-valor">
                     {posicao.valorCentavos === null ? '—' : formatarCentavos(posicao.valorCentavos)}
                   </span>
+                  {posicao.valorUsdCentavos !== null && <small>{formatarCentavosEmDolar(posicao.valorUsdCentavos)}</small>}
                   {ativo !== undefined && (
                     <div className="item-botoes">
                       <button

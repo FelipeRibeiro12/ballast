@@ -46,6 +46,34 @@ function descreverInstante(instante: string): string {
   return `${formatarDataCompleta(diaEmSaoPaulo(instante))} às ${horaEmSaoPaulo(instante)}`
 }
 
+type Motivo = NonNullable<Carteira['motivo']>
+
+// Texto de cada motivo da API. Nunca repete nada que o servidor mandou: chave e URL não chegam aqui.
+function descreverMotivo(motivo: Motivo, proximaLeituraEm: string | null): string {
+  switch (motivo) {
+    case 'INDEXADOR_NAO_CONFIGURADO':
+      return 'O indexador não está configurado. O dono precisa pôr ALCHEMY_API_KEY no api.env do servidor.'
+    case 'INDEXADOR_FORA_DO_AR':
+      return 'O indexador está fora do ar agora. Tente de novo mais tarde.'
+    case 'INDEXADOR_RECUSOU_A_CHAVE':
+      return 'O indexador recusou a chave. A chave está errada ou a rede não foi habilitada no app da Alchemy.'
+    case 'INDEXADOR_COTA_ESGOTADA':
+      return 'A cota do indexador esgotou. Ela volta no próximo ciclo da Alchemy.'
+    case 'RESPOSTA_INVALIDA':
+      return 'O indexador respondeu num formato inesperado. Tente de novo mais tarde.'
+    case 'LIMITE_DE_60S':
+      return proximaLeituraEm === null
+        ? 'A carteira foi lida há pouco. Tente de novo em instantes.'
+        : `A carteira foi lida há pouco. Dá para atualizar de novo às ${horaEmSaoPaulo(proximaLeituraEm)}.`
+  }
+}
+
+// Sem motivo gravado, o servidor sem chave ainda explica por que nada acontece.
+function motivoDaCarteira(carteira: Carteira): Motivo | null {
+  if (carteira.motivo !== null) return carteira.motivo
+  return carteira.indexadorConfigurado ? null : 'INDEXADOR_NAO_CONFIGURADO'
+}
+
 function familiaDaRede(rede: RedeDaCarteira): FamiliaDeCarteira {
   return rede === 'solana' ? 'solana' : 'evm'
 }
@@ -389,6 +417,7 @@ function CartaoDaCarteira({
   nomeDaConta,
   ativos,
   movimentos,
+  lendoPelaPrimeiraVez,
   aoAtualizar,
   aoMudar,
   aoSessaoExpirar,
@@ -397,6 +426,7 @@ function CartaoDaCarteira({
   nomeDaConta: string
   ativos: AtivoCripto[]
   movimentos: MovimentoCripto[]
+  lendoPelaPrimeiraVez: boolean
   aoAtualizar: (carteira: Carteira) => void
   aoMudar: () => void
   aoSessaoExpirar: () => void
@@ -433,6 +463,7 @@ function CartaoDaCarteira({
     }
   }
 
+  const motivo = motivoDaCarteira(carteira)
   const titulo = carteira.rotulo ?? `Carteira ${ROTULO_DA_REDE[carteira.rede]}`
   const pendentes = movimentos.filter(
     (movimento) =>
@@ -506,14 +537,25 @@ function CartaoDaCarteira({
             ? 'Ainda não lida'
             : `Última leitura em ${descreverInstante(carteira.sincronizadaEm)}`}
         </small>
-        {carteira.leituraFalhou && (
+        {motivo !== null && (
+          <p className="aviso-cripto">
+            {descreverMotivo(motivo, carteira.proximaLeituraEm)}
+            {carteira.sincronizadaEm !== null &&
+              motivo !== 'LIMITE_DE_60S' &&
+              ` Mostrando o saldo de ${descreverInstante(carteira.sincronizadaEm)}.`}
+          </p>
+        )}
+        {motivo === null && carteira.leituraFalhou && (
           <p className="aviso-cripto">
             {carteira.sincronizadaEm === null
               ? 'Não consegui atualizar agora. Ainda não há leitura anterior.'
               : `Não consegui atualizar agora, mostrando o saldo de ${descreverInstante(carteira.sincronizadaEm)}.`}
           </p>
         )}
-        {carteira.saldos.length === 0 && carteira.sincronizadaEm !== null && <small>Nenhum saldo nesta carteira.</small>}
+        {lendoPelaPrimeiraVez && motivo === null && carteira.sincronizadaEm === null && (
+          <p role="status">Lendo a carteira pela primeira vez...</p>
+        )}
+        {carteira.saldos.length === 0 && carteira.sincronizadaEm !== null && <small>Lida, sem saldo nesta rede</small>}
         {carteira.saldos.length > 0 && (
           <ul aria-label={`Saldos de ${titulo}`}>
             {carteira.saldos.map((saldo) => {
@@ -612,15 +654,16 @@ function CartaoDaCarteira({
               type="button"
               className="pequeno"
               disabled={ocupado}
-              aria-label={`Sincronizar ${titulo}`}
+              aria-label={`Atualizar ${titulo}`}
+              aria-busy={ocupado}
               onClick={() =>
                 void executar(async () => {
                   aoAtualizar(await postSincronizarCarteira(carteira.id))
                   aoMudar()
-                }, 'Não foi possível sincronizar. Tente de novo.')
+                }, 'Não foi possível atualizar. Tente de novo.')
               }
             >
-              {ocupado ? 'Lendo...' : 'Sincronizar'}
+              {ocupado ? 'Atualizando...' : 'Atualizar'}
             </button>
             <button
               type="button"
@@ -659,6 +702,24 @@ export default function Carteiras({
   const [versao, setVersao] = useState(0)
   const [carteiras, setCarteiras] = useState<Estado<Carteira[]>>({ tipo: 'carregando' })
   const [abrindo, setAbrindo] = useState(false)
+  // Conta os cadastros: a cada um, o servidor lê em segundo plano e a tela espera a primeira leitura.
+  const [cadastros, setCadastros] = useState(0)
+  const [lendoPelaPrimeiraVez, setLendoPelaPrimeiraVez] = useState(false)
+
+  // A resposta do cadastro vem sem saldo. Busca de novo aos 3 s e aos 10 s, e para por aí: sem
+  // leitura nesse prazo, a tela deixa de prometer e mostra o estado real.
+  useEffect(() => {
+    if (cadastros === 0) return
+    const primeira = setTimeout(() => setVersao((n) => n + 1), 3000)
+    const segunda = setTimeout(() => {
+      setVersao((n) => n + 1)
+      setLendoPelaPrimeiraVez(false)
+    }, 10000)
+    return () => {
+      clearTimeout(primeira)
+      clearTimeout(segunda)
+    }
+  }, [cadastros])
 
   useEffect(() => {
     let vale = true
@@ -675,6 +736,12 @@ export default function Carteiras({
     setAbrindo(false)
     setVersao((n) => n + 1)
     aoMudar()
+  }
+
+  function depoisDeCadastrar(): void {
+    setLendoPelaPrimeiraVez(true)
+    setCadastros((n) => n + 1)
+    depoisDeMudar()
   }
 
   function guardarCarteira(atualizada: Carteira): void {
@@ -714,6 +781,11 @@ export default function Carteiras({
           }
         />
       )}
+      {carteiras.tipo === 'ok' && carteiras.dados.some((item) => !item.sincronizacaoAutomatica) && (
+        <p className="aviso-cripto">
+          A sincronização de 6 em 6 horas está desligada. Use Atualizar para ler a carteira quando quiser.
+        </p>
+      )}
       {carteiras.tipo === 'ok' && carteiras.dados.length > 0 && (
         <ul className="lancamentos lista-cartao" aria-label="Carteiras">
           {carteiras.dados.map((carteira) => (
@@ -723,6 +795,7 @@ export default function Carteiras({
               nomeDaConta={nomesDeConta.get(carteira.contaId) ?? 'Conta'}
               ativos={ativos}
               movimentos={movimentos}
+              lendoPelaPrimeiraVez={lendoPelaPrimeiraVez}
               aoAtualizar={guardarCarteira}
               aoMudar={depoisDeMudar}
               aoSessaoExpirar={aoSessaoExpirar}
@@ -732,7 +805,7 @@ export default function Carteiras({
       )}
       {abrindo && contasAtivas.length > 0 && (
         <Painel titulo="Observar carteira" aoFechar={() => setAbrindo(false)}>
-          <NovaCarteira contas={contasAtivas} aoCriar={depoisDeMudar} aoSessaoExpirar={aoSessaoExpirar} />
+          <NovaCarteira contas={contasAtivas} aoCriar={depoisDeCadastrar} aoSessaoExpirar={aoSessaoExpirar} />
         </Painel>
       )}
     </>
