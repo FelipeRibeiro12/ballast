@@ -16,11 +16,17 @@ class QuoteJob {
 
   private final QuoteUpdater updater;
   private final QuoteBackfill backfill;
+  private final UsdcBrlUpdater usdc;
   private final boolean enabled;
 
-  QuoteJob(QuoteUpdater updater, QuoteBackfill backfill, QuotesProperties properties) {
+  QuoteJob(
+      QuoteUpdater updater,
+      QuoteBackfill backfill,
+      UsdcBrlUpdater usdc,
+      QuotesProperties properties) {
     this.updater = updater;
     this.backfill = backfill;
+    this.usdc = usdc;
     this.enabled = properties.hasKey();
     if (!enabled) {
       log.warn("cotação automática desligada: COINGECKO_API_KEY vazia");
@@ -33,6 +39,9 @@ class QuoteJob {
     if (enabled) {
       updater.update();
       backfill.backfill();
+      // Cada etapa guarda a própria falha: o USDC fora do ar não para a cotação dos ativos.
+      usdc.update();
+      usdc.backfill();
     }
   }
 }

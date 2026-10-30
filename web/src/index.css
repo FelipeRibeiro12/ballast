@@ -1226,6 +1226,13 @@ p[role='status'] {
   font-variant-numeric: tabular-nums;
 }
 
+.destaque-detalhes dd small {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
 .destaque a,
 .destaque a:visited {
   color: inherit;
@@ -1856,6 +1863,14 @@ p[role='status'] {
   font-size: 1.125rem;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.conta-valores {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
 }
 
 .conta-saldo.negativo {
@@ -2730,6 +2745,8 @@ button.relatorio-mes:hover:not(:disabled) {
   background: var(--superficie-2);
   color: var(--texto-fraco);
   font-size: 0.875rem;
+  /* Em 360px um nome de variável ou valor longo não pode empurrar a página para o lado. */
+  overflow-wrap: anywhere;
 }
 
 .campo-data {

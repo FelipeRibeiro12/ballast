@@ -1,5 +1,6 @@
 package com.felipe.ballast.openapi;
 
+import com.felipe.ballast.wallets.ReadingReason;
 import com.felipe.ballast.web.IdempotencyFilter;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -14,6 +15,7 @@ import io.swagger.v3.oas.models.parameters.HeaderParameter;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import org.springdoc.core.customizers.OpenApiCustomizer;
@@ -48,6 +50,14 @@ class OpenApiConfig {
       makeNullable(openApi, "Recorrencia", "divisao", "DivisaoRecorrencia");
       makeNullable(openApi, "RecorrenciaRequest", "divisao", "DivisaoRequest");
       makeNullable(openApi, "Conta", "cartao", "Cartao");
+      // O springdoc deixa enum inline; o motivo precisa de componente para o $ref existir.
+      openApi
+          .getComponents()
+          .addSchemas(
+              "MotivoLeitura",
+              new StringSchema()
+                  ._enum(Arrays.stream(ReadingReason.values()).map(Enum::name).toList()));
+      makeNullable(openApi, "Carteira", "motivo", "MotivoLeitura");
     };
   }
 

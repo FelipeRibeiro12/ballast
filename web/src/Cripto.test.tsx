@@ -54,7 +54,9 @@ const compra = {
 
 const posicoes = {
   data: '2026-10-22',
-  dolar: { valor: '5', data: '2026-10-21' },
+  // 12:30 em São Paulo.
+  dolar: { valor: '5.43', data: '2026-10-22', momento: '2026-10-22T15:30:00Z', fonte: 'USDC' },
+  contas: [{ contaId: 'c1', valorCentavos: 4_320_000, valorUsdCentavos: 864_000 }],
   posicoes: [
     {
       contaId: 'c1',
@@ -180,12 +182,46 @@ describe('Cripto', () => {
     expect(within(btc).getByText('BTC · Bitcoin · Exchange')).toBeVisible()
     // A hora é a de São Paulo, e a fonte diz se veio do job ou foi digitada (ADR-040).
     expect(within(btc).getByText(texto('Cotação US$ 70.000,1 em 21/10 às 22:30 · CoinGecko'))).toBeVisible()
-    expect(within(btc).getByText(texto('Vale US$ 8.640,00'))).toBeVisible()
+    // Real em cima, dólar logo abaixo.
+    expect(within(btc).getByText(texto('US$ 8.640,00'))).toBeVisible()
     expect(within(btc).getByText(texto('Compras menos vendas US$ 8.000,00 (R$ 40.000,00)'))).toBeVisible()
-    expect(screen.getByText(texto('Dólar (PTAX) R$ 5 em 21/10/2026.'))).toBeVisible()
+    expect(screen.getByText('Dólar do cripto (USDC/BRL) R$ 5,43, lido em 22/10/2026 às 12:30.')).toBeVisible()
     expect(within(btc).getByText(texto('R$ 43.200,00'))).toBeVisible()
     expect(within(semCotacao).getByText('Sem cotação')).toBeVisible()
     expect(within(semCotacao).getByText('—')).toBeVisible()
+  })
+
+  it('soma o valor de cada conta em reais, com o dólar abaixo', async () => {
+    mockFetch()
+    renderizar()
+    const lista = await screen.findByRole('list', { name: 'Valor por conta' })
+    const [exchangeItem] = within(lista).getAllByRole('listitem')
+    expect(within(exchangeItem).getByText('Exchange')).toBeVisible()
+    const real = within(exchangeItem).getByText(texto('R$ 43.200,00'))
+    const dolar = within(exchangeItem).getByText(texto('US$ 8.640,00'))
+    expect(real.compareDocumentPosition(dolar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('conta com valor nulo mostra traço no real e no dólar', async () => {
+    const semValor = { ...posicoes, contas: [{ contaId: 'c1', valorCentavos: null, valorUsdCentavos: null }] }
+    mockFetch({ 'GET /posicoes-cripto?data=2026-10-22': responde(semValor) })
+    renderizar()
+    const lista = await screen.findByRole('list', { name: 'Valor por conta' })
+    expect(within(lista).getAllByText('—')).toHaveLength(2)
+  })
+
+  it('rodapé do dólar quando a fonte é a PTAX', async () => {
+    const ptax = { ...posicoes, dolar: { valor: '5', data: '2026-10-21', momento: null, fonte: 'PTAX' } }
+    mockFetch({ 'GET /posicoes-cripto?data=2026-10-22': responde(ptax) })
+    renderizar()
+    expect(await screen.findByText('Sem USDC/BRL; usando a PTAX de 21/10/2026.')).toBeVisible()
+    expect(screen.queryByText(/Dólar do cripto/)).toBeNull()
+  })
+
+  it('rodapé do dólar quando não há cotação nenhuma', async () => {
+    mockFetch({ 'GET /posicoes-cripto?data=2026-10-22': responde({ ...posicoes, dolar: null }) })
+    renderizar()
+    expect(await screen.findByText('Sem cotação do dólar; valores em dólar ou em reais podem faltar.')).toBeVisible()
   })
 
   it('separa o custo médio, o ganho em aberto e o das vendas', async () => {

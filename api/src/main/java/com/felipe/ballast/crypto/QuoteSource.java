@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 // De onde vem a cotação automática. Em produção é a CoinGecko; nos testes, uma fonte em memória
 // que pode fingir que caiu. Lança exceção quando a fonte falha; ativo que ela não conhece fica
@@ -15,4 +16,11 @@ public interface QuoteSource {
   // Um preço por dia entre from e to, do mais antigo ao mais novo. Vazio quando a fonte não
   // conhece o ativo; exceção quando ela falha.
   List<ProviderQuote> history(AssetRef asset, Instant from, Instant to);
+
+  // Reais por USDC agora (ADR-077). Vazio quando a resposta não traz preço positivo; exceção
+  // quando a fonte falha.
+  Optional<UsdcQuote> usdcBrl();
+
+  // Um ponto por dia do USDC em reais, do mais antigo ao mais novo; exceção quando a fonte falha.
+  List<UsdcQuote> usdcBrlHistory(Instant from, Instant to);
 }

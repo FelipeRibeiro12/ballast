@@ -4475,9 +4475,10 @@ paths:
   /posicoes-cripto:
     get:
       description: "Soma dos movimentos até a data nas contas ativas, com a última\
-        \ cotação até o fim do dia em America/Sao_Paulo. Posição zerada não aparece.\
-        \ Posição com valor fora do inteiro seguro do JSON vem sem valor e com motivoSemValor.\
-        \ Sem data, vale hoje."
+        \ cotação até o fim do dia em America/Sao_Paulo. Reais pela cotação USDC/BRL\
+        \ (ou PTAX sem ela), em `dolar`. Posição zerada não aparece. contas traz o\
+        \ valor de cada conta cripto. Posição com valor fora do inteiro seguro do\
+        \ JSON vem sem valor e com motivoSemValor. Sem data, vale hoje."
       operationId: getPosicoesCripto
       parameters:
       - in: query
@@ -6219,10 +6220,27 @@ components:
         id:
           type: string
           format: uuid
+        indexadorConfigurado:
+          type: boolean
+          description: "O servidor tem chave do indexador para a rede desta carteira.\
+            \ Falso: nenhuma leitura acontece até o dono configurar ALCHEMY_API_KEY"
         leituraFalhou:
           type: boolean
           description: "A última tentativa de leitura falhou: os saldos são os de\
             \ sincronizadaEm, não zero"
+        motivo:
+          anyOf:
+          - $ref: "#/components/schemas/MotivoLeitura"
+          - type: "null"
+          description: "Por que a última leitura falhou; nulo se deu certo ou nunca\
+            \ foi tentada. Em POST /carteiras/{id}/sincronizar barrado pelos 60 s,\
+            \ vale LIMITE_DE_60S quando não há falha gravada"
+        proximaLeituraEm:
+          type:
+          - string
+          - "null"
+          format: date-time
+          description: Quando uma nova leitura manual é aceita; nulo se já pode
         rede:
           type: string
           enum:
@@ -6238,12 +6256,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SaldoCarteira"
+        sincronizacaoAutomatica:
+          type: boolean
+          description: O servidor lê as carteiras sozinho de 6 em 6 horas
         sincronizadaEm:
           type:
           - string
           - "null"
           format: date-time
           description: Última leitura que deu certo; nulo se nunca leu
+        ultimaTentativaEm:
+          type:
+          - string
+          - "null"
+          format: date-time
+          description: "Última tentativa de leitura, boa ou ruim; nulo se nunca tentou"
         verificadaEm:
           type:
           - string
@@ -6254,11 +6281,16 @@ components:
       - contaId
       - endereco
       - id
+      - indexadorConfigurado
       - leituraFalhou
+      - motivo
+      - proximaLeituraEm
       - rede
       - rotulo
       - saldos
+      - sincronizacaoAutomatica
       - sincronizadaEm
+      - ultimaTentativaEm
       - verificadaEm
     CarteiraRequest:
       type: object
@@ -6618,6 +6650,34 @@ components:
       - saldoCentavos
       - saldoInicialCentavos
       - tipo
+    ContaCriptoValor:
+      type: object
+      properties:
+        contaId:
+          type: string
+          format: uuid
+        valorCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Soma dos valores cheios das posições em reais, arredondada\
+            \ uma vez; nulo se alguma posição está sem cotação ou sem dólar"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        valorUsdCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Soma dos valores cheios das posições em dólares, arredondada\
+            \ uma vez; nulo se alguma posição está sem cotação"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - contaId
+      - valorCentavos
+      - valorUsdCentavos
     Cotacao:
       type: object
       properties:
@@ -6657,7 +6717,7 @@ components:
           - string
           - "null"
           description: "Dólares por unidade, em texto; nulo na cotação antiga em reais\
-            \ sem PTAX"
+            \ sem a cotação do dólar"
       required:
       - fonte
       - momento
@@ -6910,11 +6970,27 @@ components:
         data:
           type: string
           format: date
+          description: "Dia da leitura em America/Sao_Paulo, ou o dia da PTAX"
+        fonte:
+          type: string
+          description: USDC é a cotação USDC/BRL (ADR-077); PTAX só sem USDC até a
+            data
+          enum:
+          - USDC
+          - PTAX
+        momento:
+          type:
+          - string
+          - "null"
+          format: date-time
+          description: Instante da leitura do USDC/BRL; nulo quando a fonte é a PTAX
         valor:
           type: string
           description: "Reais por dólar, em texto"
       required:
       - data
+      - fonte
+      - momento
       - valor
     EmInvestimentosRequest:
       type: object
@@ -7903,6 +7979,15 @@ components:
       required:
       - ativo
       - codigosRestantes
+    MotivoLeitura:
+      type: string
+      enum:
+      - INDEXADOR_NAO_CONFIGURADO
+      - INDEXADOR_FORA_DO_AR
+      - INDEXADOR_RECUSOU_A_CHAVE
+      - INDEXADOR_COTA_ESGOTADA
+      - RESPOSTA_INVALIDA
+      - LIMITE_DE_60S
     MovimentoCripto:
       type: object
       properties:
@@ -7917,15 +8002,15 @@ components:
           - integer
           - "null"
           format: int64
-          description: "Em centavos de real pela PTAX da data; nulo sem PTAX, ou sem\
-            \ custo informado"
+          description: "Em centavos de real pela cotação USDC/BRL (ou PTAX sem ela)\
+            \ da data; nulo sem a cotação do dólar, ou sem custo informado"
         custoUsdCentavos:
           type:
           - integer
           - "null"
           format: int64
           description: "Em centavos de dólar; nulo no movimento antigo em reais sem\
-            \ PTAX, ou na entrada e saída sincronizada sem custo informado"
+            \ a cotação do dólar, ou na entrada e saída sincronizada sem custo informado"
         data:
           type: string
           format: date
@@ -8176,13 +8261,22 @@ components:
           - "null"
           format: int64
           description: "Compras menos vendas, em reais, das posições somadas em criptoCentavos\
-            \ (ADR-042); nulo sem a PTAX de algum movimento"
+            \ (ADR-042); nulo sem o dólar de algum movimento"
           maximum: 9007199254740991
           minimum: -9007199254740991
         criptoCentavos:
           type: integer
           format: int64
           description: Soma do valor das posições com cotação
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        criptoUsdCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: Soma do valor em dólares das posições com cotação; nulo quando
+            alguma tem cotação em reais e falta a cotação do dólar para voltar a dólar
           maximum: 9007199254740991
           minimum: -9007199254740991
         criptoValorizacaoCentavos:
@@ -8226,6 +8320,7 @@ components:
       - contasCentavos
       - criptoAportadoCentavos
       - criptoCentavos
+      - criptoUsdCentavos
       - criptoValorizacaoCentavos
       - data
       - rendaFixaCentavos
@@ -8312,28 +8407,31 @@ components:
           - integer
           - "null"
           format: int64
-          description: "Compras menos vendas em centavos de real, pela PTAX da data\
-            \ de cada movimento; nulo sem a PTAX de algum movimento em dólar"
+          description: "Compras menos vendas em centavos de real, pela cotação USDC/BRL\
+            \ (ou PTAX sem ela) da data de cada movimento; nulo sem a cotação do dó\
+            lar de algum movimento em dólar"
         custoDaPosicaoCentavos:
           type:
           - integer
           - "null"
           format: int64
           description: "Custo médio das unidades que restam, em centavos de real pela\
-            \ PTAX de cada movimento; nulo sem a PTAX de algum movimento em dólar"
+            \ cotação USDC/BRL (ou PTAX sem ela) de cada movimento; nulo sem a cotaç\
+            ão do dólar de algum movimento em dólar"
         custoDaPosicaoUsdCentavos:
           type:
           - integer
           - "null"
           format: int64
           description: "Custo médio das unidades que restam, em centavos de dólar;\
-            \ nulo sem a PTAX de algum movimento em reais"
+            \ nulo sem a cotação do dólar de algum movimento em reais"
         custoMedioUsd:
           type:
           - string
           - "null"
           description: "Custo médio ponderado em dólares por unidade, em texto, com\
-            \ 8 casas no máximo (ADR-042); nulo sem a PTAX de algum movimento em reais"
+            \ 8 casas no máximo (ADR-042); nulo sem a cotação do dólar de algum movimento\
+            \ em reais"
         custoPendente:
           type: boolean
           description: "Alguma entrada ou saída sincronizada ainda não tem custo:\
@@ -8344,8 +8442,8 @@ components:
           - integer
           - "null"
           format: int64
-          description: Compras menos vendas em centavos de dólar; nulo sem a PTAX
-            de algum movimento em reais
+          description: Compras menos vendas em centavos de dólar; nulo sem a cotação
+            do dólar de algum movimento em reais
         ganhoCentavos:
           type:
           - integer
@@ -8379,20 +8477,23 @@ components:
           - "null"
           format: int64
           description: "Recebido nas vendas menos o custo médio do que foi vendido,\
-            \ em centavos de real; nulo sem a PTAX de algum movimento em dólar"
+            \ em centavos de real; nulo sem a cotação do dólar de algum movimento\
+            \ em dólar"
         realizadoUsdCentavos:
           type:
           - integer
           - "null"
           format: int64
           description: "Recebido nas vendas menos o custo médio do que foi vendido,\
-            \ em centavos de dólar; nulo sem a PTAX de algum movimento em reais"
+            \ em centavos de dólar; nulo sem a cotação do dólar de algum movimento\
+            \ em reais"
         valorCentavos:
           type:
           - integer
           - "null"
           format: int64
-          description: Valor em reais pela PTAX da data; nulo sem cotação ou sem PTAX
+          description: Valor em reais pela cotação USDC/BRL (ou PTAX sem ela) da data;
+            nulo sem cotação ou sem a cotação do dólar
         valorUsdCentavos:
           type:
           - integer
@@ -8440,19 +8541,27 @@ components:
     PosicoesCripto:
       type: object
       properties:
+        contas:
+          type: array
+          description: "Toda conta cripto ativa, com o valor das posições confiáveis;\
+            \ conta sem posição vale zero"
+          items:
+            $ref: "#/components/schemas/ContaCriptoValor"
         data:
           type: string
           format: date
         dolar:
           type: "null"
           $ref: "#/components/schemas/Dolar"
-          description: "PTAX usada na conversão: a última até a data; nula se ainda\
-            \ não há"
+          description: "Cotação USDC/BRL usada na conversão: a última até o fim do\
+            \ dia em America/Sao_Paulo; sem ela, a PTAX; nula se não há nenhuma das\
+            \ duas"
         posicoes:
           type: array
           items:
             $ref: "#/components/schemas/PosicaoCripto"
       required:
+      - contas
       - data
       - dolar
       - posicoes

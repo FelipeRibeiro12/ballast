@@ -6,6 +6,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -22,9 +23,15 @@ class CryptoQueries {
   private static final String ASSET_COLUMNS =
       "SELECT id, rede, contrato, simbolo, nome, decimais, confiavel FROM ativo_cripto";
 
-  // O dólar de uma data é a última PTAX guardada até ela (ADR-038).
+  // O dólar de uma data é o último USDC em reais até o fim daquele dia em São Paulo, a mesma regra
+  // do limite da cotação das posições. Sem USDC até lá (movimento mais antigo que o histórico),
+  // vale a última PTAX guardada (ADR-077, ADR-038).
   private static final String DOLLAR_AT =
-      "(SELECT valor FROM indice WHERE serie = 'dolar' AND data <= %s ORDER BY data DESC LIMIT 1)";
+      "COALESCE((SELECT preco FROM cotacao_usdc_brl WHERE momento <"
+          + " ((%1$s + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')"
+          + " ORDER BY momento DESC LIMIT 1),"
+          + " (SELECT valor FROM indice WHERE serie = 'dolar' AND data <= %1$s"
+          + " ORDER BY data DESC LIMIT 1))";
 
   // O custo nas duas moedas, exato: quem lê arredonda uma vez. Nulo quando falta o dólar da data.
   private static final String MOVEMENT_COLUMNS =
@@ -47,7 +54,8 @@ class CryptoQueries {
       boolean trusted) {}
 
   // cost e currency são nulos na entrada ou saída sincronizada sem custo informado (ADR-071).
-  // dollar é a PTAX da data, nula se ainda não há. origin é manual ou sincronizada.
+  // dollar é o dólar da data (USDC, ou PTAX sem ele), nulo se não há nenhum. origin é manual ou
+  // sincronizada.
   record Movement(
       UUID id,
       UUID accountId,
@@ -79,7 +87,9 @@ class CryptoQueries {
 
   record LockedAccount(boolean crypto, boolean archived) {}
 
-  record Dollar(LocalDate date, BigDecimal value) {}
+  // O dólar usado numa data. moment é o instante da leitura do USDC e nulo na PTAX; source é USDC
+  // ou PTAX. date é o dia da leitura em São Paulo, ou o dia da PTAX.
+  record Dollar(LocalDate date, BigDecimal value, Instant moment, String source) {}
 
   private final JdbcClient jdbc;
 
@@ -520,22 +530,70 @@ class CryptoQueries {
         .list();
   }
 
+  // O conflito na PK guarda a leitura que já estava no mesmo instante.
+  int insertUsdcBrl(Instant moment, BigDecimal priceBrl) {
+    return jdbc.sql(
+            "INSERT INTO cotacao_usdc_brl (momento, preco) VALUES (:moment, :price)"
+                + " ON CONFLICT (momento) DO NOTHING")
+        .param("moment", OffsetDateTime.ofInstant(moment, ZoneOffset.UTC))
+        .param("price", priceBrl)
+        .update();
+  }
+
+  boolean hasUsdcBrlBefore(Instant moment) {
+    return jdbc.sql("SELECT EXISTS (SELECT 1 FROM cotacao_usdc_brl WHERE momento < :moment)")
+        .param("moment", OffsetDateTime.ofInstant(moment, ZoneOffset.UTC))
+        .query(Boolean.class)
+        .single();
+  }
+
+  // Só a PTAX: decide se um movimento antigo pede a busca dela (ADR-038).
   Optional<LocalDate> firstDollarDate() {
     return jdbc.sql("SELECT min(data) FROM indice WHERE serie = 'dolar'")
         .query(LocalDate.class)
         .optional();
   }
 
-  // A PTAX da data, ou vazio se ainda não há nenhuma até ela.
-  Optional<Dollar> dollarAt(LocalDate date) {
+  // O dólar da data: a última leitura do USDC antes de limit (o começo do dia seguinte em São
+  // Paulo) ou, sem ela, a última PTAX até date. Vazio se não há nenhuma das duas.
+  Optional<Dollar> dollarAt(LocalDate date, Instant limit) {
+    Optional<Dollar> usdc =
+        jdbc.sql(
+                "SELECT momento, preco FROM cotacao_usdc_brl WHERE momento < :limit"
+                    + " ORDER BY momento DESC LIMIT 1")
+            .param("limit", OffsetDateTime.ofInstant(limit, ZoneOffset.UTC))
+            .query(
+                (rs, row) -> {
+                  Instant moment = rs.getObject("momento", OffsetDateTime.class).toInstant();
+                  return new Dollar(
+                      moment.atZone(ZoneId.of("America/Sao_Paulo")).toLocalDate(),
+                      rs.getBigDecimal("preco"),
+                      moment,
+                      "USDC");
+                })
+            .optional();
+    if (usdc.isPresent()) {
+      return usdc;
+    }
     return jdbc.sql(
             "SELECT data, valor FROM indice WHERE serie = 'dolar' AND data <= :date"
                 + " ORDER BY data DESC LIMIT 1")
         .param("date", date)
         .query(
             (rs, row) ->
-                new Dollar(rs.getObject("data", LocalDate.class), rs.getBigDecimal("valor")))
+                new Dollar(
+                    rs.getObject("data", LocalDate.class), rs.getBigDecimal("valor"), null, "PTAX"))
         .optional();
+  }
+
+  // Contas cripto ativas, na mesma ordem das posições.
+  List<UUID> activeCryptoAccountIds(UUID userId) {
+    return jdbc.sql(
+            "SELECT id FROM conta WHERE usuario_id = :userId AND tipo = 'cripto' AND NOT arquivada"
+                + " ORDER BY lower(nome), id")
+        .param("userId", userId)
+        .query(UUID.class)
+        .list();
   }
 
   // Reais de todas as contas ativas que não são cripto até date: saldo inicial mais realizados com

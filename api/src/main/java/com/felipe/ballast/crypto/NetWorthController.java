@@ -42,7 +42,8 @@ class NetWorthController {
       summary = "Lista as posições de cripto até uma data",
       description =
           "Soma dos movimentos até a data nas contas ativas, com a última cotação até o fim do"
-              + " dia em America/Sao_Paulo. Posição zerada não aparece. Posição com valor fora do"
+              + " dia em America/Sao_Paulo. Reais pela cotação USDC/BRL (ou PTAX sem ela), em `dolar`."
+              + " Posição zerada não aparece. contas traz o valor de cada conta cripto. Posição com valor fora do"
               + " inteiro seguro do JSON vem sem valor e com motivoSemValor. Sem data, vale hoje.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
@@ -78,9 +79,21 @@ class NetWorthController {
             day.get(),
             dollar == null
                 ? null
-                : new PositionListResponse.Dollar(Decimals.format(dollar.value()), dollar.date()),
+                : new PositionListResponse.Dollar(
+                    Decimals.format(dollar.value()),
+                    dollar.date(),
+                    dollar.moment(),
+                    dollar.source()),
             positions.positions().stream()
                 .map(position -> PositionResponse.from(position, rate))
+                .toList(),
+            positions.accounts().stream()
+                .map(
+                    account ->
+                        new PositionListResponse.Account(
+                            account.accountId(),
+                            PositionResponse.cents(account.valueBrl()),
+                            PositionResponse.cents(account.valueUsd())))
                 .toList()));
   }
 

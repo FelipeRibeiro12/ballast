@@ -283,8 +283,9 @@ class AlchemyWalletIndexer implements WalletIndexer {
               .retrieve()
               .body(String.class);
     } catch (RestClientResponseException e) {
-      log.warn("indexador respondeu erro: status={}", e.getStatusCode().value());
-      throw new IndexerUnavailableException(IndexerUnavailableException.Reason.UNAVAILABLE);
+      int status = e.getStatusCode().value();
+      log.warn("indexador respondeu erro: status={}", status);
+      throw new IndexerUnavailableException(reasonOf(status));
     } catch (RuntimeException e) {
       log.warn("indexador sem resposta: tipo={}", e.getClass().getSimpleName());
       throw new IndexerUnavailableException(IndexerUnavailableException.Reason.UNAVAILABLE);
@@ -294,6 +295,14 @@ class AlchemyWalletIndexer implements WalletIndexer {
     } catch (JacksonException e) {
       throw invalid();
     }
+  }
+
+  private static IndexerUnavailableException.Reason reasonOf(int status) {
+    return switch (status) {
+      case 401, 403 -> IndexerUnavailableException.Reason.REJECTED;
+      case 429 -> IndexerUnavailableException.Reason.RATE_LIMITED;
+      default -> IndexerUnavailableException.Reason.UNAVAILABLE;
+    };
   }
 
   private static IndexerUnavailableException invalid() {

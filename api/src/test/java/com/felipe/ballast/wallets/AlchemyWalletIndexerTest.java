@@ -7,6 +7,7 @@ import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import ch.qos.logback.classic.Logger;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -153,6 +155,25 @@ class AlchemyWalletIndexerTest {
   }
 
   @Test
+  void aRefusedKeyAndARateLimitAreToldApartFromAnOutage() {
+    for (HttpStatus status : new HttpStatus[] {HttpStatus.UNAUTHORIZED, HttpStatus.FORBIDDEN}) {
+      server.reset();
+      server.expect(requestTo(URL)).andRespond(withStatus(status));
+      assertThatThrownBy(() -> indexer.read(WalletNetwork.ETHEREUM, ADDRESS))
+          .isInstanceOfSatisfying(
+              IndexerUnavailableException.class,
+              e -> assertThat(e.reason()).isEqualTo(IndexerUnavailableException.Reason.REJECTED));
+    }
+    server.reset();
+    server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
+    assertThatThrownBy(() -> indexer.read(WalletNetwork.ETHEREUM, ADDRESS))
+        .isInstanceOfSatisfying(
+            IndexerUnavailableException.class,
+            e -> assertThat(e.reason()).isEqualTo(IndexerUnavailableException.Reason.RATE_LIMITED));
+    assertNothingSensitiveWasLogged();
+  }
+
+  @Test
   void aBrokenConnectionDoesNotLetTheClientExceptionEscape() {
     // A mensagem da exceção do cliente traz a URL, e a URL traz a chave.
     server
@@ -219,7 +240,8 @@ class AlchemyWalletIndexerTest {
 
   @Test
   void thePropertiesNeverPrintTheKey() {
-    WalletsProperties properties = new WalletsProperties(KEY, null, null, null, false, null, null);
+    WalletsProperties properties =
+        new WalletsProperties(KEY, null, null, null, false, false, null, null);
 
     assertThat(properties.toString()).doesNotContain(KEY);
   }

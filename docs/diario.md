@@ -549,3 +549,11 @@ Dívida registrada: nenhuma
 Achados do revisor: reviewer não rodou; security na rota nova, ver resumo da entrega
 Pipeline: local verde (make test, lint, pnpm test, tsc, pnpm build); CI a preencher no PR
 Em aberto: abrir o PR (sem push feito); 360px sem rolagem lateral coberto só pelo e2e (jsdom não tem layout), que não rodou aqui
+## 2026-10-30 — Carteira com motivo e cripto em real pelo USDC
+
+O que entrou: a leitura de carteira devolve o motivo exato da falha (indexador sem chave, fora do ar, chave recusada, cota, resposta inválida, limite de 60 s), faz uma primeira leitura em segundo plano depois do cadastro e tem botão Atualizar com carregando; o logger HTTP do Spring fica em WARN para a URL com a chave não ir ao log. Toda conversão de dólar para real da cripto passa a usar o USDC/BRL da CoinGecko (tabela `cotacao_usdc_brl`, V40, job de 30 min e backfill de 364 dias), com PTAX como fallback antes do histórico; contas cripto mostram real e dólar em Contas, Cripto, Início e Investimentos, e a aba Cripto mostra a cotação usada com a data da leitura.
+Decisões: ADR-077 (emenda o ADR-038 só para cripto), ADR-078
+Dívida registrada: 7 linhas no backlog (limite global da primeira leitura, teto de concorrência, faixa do USDC, teto de resposta externa, repetição do backfill, centavos entre contas e patrimônio, recarga da aba Cripto)
+Achados do revisor: reviewer não rodou; security 0 bloqueante, 2 médios e 5 baixos, todos no backlog
+Pipeline: local verde (api verify 2302 testes, web 1155 testes, tsc, build); CI a preencher no PR
+Em aberto: abrir o PR (sem push feito). O dono precisa pôr ALCHEMY_API_KEY e BALLAST_CARTEIRAS_JOB_ENABLED=true no api.env da VM. Migrations V40 e V41 entram com a V39 reservada por outro trabalho: sem outOfOrder, a ordem de merge importa (V39 antes de aplicar V40 em produção).

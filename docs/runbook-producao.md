@@ -244,6 +244,22 @@ barra no fim.
   `POST /contas/{id}/cofrinho/rendimento` (botão na tela Contas) lança o de hoje
   na hora.
 
+- Carteiras observadas (ADR-071). Sem `ALCHEMY_API_KEY` no `api.env`, a carteira
+  cadastrada não atualiza e a tela diz que o indexador não está configurado.
+  Crie um app em alchemy.com, habilite Ethereum, Base e Solana nele (rede não
+  habilitada devolve 403, que a tela mostra como chave recusada) e ponha a chave
+  em `ALCHEMY_API_KEY`. As URLs de cada rede saem da chave; só defina
+  `ALCHEMY_ETHEREUM_URL`, `ALCHEMY_BASE_URL` e `ALCHEMY_SOLANA_URL` para usar
+  outro provedor. Para ler sozinho de 6 em 6 horas, ponha
+  `BALLAST_CARTEIRAS_JOB_ENABLED=true`. Sem isso a carteira é lida uma vez
+  logo depois do cadastro e quando o usuário toca em Atualizar (no máximo uma
+  leitura por minuto por carteira). Depois de editar o `api.env`:
+  `API_TAG="$(cat .api_tag)" docker compose up -d api`. Confira no log
+  (`docker compose logs api | grep carteira`): `carteira sincronizada` é
+  sucesso; `leitura de carteiras desligada: ALCHEMY_API_KEY vazia` é chave que
+  não chegou. O log nunca mostra a chave nem o endereço. O seed (passo 8) não
+  precisa da variável: o job de carteiras já nasce desligado.
+
 ## 11. Restaurar um backup
 
 1. Baixe o objeto do bucket pelo console do Oracle.

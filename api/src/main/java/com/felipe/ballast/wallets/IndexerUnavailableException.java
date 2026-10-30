@@ -8,7 +8,11 @@ public class IndexerUnavailableException extends RuntimeException {
   public enum Reason {
     UNAVAILABLE("indexador_indisponivel"),
     INVALID_RESPONSE("resposta_invalida"),
-    NO_KEY("sem_chave");
+    NO_KEY("sem_chave"),
+    // 401 ou 403: chave errada, revogada ou rede não habilitada no app da Alchemy.
+    REJECTED("indexador_recusou"),
+    // 429: a cota do plano gratuito acabou ou há requisições demais.
+    RATE_LIMITED("indexador_limite");
 
     private final String code;
 

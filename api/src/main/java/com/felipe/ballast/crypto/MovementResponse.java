@@ -24,14 +24,14 @@ public record MovementResponse(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description =
-                "Em centavos de dólar; nulo no movimento antigo em reais sem PTAX, ou na entrada"
+                "Em centavos de dólar; nulo no movimento antigo em reais sem a cotação do dólar, ou na entrada"
                     + " e saída sincronizada sem custo informado")
         Long custoUsdCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description =
-                "Em centavos de real pela PTAX da data; nulo sem PTAX, ou sem custo informado")
+                "Em centavos de real pela cotação USDC/BRL (ou PTAX sem ela) da data; nulo sem a cotação do dólar, ou sem custo informado")
         Long custoCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
@@ -41,8 +41,8 @@ public record MovementResponse(
                     + " nem se edita, só se informa o custo")
         String origem) {
 
-  // Movimento novo é em dólar; o da F13 é em reais (ADR-038). A outra moeda vem pela PTAX da
-  // data do movimento, arredondada uma vez com HALF_EVEN.
+  // Movimento novo é em dólar; o da F13 é em reais (ADR-038). A outra moeda vem pela cotação
+  // USDC/BRL (ou PTAX sem ela) da data do movimento, arredondada uma vez com HALF_EVEN.
   static MovementResponse from(CryptoQueries.Movement movement) {
     boolean inUsd = "USD".equals(movement.currency());
     boolean noCost = movement.cost() == null;

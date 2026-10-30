@@ -464,6 +464,21 @@ ganham `moeda text not null` (`BRL` | `USD`, sem default): as linhas da F13 são
 linha. `indice.serie` ganha `dolar` (PTAX de venda, série 1 do SGS, reais por
 dólar); a conversão usa a última PTAX até a data.
 
+**Cotação USDC/BRL (V40, ADR-077).** `cotacao_usdc_brl(momento timestamptz pk,
+preco numeric(20,8) not null check (preco > 0), fonte text not null default
+'coingecko')`. Sem `usuario_id`, como `indice`: é dado público de mercado, igual
+para todos, e só o job grava (o papel da aplicação tem DML pelo default da V3).
+Uma linha por leitura: o job grava a atual com o `last_updated_at` da CoinGecko e
+o backfill (até 364 dias, uma vez) grava o ponto diário do histórico; conflito na
+PK é descartado.
+
+**Regra de conversão da cripto (ADR-077, emenda o ADR-038).** O dólar de uma data
+D é a última linha de `cotacao_usdc_brl` com `momento` antes do começo do dia D+1
+em America/Sao_Paulo; sem ela, a última PTAX (`indice`, serie `dolar`) com data
+até D; sem nenhuma das duas, não há conversão e some só a moeda que dependeria
+dela. Vale para o custo de cada movimento, o valor das posições, o patrimônio
+(inclusive o mensal). A PTAX segue só na renda fixa e no IPCA.
+
 ### Carteira observada (V36, ADR-071)
 
 Endereço público ligado a uma conta `cripto`. Cadastrado digitando; a F25 só
@@ -481,7 +496,7 @@ carteira_observada
   verificada_em    timestamptz null     -- prova de posse por assinatura (F25, POST /carteiras/{id}/posse/verificar)
   sincronizada_em  timestamptz null     -- última leitura que deu certo
   tentada_em       timestamptz null     -- última tentativa, boa ou ruim: conta o intervalo de 60 s
-  erro_ultima_sync text null            -- indexador_indisponivel | resposta_invalida | sem_chave
+  erro_ultima_sync text null            -- indexador_indisponivel | resposta_invalida | sem_chave | indexador_recusou | indexador_limite (V41)
   criado_em        timestamptz not null default now()
   tipo_conta       text generated always as ('cripto') stored   -- a aplicação não escreve
   unique (usuario_id, rede, endereco)

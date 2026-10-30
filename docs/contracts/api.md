@@ -651,6 +651,25 @@ aparece no corpo das respostas e em nenhum log, URL ou mensagem de erro.
   que deu certo, nulo se nunca leu.
   `leituraFalhou` é `true` quando a última tentativa falhou: os saldos são os
   da `sincronizadaEm`, nunca zero.
+  Campos de diagnóstico (acrescentados, nenhum existente mudou): `motivo` (enum
+  `MotivoLeitura` ou `null`), `ultimaTentativaEm` (instante ou `null`),
+  `proximaLeituraEm` (instante ou `null`; quando a leitura manual volta a ser
+  aceita), `indexadorConfigurado` (boolean; falso quando o servidor está sem
+  `ALCHEMY_API_KEY`) e `sincronizacaoAutomatica` (boolean; job de 6 em 6 horas
+  ligado e indexador configurado). `motivo` vem preenchido quando
+  `leituraFalhou` é `true`: `INDEXADOR_NAO_CONFIGURADO` (sem chave),
+  `INDEXADOR_FORA_DO_AR` (rede, timeout, 5xx ou erro de RPC),
+  `INDEXADOR_RECUSOU_A_CHAVE` (401 ou 403: chave errada ou rede não habilitada
+  no app da Alchemy), `INDEXADOR_COTA_ESGOTADA` (429) ou `RESPOSTA_INVALIDA`.
+  Nunca traz URL, chave ou texto do indexador. `LIMITE_DE_60S` só aparece na
+  resposta de sincronizar barrada pelo intervalo e só quando não há falha
+  gravada; havendo, vale o motivo da falha e `proximaLeituraEm` diz quando
+  tentar de novo. Carteira nunca tentada tem os três campos de instante e
+  motivo nulos.
+- `POST /carteiras` agenda, depois do commit e fora da requisição, uma primeira
+  leitura em segundo plano (só com o indexador configurado). A resposta 201 vem
+  sem saldo; o `GET /carteiras/{id}` seguinte mostra `ultimaTentativaEm` e o
+  resultado. Falha dela não afeta o cadastro. Conta como a tentativa dos 60 s.
 - `POST /carteiras/{id}/sincronizar` lê a rede e responde 200 com a `Carteira`.
   Tudo ou nada. No máximo uma leitura por carteira a cada 60 s (a tentativa
   conta, mesmo falha): dentro do prazo devolve o estado atual sem chamar o
@@ -1358,3 +1377,34 @@ Nenhum formato consumido muda. Os campos novos são opcionais na spec.
   [{contaId, nome, saldoCentavos}]`: os cofrinhos ativos marcados, com o saldo na
   data. É um recorte de `contasCentavos`: `totalCentavos` não muda e o campo não se
   soma de novo.
+
+## Cripto em real pelo USDC (ADR-077)
+
+Emenda "Cripto em dólar" e "Patrimônio e posições". Os reais da cripto passam a
+vir da cotação USDC/BRL da CoinGecko; a PTAX vale só quando não há USDC até a
+data do movimento ou da posição (antes do histórico de 364 dias).
+
+- `GET /posicoes-cripto` responde `{data, dolar, posicoes, contas}`.
+  - `dolar` é `{valor, data, momento, fonte}` ou `null` (sem USDC nem PTAX até a
+    data). `valor` é texto (reais por dólar). `fonte` é `"USDC"` ou `"PTAX"`.
+    Com `"USDC"`, `momento` é o instante da leitura (ISO-8601) e `data` o dia
+    dela em America/Sao_Paulo. Com `"PTAX"`, `momento` é `null` e `data` o dia
+    da PTAX. A leitura vale até o fim do dia em São Paulo: sábado e domingo usam
+    a última do fim de semana.
+  - `contas` é `[{contaId, valorCentavos, valorUsdCentavos}]`, uma por conta
+    cripto ativa, na ordem das posições (nome, id). Inclui conta sem posição, com
+    `0`. Cada valor é a soma dos valores cheios (sem arredondar) das posições
+    confiáveis da conta, arredondada uma vez com `HALF_EVEN`. `valorCentavos`
+    (reais) e `valorUsdCentavos` (centavos de dólar) são `null` quando alguma
+    posição da conta está sem cotação, sem o dólar da data (reais) ou fora do
+    limite. A soma das contas pode diferir em centavos de `criptoCentavos`,
+    porque o patrimônio soma os valores já arredondados das posições.
+- `GET /patrimonio` ganha `criptoUsdCentavos`: soma do valor em dólar das
+  posições com cotação, em centavos inteiros. `null` quando alguma posição tem
+  cotação em reais (F13) e falta o dólar para voltar a dólar. `criptoCentavos`
+  segue em reais, agora pelo USDC/BRL.
+- `custoCentavos`, `valorCentavos`, `ganho*`, `realizado*` e
+  `custoDaPosicaoCentavos` convertem pelo dólar da data de cada movimento ou da
+  posição, com a regra acima. Sem nenhuma cotação, só o campo em reais fica
+  `null`, como antes.
+- Formatos não mudam: reais e dólares em centavos inteiros, quantidade em texto.

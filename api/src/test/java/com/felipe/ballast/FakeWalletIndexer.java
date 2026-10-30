@@ -22,6 +22,7 @@ public class FakeWalletIndexer implements WalletIndexer {
   private final AtomicInteger calls = new AtomicInteger();
   private volatile IndexerUnavailableException.Reason failure;
   private volatile boolean configured = true;
+  private volatile RuntimeException crash;
 
   public void publish(WalletNetwork network, String address, Reading reading) {
     published.put(new Key(network, address), reading);
@@ -43,6 +44,16 @@ public class FakeWalletIndexer implements WalletIndexer {
     failure = reason;
   }
 
+  // Exceção que não é do contrato: o indexador real não deveria lançar, mas o serviço não pode
+  // depender disso.
+  public void crashWith(RuntimeException exception) {
+    crash = exception;
+  }
+
+  public void setConfigured(boolean value) {
+    configured = value;
+  }
+
   public void recover() {
     failure = null;
   }
@@ -55,12 +66,16 @@ public class FakeWalletIndexer implements WalletIndexer {
     published.clear();
     calls.set(0);
     failure = null;
+    crash = null;
     configured = true;
   }
 
   @Override
   public Reading read(WalletNetwork network, String address) {
     calls.incrementAndGet();
+    if (crash != null) {
+      throw crash;
+    }
     if (failure != null) {
       throw new IndexerUnavailableException(failure);
     }

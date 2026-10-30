@@ -5,6 +5,7 @@ import com.felipe.ballast.limits.UserLimit;
 import com.felipe.ballast.limits.UserLimits;
 import com.felipe.ballast.web.Constraints;
 import com.felipe.ballast.web.WriteTransaction;
+import jakarta.annotation.PreDestroy;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
@@ -21,6 +22,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +47,16 @@ class WalletService {
   private static final Pattern EVM_CONTRACT = Pattern.compile("0x[0-9a-fA-F]{40}");
   private static final String ADDRESS_UNIQUE = "carteira_observada_usuario_rede_endereco_unico";
 
-  record View(WalletQueries.Wallet wallet, List<WalletQueries.Balance> balances) {}
+  // configured e automatic descrevem o servidor, não a carteira. nextReadAt é quando a próxima
+  // leitura é aceita (nulo se já pode). throttled marca a resposta de sincronizar barrada pelos
+  // 60 s.
+  record View(
+      WalletQueries.Wallet wallet,
+      List<WalletQueries.Balance> balances,
+      boolean configured,
+      boolean automatic,
+      Instant nextReadAt,
+      boolean throttled) {}
 
   sealed interface CreateResult {
     record Created(View view) implements CreateResult {}
@@ -71,23 +84,41 @@ class WalletService {
   private final WriteTransaction transaction;
   private final UserLimits limits;
   private final Clock clock;
+  private final boolean jobEnabled;
+  private final boolean firstReadEnabled;
+  // Thread virtual por tarefa: a leitura espera a rede por até alguns segundos e não deve segurar
+  // a requisição do cadastro nem uma thread do pool do Tomcat.
+  private final ExecutorService firstReadExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
   WalletService(
       WalletQueries queries,
       WalletIndexer indexer,
       WriteTransaction transaction,
       UserLimits limits,
-      Clock clock) {
+      Clock clock,
+      WalletsProperties properties) {
     this.queries = queries;
     this.indexer = indexer;
     this.transaction = transaction;
     this.limits = limits;
     this.clock = clock;
+    this.jobEnabled = properties.jobEnabled();
+    this.firstReadEnabled = properties.firstReadEnabled();
   }
 
   // accountId chega nulo quando o texto do cliente não era UUID. A conta é travada como nas
   // escritas de movimento, e o unique da V36 segura a corrida de dois cadastros iguais.
   CreateResult create(
+      UUID userId, UUID accountId, WalletNetwork network, String address, String label) {
+    CreateResult result = register(userId, accountId, network, address, label);
+    if (result instanceof CreateResult.Created created) {
+      // Depois do commit do cadastro: o register já devolveu com a transação fechada.
+      readFirstTime(userId, created.view().wallet().id());
+    }
+    return result;
+  }
+
+  private CreateResult register(
       UUID userId, UUID accountId, WalletNetwork network, String address, String label) {
     Optional<String> normalized = WalletAddress.normalize(network, address);
     if (normalized.isEmpty()) {
@@ -112,7 +143,7 @@ class WalletService {
             limits.checkRoom(userId, UserLimit.WALLETS);
             WalletQueries.Wallet saved =
                 queries.insertWallet(userId, accountId, network, normalized.get(), label);
-            return new CreateResult.Created(new View(saved, List.of()));
+            return new CreateResult.Created(view(saved, List.of(), false));
           });
     } catch (DataIntegrityViolationException e) {
       if (Constraints.isViolated(e, ADDRESS_UNIQUE)) {
@@ -120,6 +151,31 @@ class WalletService {
       }
       throw e;
     }
+  }
+
+  // Em segundo plano e sem chance de derrubar o cadastro. Respeita os 60 s como qualquer leitura,
+  // porque passa pelo mesmo sync. O log leva só os ids e o nome da classe do erro.
+  private void readFirstTime(UUID userId, UUID walletId) {
+    if (!firstReadEnabled || !indexer.isConfigured()) {
+      return;
+    }
+    try {
+      firstReadExecutor.execute(
+          () -> {
+            try {
+              sync(userId, walletId);
+            } catch (RuntimeException e) {
+              log.warn("primeira leitura não concluída: carteira_id={} tipo={}", walletId, type(e));
+            }
+          });
+    } catch (RejectedExecutionException e) {
+      log.warn("primeira leitura não agendada: carteira_id={}", walletId);
+    }
+  }
+
+  @PreDestroy
+  void stopFirstReads() {
+    firstReadExecutor.shutdown();
   }
 
   Optional<View> find(UUID userId, UUID id) {
@@ -151,7 +207,9 @@ class WalletService {
     return switch (claim) {
       case Claim.Missing missing -> SyncResult.Rejected.NOT_FOUND;
       case Claim.Archived archived -> SyncResult.Rejected.ACCOUNT_ARCHIVED;
-      case Claim.TooSoon tooSoon -> new SyncResult.Done(view(userId, tooSoon.wallet()));
+      case Claim.TooSoon tooSoon ->
+          new SyncResult.Done(
+              view(tooSoon.wallet(), queries.balances(userId, tooSoon.wallet().id()), true));
       case Claim.Granted granted -> read(userId, granted.wallet());
     };
   }
@@ -409,7 +467,17 @@ class WalletService {
   }
 
   private View view(UUID userId, WalletQueries.Wallet wallet) {
-    return new View(wallet, queries.balances(userId, wallet.id()));
+    return view(wallet, queries.balances(userId, wallet.id()), false);
+  }
+
+  private View view(
+      WalletQueries.Wallet wallet, List<WalletQueries.Balance> balances, boolean throttled) {
+    boolean configured = indexer.isConfigured();
+    Instant next = wallet.attemptedAt() == null ? null : wallet.attemptedAt().plus(MIN_INTERVAL);
+    if (next != null && !next.isAfter(clock.instant())) {
+      next = null;
+    }
+    return new View(wallet, balances, configured, configured && jobEnabled, next, throttled);
   }
 
   // Tipo da exceção sem pacote: o nome simples basta no log.

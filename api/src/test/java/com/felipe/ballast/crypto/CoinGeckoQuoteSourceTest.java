@@ -226,4 +226,75 @@ class CoinGeckoQuoteSourceTest {
     assertThatThrownBy(() -> source.history(new AssetRef(CryptoNetwork.BITCOIN, null), FROM, TO))
         .isInstanceOf(RuntimeException.class);
   }
+
+  @Test
+  void readsTheUsdcInReaisWithoutDouble() {
+    server
+        .expect(
+            requestTo(
+                BASE
+                    + "/simple/price?ids=usd-coin&vs_currencies=brl"
+                    + "&include_last_updated_at=true&precision=full"))
+        .andExpect(header("x-cg-demo-api-key", "chave-de-teste"))
+        .andRespond(
+            withSuccess(
+                "{\"usd-coin\":{\"brl\":5.412345678901,\"last_updated_at\":1792700000}}",
+                MediaType.APPLICATION_JSON));
+
+    assertThat(source.usdcBrl())
+        .contains(
+            new UsdcQuote(new BigDecimal("5.412345678901"), Instant.ofEpochSecond(1792700000)));
+    server.verify();
+  }
+
+  @Test
+  void aZeroNegativeOrMissingUsdcPriceIsIgnored() {
+    for (String body :
+        List.of(
+            "{\"usd-coin\":{\"brl\":0,\"last_updated_at\":1792700000}}",
+            "{\"usd-coin\":{\"brl\":-5,\"last_updated_at\":1792700000}}",
+            "{\"usd-coin\":{\"brl\":\"x\",\"last_updated_at\":1792700000}}",
+            "{\"usd-coin\":{\"last_updated_at\":1792700000}}",
+            "{\"usd-coin\":{\"brl\":5.4}}",
+            "{}")) {
+      server.reset();
+      server
+          .expect(requestTo(org.hamcrest.Matchers.containsString("/simple/price?ids=usd-coin")))
+          .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+      assertThat(source.usdcBrl()).as(body).isEmpty();
+    }
+  }
+
+  @Test
+  void aProviderErrorInTheUsdcComesUpAsAnException() {
+    server
+        .expect(requestTo(org.hamcrest.Matchers.containsString("/simple/price?ids=usd-coin")))
+        .andRespond(withServerError());
+
+    assertThatThrownBy(() -> source.usdcBrl()).isInstanceOf(RuntimeException.class);
+  }
+
+  @Test
+  void asksTheUsdcHistoryInReaisAndKeepsOnlyValidPoints() {
+    server
+        .expect(
+            requestTo(
+                BASE
+                    + "/coins/usd-coin/market_chart/range?vs_currency=brl"
+                    + "&from=1761350400&to=1792713600&precision=full"))
+        .andExpect(header("x-cg-demo-api-key", "chave-de-teste"))
+        .andRespond(
+            withSuccess(
+                "{\"prices\":[[1761350400000,5.30000000000000004],[1761436800000,0],"
+                    + "[1761523200000,\"x\"],[1761609600000],[1761696000000,5.5]]}",
+                MediaType.APPLICATION_JSON));
+
+    assertThat(source.usdcBrlHistory(FROM, TO))
+        .containsExactly(
+            new UsdcQuote(
+                new BigDecimal("5.30000000000000004"), Instant.ofEpochMilli(1761350400000L)),
+            new UsdcQuote(new BigDecimal("5.5"), Instant.ofEpochMilli(1761696000000L)));
+    server.verify();
+  }
 }
