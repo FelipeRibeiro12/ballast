@@ -23,14 +23,11 @@ function ResumoDoPatrimonio({ estado }: { estado: Estado<Patrimonio> }) {
   const { dados } = estado
   const semCotacao = dados.semCotacao.length
   return (
-    <section className="cartao destaque" aria-label="Patrimônio">
-      <p className="destaque-rotulo">Patrimônio em {formatarDataCompleta(dados.data)}</p>
-      <p className="destaque-valor">{formatarCentavos(dados.totalCentavos)}</p>
+    <section className="cartao destaque" aria-label="Total investido">
+      <p className="destaque-rotulo">Investido em {formatarDataCompleta(dados.data)}</p>
+      {/* Só renda fixa e cripto: o saldo das contas correntes, do cofrinho e dos benefícios não é investimento. */}
+      <p className="destaque-valor">{formatarCentavos(dados.rendaFixaCentavos + dados.criptoCentavos)}</p>
       <dl className="destaque-detalhes">
-        <div>
-          <dt>Contas</dt>
-          <dd>{formatarCentavos(dados.contasCentavos)}</dd>
-        </div>
         <div>
           <dt>Renda fixa</dt>
           <dd>{formatarCentavos(dados.rendaFixaCentavos)}</dd>
