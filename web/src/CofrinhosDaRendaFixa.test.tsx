@@ -27,6 +27,7 @@ const patrimonio = {
   data: '2026-10-22',
   contasCentavos: 700_000,
   criptoCentavos: 4_320_000,
+  criptoUsdCentavos: null,
   criptoAportadoCentavos: null,
   criptoValorizacaoCentavos: null,
   rendaFixaCentavos: 1_050_000,

@@ -78,7 +78,7 @@ describe('Investimentos', () => {
 
   it('mostra a cripto em reais e o dólar logo abaixo', async () => {
     mockFetch()
-    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} aoSessaoExpirar={vi.fn()} />)
+    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} cofrinhosAtivos={[]} aoMudarCofrinho={vi.fn()} aoSessaoExpirar={vi.fn()} />)
 
     const resumo = await screen.findByRole('region', { name: 'Total investido' })
     const real = within(resumo).getByText(texto('R$ 43.200,00'))

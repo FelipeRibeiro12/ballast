@@ -116,6 +116,8 @@ describe('SaldoDasContas', () => {
       criptoAportadoCentavos: null,
       criptoValorizacaoCentavos: null,
       rendaFixaCentavos: 0,
+      cofrinhosCentavos: 0,
+      cofrinhos: [],
       totalCentavos: 4_320_000,
       semCotacao: [],
     })
@@ -136,6 +138,8 @@ describe('SaldoDasContas', () => {
       criptoAportadoCentavos: null,
       criptoValorizacaoCentavos: null,
       rendaFixaCentavos: 0,
+      cofrinhosCentavos: 0,
+      cofrinhos: [],
       totalCentavos: 4_320_000,
       semCotacao: [],
     })
