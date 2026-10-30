@@ -287,8 +287,17 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await page.getByRole('button', { name: 'Escolher cofrinhos da renda fixa' }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.keyboard.press('Escape')
-    const rolaDeLado = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
-    expect(rolaDeLado).toBe(false)
+    // Mede só com o painel fechado: durante a saída ele ainda ocupa espaço fora da tela.
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    const estouro = await page.evaluate(() => {
+      const largura = window.innerWidth
+      const culpados = [...document.querySelectorAll('body *')]
+        .filter((el) => el.getBoundingClientRect().right > largura + 1)
+        .slice(0, 5)
+        .map((el) => `${el.tagName.toLowerCase()}.${el.className} direita=${Math.round(el.getBoundingClientRect().right)}`)
+      return { rola: document.documentElement.scrollWidth > largura, scrollWidth: document.documentElement.scrollWidth, largura, culpados }
+    })
+    expect(estouro, JSON.stringify(estouro)).toMatchObject({ rola: false })
   })
 
   await test.step('editar e apagar conta e recorrência', async () => {
