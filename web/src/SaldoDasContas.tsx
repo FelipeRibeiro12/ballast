@@ -10,7 +10,7 @@ import {
 } from './api'
 import type { Conta, Patrimonio, TipoDeConta, VisaoSaldo } from './api'
 import { hojeLocal } from './datas'
-import { formatarCentavos } from './dinheiro'
+import { formatarCentavos, formatarCentavosEmDolar } from './dinheiro'
 import { IconeEngrenagem, IconeMais } from './icones'
 import { carregar, mensagemDeEscrita } from './leitura'
 import type { Estado } from './leitura'
@@ -323,6 +323,9 @@ export default function SaldoDasContas({
             <div key={visao.id} className="cartao destaque saldo-visao">
               <p className="destaque-rotulo">{visao.titulo}</p>
               <p className="destaque-valor">{formatarCentavos(valorDaVisao(contas, patrimonio, visao.tipos))}</p>
+              {visao.tipos.includes('cripto') && patrimonio?.criptoUsdCentavos != null && (
+                <p className="saldo-tipos">Cripto em dólar {formatarCentavosEmDolar(patrimonio.criptoUsdCentavos)}</p>
+              )}
               <p className="saldo-tipos">{descreverTipos(visao.tipos)}</p>
               {patrimonioFalhou && precisaDoPatrimonio(visao.tipos) && (
                 <p className="saldo-tipos" role="status">

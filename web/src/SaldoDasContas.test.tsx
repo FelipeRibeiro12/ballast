@@ -55,7 +55,7 @@ function jsonResponse(corpo: unknown, status: number): Response {
 const texto = (valor: string): RegExp =>
   new RegExp(valor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll(' ', '[\\s\\u00a0]'))
 
-function mockFetch(visoes: Visao[]): { chamadas: { metodo: string; url: string; corpo: unknown }[] } {
+function mockFetch(visoes: Visao[], patrimonio: unknown = null): { chamadas: { metodo: string; url: string; corpo: unknown }[] } {
   let atuais = visoes
   const chamadas: { metodo: string; url: string; corpo: unknown }[] = []
   vi.stubGlobal(
@@ -79,7 +79,9 @@ function mockFetch(visoes: Visao[]): { chamadas: { metodo: string; url: string; 
         atuais = atuais.filter((v) => v.id !== url.split('/').pop())
         return Promise.resolve(new Response(null, { status: 204 }))
       }
-      if (url.startsWith('/patrimonio')) return new Promise<Response>(() => {})
+      if (url.startsWith('/patrimonio')) {
+        return patrimonio === null ? new Promise<Response>(() => {}) : Promise.resolve(jsonResponse(patrimonio, 200))
+      }
       return Promise.resolve(jsonResponse({ erro: 'inesperado' }, 500))
     }),
   )
@@ -103,6 +105,45 @@ describe('SaldoDasContas', () => {
     const grupo = await screen.findByRole('group', { name: 'Totais das contas' })
     expect((await within(grupo).findByText('Total sem cartão')).parentElement).toHaveTextContent(texto('R$ 155,00'))
     expect(within(grupo).getByText('Só a corrente').parentElement).toHaveTextContent(texto('R$ 100,00'))
+  })
+
+  it('visão com cripto mostra o dólar da cripto logo abaixo do total em reais', async () => {
+    mockFetch([{ id: 'v3', titulo: 'Cripto', tipos: ['cripto'] }], {
+      data: '2026-10-22',
+      contasCentavos: 0,
+      criptoCentavos: 4_320_000,
+      criptoUsdCentavos: 864_000,
+      criptoAportadoCentavos: null,
+      criptoValorizacaoCentavos: null,
+      rendaFixaCentavos: 0,
+      totalCentavos: 4_320_000,
+      semCotacao: [],
+    })
+    renderizar()
+
+    const grupo = await screen.findByRole('group', { name: 'Totais das contas' })
+    const real = await within(grupo).findByText(texto('R$ 43.200,00'))
+    const dolar = await within(grupo).findByText(texto('Cripto em dólar US$ 8.640,00'))
+    expect(real.compareDocumentPosition(dolar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('sem o dólar da cripto, não mostra a linha em dólar', async () => {
+    mockFetch([{ id: 'v3', titulo: 'Cripto', tipos: ['cripto'] }], {
+      data: '2026-10-22',
+      contasCentavos: 0,
+      criptoCentavos: 4_320_000,
+      criptoUsdCentavos: null,
+      criptoAportadoCentavos: null,
+      criptoValorizacaoCentavos: null,
+      rendaFixaCentavos: 0,
+      totalCentavos: 4_320_000,
+      semCotacao: [],
+    })
+    renderizar()
+
+    const grupo = await screen.findByRole('group', { name: 'Totais das contas' })
+    await within(grupo).findByText(texto('R$ 43.200,00'))
+    expect(within(grupo).queryByText(/Cripto em dólar/)).toBeNull()
   })
 
   it('a engrenagem lista as visões e adiciona uma nova', async () => {

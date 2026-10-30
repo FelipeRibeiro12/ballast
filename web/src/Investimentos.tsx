@@ -3,7 +3,7 @@ import { fetchPatrimonio } from './api'
 import type { Conta, Patrimonio } from './api'
 import Cripto from './Cripto'
 import { formatarDataCompleta, hojeLocal } from './datas'
-import { formatarCentavos } from './dinheiro'
+import { formatarCentavos, formatarCentavosEmDolar } from './dinheiro'
 import { carregar } from './leitura'
 import type { Estado } from './leitura'
 import RendaFixa from './RendaFixa'
@@ -36,7 +36,10 @@ function ResumoDoPatrimonio({ estado }: { estado: Estado<Patrimonio> }) {
         </div>
         <div>
           <dt>Cripto</dt>
-          <dd>{formatarCentavos(dados.criptoCentavos)}</dd>
+          <dd>
+            {formatarCentavos(dados.criptoCentavos)}
+            {dados.criptoUsdCentavos !== null && <small>{formatarCentavosEmDolar(dados.criptoUsdCentavos)}</small>}
+          </dd>
         </div>
       </dl>
       {dados.criptoCentavos !== 0 && dados.criptoAportadoCentavos !== null && dados.criptoValorizacaoCentavos !== null && (
