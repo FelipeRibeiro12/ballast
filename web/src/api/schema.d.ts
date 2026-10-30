@@ -1222,7 +1222,7 @@ export interface paths {
         };
         /**
          * Lista as posições de cripto até uma data
-         * @description Soma dos movimentos até a data nas contas ativas, com a última cotação até o fim do dia em America/Sao_Paulo. Posição zerada não aparece. Posição com valor fora do inteiro seguro do JSON vem sem valor e com motivoSemValor. Sem data, vale hoje.
+         * @description Soma dos movimentos até a data nas contas ativas, com a última cotação até o fim do dia em America/Sao_Paulo. Reais pela cotação USDC/BRL (ou PTAX sem ela), em `dolar`. Posição zerada não aparece. contas traz o valor de cada conta cripto. Posição com valor fora do inteiro seguro do JSON vem sem valor e com motivoSemValor. Sem data, vale hoje.
          */
         get: operations["getPosicoesCripto"];
         put?: never;
@@ -1921,6 +1921,20 @@ export interface components {
             /** @enum {string} */
             tipo: "corrente" | "poupanca" | "dinheiro" | "cartao_credito" | "beneficio" | "cripto" | "investimento" | "cofrinho";
         };
+        ContaCriptoValor: {
+            /** Format: uuid */
+            contaId: string;
+            /**
+             * Format: int64
+             * @description Soma dos valores cheios das posições em reais, arredondada uma vez; nulo se alguma posição está sem cotação ou sem dólar
+             */
+            valorCentavos: number | null;
+            /**
+             * Format: int64
+             * @description Soma dos valores cheios das posições em dólares, arredondada uma vez; nulo se alguma posição está sem cotação
+             */
+            valorUsdCentavos: number | null;
+        };
         Cotacao: {
             /** Format: uuid */
             ativoId: string;
@@ -1942,7 +1956,7 @@ export interface components {
             fonte: "manual" | "coingecko";
             /** Format: date-time */
             momento: string;
-            /** @description Dólares por unidade, em texto; nulo na cotação antiga em reais sem PTAX */
+            /** @description Dólares por unidade, em texto; nulo na cotação antiga em reais sem a cotação do dólar */
             precoUsd: string | null;
         };
         CotacaoPrecoRequest: {
@@ -2064,8 +2078,21 @@ export interface components {
             parcelas: components["schemas"]["ParcelaDivisaoRequest"][];
         };
         Dolar: {
-            /** Format: date */
+            /**
+             * Format: date
+             * @description Dia da leitura em America/Sao_Paulo, ou o dia da PTAX
+             */
             data: string;
+            /**
+             * @description USDC é a cotação USDC/BRL (ADR-077); PTAX só sem USDC até a data
+             * @enum {string}
+             */
+            fonte: "USDC" | "PTAX";
+            /**
+             * Format: date-time
+             * @description Instante da leitura do USDC/BRL; nulo quando a fonte é a PTAX
+             */
+            momento: string | null;
             /** @description Reais por dólar, em texto */
             valor: string;
         };
@@ -2562,12 +2589,12 @@ export interface components {
             contaId: string;
             /**
              * Format: int64
-             * @description Em centavos de real pela PTAX da data; nulo sem PTAX, ou sem custo informado
+             * @description Em centavos de real pela cotação USDC/BRL (ou PTAX sem ela) da data; nulo sem a cotação do dólar, ou sem custo informado
              */
             custoCentavos: number | null;
             /**
              * Format: int64
-             * @description Em centavos de dólar; nulo no movimento antigo em reais sem PTAX, ou na entrada e saída sincronizada sem custo informado
+             * @description Em centavos de dólar; nulo no movimento antigo em reais sem a cotação do dólar, ou na entrada e saída sincronizada sem custo informado
              */
             custoUsdCentavos: number | null;
             /** Format: date */
@@ -2705,7 +2732,7 @@ export interface components {
             contasCentavos: number;
             /**
              * Format: int64
-             * @description Compras menos vendas, em reais, das posições somadas em criptoCentavos (ADR-042); nulo sem a PTAX de algum movimento
+             * @description Compras menos vendas, em reais, das posições somadas em criptoCentavos (ADR-042); nulo sem o dólar de algum movimento
              */
             criptoAportadoCentavos: number | null;
             /**
@@ -2713,6 +2740,11 @@ export interface components {
              * @description Soma do valor das posições com cotação
              */
             criptoCentavos: number;
+            /**
+             * Format: int64
+             * @description Soma do valor em dólares das posições com cotação; nulo quando alguma tem cotação em reais e falta a cotação do dólar para voltar a dólar
+             */
+            criptoUsdCentavos: number | null;
             /**
              * Format: int64
              * @description criptoCentavos menos criptoAportadoCentavos: o que veio do preço e do dólar, com o ganho das vendas
@@ -2770,26 +2802,26 @@ export interface components {
             cotacao: components["schemas"]["CotacaoDaPosicao"];
             /**
              * Format: int64
-             * @description Compras menos vendas em centavos de real, pela PTAX da data de cada movimento; nulo sem a PTAX de algum movimento em dólar
+             * @description Compras menos vendas em centavos de real, pela cotação USDC/BRL (ou PTAX sem ela) da data de cada movimento; nulo sem a cotação do dólar de algum movimento em dólar
              */
             custoCentavos: number | null;
             /**
              * Format: int64
-             * @description Custo médio das unidades que restam, em centavos de real pela PTAX de cada movimento; nulo sem a PTAX de algum movimento em dólar
+             * @description Custo médio das unidades que restam, em centavos de real pela cotação USDC/BRL (ou PTAX sem ela) de cada movimento; nulo sem a cotação do dólar de algum movimento em dólar
              */
             custoDaPosicaoCentavos: number | null;
             /**
              * Format: int64
-             * @description Custo médio das unidades que restam, em centavos de dólar; nulo sem a PTAX de algum movimento em reais
+             * @description Custo médio das unidades que restam, em centavos de dólar; nulo sem a cotação do dólar de algum movimento em reais
              */
             custoDaPosicaoUsdCentavos: number | null;
-            /** @description Custo médio ponderado em dólares por unidade, em texto, com 8 casas no máximo (ADR-042); nulo sem a PTAX de algum movimento em reais */
+            /** @description Custo médio ponderado em dólares por unidade, em texto, com 8 casas no máximo (ADR-042); nulo sem a cotação do dólar de algum movimento em reais */
             custoMedioUsd: string | null;
             /** @description Alguma entrada ou saída sincronizada ainda não tem custo: custo médio, custo da posição e ganho vêm nulos, o valor de mercado continua */
             custoPendente: boolean;
             /**
              * Format: int64
-             * @description Compras menos vendas em centavos de dólar; nulo sem a PTAX de algum movimento em reais
+             * @description Compras menos vendas em centavos de dólar; nulo sem a cotação do dólar de algum movimento em reais
              */
             custoUsdCentavos: number | null;
             /**
@@ -2811,17 +2843,17 @@ export interface components {
             quantidade: string;
             /**
              * Format: int64
-             * @description Recebido nas vendas menos o custo médio do que foi vendido, em centavos de real; nulo sem a PTAX de algum movimento em dólar
+             * @description Recebido nas vendas menos o custo médio do que foi vendido, em centavos de real; nulo sem a cotação do dólar de algum movimento em dólar
              */
             realizadoCentavos: number | null;
             /**
              * Format: int64
-             * @description Recebido nas vendas menos o custo médio do que foi vendido, em centavos de dólar; nulo sem a PTAX de algum movimento em reais
+             * @description Recebido nas vendas menos o custo médio do que foi vendido, em centavos de dólar; nulo sem a cotação do dólar de algum movimento em reais
              */
             realizadoUsdCentavos: number | null;
             /**
              * Format: int64
-             * @description Valor em reais pela PTAX da data; nulo sem cotação ou sem PTAX
+             * @description Valor em reais pela cotação USDC/BRL (ou PTAX sem ela) da data; nulo sem cotação ou sem a cotação do dólar
              */
             valorCentavos: number | null;
             /** Format: int64 */
@@ -2838,9 +2870,11 @@ export interface components {
             quantidade: string;
         };
         PosicoesCripto: {
+            /** @description Toda conta cripto ativa, com o valor das posições confiáveis; conta sem posição vale zero */
+            contas: components["schemas"]["ContaCriptoValor"][];
             /** Format: date */
             data: string;
-            /** @description PTAX usada na conversão: a última até a data; nula se ainda não há */
+            /** @description Cotação USDC/BRL usada na conversão: a última até o fim do dia em America/Sao_Paulo; sem ela, a PTAX; nula se não há nenhuma das duas */
             dolar: components["schemas"]["Dolar"];
             posicoes: components["schemas"]["PosicaoCripto"][];
         };

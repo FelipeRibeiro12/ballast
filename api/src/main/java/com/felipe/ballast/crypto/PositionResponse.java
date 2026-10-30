@@ -18,15 +18,15 @@ public record PositionResponse(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description =
-                "Compras menos vendas em centavos de dólar; nulo sem a PTAX de algum"
+                "Compras menos vendas em centavos de dólar; nulo sem a cotação do dólar de algum"
                     + " movimento em reais")
         Long custoUsdCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description =
-                "Compras menos vendas em centavos de real, pela PTAX da data de cada"
-                    + " movimento; nulo sem a PTAX de algum movimento em dólar")
+                "Compras menos vendas em centavos de real, pela cotação USDC/BRL (ou PTAX sem ela) da data de cada"
+                    + " movimento; nulo sem a cotação do dólar de algum movimento em dólar")
         Long custoCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
@@ -37,28 +37,29 @@ public record PositionResponse(
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
-            description = "Valor em reais pela PTAX da data; nulo sem cotação ou sem PTAX")
+            description =
+                "Valor em reais pela cotação USDC/BRL (ou PTAX sem ela) da data; nulo sem cotação ou sem a cotação do dólar")
         Long valorCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description =
                 "Custo médio ponderado em dólares por unidade, em texto, com 8 casas no máximo"
-                    + " (ADR-042); nulo sem a PTAX de algum movimento em reais")
+                    + " (ADR-042); nulo sem a cotação do dólar de algum movimento em reais")
         String custoMedioUsd,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description =
-                "Custo médio das unidades que restam, em centavos de dólar; nulo sem a PTAX de"
-                    + " algum movimento em reais")
+                "Custo médio das unidades que restam, em centavos de dólar; nulo sem a cotação do"
+                    + " dólar de algum movimento em reais")
         Long custoDaPosicaoUsdCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description =
-                "Custo médio das unidades que restam, em centavos de real pela PTAX de cada"
-                    + " movimento; nulo sem a PTAX de algum movimento em dólar")
+                "Custo médio das unidades que restam, em centavos de real pela cotação USDC/BRL (ou PTAX sem ela) de cada"
+                    + " movimento; nulo sem a cotação do dólar de algum movimento em dólar")
         Long custoDaPosicaoCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
@@ -79,14 +80,14 @@ public record PositionResponse(
             nullable = true,
             description =
                 "Recebido nas vendas menos o custo médio do que foi vendido, em centavos de"
-                    + " dólar; nulo sem a PTAX de algum movimento em reais")
+                    + " dólar; nulo sem a cotação do dólar de algum movimento em reais")
         Long realizadoUsdCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description =
                 "Recebido nas vendas menos o custo médio do que foi vendido, em centavos de real;"
-                    + " nulo sem a PTAX de algum movimento em dólar")
+                    + " nulo sem a cotação do dólar de algum movimento em dólar")
         Long realizadoCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
@@ -115,7 +116,7 @@ public record PositionResponse(
               requiredMode = Schema.RequiredMode.REQUIRED,
               nullable = true,
               description =
-                  "Dólares por unidade, em texto; nulo na cotação antiga em reais sem PTAX")
+                  "Dólares por unidade, em texto; nulo na cotação antiga em reais sem a cotação do dólar")
           String precoUsd,
       @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Instant momento,
       @Schema(
@@ -124,7 +125,7 @@ public record PositionResponse(
               description = "manual quando digitada, coingecko quando veio do job (ADR-040)")
           String fonte) {}
 
-  // dollar é a PTAX da data da posição, para mostrar em dólar a cotação antiga gravada em reais.
+  // dollar é o dólar da data da posição, para mostrar em dólar a cotação antiga gravada em reais.
   static PositionResponse from(NetWorthService.ValuedPosition valued, BigDecimal dollar) {
     CryptoQueries.Position position = valued.position();
     QuoteValue quote = null;

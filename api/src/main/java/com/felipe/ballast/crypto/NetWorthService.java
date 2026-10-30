@@ -42,6 +42,8 @@ class NetWorthService {
       CryptoQueries.Position position,
       BigDecimal valueUsd,
       BigDecimal valueBrl,
+      BigDecimal fullUsd,
+      BigDecimal fullBrl,
       BigDecimal costUsd,
       BigDecimal costBrl,
       BigDecimal averageCostUsd,
@@ -57,7 +59,8 @@ class NetWorthService {
     // (ADR-058).
     private static ValuedPosition withoutValue(CryptoQueries.Position position) {
       return new ValuedPosition(
-          position, null, null, null, null, null, null, null, null, null, null, null, true);
+          position, null, null, null, null, null, null, null, null, null, null, null, null, null,
+          true);
     }
 
     private List<BigDecimal> amounts() {
@@ -79,7 +82,12 @@ class NetWorthService {
 
   private record Bases(CostBasis usd, CostBasis brl) {}
 
-  record Positions(CryptoQueries.Dollar dollar, List<ValuedPosition> positions) {}
+  // Valor de uma conta cripto: soma dos valores cheios das posições, arredondada uma vez. Cada
+  // moeda é nula se alguma posição da conta não tem o valor nela.
+  record AccountValue(UUID accountId, BigDecimal valueBrl, BigDecimal valueUsd) {}
+
+  record Positions(
+      CryptoQueries.Dollar dollar, List<ValuedPosition> positions, List<AccountValue> accounts) {}
 
   static final String OUT_OF_RANGE_REASON = "fora do limite";
   static final String UNQUOTED_REASON = "sem cotação";
@@ -87,11 +95,15 @@ class NetWorthService {
   // reason diz por que a posição ficou fora do total: sem cotação (ou sem dólar) ou fora do limite.
   record Unquoted(CryptoQueries.Position position, String reason) {}
 
-  // cryptoContribution é compras menos vendas, em reais, das posições que entram em crypto, e
-  // cryptoAppreciation o resto do valor delas. Os dois nulos sem a PTAX de algum movimento.
+  // cryptoUsd soma o valor em dólar das posições com cotação; nulo se alguma tem cotação em reais e
+  // nenhum dólar para voltar a dólar. cryptoContribution é compras menos vendas, em reais, das
+  // posições que entram em crypto, e
+  // cryptoAppreciation o resto do valor delas. Os dois nulos sem a cotação do dólar de algum
+  // movimento.
   record NetWorth(
       BigDecimal accounts,
       BigDecimal crypto,
+      BigDecimal cryptoUsd,
       BigDecimal cryptoContribution,
       BigDecimal cryptoAppreciation,
       BigDecimal fixedIncome,
@@ -100,10 +112,11 @@ class NetWorthService {
       List<Unquoted> unquoted,
       List<FixedIncomeService.Excluded> fixedIncomeExcluded) {}
 
-  // dollar é a PTAX da data (nula se não há). Posição com valor fora da faixa do JSON vem sem
+  // dollar é o dólar da data (USDC, ou PTAX sem ele; nulo se não há). Posição com valor fora da
+  // faixa do JSON vem sem
   // valor, e não derruba a lista (ADR-058).
   Positions positions(UUID userId, LocalDate date) {
-    CryptoQueries.Dollar dollar = queries.dollarAt(date).orElse(null);
+    CryptoQueries.Dollar dollar = queries.dollarAt(date, quoteLimit(date)).orElse(null);
     BigDecimal rate = dollar == null ? null : dollar.value();
     List<ValuedPosition> valued = new ArrayList<>();
     Map<PositionKey, Bases> bases = bases(queries.movementsUntil(userId, date));
@@ -128,6 +141,8 @@ class NetWorthService {
               position,
               valueUsd,
               valueBrl,
+              usd,
+              brl,
               cents(position.costUsd()),
               cents(position.costBrl()),
               // Oito casas, as mesmas da cotação, para comparar uma com a outra na tela.
@@ -146,7 +161,31 @@ class NetWorthService {
               ? item
               : ValuedPosition.withoutValue(position));
     }
-    return new Positions(dollar, valued);
+    return new Positions(dollar, valued, accountValues(userId, valued));
+  }
+
+  // Só ativo confiável entra, como no patrimônio. Posição sem cotação, sem o dólar ou fora do
+  // limite
+  // deixa nula a moeda que lhe falta; conta sem posição vale zero.
+  private List<AccountValue> accountValues(UUID userId, List<ValuedPosition> valued) {
+    List<AccountValue> accounts = new ArrayList<>();
+    for (UUID accountId : queries.activeCryptoAccountIds(userId)) {
+      BigDecimal brl = BigDecimal.ZERO;
+      BigDecimal usd = BigDecimal.ZERO;
+      for (ValuedPosition item : valued) {
+        if (!item.position().accountId().equals(accountId) || !item.position().trusted()) {
+          continue;
+        }
+        brl = brl == null || item.fullBrl() == null ? null : brl.add(item.fullBrl());
+        usd = usd == null || item.fullUsd() == null ? null : usd.add(item.fullUsd());
+      }
+      BigDecimal valueBrl = cents(brl);
+      BigDecimal valueUsd = cents(usd);
+      accounts.add(
+          new AccountValue(
+              accountId, fits(valueBrl) ? valueBrl : null, fits(valueUsd) ? valueUsd : null));
+    }
+    return accounts;
   }
 
   Optional<NetWorth> netWorth(UUID userId, LocalDate date) {
@@ -154,12 +193,18 @@ class NetWorthService {
     // Sem cotação, sem o dólar que leva a cotação em USD para reais, ou com o valor fora da faixa,
     // a posição fica de fora.
     BigDecimal crypto = BigDecimal.ZERO;
+    BigDecimal cryptoUsd = BigDecimal.ZERO;
     BigDecimal contribution = BigDecimal.ZERO;
     List<Unquoted> unquoted = new ArrayList<>();
     for (ValuedPosition valued : positions.positions()) {
       // Ativo não confiável (spam de uma leitura de carteira) não entra em nada até ser promovido.
       if (!valued.position().trusted()) {
         continue;
+      }
+      if (valued.valueUsd() != null) {
+        cryptoUsd = cryptoUsd == null ? null : cryptoUsd.add(valued.valueUsd());
+      } else if (valued.position().price() != null && !valued.outOfRange()) {
+        cryptoUsd = null;
       }
       if (valued.valueBrl() == null) {
         unquoted.add(
@@ -192,6 +237,7 @@ class NetWorthService {
     }
     if (!fits(accounts)
         || !fits(crypto)
+        || !fits(cryptoUsd)
         || !fits(contribution)
         || !fits(appreciation)
         || !fits(total)) {
@@ -201,6 +247,7 @@ class NetWorthService {
         new NetWorth(
             accounts,
             crypto,
+            cryptoUsd,
             contribution,
             appreciation,
             titles.get().total(),
@@ -230,7 +277,7 @@ class NetWorthService {
   record MonthEnd(YearMonth month, LocalDate date, NetWorth netWorth) {}
 
   // Um custo médio por posição e moeda, com os movimentos já na ordem certa. O movimento em
-  // reais sem a PTAX da data deixa o lado em dólar sem custo, e o contrário também.
+  // reais sem o dólar da data deixa o lado em dólar sem custo, e o contrário também.
   private static Map<PositionKey, Bases> bases(List<CryptoQueries.Movement> movements) {
     Map<PositionKey, Bases> bases = new HashMap<>();
     for (CryptoQueries.Movement movement : movements) {
@@ -265,9 +312,8 @@ class NetWorthService {
     return value == null || cost == null ? null : value.subtract(cost);
   }
 
-  // reais = dólares x PTAX; dólares = reais / PTAX. Sem PTAX não há conversão. Fica exato: a
-  // divisão
-  // usa 34 dígitos, e só cents arredonda.
+  // reais = dólares x cotação; dólares = reais / cotação. Sem cotação não há conversão. Fica exato:
+  // a divisão usa 34 dígitos, e só cents arredonda.
   private static BigDecimal convert(BigDecimal value, BigDecimal rate, boolean toBrl) {
     if (rate == null) {
       return null;

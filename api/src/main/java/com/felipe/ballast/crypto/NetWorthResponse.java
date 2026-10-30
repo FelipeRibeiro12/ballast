@@ -26,8 +26,17 @@ public record NetWorthResponse(
             requiredMode = Schema.RequiredMode.REQUIRED,
             nullable = true,
             description =
+                "Soma do valor em dólares das posições com cotação; nulo quando alguma tem cotação"
+                    + " em reais e falta a cotação do dólar para voltar a dólar",
+            minimum = "-9007199254740991",
+            maximum = "9007199254740991")
+        Long criptoUsdCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
                 "Compras menos vendas, em reais, das posições somadas em criptoCentavos (ADR-042);"
-                    + " nulo sem a PTAX de algum movimento",
+                    + " nulo sem o dólar de algum movimento",
             minimum = "-9007199254740991",
             maximum = "9007199254740991")
         Long criptoAportadoCentavos,
@@ -117,6 +126,7 @@ public record NetWorthResponse(
         date,
         cents(netWorth.accounts()),
         cents(netWorth.crypto()),
+        nullableCents(netWorth.cryptoUsd()),
         nullableCents(netWorth.cryptoContribution()),
         nullableCents(netWorth.cryptoAppreciation()),
         cents(netWorth.fixedIncome()),
