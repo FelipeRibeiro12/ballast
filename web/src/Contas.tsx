@@ -6,6 +6,7 @@ import {
   atualizarConta,
   deleteConta,
   fetchMfa,
+  fetchPosicoesCripto,
   fetchResumoExclusao,
   LimiteTentativasError,
   NomeDeContaRepetidoError,
@@ -19,9 +20,24 @@ import {
   putCofrinho,
   putCategoriasPermitidas,
 } from './api'
-import type { AtualizarContaRequest, Categoria, Conta, CriarContaRequest, RendimentoCofrinho, ResumoExclusaoConta } from './api'
+import type {
+  AtualizarContaRequest,
+  Categoria,
+  Conta,
+  ContaCriptoValor,
+  CriarContaRequest,
+  RendimentoCofrinho,
+  ResumoExclusaoConta,
+} from './api'
 import Faturas from './Faturas'
-import { centavosParaCampo, formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
+import { hojeLocal } from './datas'
+import {
+  centavosParaCampo,
+  formatarCentavos,
+  formatarCentavosEmDolar,
+  lerCentavos,
+  lerValorPositivo,
+} from './dinheiro'
 import { IconeBanco, IconeBeneficio, IconeCartao, IconeCripto, IconeDinheiro, IconeInvestimentos, IconeMais } from './icones'
 import Painel from './Painel'
 import { hashDaSecao } from './rota'
@@ -950,6 +966,19 @@ function LancarRendimento({
   )
 }
 
+// Real em cima, dólar logo abaixo (ADR-077). Sem valor (busca falhou ou falta cotação), traço.
+function ValorDaContaCripto({ valor }: { valor: ContaCriptoValor | null }) {
+  return (
+    <div className="conta-valores">
+      <span className="conta-saldo">
+        {valor?.valorCentavos == null ? '—' : formatarCentavos(valor.valorCentavos)}
+      </span>
+      <small>{valor?.valorUsdCentavos == null ? '—' : formatarCentavosEmDolar(valor.valorUsdCentavos)}</small>
+      <a href={hashDaSecao('investimentos')}>Ver posições</a>
+    </div>
+  )
+}
+
 export default function Contas({
   aoSessaoExpirar,
   versaoDeSaldo,
@@ -979,6 +1008,33 @@ export default function Contas({
   const [categorias, setCategorias] = useState<EstadoCategorias>({ tipo: 'carregando' })
   const [tentativaDeCategorias, setTentativaDeCategorias] = useState(0)
   const acaoEmVoo = useRef(false)
+  // Valor de cada conta cripto, vindo das posições. Nulo enquanto não chega ou se a busca falhou.
+  const [valoresCripto, setValoresCripto] = useState<ContaCriptoValor[] | null>(null)
+
+  const idsCripto =
+    estado.tipo === 'ok' && !arquivadas
+      ? estado.contas
+          .filter((conta) => conta.tipo === 'cripto')
+          .map((conta) => conta.id)
+          .join(',')
+      : ''
+
+  useEffect(() => {
+    if (idsCripto === '') return
+    let ativo = true
+    // Falha aqui não derruba a lista: o cartão mostra traço e o atalho para as posições segue.
+    fetchPosicoesCripto(hojeLocal()).then(
+      (posicoes) => {
+        if (ativo) setValoresCripto(posicoes.contas)
+      },
+      () => {
+        if (ativo) setValoresCripto(null)
+      },
+    )
+    return () => {
+      ativo = false
+    }
+  }, [idsCripto, versaoDeSaldo])
 
   useEffect(() => {
     // Descarta a resposta da lista anterior se o usuário já trocou de visão.
@@ -1156,9 +1212,11 @@ export default function Contas({
                         {conta.percentualCdi != null && ` · ${conta.percentualCdi.replace('.', ',')}% do CDI`}
                       </span>
                     </div>
-                    {conta.tipo === 'cripto' || conta.tipo === 'investimento' ? (
+                    {conta.tipo === 'cripto' ? (
+                      <ValorDaContaCripto valor={valoresCripto?.find((item) => item.contaId === conta.id) ?? null} />
+                    ) : conta.tipo === 'investimento' ? (
                       <a className="conta-saldo" href={hashDaSecao('investimentos')}>
-                        {conta.tipo === 'cripto' ? 'Ver posições' : 'Ver títulos'}
+                        Ver títulos
                       </a>
                     ) : (
                       <span className={conta.saldoCentavos < 0 ? 'conta-saldo negativo' : 'conta-saldo'}>

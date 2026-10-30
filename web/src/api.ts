@@ -1349,6 +1349,7 @@ export type MovimentoCriptoRequest = components['schemas']['MovimentoCriptoReque
 export type PosicaoCripto = components['schemas']['PosicaoCripto']
 export type PosicoesCripto = components['schemas']['PosicoesCripto']
 export type Patrimonio = components['schemas']['Patrimonio']
+export type ContaCriptoValor = components['schemas']['ContaCriptoValor']
 
 export class InvestimentoNaoEncontradoError extends ApiError {}
 

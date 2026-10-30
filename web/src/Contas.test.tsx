@@ -227,6 +227,76 @@ describe('Contas', () => {
     })
   })
 
+  describe('valor da conta cripto', () => {
+    const exchange = conta({ id: 'x1', nome: 'Exchange', tipo: 'cripto', saldoInicialCentavos: 0, saldoCentavos: 0 })
+    const dolar = { valor: '5.43', data: '2026-10-22', momento: '2026-10-22T15:30:00Z', fonte: 'USDC' }
+
+    const secaoPronta = (): Promise<HTMLElement> => screen.findByRole('region', { name: /^contas/i })
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-22T12:00:00-03:00'))
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    function posicoesCom(contas: unknown[]): unknown {
+      return { data: '2026-10-22', dolar, posicoes: [], contas }
+    }
+
+    it('mostra o valor em reais e o dólar logo abaixo, e mantém o atalho', async () => {
+      mockFetch({
+        ...sessaoViva,
+        'GET /contas': responde([exchange]),
+        'GET /posicoes-cripto?data=2026-10-22': responde(
+          posicoesCom([{ contaId: 'x1', valorCentavos: 4_320_000, valorUsdCentavos: 864_000 }]),
+        ),
+      })
+      render(<App />)
+      const secao = await secaoPronta()
+      const real = await within(secao).findByText(texto('R$ 43.200,00'))
+      const usd = within(secao).getByText(texto('US$ 8.640,00'))
+      expect(real.compareDocumentPosition(usd) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(within(secao).getByRole('link', { name: 'Ver posições' })).toHaveAttribute('href', '#/investimentos')
+    })
+
+    it('valor nulo mostra traço', async () => {
+      mockFetch({
+        ...sessaoViva,
+        'GET /contas': responde([exchange]),
+        'GET /posicoes-cripto?data=2026-10-22': responde(
+          posicoesCom([{ contaId: 'x1', valorCentavos: null, valorUsdCentavos: null }]),
+        ),
+      })
+      render(<App />)
+      const secao = await secaoPronta()
+      await waitFor(() => expect(within(secao).getAllByText('—').length).toBeGreaterThanOrEqual(2))
+    })
+
+    it('falha ao buscar as posições não esconde a conta e mostra traço', async () => {
+      mockFetch({
+        ...sessaoViva,
+        'GET /contas': responde([exchange]),
+        'GET /posicoes-cripto?data=2026-10-22': responde({ erro: 'x' }, 500),
+      })
+      render(<App />)
+      const secao = await secaoPronta()
+      expect(await within(secao).findByText('Exchange')).toBeVisible()
+      expect(within(secao).getByRole('link', { name: 'Ver posições' })).toBeVisible()
+      await waitFor(() => expect(chamadasA('GET /posicoes-cripto?data=2026-10-22')).toHaveLength(1))
+      expect(within(secao).getAllByText('—').length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('busca as posições uma vez e só quando há conta cripto', async () => {
+      mockFetch({ ...sessaoViva, 'GET /contas': responde([conta()]) })
+      render(<App />)
+      await within(await secaoPronta()).findByText('Nubank')
+      expect(chamadasA('GET /posicoes-cripto?data=2026-10-22')).toHaveLength(0)
+    })
+  })
+
   it('cria a conta, mostra na lista sem recarregar e limpa o formulário', async () => {
     mockFetch({
       ...sessaoViva,

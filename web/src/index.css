@@ -1858,6 +1858,14 @@ p[role='status'] {
   white-space: nowrap;
 }
 
+.conta-valores {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+}
+
 .conta-saldo.negativo {
   color: var(--despesa);
 }
