@@ -15,6 +15,7 @@ function conta(tipo: Conta['tipo'], saldoCentavos: number): Conta {
     cartao: null,
     categoriasPermitidas: null,
     percentualCdi: null,
+    emInvestimentos: false,
   }
 }
 

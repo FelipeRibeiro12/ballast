@@ -458,6 +458,7 @@ function App() {
     [contasAtivas],
   )
   const contasCripto = useMemo(() => contasAtivas?.filter((conta) => conta.tipo === 'cripto') ?? [], [contasAtivas])
+  const cofrinhosAtivos = useMemo(() => contasAtivas?.filter((conta) => conta.tipo === 'cofrinho') ?? [], [contasAtivas])
   const contasDeInvestimento = useMemo(
     () => contasAtivas?.filter((conta) => conta.tipo === 'investimento') ?? [],
     [contasAtivas],
@@ -658,6 +659,9 @@ function App() {
           <Investimentos
             contasDeInvestimento={contasDeInvestimento}
             contasCripto={contasCripto}
+            cofrinhosAtivos={cofrinhosAtivos}
+            // A lista de contas, que alimenta a engrenagem, busca de novo quando o saldo muda.
+            aoMudarCofrinho={() => setVersaoDeSaldo((n) => n + 1)}
             aoSessaoExpirar={aoSessaoExpirar}
           />
         )}

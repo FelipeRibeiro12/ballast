@@ -565,6 +565,42 @@ class CryptoQueries {
         .single();
   }
 
+  record SavingsPot(UUID id, String name, BigDecimal balance) {}
+
+  // Cofrinhos ativos que o usuário marcou como investimento, com o saldo até date (mesma conta de
+  // accountsBalance). Escopado por usuario_id; a lista sai em ordem estável por nome e id.
+  List<SavingsPot> investedSavingsPots(UUID userId, LocalDate date) {
+    return jdbc.sql(
+            """
+            SELECT c.id, c.nome,
+                   c.saldo_inicial + COALESCE((
+                     SELECT SUM(CASE l.tipo
+                                  WHEN 'receita' THEN l.valor
+                                  WHEN 'despesa' THEN -l.valor
+                                  WHEN 'transferencia' THEN
+                                    CASE WHEN te.id IS NOT NULL THEN l.valor ELSE -l.valor END
+                                END)
+                     FROM lancamento l
+                     LEFT JOIN transferencia te
+                       ON te.entrada_id = l.id AND te.usuario_id = l.usuario_id
+                     WHERE l.usuario_id = c.usuario_id AND l.conta_id = c.id
+                       AND l.status = 'realizado' AND l.data_caixa <= :date), 0) AS saldo
+            FROM conta c
+            WHERE c.usuario_id = :userId AND c.tipo = 'cofrinho' AND c.em_investimentos
+              AND NOT c.arquivada
+            ORDER BY c.nome, c.id
+            """)
+        .param("userId", userId)
+        .param("date", date)
+        .query(
+            (rs, row) ->
+                new SavingsPot(
+                    rs.getObject("id", UUID.class),
+                    rs.getString("nome"),
+                    rs.getBigDecimal("saldo")))
+        .list();
+  }
+
   private static UUID newId() {
     // O gerador do Hibernate não usa a sessão; é o mesmo dos @UuidGenerator das entidades.
     return UuidVersion7Strategy.INSTANCE.generateUuid(null);

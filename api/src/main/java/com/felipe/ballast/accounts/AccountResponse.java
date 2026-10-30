@@ -45,7 +45,13 @@ public record AccountResponse(
             description =
                 "Percentual do CDI do cofrinho, em texto com duas casas (ex. \"110.00\"). Nulo"
                     + " fora do cofrinho e no cofrinho sem percentual")
-        String percentualCdi) {
+        String percentualCdi,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description =
+                "Se o saldo do cofrinho conta na tela Investimentos (ADR-076). Falso fora do"
+                    + " cofrinho e por padrão")
+        boolean emInvestimentos) {
 
   // Única conversão para centavos, na borda de saída. longValueExact falha alto se o banco
   // devolver mais que 2 casas ou um valor fora de long, em vez de arredondar em silêncio.
@@ -61,7 +67,8 @@ public record AccountResponse(
         summary.createdAt(),
         summary.card() == null ? null : CardResponse.from(summary.card(), summary.balance()),
         summary.permittedCategories(),
-        summary.cdiPercent() == null ? null : summary.cdiPercent().toPlainString());
+        summary.cdiPercent() == null ? null : summary.cdiPercent().toPlainString(),
+        summary.inInvestments());
   }
 
   private static long toCents(BigDecimal amount) {

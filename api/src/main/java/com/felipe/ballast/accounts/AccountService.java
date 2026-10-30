@@ -224,6 +224,34 @@ class AccountService {
         });
   }
 
+  enum InvestmentsResult {
+    NOT_FOUND,
+    NOT_SAVINGS_POT,
+    ARCHIVED
+  }
+
+  record InvestmentsUpdated(AccountSummary account) {}
+
+  // Marcar conta arquivada é recusado; desmarcar passa, para o usuário poder limpar a escolha. A
+  // trava segue o padrão de setCdiPercent. Repetir o mesmo valor só regrava o mesmo valor.
+  Object setInInvestments(UUID userId, UUID id, boolean value) {
+    return transaction.execute(
+        status -> {
+          Optional<AccountQueries.LockedAccount> account = queries.lockAccount(userId, id);
+          if (account.isEmpty()) {
+            return InvestmentsResult.NOT_FOUND;
+          }
+          if (account.get().type() != AccountType.SAVINGS_POT) {
+            return InvestmentsResult.NOT_SAVINGS_POT;
+          }
+          if (value && account.get().archived()) {
+            return InvestmentsResult.ARCHIVED;
+          }
+          queries.updateInInvestments(userId, id, value);
+          return new InvestmentsUpdated(queries.find(userId, id).orElseThrow());
+        });
+  }
+
   private ReplaceResult replaceLocked(UUID userId, UUID id, List<UUID> ids) {
     Optional<AccountQueries.LockedAccount> account = queries.lockAccount(userId, id);
     if (account.isEmpty()) {

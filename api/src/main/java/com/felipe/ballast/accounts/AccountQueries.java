@@ -40,7 +40,7 @@ class AccountQueries {
       )
       SELECT c.id, c.nome, c.tipo, c.moeda, c.saldo_inicial,
              c.saldo_inicial + COALESCE(m.movimento, 0) AS saldo,
-             c.arquivada, c.criada_em, c.percentual_cdi,
+             c.arquivada, c.criada_em, c.percentual_cdi, c.em_investimentos,
              ca.limite, ca.dia_fechamento, ca.dia_vencimento, ca.conta_pagamento_id,
              CASE WHEN c.tipo = 'beneficio' THEN
                ARRAY(SELECT p.categoria_id FROM conta_categoria_permitida p
@@ -220,7 +220,8 @@ class AccountQueries {
         rs.getObject("criada_em", OffsetDateTime.class).toInstant(),
         mapCard(rs),
         mapPermitted(rs),
-        rs.getBigDecimal("percentual_cdi"));
+        rs.getBigDecimal("percentual_cdi"),
+        rs.getBoolean("em_investimentos"));
   }
 
   // Nulo fora de conta de benefício; vazio quando a conta aceita qualquer categoria.
@@ -242,6 +243,14 @@ class AccountQueries {
         rs.getInt("dia_fechamento"),
         rs.getInt("dia_vencimento"),
         rs.getObject("conta_pagamento_id", UUID.class));
+  }
+
+  void updateInInvestments(UUID userId, UUID accountId, boolean value) {
+    jdbc.sql("UPDATE conta SET em_investimentos = :value WHERE usuario_id = :userId AND id = :id")
+        .param("value", value)
+        .param("userId", userId)
+        .param("id", accountId)
+        .update();
   }
 
   void updateCdiPercent(UUID userId, UUID accountId, BigDecimal percent) {

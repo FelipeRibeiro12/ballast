@@ -283,6 +283,23 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await expect(titulos).toContainText(reais('1.000,00'))
     await expect(page.getByRole('region', { name: 'Total investido' })).toContainText('Renda fixa')
     await capturar(page, projeto, '11e-renda-fixa')
+    // A engrenagem abre a escolha de cofrinhos; a página não pode rolar de lado em nenhuma largura.
+    await page.getByRole('button', { name: 'Escolher cofrinhos da renda fixa' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    // Mede só com o painel fechado: durante a saída ele ainda ocupa espaço fora da tela.
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    // Só o conteúdo da página (main): a barra do topo estoura no Linux do CI com outras fontes,
+    // problema antigo que está no backlog e não pertence a esta tela.
+    const estouro = await page.evaluate(() => {
+      const largura = window.innerWidth
+      const culpados = [...document.querySelectorAll('main *')]
+        .filter((el) => el.getBoundingClientRect().right > largura + 1)
+        .slice(0, 5)
+        .map((el) => `${el.tagName.toLowerCase()}.${el.className} direita=${Math.round(el.getBoundingClientRect().right)}`)
+      return { culpados }
+    })
+    expect(estouro, JSON.stringify(estouro)).toEqual({ culpados: [] })
   })
 
   await test.step('editar e apagar conta e recorrência', async () => {

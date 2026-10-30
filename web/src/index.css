@@ -1183,6 +1183,14 @@ p[role='status'] {
   color: #ffffff;
 }
 
+.investimentos-resumo {
+  margin-bottom: var(--esp-4);
+}
+
+.investimentos-resumo + .segmentos {
+  margin-bottom: var(--esp-4);
+}
+
 .destaque-rotulo {
   margin-bottom: var(--esp-1);
   font-size: 0.875rem;

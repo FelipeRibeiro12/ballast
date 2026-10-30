@@ -12,6 +12,8 @@ const patrimonio = {
   criptoAportadoCentavos: 4_000_000,
   criptoValorizacaoCentavos: 320_000,
   rendaFixaCentavos: 1_050_000,
+  cofrinhosCentavos: 0,
+  cofrinhos: [],
   totalCentavos: 5_870_000,
   semCotacao: [{ contaId: 'c1', ativoId: 'a2', quantidade: '10' }],
 }
@@ -51,7 +53,7 @@ afterEach(() => {
 describe('Investimentos', () => {
   it('mostra só renda fixa e cripto no total, sem o saldo das contas, e o aviso das sem cotação', async () => {
     mockFetch()
-    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} aoSessaoExpirar={vi.fn()} />)
+    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} cofrinhosAtivos={[]} aoMudarCofrinho={vi.fn()} aoSessaoExpirar={vi.fn()} />)
 
     const resumo = await screen.findByRole('region', { name: 'Total investido' })
     expect(within(resumo).getByText(texto('R$ 53.700,00'))).toBeVisible()
@@ -65,7 +67,7 @@ describe('Investimentos', () => {
 
   it('separa na cripto o que foi aporte do que foi valorização', async () => {
     mockFetch()
-    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} aoSessaoExpirar={vi.fn()} />)
+    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} cofrinhosAtivos={[]} aoMudarCofrinho={vi.fn()} aoSessaoExpirar={vi.fn()} />)
 
     const resumo = await screen.findByRole('region', { name: 'Total investido' })
     expect(
@@ -75,7 +77,7 @@ describe('Investimentos', () => {
 
   it('abre em renda fixa e troca para cripto', async () => {
     mockFetch()
-    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} aoSessaoExpirar={vi.fn()} />)
+    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} cofrinhosAtivos={[]} aoMudarCofrinho={vi.fn()} aoSessaoExpirar={vi.fn()} />)
 
     expect(await screen.findByRole('region', { name: 'Renda fixa' })).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Cripto' }))
@@ -85,7 +87,7 @@ describe('Investimentos', () => {
 
   it('a data vale para o patrimônio e para a aba aberta', async () => {
     mockFetch()
-    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} aoSessaoExpirar={vi.fn()} />)
+    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} cofrinhosAtivos={[]} aoMudarCofrinho={vi.fn()} aoSessaoExpirar={vi.fn()} />)
     await screen.findByRole('region', { name: 'Total investido' })
 
     fireEvent.change(screen.getByLabelText('Posição em'), { target: { value: '2026-03-10' } })

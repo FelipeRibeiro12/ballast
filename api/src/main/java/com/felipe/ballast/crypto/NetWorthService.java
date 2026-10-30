@@ -96,6 +96,7 @@ class NetWorthService {
       BigDecimal cryptoAppreciation,
       BigDecimal fixedIncome,
       BigDecimal total,
+      List<CryptoQueries.SavingsPot> savingsPots,
       List<Unquoted> unquoted,
       List<FixedIncomeService.Excluded> fixedIncomeExcluded) {}
 
@@ -180,6 +181,15 @@ class NetWorthService {
       return Optional.empty();
     }
     BigDecimal total = accounts.add(crypto).add(titles.get().total());
+    // O cofrinho marcado já está em accounts; aqui só se separa para a tela, sem somar de novo.
+    List<CryptoQueries.SavingsPot> savingsPots = queries.investedSavingsPots(userId, date);
+    BigDecimal savingsTotal =
+        savingsPots.stream()
+            .map(CryptoQueries.SavingsPot::balance)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    if (!fits(savingsTotal) || savingsPots.stream().anyMatch(pot -> !fits(pot.balance()))) {
+      return Optional.empty();
+    }
     if (!fits(accounts)
         || !fits(crypto)
         || !fits(contribution)
@@ -195,6 +205,7 @@ class NetWorthService {
             appreciation,
             titles.get().total(),
             total,
+            savingsPots,
             unquoted,
             titles.get().excluded()));
   }

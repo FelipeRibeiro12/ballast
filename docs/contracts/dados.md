@@ -564,6 +564,13 @@ estiver faltando, em vez de inventar.
 todo tipo, menos no cofrinho, e nele pode ficar nulo até o usuário informar.
 `conta_percentual_cdi_so_no_cofrinho`: só no tipo `cofrinho` e entre 0 e 1000.
 
+### Cofrinho em investimentos (V39, ADR-076)
+
+`conta.em_investimentos boolean not null default false`. O CHECK
+`conta_em_investimentos_so_no_cofrinho` só deixa `true` no tipo `cofrinho`. Diz se
+o saldo do cofrinho conta no card Renda fixa e no Total investido da tela
+Investimentos; não mexe em saldo, lançamento nem no Posso gastar.
+
 ### Rendimento diário do cofrinho (V38, ADR-074)
 
 Marcador de cada dia de crédito do cofrinho. O job diário e o
@@ -1440,6 +1447,7 @@ apenas em código:
 14. Idempotência (V23, ADR-056): uma linha por usuário e chave; chave só com letras, dígitos e `._:-` de 1 a 80 caracteres; status 2xx e resposta nulos ou preenchidos juntos
 15. `mapeamento_csv` (V35, ADR-070): nome único por usuário, de 1 a 60 caracteres sem espaço nas pontas; separador, formato de data, decimal e sinal só nos valores do contrato; colunas de 0 a 49 e diferentes entre si
 16. `rendimento_cofrinho` (V38, ADR-074): um marcador por conta e dia; conta e lançamento do mesmo usuário (FK composta); apagar o lançamento anula só `lancamento_id`
+17. `conta.em_investimentos` (V39, ADR-076): verdadeiro só em conta do tipo `cofrinho`
 
 ## Índices iniciais
 

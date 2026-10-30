@@ -16,6 +16,7 @@ function conta(id: string, nome: string): Conta {
     cartao: null,
     categoriasPermitidas: null,
     percentualCdi: null,
+    emInvestimentos: false,
   }
 }
 

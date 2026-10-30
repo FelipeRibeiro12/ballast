@@ -27,6 +27,7 @@ const exchange: Conta = {
   cartao: null,
   categoriasPermitidas: null,
   percentualCdi: null,
+  emInvestimentos: false,
 }
 
 const ENDERECO = '0x52908400098527886e0f7030069857d2e4169ee7'
