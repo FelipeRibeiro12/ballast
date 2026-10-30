@@ -46,6 +46,7 @@ Notificação no PWA. No iOS só funciona se instalado na tela inicial.
 - **F27** — Previsão de gasto e detecção de anomalia (serviço Python, ADR-007)
 - **F28** — Classificação automática de categoria pela descrição
 - **F29** — Capacitor para publicar nas lojas
+- **F30** — Mais redes na observação de carteira (ADR-071). O dono habilitou no app da Alchemy: Ethereum, Solana, Base, Arbitrum, Polygon PoS, Robinhood Chain, Avalanche e Bitcoin. Hoje o Ballast lê só Ethereum, Base e Solana. Arbitrum, Polygon PoS, Avalanche e Robinhood Chain são EVM: entram como Base entrou (rede, URL padrão da Alchemy, nativo e validação de endereço), com a mesma chave. Bitcoin é fatia própria: endereço em outro formato (bech32 e legado), saldo por UTXO e sem token. Confirmar o host de cada rede na documentação da Alchemy antes de implementar.
 - **DÍVIDA** — Sincronização de carteira sem teto por usuário nem orçamento global: 20 carteiras a cada 60 s esgotam a cota gratuita da Alchemy para todos (F24, ADR-071). Dono: backend, limite de leituras por usuário por hora.
 - **DÍVIDA** — Airdrop de token-lixo: leitura parcial nunca zera o que saiu do endereço e cada leitura cria até 100 ativos não confiáveis, enchendo o teto de 200 (F24). Dono: backend, limitar ativos novos por leitura e não criar ativo em leitura parcial.
 - **DÍVIDA** — Leitura lenta pode aplicar delta antigo sobre estado mais novo; comparar `tentada_em` ao aplicar se `TIMEOUT` ou `MAX_TOKENS` subirem (F24). Dono: backend.
