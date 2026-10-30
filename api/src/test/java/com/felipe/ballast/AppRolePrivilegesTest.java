@@ -91,6 +91,7 @@ class AppRolePrivilegesTest {
     assertDenied("TRUNCATE titulo_renda_fixa");
     assertDenied("TRUNCATE marcacao_renda_fixa");
     assertDenied("TRUNCATE indice");
+    assertDenied("TRUNCATE cotacao_usdc_brl");
   }
 
   @Test
