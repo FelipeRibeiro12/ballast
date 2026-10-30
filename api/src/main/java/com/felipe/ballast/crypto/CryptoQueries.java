@@ -520,6 +520,23 @@ class CryptoQueries {
         .list();
   }
 
+  // O conflito na PK guarda a leitura que já estava no mesmo instante.
+  int insertUsdcBrl(Instant moment, BigDecimal priceBrl) {
+    return jdbc.sql(
+            "INSERT INTO cotacao_usdc_brl (momento, preco) VALUES (:moment, :price)"
+                + " ON CONFLICT (momento) DO NOTHING")
+        .param("moment", OffsetDateTime.ofInstant(moment, ZoneOffset.UTC))
+        .param("price", priceBrl)
+        .update();
+  }
+
+  boolean hasUsdcBrlBefore(Instant moment) {
+    return jdbc.sql("SELECT EXISTS (SELECT 1 FROM cotacao_usdc_brl WHERE momento < :moment)")
+        .param("moment", OffsetDateTime.ofInstant(moment, ZoneOffset.UTC))
+        .query(Boolean.class)
+        .single();
+  }
+
   Optional<LocalDate> firstDollarDate() {
     return jdbc.sql("SELECT min(data) FROM indice WHERE serie = 'dolar'")
         .query(LocalDate.class)
