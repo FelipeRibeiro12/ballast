@@ -4,8 +4,9 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 // apiKey é a chave da Alchemy (ADR-071); sem ela o job não roda e a leitura manual responde
-// sem_chave. As URLs são a raiz de cada rede, sem a chave: o cliente acrescenta /v2/{chave}.
-// Vazio vale o padrão, porque o .env.example deixa as chaves em branco.
+// sem_chave. As URLs são a raiz de cada rede, sem a chave: o cliente acrescenta /v2/{chave} na
+// hora da chamada, então só ALCHEMY_API_KEY basta e uma URL explícita (outro provedor ou um
+// proxy) vence o padrão. firstReadEnabled liga a leitura logo depois do cadastro da carteira.
 @ConfigurationProperties("ballast.carteiras")
 public record WalletsProperties(
     String apiKey,
@@ -13,6 +14,7 @@ public record WalletsProperties(
     String baseUrl,
     String solanaUrl,
     boolean jobEnabled,
+    boolean firstReadEnabled,
     Duration interval,
     Duration pause) {
 

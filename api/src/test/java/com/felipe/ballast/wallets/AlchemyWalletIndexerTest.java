@@ -240,7 +240,8 @@ class AlchemyWalletIndexerTest {
 
   @Test
   void thePropertiesNeverPrintTheKey() {
-    WalletsProperties properties = new WalletsProperties(KEY, null, null, null, false, null, null);
+    WalletsProperties properties =
+        new WalletsProperties(KEY, null, null, null, false, false, null, null);
 
     assertThat(properties.toString()).doesNotContain(KEY);
   }

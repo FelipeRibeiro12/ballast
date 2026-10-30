@@ -132,6 +132,8 @@ ballast:
     solana-url: ${ALCHEMY_SOLANA_URL:}
     # Desligado por padrão. Para ligar, BALLAST_CARTEIRAS_JOB_ENABLED=true.
     job-enabled: false
+    # Lê a carteira uma vez logo depois de cadastrada, em segundo plano. Sem chave não faz nada.
+    first-read-enabled: true
     interval: PT6H
     # Pausa entre uma carteira e a seguinte, para não gastar a cota do plano gratuito de uma vez.
     pause: PT1S
@@ -145,6 +147,10 @@ logging:
     # O Hibernate loga o erro do driver, e o do Postgres traz "Key (email)=(...)" com o e-mail
     # inteiro. E-mail repetido é caminho esperado do cadastro e já é logado mascarado.
     org.hibernate.orm.jdbc.error: "OFF"
+    # Em DEBUG estes loggers escrevem a URL da chamada, e a URL da Alchemy leva a chave. Subir o
+    # nível aqui vaza a chave no log (ADR-071).
+    org.springframework.web.client: "WARN"
+    org.springframework.http.client: "WARN"
 
 server:
   # loopback por padrão: sem HOST explícito a API não escuta na rede local
