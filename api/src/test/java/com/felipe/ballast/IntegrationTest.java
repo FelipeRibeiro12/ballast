@@ -30,6 +30,7 @@ import org.springframework.context.annotation.Import;
       "ballast.indices.job-enabled=false",
       "ballast.cotacoes.job-enabled=false",
       "ballast.carteiras.job-enabled=false",
+      "ballast.cofrinho.job-enabled=false",
       "ballast.password.memory-kib=8",
       "ballast.password.iterations=1",
       "ballast.password.parallelism=1"

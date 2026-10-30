@@ -372,6 +372,32 @@ export async function putCofrinho(id: string, percentualCdi: string): Promise<Co
   return lerConta(resposta, 'PUT /contas/{id}/cofrinho')
 }
 
+export type RendimentoCofrinho = components['schemas']['RendimentoCofrinho']
+
+const SITUACOES_DE_RENDIMENTO = ['lancado', 'ja_lancado', 'sem_cdi', 'sem_rendimento', 'sem_percentual']
+
+function isRendimentoCofrinho(valor: unknown): valor is RendimentoCofrinho {
+  if (typeof valor !== 'object' || valor === null) return false
+  const { situacao, valor: centavos } = valor as Record<string, unknown>
+  return (
+    typeof situacao === 'string' &&
+    SITUACOES_DE_RENDIMENTO.includes(situacao) &&
+    (centavos === null || Number.isSafeInteger(centavos))
+  )
+}
+
+// Corpo vazio: a rota roda a conta de hoje e é idempotente pelo marcador do dia (ADR-074).
+export async function postRendimentoCofrinho(id: string): Promise<RendimentoCofrinho> {
+  const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(id)}/cofrinho/rendimento`, {
+    method: 'POST',
+    credentials: 'same-origin',
+  })
+  if (!resposta.ok) return recusarResposta(resposta, 'POST /contas/{id}/cofrinho/rendimento')
+  const corpo: unknown = await resposta.json()
+  if (!isRendimentoCofrinho(corpo)) throw new ApiError('POST /contas/{id}/cofrinho/rendimento com formato inesperado')
+  return corpo
+}
+
 export async function patchConta(id: string, arquivada: boolean): Promise<Conta> {
   const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(id)}`, {
     method: 'PATCH',

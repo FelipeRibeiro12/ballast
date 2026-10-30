@@ -194,7 +194,8 @@ barra no fim.
    API_TAG="$(cat .api_tag)" docker compose run --rm \
      -e SPRING_PROFILES_ACTIVE=producao,seed -e SEED_EMAIL -e SEED_SENHA \
      -e BALLAST_RECURRENCE_JOB_ENABLED=false -e BALLAST_INDICES_JOB_ENABLED=false \
-     -e BALLAST_COTACOES_JOB_ENABLED=false -e BALLAST_IDENTITY_CLEANUP_JOB_ENABLED=false api
+     -e BALLAST_COTACOES_JOB_ENABLED=false -e BALLAST_IDENTITY_CLEANUP_JOB_ENABLED=false \
+     -e BALLAST_COFRINHO_JOB_ENABLED=false api
    unset SEED_SENHA
    ```
 
@@ -235,6 +236,13 @@ barra no fim.
 - No log da API (`API_TAG="$(cat .api_tag)" docker compose logs api`), uma
   senha errada aparece com o seu IP, não com o do Caddy.
 - Rode o `backup` à mão uma vez e faça a restauração do passo 11.
+- Rendimento do cofrinho (ADR-074): o job roda às 03:30 de São Paulo e lança uma
+  receita "Rendimento do cofrinho (estimado)" por conta, só em dia útil. No log,
+  procure `rendimento do cofrinho`. Para desligar, `BALLAST_COFRINHO_JOB_ENABLED=false`
+  no `api.env`. É estimativa: o banco pode diferir em centavos, e o usuário edita
+  ou apaga o lançamento. Se a API ficou fora, o job recupera até 7 dias.
+  `POST /contas/{id}/cofrinho/rendimento` (botão na tela Contas) lança o de hoje
+  na hora.
 
 ## 11. Restaurar um backup
 

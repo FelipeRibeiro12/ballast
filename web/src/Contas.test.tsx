@@ -913,3 +913,64 @@ describe('Conta de benefício', () => {
     expect(await within(form).findByRole('alert')).toHaveTextContent('Muitas tentativas. Tente de novo em 6 segundos.')
   })
 })
+
+describe('Contas, rendimento do cofrinho', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const cofrinho = (): Record<string, unknown> =>
+    conta({ id: 'c9', nome: 'Cofrinho MP', tipo: 'cofrinho', percentualCdi: '100.00' })
+
+  async function clicarLancar(rota: () => Promise<Response>): Promise<HTMLElement> {
+    mockFetch({ ...sessaoViva, 'GET /contas': responde([cofrinho()]), 'POST /contas/c9/cofrinho/rendimento': rota })
+    render(<App />)
+    await screen.findByText('Cofrinho MP')
+    fireEvent.click(within(secaoContas()).getByRole('button', { name: 'Lançar rendimento de hoje' }))
+    return secaoContas()
+  }
+
+  it('lançado mostra o valor em reais e busca as contas de novo', async () => {
+    const secao = await clicarLancar(responde({ situacao: 'lancado', valor: 1234 }))
+    expect(await within(secao).findByRole('status')).toHaveTextContent(texto('Rendimento de R$ 12,34 lançado.'))
+    expect(chamadasA('POST /contas/c9/cofrinho/rendimento')).toHaveLength(1)
+    await waitFor(() => expect(chamadasA('GET /contas').length).toBeGreaterThan(1))
+  })
+
+  it.each([
+    ['ja_lancado', 'O rendimento de hoje já foi lançado.'],
+    ['sem_cdi', 'Ainda não há CDI guardado para calcular. Tente de novo mais tarde.'],
+    ['sem_rendimento', 'Sem rendimento para lançar hoje.'],
+    ['sem_percentual', 'Defina o percentual do CDI deste cofrinho primeiro.'],
+  ])('situação %s mostra a mensagem certa', async (situacao, mensagem) => {
+    const secao = await clicarLancar(responde({ situacao, valor: null }))
+    expect(await within(secao).findByRole('status')).toHaveTextContent(mensagem)
+  })
+
+  it('falha da API avisa com alerta', async () => {
+    const secao = await clicarLancar(responde({ erro: 'x' }, 500))
+    expect(await within(secao).findByRole('alert')).toHaveTextContent('Não foi possível lançar o rendimento. Tente de novo.')
+  })
+
+  it('desabilita o botão enquanto a chamada não volta', async () => {
+    const secao = await clicarLancar(() => new Promise<Response>(() => {}))
+    await waitFor(() => expect(within(secao).getByRole('button', { name: 'Lançar rendimento de hoje' })).toBeDisabled())
+    expect(chamadasA('POST /contas/c9/cofrinho/rendimento')).toHaveLength(1)
+  })
+
+  it('o botão e o aviso de estimativa só aparecem no cofrinho', async () => {
+    mockFetch({ ...sessaoViva, 'GET /contas': responde([conta()]) })
+    render(<App />)
+    await contasNubank()
+    expect(within(secaoContas()).queryByRole('button', { name: 'Lançar rendimento de hoje' })).toBeNull()
+    expect(within(secaoContas()).queryByText(/Estimativa pelo CDI/)).toBeNull()
+  })
+
+  it('diz que o valor é estimativa', async () => {
+    mockFetch({ ...sessaoViva, 'GET /contas': responde([cofrinho()]) })
+    render(<App />)
+    await screen.findByText('Cofrinho MP')
+    expect(within(secaoContas()).getByText('Estimativa pelo CDI; o banco pode diferir em centavos.')).toBeVisible()
+  })
+})
+

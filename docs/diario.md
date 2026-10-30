@@ -523,3 +523,12 @@ Dívida registrada: leitores por emissor, fatura em duas colunas, conciliação 
 Achados do revisor: reviewer não rodou (decisão de economia); security 0 crítico, 2 altos (heap e threads abandonadas) corrigidos na fatia, 2 médios e 2 baixos no backlog
 Pipeline: local verde (make test, lint e web); CI a preencher no PR
 Em aberto: abrir o PR; a branch fica empilhada sobre `feat/f25-conectar-carteira`; nenhuma fatura real testada
+
+## 2026-10-29 — Rendimento diário do cofrinho
+
+O que entrou: job diário (03:30 America/Sao_Paulo, `BALLAST_COFRINHO_JOB_ENABLED`, ligado por padrão) que lança como receita realizada o rendimento estimado de cada cofrinho com percentual, em dia útil, com catch-up de até 7 dias e só hoje na primeira execução. Marcador `rendimento_cofrinho` (V38, unique conta e data) para idempotência, trava da conta como a recorrência. `POST /contas/{id}/cofrinho/rendimento` para lançar o de hoje na hora (situações `lancado`, `ja_lancado`, `sem_cdi`, `sem_rendimento`, `sem_percentual`), botão discreto na tela Contas. O valor é estimativa: o banco pode diferir em centavos e o usuário edita ou apaga o lançamento sem o job recriar.
+Decisões: ADR-074 (substitui o trecho "a estimativa não vira lançamento" do ADR-061). Além dele: `ON DELETE SET NULL (lancamento_id)` na FK do marcador, bean do job condicional à flag, catch-up da conta para no primeiro dia sem CDI.
+Dívida registrada: 3 linhas no backlog (catch-up com lançamento recusado, versão do Postgres no Neon, testes de concorrência e bordas)
+Achados do revisor: reviewer não rodou (decisão de economia); security 0 crítico, 0 alto, 1 médio e 4 baixos, todos no backlog ou aceitos
+Pipeline: local verde (ver commit final); CI a preencher no PR
+Em aberto: abrir o PR (sem push feito); o rendimento de hoje (29/10) só entra depois do deploy, ou clicando no botão

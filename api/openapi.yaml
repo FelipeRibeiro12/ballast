@@ -2152,6 +2152,55 @@ paths:
       summary: Define o percentual do CDI do cofrinho
       tags:
       - contas
+  /contas/{id}/cofrinho/rendimento:
+    post:
+      description: "Roda a conta para hoje, como o job diário, sem esperar as 03:30.\
+        \ Repetir no mesmo dia responde ja_lancado e não duplica. Hoje sem dia útil\
+        \ responde sem_rendimento (ADR-074). O corpo é vazio."
+      operationId: postContasByIdCofrinhoRendimento
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RendimentoCofrinho"
+          description: O que a rodada fez; valor só vem em lancado
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente, que não é cofrinho ou\
+            \ id que não é UUID; mesmo corpo"
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Limite geral de requisições por IP (ADR-049)
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Conta em uso por outra requisição; tentar de novo
+      security:
+      - cookieAuth: []
+      summary: Lança agora o rendimento de hoje do cofrinho
+      tags:
+      - contas
   /contas/{id}/faturas:
     get:
       description: "Todas as faturas com vencimento entre de e ate (pontas incluí\
@@ -8703,6 +8752,29 @@ components:
       - mes
       - receitasEDespesas
       - totalDespesasCentavos
+    RendimentoCofrinho:
+      type: object
+      properties:
+        situacao:
+          type: string
+          description: O que a rodada de hoje fez com a conta
+          enum:
+          - lancado
+          - ja_lancado
+          - sem_cdi
+          - sem_rendimento
+          - sem_percentual
+        valor:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: "Rendimento lançado, em centavos; nulo quando não lançou"
+          maximum: 9007199254740991
+          minimum: 1
+      required:
+      - situacao
+      - valor
     ResumoExclusaoConta:
       type: object
       properties:
