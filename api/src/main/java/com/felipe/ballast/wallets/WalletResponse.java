@@ -31,6 +31,34 @@ public record WalletResponse(
             description =
                 "A última tentativa de leitura falhou: os saldos são os de sincronizadaEm, não zero")
         boolean leituraFalhou,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "Por que a última leitura falhou; nulo se deu certo ou nunca foi tentada."
+                    + " Em POST /carteiras/{id}/sincronizar barrado pelos 60 s, vale LIMITE_DE_60S"
+                    + " quando não há falha gravada")
+        ReadingReason motivo,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description = "Última tentativa de leitura, boa ou ruim; nulo se nunca tentou")
+        Instant ultimaTentativaEm,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description = "Quando uma nova leitura manual é aceita; nulo se já pode")
+        Instant proximaLeituraEm,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description =
+                "O servidor tem chave do indexador para a rede desta carteira. Falso: nenhuma"
+                    + " leitura acontece até o dono configurar ALCHEMY_API_KEY")
+        boolean indexadorConfigurado,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "O servidor lê as carteiras sozinho de 6 em 6 horas")
+        boolean sincronizacaoAutomatica,
     @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<Balance> saldos) {
 
   @Schema(name = "SaldoCarteira")
@@ -66,6 +94,11 @@ public record WalletResponse(
         wallet.verifiedAt(),
         wallet.syncedAt(),
         wallet.lastError() != null,
+        motivoOf(view),
+        wallet.attemptedAt(),
+        view.nextReadAt(),
+        view.configured(),
+        view.automatic(),
         view.balances().stream()
             .map(
                 balance ->
@@ -77,5 +110,10 @@ public record WalletResponse(
                         balance.trusted(),
                         balance.costPending()))
             .toList());
+  }
+
+  private static ReadingReason motivoOf(WalletService.View view) {
+    return ReadingReason.fromCode(view.wallet().lastError())
+        .orElse(view.throttled() ? ReadingReason.LIMITE_DE_60S : null);
   }
 }

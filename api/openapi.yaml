@@ -6219,10 +6219,27 @@ components:
         id:
           type: string
           format: uuid
+        indexadorConfigurado:
+          type: boolean
+          description: "O servidor tem chave do indexador para a rede desta carteira.\
+            \ Falso: nenhuma leitura acontece até o dono configurar ALCHEMY_API_KEY"
         leituraFalhou:
           type: boolean
           description: "A última tentativa de leitura falhou: os saldos são os de\
             \ sincronizadaEm, não zero"
+        motivo:
+          anyOf:
+          - $ref: "#/components/schemas/MotivoLeitura"
+          - type: "null"
+          description: "Por que a última leitura falhou; nulo se deu certo ou nunca\
+            \ foi tentada. Em POST /carteiras/{id}/sincronizar barrado pelos 60 s,\
+            \ vale LIMITE_DE_60S quando não há falha gravada"
+        proximaLeituraEm:
+          type:
+          - string
+          - "null"
+          format: date-time
+          description: Quando uma nova leitura manual é aceita; nulo se já pode
         rede:
           type: string
           enum:
@@ -6238,12 +6255,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SaldoCarteira"
+        sincronizacaoAutomatica:
+          type: boolean
+          description: O servidor lê as carteiras sozinho de 6 em 6 horas
         sincronizadaEm:
           type:
           - string
           - "null"
           format: date-time
           description: Última leitura que deu certo; nulo se nunca leu
+        ultimaTentativaEm:
+          type:
+          - string
+          - "null"
+          format: date-time
+          description: "Última tentativa de leitura, boa ou ruim; nulo se nunca tentou"
         verificadaEm:
           type:
           - string
@@ -6254,11 +6280,16 @@ components:
       - contaId
       - endereco
       - id
+      - indexadorConfigurado
       - leituraFalhou
+      - motivo
+      - proximaLeituraEm
       - rede
       - rotulo
       - saldos
+      - sincronizacaoAutomatica
       - sincronizadaEm
+      - ultimaTentativaEm
       - verificadaEm
     CarteiraRequest:
       type: object
@@ -7903,6 +7934,15 @@ components:
       required:
       - ativo
       - codigosRestantes
+    MotivoLeitura:
+      type: string
+      enum:
+      - INDEXADOR_NAO_CONFIGURADO
+      - INDEXADOR_FORA_DO_AR
+      - INDEXADOR_RECUSOU_A_CHAVE
+      - INDEXADOR_COTA_ESGOTADA
+      - RESPOSTA_INVALIDA
+      - LIMITE_DE_60S
     MovimentoCripto:
       type: object
       properties:

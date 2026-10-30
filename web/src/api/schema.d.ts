@@ -1728,17 +1728,33 @@ export interface components {
             endereco: string;
             /** Format: uuid */
             id: string;
+            /** @description O servidor tem chave do indexador para a rede desta carteira. Falso: nenhuma leitura acontece até o dono configurar ALCHEMY_API_KEY */
+            indexadorConfigurado: boolean;
             /** @description A última tentativa de leitura falhou: os saldos são os de sincronizadaEm, não zero */
             leituraFalhou: boolean;
+            /** @description Por que a última leitura falhou; nulo se deu certo ou nunca foi tentada. Em POST /carteiras/{id}/sincronizar barrado pelos 60 s, vale LIMITE_DE_60S quando não há falha gravada */
+            motivo: components["schemas"]["MotivoLeitura"] | null;
+            /**
+             * Format: date-time
+             * @description Quando uma nova leitura manual é aceita; nulo se já pode
+             */
+            proximaLeituraEm: string | null;
             /** @enum {string} */
             rede: "ethereum" | "base" | "solana";
             rotulo: string | null;
             saldos: components["schemas"]["SaldoCarteira"][];
+            /** @description O servidor lê as carteiras sozinho de 6 em 6 horas */
+            sincronizacaoAutomatica: boolean;
             /**
              * Format: date-time
              * @description Última leitura que deu certo; nulo se nunca leu
              */
             sincronizadaEm: string | null;
+            /**
+             * Format: date-time
+             * @description Última tentativa de leitura, boa ou ruim; nulo se nunca tentou
+             */
+            ultimaTentativaEm: string | null;
             /**
              * Format: date-time
              * @description Prova de posse por assinatura (F25); nulo se nunca provou
@@ -2537,6 +2553,8 @@ export interface components {
              */
             codigosRestantes: number;
         };
+        /** @enum {string} */
+        MotivoLeitura: "INDEXADOR_NAO_CONFIGURADO" | "INDEXADOR_FORA_DO_AR" | "INDEXADOR_RECUSOU_A_CHAVE" | "INDEXADOR_COTA_ESGOTADA" | "RESPOSTA_INVALIDA" | "LIMITE_DE_60S";
         MovimentoCripto: {
             /** Format: uuid */
             ativoId: string;

@@ -43,7 +43,16 @@ class WalletService {
   private static final Pattern EVM_CONTRACT = Pattern.compile("0x[0-9a-fA-F]{40}");
   private static final String ADDRESS_UNIQUE = "carteira_observada_usuario_rede_endereco_unico";
 
-  record View(WalletQueries.Wallet wallet, List<WalletQueries.Balance> balances) {}
+  // configured e automatic descrevem o servidor, não a carteira. nextReadAt é quando a próxima
+  // leitura é aceita (nulo se já pode). throttled marca a resposta de sincronizar barrada pelos
+  // 60 s.
+  record View(
+      WalletQueries.Wallet wallet,
+      List<WalletQueries.Balance> balances,
+      boolean configured,
+      boolean automatic,
+      Instant nextReadAt,
+      boolean throttled) {}
 
   sealed interface CreateResult {
     record Created(View view) implements CreateResult {}
@@ -71,18 +80,21 @@ class WalletService {
   private final WriteTransaction transaction;
   private final UserLimits limits;
   private final Clock clock;
+  private final boolean jobEnabled;
 
   WalletService(
       WalletQueries queries,
       WalletIndexer indexer,
       WriteTransaction transaction,
       UserLimits limits,
-      Clock clock) {
+      Clock clock,
+      WalletsProperties properties) {
     this.queries = queries;
     this.indexer = indexer;
     this.transaction = transaction;
     this.limits = limits;
     this.clock = clock;
+    this.jobEnabled = properties.jobEnabled();
   }
 
   // accountId chega nulo quando o texto do cliente não era UUID. A conta é travada como nas
@@ -112,7 +124,7 @@ class WalletService {
             limits.checkRoom(userId, UserLimit.WALLETS);
             WalletQueries.Wallet saved =
                 queries.insertWallet(userId, accountId, network, normalized.get(), label);
-            return new CreateResult.Created(new View(saved, List.of()));
+            return new CreateResult.Created(view(saved, List.of(), false));
           });
     } catch (DataIntegrityViolationException e) {
       if (Constraints.isViolated(e, ADDRESS_UNIQUE)) {
@@ -151,7 +163,9 @@ class WalletService {
     return switch (claim) {
       case Claim.Missing missing -> SyncResult.Rejected.NOT_FOUND;
       case Claim.Archived archived -> SyncResult.Rejected.ACCOUNT_ARCHIVED;
-      case Claim.TooSoon tooSoon -> new SyncResult.Done(view(userId, tooSoon.wallet()));
+      case Claim.TooSoon tooSoon ->
+          new SyncResult.Done(
+              view(tooSoon.wallet(), queries.balances(userId, tooSoon.wallet().id()), true));
       case Claim.Granted granted -> read(userId, granted.wallet());
     };
   }
@@ -409,7 +423,17 @@ class WalletService {
   }
 
   private View view(UUID userId, WalletQueries.Wallet wallet) {
-    return new View(wallet, queries.balances(userId, wallet.id()));
+    return view(wallet, queries.balances(userId, wallet.id()), false);
+  }
+
+  private View view(
+      WalletQueries.Wallet wallet, List<WalletQueries.Balance> balances, boolean throttled) {
+    boolean configured = indexer.isConfigured();
+    Instant next = wallet.attemptedAt() == null ? null : wallet.attemptedAt().plus(MIN_INTERVAL);
+    if (next != null && !next.isAfter(clock.instant())) {
+      next = null;
+    }
+    return new View(wallet, balances, configured, configured && jobEnabled, next, throttled);
   }
 
   // Tipo da exceção sem pacote: o nome simples basta no log.

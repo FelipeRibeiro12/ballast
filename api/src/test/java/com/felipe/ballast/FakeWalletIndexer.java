@@ -43,6 +43,10 @@ public class FakeWalletIndexer implements WalletIndexer {
     failure = reason;
   }
 
+  public void setConfigured(boolean value) {
+    configured = value;
+  }
+
   public void recover() {
     failure = null;
   }
