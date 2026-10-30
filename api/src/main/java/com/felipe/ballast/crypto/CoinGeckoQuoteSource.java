@@ -13,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,9 @@ class CoinGeckoQuoteSource implements QuoteSource {
 
   // A CoinGecko fora não pode prender a thread do job.
   private static final Duration TIMEOUT = Duration.ofSeconds(5);
+
+  // Id do USDC na CoinGecko; o preço dele em reais converte a cripto de dólar para real (ADR-077).
+  private static final String USDC_ID = "usd-coin";
 
   // A documentação aceita mais por pedido; 100 deixa a URL curta e o pedido barato.
   private static final int CONTRACTS_PER_CALL = 100;
@@ -205,6 +209,53 @@ class CoinGeckoQuoteSource implements QuoteSource {
       return null;
     }
     return new ProviderQuote(price.decimalValue(), Instant.ofEpochMilli(moment.longValue()));
+  }
+
+  @Override
+  public Optional<UsdcQuote> usdcBrl() {
+    JsonNode body =
+        get(
+            "/simple/price?ids={id}&vs_currencies=brl&include_last_updated_at=true"
+                + "&precision=full",
+            USDC_ID);
+    JsonNode item = body.get(USDC_ID);
+    if (item == null || !item.isObject()) {
+      return Optional.empty();
+    }
+    JsonNode brl = item.get("brl");
+    JsonNode updated = item.get("last_updated_at");
+    if (brl == null
+        || !brl.isNumber()
+        || brl.decimalValue().signum() <= 0
+        || updated == null
+        || !updated.isIntegralNumber()) {
+      log.warn("cotação do USDC ignorada: formato inesperado ou preço não positivo");
+      return Optional.empty();
+    }
+    return Optional.of(
+        new UsdcQuote(brl.decimalValue(), Instant.ofEpochSecond(updated.longValue())));
+  }
+
+  @Override
+  public List<UsdcQuote> usdcBrlHistory(Instant from, Instant to) {
+    JsonNode body =
+        get(
+            "/coins/{id}/market_chart/range?vs_currency=brl&from={from}&to={to}&precision=full",
+            USDC_ID,
+            from.getEpochSecond(),
+            to.getEpochSecond());
+    JsonNode prices = body.get("prices");
+    if (prices == null || !prices.isArray()) {
+      throw new IllegalStateException("histórico do USDC fora do formato");
+    }
+    List<UsdcQuote> history = new ArrayList<>();
+    for (JsonNode point : prices) {
+      ProviderQuote quote = readPoint(point);
+      if (quote != null) {
+        history.add(new UsdcQuote(quote.priceUsd(), quote.updatedAt()));
+      }
+    }
+    return history;
   }
 
   private JsonNode get(String uri, Object... variables) {

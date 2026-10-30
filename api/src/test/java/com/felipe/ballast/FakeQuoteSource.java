@@ -3,11 +3,13 @@ package com.felipe.ballast;
 import com.felipe.ballast.crypto.AssetRef;
 import com.felipe.ballast.crypto.ProviderQuote;
 import com.felipe.ballast.crypto.QuoteSource;
+import com.felipe.ballast.crypto.UsdcQuote;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -25,6 +27,9 @@ public class FakeQuoteSource implements QuoteSource {
   private final Map<AssetRef, List<ProviderQuote>> histories = new ConcurrentHashMap<>();
   private final List<AssetRef> requests = new CopyOnWriteArrayList<>();
   private final List<HistoryRequest> historyRequests = new CopyOnWriteArrayList<>();
+  private volatile UsdcQuote usdc;
+  private volatile List<UsdcQuote> usdcHistory = List.of();
+  private final List<HistoryRequest> usdcHistoryRequests = new CopyOnWriteArrayList<>();
   private final AtomicBoolean down = new AtomicBoolean();
 
   public void publish(AssetRef asset, ProviderQuote quote) {
@@ -33,6 +38,18 @@ public class FakeQuoteSource implements QuoteSource {
 
   public void publishHistory(AssetRef asset, List<ProviderQuote> history) {
     histories.put(asset, List.copyOf(history));
+  }
+
+  public void publishUsdc(UsdcQuote quote) {
+    usdc = quote;
+  }
+
+  public void publishUsdcHistory(List<UsdcQuote> history) {
+    usdcHistory = List.copyOf(history);
+  }
+
+  public List<HistoryRequest> usdcHistoryRequests() {
+    return List.copyOf(usdcHistoryRequests);
   }
 
   public void goDown() {
@@ -52,6 +69,9 @@ public class FakeQuoteSource implements QuoteSource {
     histories.clear();
     requests.clear();
     historyRequests.clear();
+    usdc = null;
+    usdcHistory = List.of();
+    usdcHistoryRequests.clear();
     down.set(false);
   }
 
@@ -78,6 +98,23 @@ public class FakeQuoteSource implements QuoteSource {
       throw new IllegalStateException("coingecko fora do ar no teste");
     }
     return histories.getOrDefault(asset, List.of());
+  }
+
+  @Override
+  public Optional<UsdcQuote> usdcBrl() {
+    if (down.get()) {
+      throw new IllegalStateException("coingecko fora do ar no teste");
+    }
+    return Optional.ofNullable(usdc);
+  }
+
+  @Override
+  public List<UsdcQuote> usdcBrlHistory(Instant from, Instant to) {
+    usdcHistoryRequests.add(new HistoryRequest(null, from, to));
+    if (down.get()) {
+      throw new IllegalStateException("coingecko fora do ar no teste");
+    }
+    return usdcHistory;
   }
 
   @TestConfiguration(proxyBeanMethods = false)

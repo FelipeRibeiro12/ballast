@@ -11,7 +11,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
-// Dado público de mercado, sem usuario_id (ADR-077). Vive em 1953 para não cruzar com outros testes.
+// Dado público de mercado, sem usuario_id (ADR-077). Vive em 1953 para não cruzar com outros
+// testes.
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
 class CotacaoUsdcBrlMigrationTest {
