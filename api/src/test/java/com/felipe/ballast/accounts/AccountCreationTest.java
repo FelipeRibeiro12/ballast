@@ -67,7 +67,8 @@ class AccountCreationTest {
             "criadaEm",
             "cartao",
             "categoriasPermitidas",
-            "percentualCdi");
+            "percentualCdi",
+            "emInvestimentos");
     assertThat(body.get("cartao").isNull()).isTrue();
     assertThat(body.get("categoriasPermitidas").isNull()).isTrue();
     assertThat(body.get("nome").asString()).isEqualTo("Nubank");

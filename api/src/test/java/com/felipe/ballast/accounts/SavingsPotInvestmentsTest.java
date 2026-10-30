@@ -208,4 +208,17 @@ class SavingsPotInvestmentsTest {
     assertThat(netWorth("2026-03-10").get("cofrinhosCentavos").asLong()).isEqualTo(125_00);
     assertThat(netWorth("2026-03-10").get("totalCentavos").asLong()).isEqualTo(125_00);
   }
+
+  @Test
+  void anotherUsersPatrimonyDoesNotShowMyMarkedPots() throws Exception {
+    String pot = create(sessionA, "cofrinho", 100_00);
+    mark(sessionA, pot, true);
+
+    MockHttpServletResponse response =
+        mvc.perform(get("/patrimonio?data=2026-06-01").cookie(sessionB)).andReturn().getResponse();
+
+    JsonNode body = JSON.readTree(response.getContentAsString(StandardCharsets.UTF_8));
+    assertThat(body.get("cofrinhos")).isEmpty();
+    assertThat(body.get("cofrinhosCentavos").asLong()).isZero();
+  }
 }
