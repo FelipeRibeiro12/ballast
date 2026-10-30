@@ -48,6 +48,18 @@ public record NetWorthResponse(
         long rendaFixaCentavos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
+            description =
+                "Saldo na data dos cofrinhos ativos marcados em investimentos (ADR-076). Já está"
+                    + " em contasCentavos e no total; não soma de novo",
+            minimum = "-9007199254740991",
+            maximum = "9007199254740991")
+        long cofrinhosCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "Os cofrinhos marcados que somam cofrinhosCentavos")
+        List<Cofrinho> cofrinhos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
             minimum = "-9007199254740991",
             maximum = "9007199254740991")
         long totalCentavos,
@@ -62,6 +74,16 @@ public record NetWorthResponse(
                 "Títulos de renda fixa com valor fora do limite, que ficam fora de"
                     + " rendaFixaCentavos")
         List<TitleWithoutValue> rendaFixaSemValor) {
+
+  @Schema(name = "CofrinhoEmInvestimentos")
+  public record Cofrinho(
+      @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID contaId,
+      @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String nome,
+      @Schema(
+              requiredMode = Schema.RequiredMode.REQUIRED,
+              minimum = "-9007199254740991",
+              maximum = "9007199254740991")
+          long saldoCentavos) {}
 
   @Schema(name = "PosicaoSemCotacao")
   public record Unquoted(
@@ -98,6 +120,13 @@ public record NetWorthResponse(
         nullableCents(netWorth.cryptoContribution()),
         nullableCents(netWorth.cryptoAppreciation()),
         cents(netWorth.fixedIncome()),
+        cents(
+            netWorth.savingsPots().stream()
+                .map(CryptoQueries.SavingsPot::balance)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)),
+        netWorth.savingsPots().stream()
+            .map(pot -> new Cofrinho(pot.id(), pot.name(), cents(pot.balance())))
+            .toList(),
         cents(netWorth.total()),
         unquoted,
         netWorth.fixedIncomeExcluded().stream()

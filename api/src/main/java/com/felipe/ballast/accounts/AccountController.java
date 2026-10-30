@@ -80,6 +80,9 @@ class AccountController {
   private static final ErrorResponse NOT_SAVINGS_POT =
       new ErrorResponse("só cofrinho tem percentual do CDI");
 
+  private static final ErrorResponse NOT_SAVINGS_POT_FLAG =
+      new ErrorResponse("só cofrinho entra em investimentos");
+
   private static final ErrorResponse NOT_BENEFIT =
       new ErrorResponse("só conta de benefício tem categorias permitidas");
 
@@ -633,6 +636,62 @@ class AccountController {
     return switch ((AccountService.CdiResult) result) {
       case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
       case NOT_SAVINGS_POT -> ResponseEntity.badRequest().body(NOT_SAVINGS_POT);
+      case ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
+    };
+  }
+
+  @Operation(
+      operationId = "putContasByIdInvestimentos",
+      summary = "Marca ou desmarca o cofrinho na tela Investimentos",
+      description =
+          "Só diz se o saldo conta no card Renda fixa e no total investido. O saldo e o Posso"
+              + " gastar não mudam (ADR-076).",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Conta atualizada",
+      content = @Content(schema = @Schema(implementation = AccountResponse.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          "Campo ausente ou não declarado, conta que não é cofrinho, ou marcar conta arquivada",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "Conta de outro usuário, inexistente ou id que não é UUID; mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível ou conta travada por mais de 2 s",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @PutMapping(
+      path = "/contas/{id}/investimentos",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> setInInvestments(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable("id") String id,
+      @Valid @RequestBody InvestmentsRequest request) {
+    Optional<UUID> accountId = CanonicalUuid.parse(id);
+    if (accountId.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    Object result = accounts.setInInvestments(user.id(), accountId.get(), request.inInvestments());
+    if (result instanceof AccountService.InvestmentsUpdated updated) {
+      log.info(
+          "cofrinho em investimentos trocado usuario_id={} conta_id={} marcado={}",
+          user.id(),
+          accountId.get(),
+          request.inInvestments());
+      return ResponseEntity.ok(AccountResponse.from(updated.account()));
+    }
+    return switch ((AccountService.InvestmentsResult) result) {
+      case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+      case NOT_SAVINGS_POT -> ResponseEntity.badRequest().body(NOT_SAVINGS_POT_FLAG);
       case ARCHIVED -> ResponseEntity.badRequest().body(ACCOUNT_ARCHIVED);
     };
   }

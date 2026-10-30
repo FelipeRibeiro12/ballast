@@ -634,6 +634,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/contas/{id}/investimentos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Marca ou desmarca o cofrinho na tela Investimentos
+         * @description Só diz se o saldo conta no card Renda fixa e no total investido. O saldo e o Posso gastar não mudam (ADR-076).
+         */
+        put: operations["putContasByIdInvestimentos"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/contas/{id}/resumo-exclusao": {
         parameters: {
             query?: never;
@@ -1762,6 +1782,13 @@ export interface components {
             /** @description Lista inteira que passa a valer. Vazia libera qualquer categoria de despesa */
             categoriaIds: string[];
         };
+        CofrinhoEmInvestimentos: {
+            /** Format: uuid */
+            contaId: string;
+            nome: string;
+            /** Format: int64 */
+            saldoCentavos: number;
+        };
         CofrinhoRequest: {
             /**
              * @description Percentual do CDI, de 0,01 a 1000, com até duas casas
@@ -1856,6 +1883,8 @@ export interface components {
             categoriasPermitidas: string[] | null;
             /** Format: date-time */
             criadaEm: string;
+            /** @description Se o saldo do cofrinho conta na tela Investimentos (ADR-076). Falso fora do cofrinho e por padrão */
+            emInvestimentos: boolean;
             /** Format: uuid */
             id: string;
             /** @enum {string} */
@@ -2023,6 +2052,10 @@ export interface components {
             data: string;
             /** @description Reais por dólar, em texto */
             valor: string;
+        };
+        EmInvestimentosRequest: {
+            /** @description Se o saldo do cofrinho conta na tela Investimentos */
+            emInvestimentos: boolean;
         };
         Erro: {
             erro: string;
@@ -2640,6 +2673,13 @@ export interface components {
             valorCentavos?: number | null;
         };
         Patrimonio: {
+            /** @description Os cofrinhos marcados que somam cofrinhosCentavos */
+            cofrinhos: components["schemas"]["CofrinhoEmInvestimentos"][];
+            /**
+             * Format: int64
+             * @description Saldo na data dos cofrinhos ativos marcados em investimentos (ADR-076). Já está em contasCentavos e no total; não soma de novo
+             */
+            cofrinhosCentavos: number;
             /**
              * Format: int64
              * @description Saldo até a data das contas ativas que não são cripto
@@ -5888,6 +5928,68 @@ export interface operations {
                 };
             };
             /** @description Banco indisponível; pode tentar de novo */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putContasByIdInvestimentos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmInvestimentosRequest"];
+            };
+        };
+        responses: {
+            /** @description Conta atualizada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Conta"];
+                };
+            };
+            /** @description Campo ausente ou não declarado, conta que não é cofrinho, ou marcar conta arquivada */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Conta de outro usuário, inexistente ou id que não é UUID; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível ou conta travada por mais de 2 s */
             503: {
                 headers: {
                     [name: string]: unknown;

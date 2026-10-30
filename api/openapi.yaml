@@ -2268,6 +2268,61 @@ paths:
       summary: Lista as faturas de um cartão por vencimento
       tags:
       - cartao
+  /contas/{id}/investimentos:
+    put:
+      description: Só diz se o saldo conta no card Renda fixa e no total investido.
+        O saldo e o Posso gastar não mudam (ADR-076).
+      operationId: putContasByIdInvestimentos
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmInvestimentosRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conta"
+          description: Conta atualizada
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Campo ausente ou não declarado, conta que não é cofrinho,\
+            \ ou marcar conta arquivada"
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Conta de outro usuário, inexistente ou id que não é UUID;\
+            \ mesmo corpo"
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível ou conta travada por mais de 2 s
+      security:
+      - cookieAuth: []
+      summary: Marca ou desmarca o cofrinho na tela Investimentos
+      tags:
+      - contas
   /contas/{id}/resumo-exclusao:
     get:
       operationId: getContasByIdResumoExclusao
@@ -6313,6 +6368,23 @@ components:
           minItems: 0
       required:
       - categoriaIds
+    CofrinhoEmInvestimentos:
+      type: object
+      properties:
+        contaId:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        saldoCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+      required:
+      - contaId
+      - nome
+      - saldoCentavos
     CofrinhoRequest:
       type: object
       properties:
@@ -6489,6 +6561,10 @@ components:
         criadaEm:
           type: string
           format: date-time
+        emInvestimentos:
+          type: boolean
+          description: Se o saldo do cofrinho conta na tela Investimentos (ADR-076).
+            Falso fora do cofrinho e por padrão
         id:
           type: string
           format: uuid
@@ -6534,6 +6610,7 @@ components:
       - cartao
       - categoriasPermitidas
       - criadaEm
+      - emInvestimentos
       - id
       - moeda
       - nome
@@ -6839,6 +6916,14 @@ components:
       required:
       - data
       - valor
+    EmInvestimentosRequest:
+      type: object
+      properties:
+        emInvestimentos:
+          type: boolean
+          description: Se o saldo do cofrinho conta na tela Investimentos
+      required:
+      - emInvestimentos
     Erro:
       type: object
       properties:
@@ -8067,6 +8152,18 @@ components:
     Patrimonio:
       type: object
       properties:
+        cofrinhos:
+          type: array
+          description: Os cofrinhos marcados que somam cofrinhosCentavos
+          items:
+            $ref: "#/components/schemas/CofrinhoEmInvestimentos"
+        cofrinhosCentavos:
+          type: integer
+          format: int64
+          description: Saldo na data dos cofrinhos ativos marcados em investimentos
+            (ADR-076). Já está em contasCentavos e no total; não soma de novo
+          maximum: 9007199254740991
+          minimum: -9007199254740991
         contasCentavos:
           type: integer
           format: int64
@@ -8124,6 +8221,8 @@ components:
           maximum: 9007199254740991
           minimum: -9007199254740991
       required:
+      - cofrinhos
+      - cofrinhosCentavos
       - contasCentavos
       - criptoAportadoCentavos
       - criptoCentavos
