@@ -31,6 +31,16 @@ Notificação no PWA. No iOS só funciona se instalado na tela inicial.
 - Extração do PDF em processo separado que se possa matar, se o residual de heap preocupar. Dono: backend e devops.
 - Teste que fixe o corte de 200 caracteres por linha (regex do `GenericStatementReader` é quadrática e roda fora do timeout). Dono: qa.
 
+### Dívidas da carteira e do USDC (ADR-077, ADR-078)
+
+- Primeira leitura pós-cadastro sem limite global: cadastrar e apagar em laço gasta a cota da Alchemy. Dono: backend, fatia de limites. Contador por usuario_id ou semáforo.
+- Thread virtual da primeira leitura sem teto de concorrência (disputa o Hikari). Dono: backend, mesma fatia: semáforo de 4 a 8, descarta quando cheio.
+- Faixa plausível do USDC/BRL (0,5 a 50 como a PTAX) no código e em CHECK por migration nova. Dono: backend e dba.
+- Teto de tamanho de resposta nos clientes Alchemy e CoinGecko (2 MiB). Dono: backend.
+- Backfill do USDC repete a cada rodada se o provedor nunca devolver ponto com mais de 300 dias. Dono: backend.
+- Soma de `contas` pode diferir em centavos de `criptoCentavos` (valores cheios contra arredondados). Dono: backend.
+- Primeira leitura de carteira não recarrega movimentos e posições da aba Cripto. Dono: frontend.
+
 ## Mais adiante
 
 - **F27** — Previsão de gasto e detecção de anomalia (serviço Python, ADR-007)
