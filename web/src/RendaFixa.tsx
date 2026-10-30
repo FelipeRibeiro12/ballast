@@ -11,6 +11,8 @@ import {
   putTituloRendaFixa,
 } from './api'
 import type { Conta, TituloRendaFixa, TituloRendaFixaRequest, TitulosRendaFixa } from './api'
+import { EngrenagemDosCofrinhos, ListaDosCofrinhos } from './CofrinhosDaRendaFixa'
+import type { CofrinhoNaData } from './CofrinhosDaRendaFixa'
 import { formatarDataCompleta, hojeLocal } from './datas'
 import { formatarDecimal, lerTaxa } from './decimais'
 import { centavosParaCampo, formatarCentavos, lerCentavos, lerValorPositivo } from './dinheiro'
@@ -361,12 +363,18 @@ function ValoresDoTitulo({ titulo }: { titulo: TituloRendaFixa }) {
 export default function RendaFixa({
   contas,
   data,
+  cofrinhosAtivos,
+  cofrinhosNaData,
   aoMudar,
+  aoMudarCofrinho,
   aoSessaoExpirar,
 }: {
   contas: Conta[]
+  cofrinhosAtivos: Conta[]
+  cofrinhosNaData: CofrinhoNaData[]
   data: string
   aoMudar: () => void
+  aoMudarCofrinho: () => void
   aoSessaoExpirar: () => void
 }) {
   const [titulos, setTitulos] = useState<Estado<TitulosRendaFixa>>({ tipo: 'carregando' })
@@ -420,15 +428,24 @@ export default function RendaFixa({
     <section aria-labelledby="titulo-renda-fixa">
       <header className="pagina-topo">
         <h3 id="titulo-renda-fixa">Renda fixa</h3>
-        {contas.length > 0 && (
-          <div className="topo-botoes">
+        <div className="topo-botoes">
+          <EngrenagemDosCofrinhos
+            cofrinhos={cofrinhosAtivos}
+            aoMudar={() => {
+              aoMudar()
+              aoMudarCofrinho()
+            }}
+            aoSessaoExpirar={aoSessaoExpirar}
+          />
+          {contas.length > 0 && (
             <button type="button" className="primario" onClick={() => setAbertura({ tipo: 'novo' })}>
               <IconeMais />
               Novo título
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </header>
+      <ListaDosCofrinhos cofrinhos={cofrinhosNaData} />
       {titulos.tipo === 'ok' && (
         <p className="aviso-cripto">
           {titulos.dados.indices.cdiAte === null

@@ -540,3 +540,12 @@ Dívida registrada: lista por competência da onda 7 (ADR-059) ainda usa a data 
 Achados do revisor: reviewer e security não rodaram (diff de leitura, sem borda nova)
 Pipeline: local verde (make test, lint e web)
 Em aberto: abrir o PR; a branch sai de origin/main
+
+## 2026-10-30 — Cofrinho em Investimentos e espaçamento da tela
+
+O que entrou: engrenagem no card Renda fixa com um interruptor por cofrinho ativo (sem marcar todos, padrão desmarcado); os marcados somam em Renda fixa e no Total investido e aparecem listados com nome e saldo na data. V39 `conta.em_investimentos`, `PUT /contas/{id}/investimentos`, `emInvestimentos` em `GET /contas`, `cofrinhosCentavos` e `cofrinhos` em `GET /patrimonio` sem mudar `totalCentavos`. Margem entre o resumo de patrimônio e as abas (contêiner `.investimentos-resumo`).
+Decisões: ADR-076
+Dívida registrada: nenhuma
+Achados do revisor: reviewer não rodou; security na rota nova, ver resumo da entrega
+Pipeline: local verde (make test, lint, pnpm test, tsc, pnpm build); CI a preencher no PR
+Em aberto: abrir o PR (sem push feito); 360px sem rolagem lateral coberto só pelo e2e (jsdom não tem layout), que não rodou aqui

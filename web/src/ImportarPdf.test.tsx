@@ -9,6 +9,7 @@ const base: Conta = {
   tipo: 'corrente',
   moeda: 'BRL',
   percentualCdi: null,
+  emInvestimentos: false,
   saldoInicialCentavos: 0,
   saldoCentavos: 0,
   arquivada: false,

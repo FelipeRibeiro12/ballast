@@ -1345,3 +1345,16 @@ Nenhum formato consumido muda. Os campos novos são opcionais na spec.
 - `GET /saldo-projetado` sem `contaId` não inclui conta cripto. Com `contaId` de
   conta cripto: 400 `conta cripto não tem saldo projetado`; de outro usuário,
   404 `conta não encontrada` como antes.
+
+## Cofrinho em investimentos (ADR-076)
+
+- `PUT /contas/{id}/investimentos`, corpo `{"emInvestimentos": true|false}`
+  (obrigatório; campo não declarado dá 400). Responde 200 com a conta. 400: conta
+  que não é cofrinho, ou marcar conta arquivada (desmarcar passa). 404: conta de
+  outro usuário, inexistente ou id que não é UUID, com o mesmo corpo. 401 sem
+  sessão. 503 se a conta ficar travada por mais de 2 s. Idempotente.
+- `Conta` ganha `emInvestimentos` (boolean, falso por padrão e fora do cofrinho).
+- `GET /patrimonio` ganha `cofrinhosCentavos` (inteiro) e `cofrinhos:
+  [{contaId, nome, saldoCentavos}]`: os cofrinhos ativos marcados, com o saldo na
+  data. É um recorte de `contasCentavos`: `totalCentavos` não muda e o campo não se
+  soma de novo.

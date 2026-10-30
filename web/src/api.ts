@@ -372,6 +372,18 @@ export async function putCofrinho(id: string, percentualCdi: string): Promise<Co
   return lerConta(resposta, 'PUT /contas/{id}/cofrinho')
 }
 
+// Marca ou desmarca um cofrinho na tela Investimentos (ADR-076). Uma conta por chamada.
+export async function putCofrinhoEmInvestimentos(id: string, emInvestimentos: boolean): Promise<Conta> {
+  const resposta = await fetch(`${baseUrl}/contas/${encodeURIComponent(id)}/investimentos`, {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ emInvestimentos }),
+  })
+  if (!resposta.ok) return recusarResposta(resposta, 'PUT /contas/{id}/investimentos')
+  return lerConta(resposta, 'PUT /contas/{id}/investimentos')
+}
+
 export type RendimentoCofrinho = components['schemas']['RendimentoCofrinho']
 
 const SITUACOES_DE_RENDIMENTO = ['lancado', 'ja_lancado', 'sem_cdi', 'sem_rendimento', 'sem_percentual']
@@ -1504,6 +1516,19 @@ function isPosicaoSemCotacao(valor: unknown): boolean {
   )
 }
 
+function isCofrinhoEmInvestimentos(valor: unknown): boolean {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'contaId' in valor &&
+    typeof valor.contaId === 'string' &&
+    'nome' in valor &&
+    typeof valor.nome === 'string' &&
+    'saldoCentavos' in valor &&
+    Number.isSafeInteger(valor.saldoCentavos)
+  )
+}
+
 function isPatrimonio(valor: unknown): valor is Patrimonio {
   return (
     typeof valor === 'object' &&
@@ -1520,6 +1545,11 @@ function isPatrimonio(valor: unknown): valor is Patrimonio {
     inteiroSeguroOuNulo(valor.criptoValorizacaoCentavos) &&
     'rendaFixaCentavos' in valor &&
     Number.isSafeInteger(valor.rendaFixaCentavos) &&
+    'cofrinhosCentavos' in valor &&
+    Number.isSafeInteger(valor.cofrinhosCentavos) &&
+    'cofrinhos' in valor &&
+    Array.isArray(valor.cofrinhos) &&
+    valor.cofrinhos.every(isCofrinhoEmInvestimentos) &&
     'totalCentavos' in valor &&
     Number.isSafeInteger(valor.totalCentavos) &&
     'semCotacao' in valor &&

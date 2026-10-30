@@ -283,6 +283,12 @@ test('fluxo principal de ponta a ponta', async ({ page }, info) => {
     await expect(titulos).toContainText(reais('1.000,00'))
     await expect(page.getByRole('region', { name: 'Total investido' })).toContainText('Renda fixa')
     await capturar(page, projeto, '11e-renda-fixa')
+    // A engrenagem abre a escolha de cofrinhos; a página não pode rolar de lado em nenhuma largura.
+    await page.getByRole('button', { name: 'Escolher cofrinhos da renda fixa' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    const rolaDeLado = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+    expect(rolaDeLado).toBe(false)
   })
 
   await test.step('editar e apagar conta e recorrência', async () => {

@@ -14,6 +14,7 @@ const corretora: Conta = {
   cartao: null,
   categoriasPermitidas: null,
     percentualCdi: null,
+    emInvestimentos: false,
 }
 
 function titulo(sobra: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
@@ -77,7 +78,7 @@ const texto = (valor: string): RegExp =>
 function renderizar(contas: Conta[] = [corretora]) {
   const aoMudar = vi.fn()
   const aoSessaoExpirar = vi.fn()
-  render(<RendaFixa contas={contas} data="2026-10-22" aoMudar={aoMudar} aoSessaoExpirar={aoSessaoExpirar} />)
+  render(<RendaFixa contas={contas} cofrinhosAtivos={[]} cofrinhosNaData={[]} aoMudarCofrinho={vi.fn()} data="2026-10-22" aoMudar={aoMudar} aoSessaoExpirar={aoSessaoExpirar} />)
   return { aoMudar, aoSessaoExpirar }
 }
 

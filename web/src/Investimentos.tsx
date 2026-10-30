@@ -22,15 +22,17 @@ function ResumoDoPatrimonio({ estado }: { estado: Estado<Patrimonio> }) {
   }
   const { dados } = estado
   const semCotacao = dados.semCotacao.length
+  const rendaFixa = dados.rendaFixaCentavos + dados.cofrinhosCentavos
   return (
     <section className="cartao destaque" aria-label="Total investido">
       <p className="destaque-rotulo">Investido em {formatarDataCompleta(dados.data)}</p>
-      {/* Só renda fixa e cripto: o saldo das contas correntes, do cofrinho e dos benefícios não é investimento. */}
-      <p className="destaque-valor">{formatarCentavos(dados.rendaFixaCentavos + dados.criptoCentavos)}</p>
+      {/* Renda fixa, cofrinhos que o usuário marcou e cripto. O saldo das contas correntes e dos
+          benefícios não é investimento, e o cofrinho só entra se for marcado (ADR-076). */}
+      <p className="destaque-valor">{formatarCentavos(rendaFixa + dados.criptoCentavos)}</p>
       <dl className="destaque-detalhes">
         <div>
           <dt>Renda fixa</dt>
-          <dd>{formatarCentavos(dados.rendaFixaCentavos)}</dd>
+          <dd>{formatarCentavos(rendaFixa)}</dd>
         </div>
         <div>
           <dt>Cripto</dt>
@@ -61,10 +63,14 @@ function ResumoDoPatrimonio({ estado }: { estado: Estado<Patrimonio> }) {
 export default function Investimentos({
   contasDeInvestimento,
   contasCripto,
+  cofrinhosAtivos,
+  aoMudarCofrinho,
   aoSessaoExpirar,
 }: {
   contasDeInvestimento: Conta[]
   contasCripto: Conta[]
+  cofrinhosAtivos: Conta[]
+  aoMudarCofrinho: () => void
   aoSessaoExpirar: () => void
 }) {
   const [data, setData] = useState(hojeLocal())
@@ -106,7 +112,10 @@ export default function Investimentos({
           }}
         />
       </div>
-      {dataValida ? <ResumoDoPatrimonio estado={patrimonio} /> : <p role="status">Escolha uma data.</p>}
+      {/* A margem fica no contêiner do resumo: o cartão destacado não tem margem própria e colava nas abas. */}
+      <div className="investimentos-resumo">
+        {dataValida ? <ResumoDoPatrimonio estado={patrimonio} /> : <p role="status">Escolha uma data.</p>}
+      </div>
       <div className="segmentos" role="group" aria-label="Tipo de investimento">
         <button type="button" aria-pressed={aba === 'renda-fixa'} onClick={() => setAba('renda-fixa')}>
           Renda fixa
@@ -120,8 +129,11 @@ export default function Investimentos({
         <RendaFixa
           key={data}
           contas={contasDeInvestimento}
+          cofrinhosAtivos={cofrinhosAtivos}
+          cofrinhosNaData={patrimonio.tipo === 'ok' ? patrimonio.dados.cofrinhos : []}
           data={data}
           aoMudar={aoMudar}
+          aoMudarCofrinho={aoMudarCofrinho}
           aoSessaoExpirar={aoSessaoExpirar}
         />
       )}
