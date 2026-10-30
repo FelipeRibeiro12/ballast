@@ -1,6 +1,6 @@
 # ADR-046: Relatórios na F18
 
-**Status:** aceito
+**Status:** aceito (parcela passa a contar no mês dela, ADR-075)
 **Data:** 2026-10-23
 
 ## Contexto

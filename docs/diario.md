@@ -532,3 +532,11 @@ Dívida registrada: 3 linhas no backlog (catch-up com lançamento recusado, vers
 Achados do revisor: reviewer não rodou (decisão de economia); security 0 crítico, 0 alto, 1 médio e 4 baixos, todos no backlog ou aceitos
 Pipeline: local verde (ver commit final); CI a preencher no PR
 Em aberto: abrir o PR (sem push feito); o rendimento de hoje (29/10) só entra depois do deploy, ou clicando no botão
+## 2026-10-29 — Parcela no mês dela
+
+O que entrou: relatório, série mensal e orçamento passam a contar a parcela de compra parcelada no mês dela (mês da compra mais `parcela_num - 1`) e só pelo valor dela, por um trecho de SQL único (`entries/AggregationCompetence`). Nada gravado muda; sem migration. O Início lê o mesmo relatório. Posso gastar não agrega por categoria e não muda.
+Decisões: ADR-075 (emenda ADR-032 só para agregação; atualiza ADR-043 e ADR-046)
+Dívida registrada: lista por competência da onda 7 (ADR-059) ainda usa a data gravada; índice parcial se o histórico crescer (51 ms com 200 mil linhas, sem índice novo)
+Achados do revisor: reviewer e security não rodaram (diff de leitura, sem borda nova)
+Pipeline: local verde (make test, lint e web)
+Em aberto: abrir o PR; a branch sai de origin/main

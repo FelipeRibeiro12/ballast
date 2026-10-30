@@ -56,7 +56,8 @@ class BudgetController {
       summary = "Orçamento do mês por categoria",
       description =
           "Cada categoria com teto no mês, com o gasto por competência, o previsto e o que falta"
-              + " (ADR-043). Sem mes, vale o mês corrente em America/Sao_Paulo.",
+              + " (ADR-043). Parcela de compra parcelada conta no mês dela e pelo valor dela"
+              + " (ADR-075). Sem mes, vale o mês corrente em America/Sao_Paulo.",
       security = @SecurityRequirement(name = "cookieAuth"))
   @ApiResponse(
       responseCode = "200",
