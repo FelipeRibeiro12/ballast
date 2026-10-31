@@ -509,7 +509,9 @@ function isFatura(valor: unknown): valor is Fatura {
     Number.isSafeInteger(valor.restanteCentavos) &&
     'situacao' in valor &&
     typeof valor.situacao === 'string' &&
-    SITUACOES_DE_FATURA.includes(valor.situacao)
+    SITUACOES_DE_FATURA.includes(valor.situacao) &&
+    'fechadaManualmente' in valor &&
+    typeof valor.fechadaManualmente === 'boolean'
   )
 }
 
@@ -523,6 +525,39 @@ function isFaturas(valor: unknown): valor is Faturas {
     Array.isArray(valor.faturas) &&
     valor.faturas.every(isFatura)
   )
+}
+
+// 409 do fechamento: a fatura já passou do dia de fechamento ou ainda não começou.
+export class FaturaRecusadaError extends ApiError {
+  readonly mensagemServidor: string | null
+
+  constructor(mensagemServidor: string | null) {
+    super('fechamento de fatura recusado')
+    this.mensagemServidor = mensagemServidor
+  }
+}
+
+async function alterarFechamentoDaFatura(
+  contaId: string,
+  vencimento: string,
+  metodo: 'PUT' | 'DELETE',
+): Promise<void> {
+  const resposta = await fetch(
+    `${baseUrl}/contas/${encodeURIComponent(contaId)}/faturas/${encodeURIComponent(vencimento)}/fechamento`,
+    { method: metodo, credentials: 'same-origin', headers: cabecalhosDeEscrita() },
+  )
+  if (resposta.status === 204) return
+  if (resposta.status === 409) throw new FaturaRecusadaError(await lerMensagemDeErro(resposta))
+  return recusarResposta(resposta, `${metodo} /contas/{id}/faturas/{vencimento}/fechamento`)
+}
+
+// Fecha a fatura antes do dia de fechamento, quando o banco fecha antes.
+export function fecharFatura(contaId: string, vencimento: string): Promise<void> {
+  return alterarFechamentoDaFatura(contaId, vencimento, 'PUT')
+}
+
+export function reabrirFatura(contaId: string, vencimento: string): Promise<void> {
+  return alterarFechamentoDaFatura(contaId, vencimento, 'DELETE')
 }
 
 // de e ate são datas de vencimento, AAAA-MM-DD.
@@ -2567,7 +2602,9 @@ function isTerceiro(valor: unknown): valor is Terceiro {
     'recebidoCentavos' in valor &&
     Number.isSafeInteger(valor.recebidoCentavos) &&
     'devidoCentavos' in valor &&
-    Number.isSafeInteger(valor.devidoCentavos)
+    Number.isSafeInteger(valor.devidoCentavos) &&
+    'devidoNoMesCentavos' in valor &&
+    Number.isSafeInteger(valor.devidoNoMesCentavos)
   )
 }
 

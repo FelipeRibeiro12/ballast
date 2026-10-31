@@ -98,7 +98,7 @@ function FormularioDeReembolso({
   const [contas, setContas] = useState<Estado<Conta[]>>({ tipo: 'carregando' })
   const [categorias, setCategorias] = useState<Estado<Categoria[]>>({ tipo: 'carregando' })
   const [contaId, setContaId] = useState('')
-  const [valor, setValor] = useState(terceiro.devidoCentavos > 0 ? centavosParaCampo(terceiro.devidoCentavos) : '')
+  const [valor, setValor] = useState(terceiro.devidoNoMesCentavos > 0 ? centavosParaCampo(terceiro.devidoNoMesCentavos) : '')
   const [data, setData] = useState(() => hojeLocal())
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
@@ -327,16 +327,18 @@ export default function Terceiros({
             <li key={terceiro.id}>
               <div className="item-corpo">
                 <strong className="item-titulo">{terceiro.nome}</strong>
-                <small>
-                  Comprou {formatarCentavos(terceiro.compradoCentavos)} · pagou {formatarCentavos(terceiro.recebidoCentavos)}
-                </small>
                 <strong>
-                  {terceiro.devidoCentavos > 0
-                    ? `Deve ${formatarCentavos(terceiro.devidoCentavos)}`
+                  {terceiro.devidoNoMesCentavos > 0
+                    ? `Deve ${formatarCentavos(terceiro.devidoNoMesCentavos)} no mês`
                     : terceiro.devidoCentavos < 0
                       ? `Pagou a mais ${formatarCentavos(-terceiro.devidoCentavos)}`
-                      : 'Em dia'}
+                      : 'Em dia no mês'}
                 </strong>
+                <small>
+                  Total: comprou {formatarCentavos(terceiro.compradoCentavos)} · pagou{' '}
+                  {formatarCentavos(terceiro.recebidoCentavos)}
+                  {terceiro.devidoCentavos > 0 ? ` · falta ${formatarCentavos(terceiro.devidoCentavos)}` : ''}
+                </small>
                 {terceiro.arquivado && (
                   <div className="item-selos">
                     <Selo tom="neutro">Arquivado</Selo>

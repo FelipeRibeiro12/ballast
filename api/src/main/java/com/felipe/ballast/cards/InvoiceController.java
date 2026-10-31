@@ -22,8 +22,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -44,6 +46,11 @@ class InvoiceController {
       new ErrorResponse("de deve ser anterior ou igual a ate");
   private static final ErrorResponse RANGE_TOO_LONG =
       new ErrorResponse("o intervalo entre de e ate deve ter no máximo 366 dias");
+
+  private static final ErrorResponse ALREADY_CLOSED =
+      new ErrorResponse("a fatura já passou do dia de fechamento");
+  private static final ErrorResponse NOT_STARTED =
+      new ErrorResponse("a fatura ainda não começou a receber compras");
 
   // Conta os dois extremos, como em GET /lancamentos.
   private static final long MAX_DAYS = 366;
@@ -139,6 +146,84 @@ class InvoiceController {
     };
   }
 
+  @Operation(
+      operationId = "putContasByIdFaturasByVencimentoFechamento",
+      summary = "Fecha a fatura antes do dia de fechamento",
+      description =
+          "Marca a fatura que vence em vencimento como fechada hoje (America/Sao_Paulo). Ela passa"
+              + " a aceitar pagamento desde hoje. Repetir a chamada não muda a data do fechamento.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(responseCode = "204", description = "Fatura fechada")
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description =
+          "Cartão de outro usuário, inexistente, que não é cartão, ou vencimento que não é de uma"
+              + " fatura do cartão; mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "Fatura já fechada pela data ou ainda sem compras em andamento",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @PutMapping(
+      path = "/contas/{id}/faturas/{vencimento}/fechamento",
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> close(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable("id") String id,
+      @PathVariable("vencimento") String due) {
+    return change(user, id, due, true);
+  }
+
+  @Operation(
+      operationId = "deleteContasByIdFaturasByVencimentoFechamento",
+      summary = "Reabre a fatura fechada à mão",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(responseCode = "204", description = "Fatura reaberta")
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "Mesmos casos do fechamento; mesmo corpo",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "Fatura já fechada pela data",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @DeleteMapping(
+      path = "/contas/{id}/faturas/{vencimento}/fechamento",
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> reopen(
+      @AuthenticationPrincipal AuthenticatedUser user,
+      @PathVariable("id") String id,
+      @PathVariable("vencimento") String due) {
+    return change(user, id, due, false);
+  }
+
+  private ResponseEntity<?> change(AuthenticatedUser user, String id, String due, boolean close) {
+    Optional<UUID> accountId = CanonicalUuid.parse(id);
+    Optional<LocalDate> dueDate = IsoDates.parse(due);
+    if (accountId.isEmpty() || dueDate.isEmpty()) {
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+    }
+    LocalDate today = clock.instant().atZone(ZONE).toLocalDate();
+    InvoiceService.CloseResult result =
+        close
+            ? invoices.close(user.id(), accountId.get(), dueDate.get(), today)
+            : invoices.reopen(user.id(), accountId.get(), dueDate.get(), today);
+    return switch (result) {
+      case DONE -> ResponseEntity.noContent().build();
+      case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(NOT_FOUND);
+      case ALREADY_CLOSED -> ResponseEntity.status(HttpStatus.CONFLICT).body(ALREADY_CLOSED);
+      case NOT_STARTED -> ResponseEntity.status(HttpStatus.CONFLICT).body(NOT_STARTED);
+    };
+  }
+
   private static InvoiceResponse toResponse(InvoiceService.Invoice invoice) {
     return new InvoiceResponse(
         invoice.due(),
@@ -146,7 +231,8 @@ class InvoiceController {
         cents(invoice.total()),
         cents(invoice.paid()),
         cents(invoice.remaining()),
-        invoice.situation().value());
+        invoice.situation().value(),
+        invoice.closedByHand());
   }
 
   // A faixa já foi conferida no serviço; longValueExact falha alto se algum valor escapar.

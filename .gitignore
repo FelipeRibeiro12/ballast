@@ -16,3 +16,6 @@ target/
 web/e2e/capturas/
 web/test-results/
 web/playwright-report/
+
+# Configuração pessoal do Obsidian (vault em docs/Obsidian)
+docs/Obsidian/.obsidian/

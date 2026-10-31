@@ -270,6 +270,12 @@ Migration `V10` (ADR-031):
   de faturas, `(usuario_id, conta_id, data_caixa)` em `lancamento` foi medido e
   não entrou (seção Lançamento, "Índice da F10").
 
+`fatura_fechamento` (V42, ADR-079): `usuario_id`, `conta_id`, `vencimento`,
+`fechada_em`; PK nas três primeiras. FK `(conta_id, usuario_id, tipo_conta)`
+para `conta (id, usuario_id, tipo)`, com `tipo_conta` gerada constante
+`cartao_credito`, então só cartão do mesmo usuário tem linha. Existir a linha
+tira a fatura de `aberta`. Desfazer: bloco comentado no fim da `V42`.
+
 ### Cripto
 
 Recorte da F13 (ADR-035), migration `V13`. Cripto digitada à mão, sem carteira

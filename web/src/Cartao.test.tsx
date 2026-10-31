@@ -47,6 +47,7 @@ function fatura(sobra: Partial<Record<string, unknown>> = {}): Record<string, un
     pagoCentavos: 0,
     restanteCentavos: 20000,
     situacao: 'fechada',
+    fechadaManualmente: false,
     ...sobra,
   }
 }
@@ -358,7 +359,8 @@ describe('Cartão de crédito', () => {
       expect(within(form).getByLabelText('Conta de origem')).toHaveValue('c1')
       expect(within(form).getByLabelText('Conta de destino')).toHaveValue('c9')
       expect(within(form).getByLabelText('Valor em reais')).toHaveValue('200,00')
-      expect(within(form).getByLabelText('Data do pagamento')).toHaveValue('2026-11-10')
+      // Hoje é 19/10, antes do vencimento: sugere hoje, pagamento antecipado.
+      expect(within(form).getByLabelText('Data do pagamento')).toHaveValue('2026-10-19')
       expect(within(form).getByLabelText('Título')).toHaveValue('Pagamento da fatura')
       expect(within(form).getByText(/depois do próximo fechamento conta na fatura seguinte/i)).toBeVisible()
       const contasAntes = chamadasA('GET /contas').length
@@ -368,12 +370,46 @@ describe('Cartão de crédito', () => {
         contaOrigemId: 'c1',
         contaDestinoId: 'c9',
         valorCentavos: 20000,
-        data: '2026-11-10',
+        data: '2026-10-19',
         titulo: 'Pagamento da fatura',
       })
       await waitFor(() => expect(chamadasA(FATURAS)).toHaveLength(2))
       await waitFor(() => expect(chamadasA('GET /contas').length).toBeGreaterThan(contasAntes))
       await waitFor(() => expect(screen.queryByRole('form', { name: 'Pagamento da fatura' })).not.toBeInTheDocument())
+    })
+
+    it('Fechar fatura fecha a aberta antes da data, recarrega e passa a oferecer o pagamento', async () => {
+      let fechada = false
+      mockFetch({
+        ...sessaoViva,
+        'GET /contas': responde([conta(), cartaoVisa()]),
+        [FATURAS]: () =>
+          responde({
+            contaId: 'c9',
+            faturas: [
+              fatura(
+                fechada
+                  ? { fechadaManualmente: true, situacao: 'fechada' }
+                  : { fechamento: '2026-10-31', situacao: 'aberta' },
+              ),
+            ],
+          })(),
+        'PUT /contas/c9/faturas/2026-11-10/fechamento': () => {
+          fechada = true
+          return Promise.resolve(new Response(null, { status: 204 }))
+        },
+        'DELETE /contas/c9/faturas/2026-11-10/fechamento': () => {
+          fechada = false
+          return Promise.resolve(new Response(null, { status: 204 }))
+        },
+      })
+      render(<App />)
+      await abrirFaturas()
+      expect(screen.queryByRole('button', { name: 'Pagar fatura de 10/11/2026' })).not.toBeInTheDocument()
+      fireEvent.click(await screen.findByRole('button', { name: 'Fechar fatura de 10/11/2026' }))
+      expect(await screen.findByRole('button', { name: 'Pagar fatura de 10/11/2026' })).toBeVisible()
+      fireEvent.click(screen.getByRole('button', { name: 'Reabrir fatura de 10/11/2026' }))
+      expect(await screen.findByRole('button', { name: 'Fechar fatura de 10/11/2026' })).toBeVisible()
     })
 
     it('erro do servidor no pagamento aparece e o formulário continua aberto', async () => {

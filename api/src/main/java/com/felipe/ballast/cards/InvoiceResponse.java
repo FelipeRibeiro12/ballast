@@ -31,4 +31,10 @@ public record InvoiceResponse(
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
             allowableValues = {"aberta", "fechada", "paga"})
-        String situacao) {}
+        String situacao,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description =
+                "true quando o dono fechou a fatura antes do dia de fechamento e ela ainda pode"
+                    + " ser reaberta")
+        boolean fechadaManualmente) {}

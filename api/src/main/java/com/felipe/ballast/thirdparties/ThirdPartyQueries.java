@@ -15,7 +15,12 @@ class ThirdPartyQueries {
 
   // bought: despesas não canceladas. received: reembolsos já realizados.
   record ThirdParty(
-      UUID id, String name, boolean archived, BigDecimal bought, BigDecimal received) {}
+      UUID id,
+      String name,
+      boolean archived,
+      BigDecimal bought,
+      BigDecimal received,
+      BigDecimal boughtUntilMonthEnd) {}
 
   record TaggedEntry(
       UUID id,
@@ -38,7 +43,10 @@ class ThirdPartyQueries {
       SELECT t.id, t.nome, t.arquivado,
         COALESCE(SUM(l.valor) FILTER (WHERE l.tipo = 'despesa'), 0) AS comprado,
         COALESCE(SUM(l.valor) FILTER (WHERE l.tipo = 'receita' AND l.status = 'realizado'), 0)
-          AS recebido
+          AS recebido,
+        COALESCE(SUM(l.valor) FILTER (WHERE l.tipo = 'despesa'
+          AND l.data_caixa <= (date_trunc('month', now() AT TIME ZONE 'America/Sao_Paulo')
+                               + interval '1 month - 1 day')::date), 0) AS comprado_ate_fim_do_mes
       FROM terceiro t
       LEFT JOIN terceiro_lancamento v ON v.terceiro_id = t.id AND v.usuario_id = t.usuario_id
       LEFT JOIN lancamento l ON l.id = v.lancamento_id AND l.usuario_id = v.usuario_id
@@ -221,6 +229,7 @@ class ThirdPartyQueries {
         rs.getString("nome"),
         rs.getBoolean("arquivado"),
         rs.getBigDecimal("comprado"),
-        rs.getBigDecimal("recebido"));
+        rs.getBigDecimal("recebido"),
+        rs.getBigDecimal("comprado_ate_fim_do_mes"));
   }
 }

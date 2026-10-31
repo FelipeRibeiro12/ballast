@@ -634,6 +634,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/contas/{id}/faturas/{vencimento}/fechamento": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Fecha a fatura antes do dia de fechamento
+         * @description Marca a fatura que vence em vencimento como fechada hoje (America/Sao_Paulo). Ela passa a aceitar pagamento desde hoje. Repetir a chamada não muda a data do fechamento.
+         */
+        put: operations["putContasByIdFaturasByVencimentoFechamento"];
+        post?: never;
+        /** Reabre a fatura fechada à mão */
+        delete: operations["deleteContasByIdFaturasByVencimentoFechamento"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/contas/{id}/investimentos": {
         parameters: {
             query?: never;
@@ -2104,6 +2125,8 @@ export interface components {
             erro: string;
         };
         Fatura: {
+            /** @description true quando o dono fechou a fatura antes do dia de fechamento e ela ainda pode ser reaberta */
+            fechadaManualmente: boolean;
             /**
              * Format: date
              * @description Data de fechamento
@@ -3171,6 +3194,11 @@ export interface components {
              * @description Comprado menos recebido; negativo quando pagou a mais
              */
             devidoCentavos: number;
+            /**
+             * Format: int64
+             * @description Compras com dataCaixa até o fim do mês corrente menos todos os reembolsos realizados, nunca negativo. Reembolso maior que o do mês abate os meses seguintes.
+             */
+            devidoNoMesCentavos: number;
             /** Format: uuid */
             id: string;
             nome: string;
@@ -5981,6 +6009,106 @@ export interface operations {
             };
             /** @description Banco indisponível; pode tentar de novo */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    putContasByIdFaturasByVencimentoFechamento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                vencimento: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fatura fechada */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Cartão de outro usuário, inexistente, que não é cartão, ou vencimento que não é de uma fatura do cartão; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Fatura já fechada pela data ou ainda sem compras em andamento */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    deleteContasByIdFaturasByVencimentoFechamento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                vencimento: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fatura reaberta */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Mesmos casos do fechamento; mesmo corpo */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Fatura já fechada pela data */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
