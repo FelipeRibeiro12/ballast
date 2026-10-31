@@ -2268,6 +2268,97 @@ paths:
       summary: Lista as faturas de um cartão por vencimento
       tags:
       - cartao
+  /contas/{id}/faturas/{vencimento}/fechamento:
+    delete:
+      operationId: deleteContasByIdFaturasByVencimentoFechamento
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: vencimento
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Fatura reaberta
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Mesmos casos do fechamento; mesmo corpo
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Fatura já fechada pela data
+      security:
+      - cookieAuth: []
+      summary: Reabre a fatura fechada à mão
+      tags:
+      - cartao
+    put:
+      description: Marca a fatura que vence em vencimento como fechada hoje (America/Sao_Paulo).
+        Ela passa a aceitar pagamento desde hoje. Repetir a chamada não muda a data
+        do fechamento.
+      operationId: putContasByIdFaturasByVencimentoFechamento
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: vencimento
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Fatura fechada
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: "Cartão de outro usuário, inexistente, que não é cartão, ou\
+            \ vencimento que não é de uma fatura do cartão; mesmo corpo"
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Fatura já fechada pela data ou ainda sem compras em andamento
+      security:
+      - cookieAuth: []
+      summary: Fecha a fatura antes do dia de fechamento
+      tags:
+      - cartao
   /contas/{id}/investimentos:
     put:
       description: Só diz se o saldo conta no card Renda fixa e no total investido.
@@ -7010,6 +7101,10 @@ components:
     Fatura:
       type: object
       properties:
+        fechadaManualmente:
+          type: boolean
+          description: true quando o dono fechou a fatura antes do dia de fechamento
+            e ela ainda pode ser reaberta
         fechamento:
           type: string
           format: date
@@ -7044,6 +7139,7 @@ components:
           format: date
           description: Data de vencimento
       required:
+      - fechadaManualmente
       - fechamento
       - pagoCentavos
       - restanteCentavos
@@ -9102,6 +9198,14 @@ components:
           description: Comprado menos recebido; negativo quando pagou a mais
           maximum: 9007199254740991
           minimum: -9007199254740991
+        devidoNoMesCentavos:
+          type: integer
+          format: int64
+          description: "Compras com dataCaixa até o fim do mês corrente menos todos\
+            \ os reembolsos realizados, nunca negativo. Reembolso maior que o do mê\
+            s abate os meses seguintes."
+          maximum: 9007199254740991
+          minimum: 0
         id:
           type: string
           format: uuid
@@ -9119,6 +9223,7 @@ components:
       - arquivado
       - compradoCentavos
       - devidoCentavos
+      - devidoNoMesCentavos
       - id
       - nome
       - recebidoCentavos

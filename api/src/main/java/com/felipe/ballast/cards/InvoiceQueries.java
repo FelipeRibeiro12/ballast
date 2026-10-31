@@ -72,6 +72,48 @@ class InvoiceQueries {
         to);
   }
 
+  // Faturas fechadas à mão do cartão, por vencimento. São poucas linhas por cartão.
+  Map<LocalDate, LocalDate> manualClosings(UUID userId, UUID accountId) {
+    Map<LocalDate, LocalDate> result = new LinkedHashMap<>();
+    jdbc.sql(
+            "SELECT vencimento, fechada_em FROM fatura_fechamento"
+                + " WHERE usuario_id = :userId AND conta_id = :accountId")
+        .param("userId", userId)
+        .param("accountId", accountId)
+        .query(
+            rs -> {
+              result.put(
+                  rs.getObject("vencimento", LocalDate.class),
+                  rs.getObject("fechada_em", LocalDate.class));
+            });
+    return result;
+  }
+
+  // Segunda chamada no mesmo dia não muda a data em que a fatura foi fechada.
+  void closeInvoice(UUID userId, UUID accountId, LocalDate due, LocalDate closedOn) {
+    jdbc.sql(
+            """
+            INSERT INTO fatura_fechamento (usuario_id, conta_id, vencimento, fechada_em)
+            VALUES (:userId, :accountId, :due, :closedOn)
+            ON CONFLICT DO NOTHING
+            """)
+        .param("userId", userId)
+        .param("accountId", accountId)
+        .param("due", due)
+        .param("closedOn", closedOn)
+        .update();
+  }
+
+  void reopenInvoice(UUID userId, UUID accountId, LocalDate due) {
+    jdbc.sql(
+            "DELETE FROM fatura_fechamento"
+                + " WHERE usuario_id = :userId AND conta_id = :accountId AND vencimento = :due")
+        .param("userId", userId)
+        .param("accountId", accountId)
+        .param("due", due)
+        .update();
+  }
+
   private Map<LocalDate, BigDecimal> byDate(
       String sql, UUID userId, UUID accountId, LocalDate from, LocalDate to) {
     Map<LocalDate, BigDecimal> result = new LinkedHashMap<>();

@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  FaturaRecusadaError,
   ServicoIndisponivelError,
   SessaoExpiradaError,
   TransferenciaInvalidaError,
+  fecharFatura,
   fetchFaturas,
   postTransferencia,
+  reabrirFatura,
 } from './api'
 import type { Conta, Fatura } from './api'
-import { formatarDataCompleta, intervaloDoMes, mesDeHoje, somarMeses } from './datas'
+import { formatarDataCompleta, hojeLocal, intervaloDoMes, mesDeHoje, somarMeses } from './datas'
 import { formatarCentavos, lerValorPositivo } from './dinheiro'
 import { Carregando, Selo } from './ui'
 
@@ -40,6 +43,12 @@ function mensagemDePagamento(erro: unknown): string {
   return 'Não foi possível pagar a fatura. Tente de novo.'
 }
 
+function mensagemDeFechamento(erro: unknown): string {
+  if (erro instanceof FaturaRecusadaError && erro.mensagemServidor !== null) return erro.mensagemServidor
+  if (erro instanceof ServicoIndisponivelError) return MENSAGEM_INDISPONIVEL
+  return 'Não foi possível alterar o fechamento. Tente de novo.'
+}
+
 function eContaDePagamento(conta: Conta): boolean {
   return conta.tipo === 'corrente' || conta.tipo === 'poupanca'
 }
@@ -69,7 +78,11 @@ function FormularioDePagamento({
   const [destinoEscolhido, setDestinoEscolhido] = useState(cartao.id)
   const [titulo, setTitulo] = useState('Pagamento da fatura')
   const [valor, setValor] = useState(formatarCentavos(fatura.restanteCentavos).replace(/[^\d.,]/g, ''))
-  const [data, setData] = useState(fatura.vencimento)
+  // Pagar antes do vencimento é comum: sugere hoje, e o vencimento só quando já passou.
+  const [data, setData] = useState(() => {
+    const hoje = hojeLocal()
+    return hoje < fatura.vencimento ? hoje : fatura.vencimento
+  })
   const [enviando, setEnviando] = useState(false)
   const [mensagem, setMensagem] = useState<string | null>(null)
   // O state só atualiza no próximo render; o ref barra o segundo submit síncrono.
@@ -228,6 +241,7 @@ export default function Faturas({
   const [estado, setEstado] = useState<EstadoFaturas>({ tipo: 'carregando' })
   const [tentativa, setTentativa] = useState(0)
   const [pagando, setPagando] = useState<Fatura | null>(null)
+  const [falhaDeFechamento, setFalhaDeFechamento] = useState<string | null>(null)
 
   useEffect(() => {
     // De 3 meses atrás a 6 à frente, por vencimento, em datas locais.
@@ -256,6 +270,21 @@ export default function Faturas({
   function recarregar(): void {
     setEstado({ tipo: 'carregando' })
     setTentativa((n) => n + 1)
+  }
+
+  async function alterarFechamento(fatura: Fatura, fechar: boolean): Promise<void> {
+    setFalhaDeFechamento(null)
+    try {
+      if (fechar) await fecharFatura(cartao.id, fatura.vencimento)
+      else await reabrirFatura(cartao.id, fatura.vencimento)
+      recarregar()
+    } catch (erro) {
+      if (erro instanceof SessaoExpiradaError) {
+        aoSessaoExpirar()
+        return
+      }
+      setFalhaDeFechamento(mensagemDeFechamento(erro))
+    }
   }
 
   const vencimentoAtual =
@@ -318,6 +347,30 @@ export default function Faturas({
                     </>
                   )}
                 </div>
+                {atual && fatura.situacao === 'aberta' && !semCompras && (
+                  <div className="fatura-acao">
+                    <button
+                      type="button"
+                      className="pequeno"
+                      aria-label={`Fechar fatura de ${formatarDataCompleta(fatura.vencimento)}`}
+                      onClick={() => void alterarFechamento(fatura, true)}
+                    >
+                      Fechar fatura
+                    </button>
+                  </div>
+                )}
+                {fatura.fechadaManualmente && fatura.pagoCentavos === 0 && (
+                  <div className="fatura-acao">
+                    <button
+                      type="button"
+                      className="pequeno discreto"
+                      aria-label={`Reabrir fatura de ${formatarDataCompleta(fatura.vencimento)}`}
+                      onClick={() => void alterarFechamento(fatura, false)}
+                    >
+                      Reabrir
+                    </button>
+                  </div>
+                )}
                 {aPagar && (
                   <div className="fatura-acao">
                     <button
@@ -334,6 +387,11 @@ export default function Faturas({
             )
           })}
         </ul>
+      )}
+      {falhaDeFechamento !== null && (
+        <p role="alert" className="erro">
+          {falhaDeFechamento}
+        </p>
       )}
       {pagando !== null && (
         <FormularioDePagamento

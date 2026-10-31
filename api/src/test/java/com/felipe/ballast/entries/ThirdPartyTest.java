@@ -96,6 +96,32 @@ class ThirdPartyTest {
   }
 
   @Test
+  void whatIsOwedThisMonthIgnoresFutureInstallmentsAndUsesAPaymentInFullToCoverThem()
+      throws Exception {
+    String friend = newThirdParty(actor.session(), "Bia");
+    JsonNode current = api.createOk(actor.session(), EntriesApi.expenseBody(actor));
+    link(actor.session(), current.get("id").asString(), friend);
+    Map<String, Object> later = new java.util.LinkedHashMap<>(EntriesApi.expenseBody(actor));
+    later.put("data", "2099-01-10");
+    JsonNode future = api.createOk(actor.session(), later);
+    link(actor.session(), future.get("id").asString(), friend);
+
+    JsonNode before = thirdParty(actor.session(), friend);
+    assertThat(before.get("devidoCentavos").asLong()).isEqualTo(24_690);
+    assertThat(before.get("devidoNoMesCentavos").asLong()).isEqualTo(12_345);
+
+    // Pagou o total de uma vez: o mês zera e a sobra do valor cobre o mês que vem.
+    Map<String, Object> everything = new java.util.LinkedHashMap<>(EntriesApi.incomeBody(actor));
+    everything.put("valorCentavos", 24_690);
+    JsonNode received = api.createOk(actor.session(), everything);
+    link(actor.session(), received.get("id").asString(), friend);
+
+    JsonNode after = thirdParty(actor.session(), friend);
+    assertThat(after.get("devidoCentavos").asLong()).isZero();
+    assertThat(after.get("devidoNoMesCentavos").asLong()).isZero();
+  }
+
+  @Test
   void aLinkedPurchaseLeavesTheMonthlyReport() throws Exception {
     String friend = newThirdParty(actor.session(), "João");
     JsonNode purchase = api.createOk(actor.session(), EntriesApi.expenseBody(actor));

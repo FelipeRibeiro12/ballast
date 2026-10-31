@@ -1061,6 +1061,7 @@ describe('fetchFaturas', () => {
     pagoCentavos: 5000,
     restanteCentavos: 10000,
     situacao: 'fechada',
+    fechadaManualmente: false,
   }
   const corpo = { contaId, faturas: [fatura] }
 
