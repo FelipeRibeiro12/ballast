@@ -46,6 +46,7 @@ public record WalletsProperties(
       case ETHEREUM -> ethereumUrl;
       case BASE -> baseUrl;
       case SOLANA -> solanaUrl;
+      default -> network.defaultUrl();
     };
   }
 

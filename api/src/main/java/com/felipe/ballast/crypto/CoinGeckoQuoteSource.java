@@ -53,6 +53,8 @@ class CoinGeckoQuoteSource implements QuoteSource {
               CryptoNetwork.BASE, "ethereum",
               CryptoNetwork.ARBITRUM, "ethereum",
               CryptoNetwork.POLYGON, "polygon-ecosystem-token",
+              CryptoNetwork.AVALANCHE, "avalanche-2",
+              CryptoNetwork.ROBINHOOD, "ethereum",
               CryptoNetwork.SOLANA, "solana"));
 
   private static final Map<CryptoNetwork, String> PLATFORM_ID =
@@ -62,6 +64,7 @@ class CoinGeckoQuoteSource implements QuoteSource {
               CryptoNetwork.BASE, "base",
               CryptoNetwork.ARBITRUM, "arbitrum-one",
               CryptoNetwork.POLYGON, "polygon-pos",
+              CryptoNetwork.AVALANCHE, "avalanche",
               CryptoNetwork.SOLANA, "solana"));
 
   // O preço chega como número JSON. Lido como double, 0.1 + 0.2 já viria errado.

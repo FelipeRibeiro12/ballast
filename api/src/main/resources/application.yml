@@ -123,6 +123,10 @@ ballast:
     # Domínio que entra na mensagem assinada na prova de posse (ADR-072). Obrigatório fora de
     # APP_ENV=development; lá o padrão é localhost:5173.
     domain: ${BALLAST_POSSE_DOMAIN:}
+  zerion:
+    # NFT e posição DeFi das carteiras (ADR-081). Sem ZERION_API_KEY ficam desligados.
+    api-key: ${ZERION_API_KEY:}
+    url: ${ZERION_API_URL:}
   carteiras:
     # Alchemy, plano gratuito (ADR-071). Sem ALCHEMY_API_KEY o job não roda e a leitura manual
     # responde que o indexador não está configurado. As URLs são a raiz de cada rede, sem a chave.

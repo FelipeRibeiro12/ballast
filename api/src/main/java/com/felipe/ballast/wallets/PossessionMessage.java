@@ -61,7 +61,12 @@ final class PossessionMessage {
     return switch (network) {
       case ETHEREUM -> 1;
       case BASE -> 8453;
-      case SOLANA -> throw new IllegalArgumentException("Solana não tem chain id");
+      case ARBITRUM -> 42161;
+      case POLYGON -> 137;
+      case AVALANCHE -> 43114;
+      // Rede nova da Robinhood; o id real precisa ser conferido antes de ligar a prova de posse.
+      case ROBINHOOD -> throw new IllegalArgumentException("chain id da Robinhood não conferido");
+      case SOLANA, BITCOIN -> throw new IllegalArgumentException("rede sem chain id");
     };
   }
 }

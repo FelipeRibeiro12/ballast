@@ -13,7 +13,7 @@ import {
   putAtivoCripto,
   putCustoMovimento,
 } from './api'
-import type { AtivoCripto, Carteira, Conta, MovimentoCripto } from './api'
+import type { AtivoCripto, Carteira, Conta, MovimentoCripto, PosicaoCarteira } from './api'
 import { formatarDecimal } from './decimais'
 import { diaEmSaoPaulo, formatarDataCompleta, horaEmSaoPaulo } from './datas'
 import { lerValorPositivo } from './dinheiro'
@@ -26,12 +26,32 @@ import { Carregando, EstadoVazio, Selo } from './ui'
 
 type RedeDaCarteira = Carteira['rede']
 
-const REDES_DA_CARTEIRA: RedeDaCarteira[] = ['ethereum', 'base', 'solana']
+const REDES_DA_CARTEIRA: RedeDaCarteira[] = [
+  'ethereum',
+  'base',
+  'arbitrum',
+  'polygon',
+  'avalanche',
+  'robinhood',
+  'solana',
+  'bitcoin',
+]
 
 const ROTULO_DA_REDE: Record<RedeDaCarteira, string> = {
   ethereum: 'Ethereum',
   base: 'Base',
+  arbitrum: 'Arbitrum',
+  polygon: 'Polygon',
+  avalanche: 'Avalanche',
+  robinhood: 'Robinhood Chain',
   solana: 'Solana',
+  bitcoin: 'Bitcoin',
+}
+
+// Bitcoin não assina mensagem pelo mesmo caminho e a Robinhood Chain não teve o chain id conferido:
+// nas duas a prova de posse não existe.
+function aceitaProvaDePosse(rede: RedeDaCarteira): boolean {
+  return rede !== 'bitcoin' && rede !== 'robinhood'
 }
 
 // Acima disso nenhum endereço das três redes cabe; o servidor valida o formato de verdade.
@@ -44,6 +64,42 @@ function abreviarEndereco(endereco: string): string {
 
 function descreverInstante(instante: string): string {
   return `${formatarDataCompleta(diaEmSaoPaulo(instante))} às ${horaEmSaoPaulo(instante)}`
+}
+
+const ROTULO_DA_CATEGORIA: Record<PosicaoCarteira['categoria'], string> = {
+  nft: 'NFT',
+  liquidez: 'Pool de liquidez',
+  stake: 'Stake',
+  deposito: 'Depósito',
+  emprestimo: 'Empréstimo',
+  rendimento: 'Rendimento',
+  bloqueado: 'Bloqueado',
+  recompensa: 'Recompensa',
+  outro: 'Outro',
+}
+
+// Dólar em centavos inteiros: só a formatação usa Intl, nada de aritmética com decimal.
+function formatarDolar(centavos: number): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' }).format(centavos / 100)
+}
+
+function ListaDePosicoes({ titulo, posicoes }: { titulo: string; posicoes: PosicaoCarteira[] }): React.JSX.Element | null {
+  if (posicoes.length === 0) return null
+  return (
+    <ul aria-label={titulo}>
+      {posicoes.map((posicao) => (
+        <li key={posicao.id}>
+          <strong>{posicao.nome}</strong>{' '}
+          <span className="item-meta">
+            {ROTULO_DA_CATEGORIA[posicao.categoria]}
+            {posicao.protocolo !== null && ` · ${posicao.protocolo}`}
+          </span>
+          {posicao.quantidade !== null && <small> {formatarDecimal(posicao.quantidade)}</small>}
+          {posicao.valorUsdCentavos !== null && <small> · {formatarDolar(posicao.valorUsdCentavos)}</small>}
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 type Motivo = NonNullable<Carteira['motivo']>
@@ -78,10 +134,10 @@ function familiaDaRede(rede: RedeDaCarteira): FamiliaDeCarteira {
   return rede === 'solana' ? 'solana' : 'evm'
 }
 
-// No EVM a mesma conta vale em Ethereum e Base: mantém a escolha do usuário entre as duas.
+// No EVM a mesma conta vale em todas as redes EVM: mantém a escolha do usuário entre elas.
 function redeAposConectar(familia: FamiliaDeCarteira, atual: RedeDaCarteira): RedeDaCarteira {
   if (familia === 'solana') return 'solana'
-  return atual === 'solana' ? 'ethereum' : atual
+  return familiaDaRede(atual) === 'evm' && atual !== 'bitcoin' ? atual : 'ethereum'
 }
 
 function mensagemDeFalha(erro: unknown, padrao: string): string {
@@ -492,7 +548,7 @@ function CartaoDaCarteira({
           >
             {completo ? 'Ocultar endereço' : 'Endereço completo'}
           </button>
-          {carteira.verificadaEm === null && (
+          {carteira.verificadaEm === null && aceitaProvaDePosse(carteira.rede) && (
             <button
               type="button"
               className="pequeno discreto"
@@ -555,7 +611,9 @@ function CartaoDaCarteira({
         {lendoPelaPrimeiraVez && motivo === null && carteira.sincronizadaEm === null && (
           <p role="status">Lendo a carteira pela primeira vez...</p>
         )}
-        {carteira.saldos.length === 0 && carteira.sincronizadaEm !== null && <small>Lida, sem saldo nesta rede</small>}
+        {carteira.saldos.length === 0 &&
+          carteira.posicoes.length === 0 &&
+          carteira.sincronizadaEm !== null && <small>Lida, sem saldo nesta rede</small>}
         {carteira.saldos.length > 0 && (
           <ul aria-label={`Saldos de ${titulo}`}>
             {carteira.saldos.map((saldo) => {
@@ -618,6 +676,17 @@ function CartaoDaCarteira({
               )
             })}
           </ul>
+        )}
+        <ListaDePosicoes
+          titulo={`DeFi de ${titulo}`}
+          posicoes={carteira.posicoes.filter((posicao) => posicao.tipo === 'defi')}
+        />
+        <ListaDePosicoes
+          titulo={`NFTs de ${titulo}`}
+          posicoes={carteira.posicoes.filter((posicao) => posicao.tipo === 'nft')}
+        />
+        {!carteira.posicoesConfiguradas && familiaDaRede(carteira.rede) === 'evm' && carteira.rede !== 'bitcoin' && (
+          <small>NFT e DeFi desligados: o dono precisa pôr ZERION_API_KEY no api.env do servidor.</small>
         )}
         {mensagem !== null && (
           <p role="alert" className="erro">

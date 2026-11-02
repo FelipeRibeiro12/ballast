@@ -1658,7 +1658,7 @@ export interface components {
             id: string;
             nome: string | null;
             /** @enum {string} */
-            rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "solana";
+            rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "avalanche" | "robinhood" | "solana";
             simbolo: string;
         };
         AtivoCriptoEdicao: {
@@ -1676,7 +1676,7 @@ export interface components {
             decimais: number;
             nome?: string | null;
             /** @enum {string} */
-            rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "solana";
+            rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "avalanche" | "robinhood" | "solana";
             simbolo: string;
         };
         AtualizarCartaoRequest: {
@@ -1755,13 +1755,17 @@ export interface components {
             leituraFalhou: boolean;
             /** @description Por que a última leitura falhou; nulo se deu certo ou nunca foi tentada. Em POST /carteiras/{id}/sincronizar barrado pelos 60 s, vale LIMITE_DE_60S quando não há falha gravada */
             motivo: components["schemas"]["MotivoLeitura"] | null;
+            /** @description NFT e posição DeFi da última leitura; vazio sem chave da Zerion */
+            posicoes: components["schemas"]["PosicaoCarteira"][];
+            /** @description O servidor tem ZERION_API_KEY; falso deixa NFT e DeFi desligados */
+            posicoesConfiguradas: boolean;
             /**
              * Format: date-time
              * @description Quando uma nova leitura manual é aceita; nulo se já pode
              */
             proximaLeituraEm: string | null;
             /** @enum {string} */
-            rede: "ethereum" | "base" | "solana";
+            rede: "ethereum" | "base" | "arbitrum" | "polygon" | "avalanche" | "robinhood" | "solana" | "bitcoin";
             rotulo: string | null;
             saldos: components["schemas"]["SaldoCarteira"][];
             /** @description O servidor lê as carteiras sozinho de 6 em 6 horas */
@@ -1788,7 +1792,7 @@ export interface components {
             /** @description EVM: 0x mais 40 hexadecimais, com checksum EIP-55 se tiver caixa mista, gravado em minúsculas. Solana: base58 que decodifica em 32 bytes */
             endereco: string;
             /** @enum {string} */
-            rede: "ethereum" | "base" | "solana";
+            rede: "ethereum" | "base" | "arbitrum" | "polygon" | "avalanche" | "robinhood" | "solana" | "bitcoin";
             rotulo?: string | null;
         };
         Categoria: {
@@ -2813,6 +2817,26 @@ export interface components {
             mes: string;
             /** @description Até doze meses terminando em mes, do mais antigo para o mais novo. Mês depois do corrente fica de fora */
             meses: components["schemas"]["PatrimonioDoMes"][];
+        };
+        PosicaoCarteira: {
+            /** @enum {string} */
+            categoria: "nft" | "liquidez" | "stake" | "deposito" | "emprestimo" | "rendimento" | "bloqueado" | "recompensa" | "outro";
+            detalhe: string | null;
+            /** Format: uuid */
+            id: string;
+            /** @description Texto de terceiro, limpo */
+            nome: string;
+            /** @description Protocolo (DeFi) ou coleção (NFT) */
+            protocolo: string | null;
+            /** @description Em texto; nulo em pool de liquidez, que tem vários tokens */
+            quantidade: string | null;
+            /** @enum {string} */
+            tipo: "nft" | "defi";
+            /**
+             * Format: int64
+             * @description Centavos de dólar inteiros; negativo em empréstimo; nulo se o provedor não sabe
+             */
+            valorUsdCentavos: number | null;
         };
         PosicaoCripto: {
             /** Format: uuid */

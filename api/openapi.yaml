@@ -6094,6 +6094,8 @@ components:
           - base
           - arbitrum
           - polygon
+          - avalanche
+          - robinhood
           - solana
         simbolo:
           type: string
@@ -6162,6 +6164,8 @@ components:
           - base
           - arbitrum
           - polygon
+          - avalanche
+          - robinhood
           - solana
         simbolo:
           type: string
@@ -6326,6 +6330,14 @@ components:
           description: "Por que a última leitura falhou; nulo se deu certo ou nunca\
             \ foi tentada. Em POST /carteiras/{id}/sincronizar barrado pelos 60 s,\
             \ vale LIMITE_DE_60S quando não há falha gravada"
+        posicoes:
+          type: array
+          description: NFT e posição DeFi da última leitura; vazio sem chave da Zerion
+          items:
+            $ref: "#/components/schemas/PosicaoCarteira"
+        posicoesConfiguradas:
+          type: boolean
+          description: O servidor tem ZERION_API_KEY; falso deixa NFT e DeFi desligados
         proximaLeituraEm:
           type:
           - string
@@ -6337,7 +6349,12 @@ components:
           enum:
           - ethereum
           - base
+          - arbitrum
+          - polygon
+          - avalanche
+          - robinhood
           - solana
+          - bitcoin
         rotulo:
           type:
           - string
@@ -6375,6 +6392,8 @@ components:
       - indexadorConfigurado
       - leituraFalhou
       - motivo
+      - posicoes
+      - posicoesConfiguradas
       - proximaLeituraEm
       - rede
       - rotulo
@@ -6401,8 +6420,13 @@ components:
           enum:
           - ethereum
           - base
+          - arbitrum
+          - polygon
+          - avalanche
+          - robinhood
           - solana
-          pattern: ethereum|base|solana
+          - bitcoin
+          pattern: ethereum|base|arbitrum|polygon|avalanche|robinhood|solana|bitcoin
         rotulo:
           type:
           - string
@@ -8480,6 +8504,62 @@ components:
       required:
       - mes
       - meses
+    PosicaoCarteira:
+      type: object
+      properties:
+        categoria:
+          type: string
+          enum:
+          - nft
+          - liquidez
+          - stake
+          - deposito
+          - emprestimo
+          - rendimento
+          - bloqueado
+          - recompensa
+          - outro
+        detalhe:
+          type:
+          - string
+          - "null"
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+          description: "Texto de terceiro, limpo"
+        protocolo:
+          type:
+          - string
+          - "null"
+          description: Protocolo (DeFi) ou coleção (NFT)
+        quantidade:
+          type:
+          - string
+          - "null"
+          description: "Em texto; nulo em pool de liquidez, que tem vários tokens"
+        tipo:
+          type: string
+          enum:
+          - nft
+          - defi
+        valorUsdCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: Centavos de dólar inteiros; negativo em empréstimo; nulo se
+            o provedor não sabe
+      required:
+      - categoria
+      - detalhe
+      - id
+      - nome
+      - protocolo
+      - quantidade
+      - tipo
+      - valorUsdCentavos
     PosicaoCripto:
       type: object
       properties:

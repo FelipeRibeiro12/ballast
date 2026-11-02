@@ -5,11 +5,13 @@ import java.math.BigInteger;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +36,10 @@ class AlchemyWalletIndexer implements WalletIndexer {
 
   private static final Duration TIMEOUT = Duration.ofSeconds(5);
   static final int MAX_TOKENS = 100;
+  // Quantas páginas de saldo a leitura percorre antes de desistir. Carteira com airdrop tem
+  // centenas de tokens de lixo, e os verdadeiros podem estar depois da primeira página.
+  static final int MAX_PAGES = 10;
+  static final String ESPLORA_URL = "https://blockstream.info/api";
 
   private static final Pattern HEX = Pattern.compile("0x[0-9a-fA-F]{0,64}");
   private static final Pattern EVM_CONTRACT = Pattern.compile("0x[0-9a-fA-F]{40}");
@@ -47,16 +53,22 @@ class AlchemyWalletIndexer implements WalletIndexer {
 
   private final String apiKey;
   private final Map<WalletNetwork, RestClient> clients;
+  private final TokenVetter vetter;
 
   @Autowired
-  AlchemyWalletIndexer(WalletsProperties properties) {
-    this(properties.apiKey(), clientsOf(properties));
+  AlchemyWalletIndexer(WalletsProperties properties, TokenVetter vetter) {
+    this(properties.apiKey(), clientsOf(properties), vetter);
   }
 
-  // O teste entrega clientes ligados ao servidor simulado do Spring.
+  // O teste entrega clientes ligados ao servidor simulado do Spring. Sem vetter, todo token vale.
   AlchemyWalletIndexer(String apiKey, Map<WalletNetwork, RestClient> clients) {
+    this(apiKey, clients, null);
+  }
+
+  AlchemyWalletIndexer(String apiKey, Map<WalletNetwork, RestClient> clients, TokenVetter vetter) {
     this.apiKey = apiKey;
     this.clients = clients;
+    this.vetter = vetter;
   }
 
   private static Map<WalletNetwork, RestClient> clientsOf(WalletsProperties properties) {
@@ -67,7 +79,10 @@ class AlchemyWalletIndexer implements WalletIndexer {
       factory.setReadTimeout(TIMEOUT);
       clients.put(
           network,
-          RestClient.builder().baseUrl(properties.urlOf(network)).requestFactory(factory).build());
+          RestClient.builder()
+              .baseUrl(network.isBitcoin() ? ESPLORA_URL : properties.urlOf(network))
+              .requestFactory(factory)
+              .build());
     }
     return clients;
   }
@@ -79,6 +94,10 @@ class AlchemyWalletIndexer implements WalletIndexer {
 
   @Override
   public Reading read(WalletNetwork network, String address) {
+    if (network.isBitcoin()) {
+      // Esplora é público e não usa a chave da Alchemy.
+      return readBitcoin(address);
+    }
     if (!isConfigured()) {
       throw new IndexerUnavailableException(IndexerUnavailableException.Reason.NO_KEY);
     }
@@ -89,33 +108,56 @@ class AlchemyWalletIndexer implements WalletIndexer {
     List<Holding> holdings = new ArrayList<>();
     JsonNode balance = call(network, "eth_getBalance", List.of(address, "latest"));
     holdings.add(nativeHolding(network, wei(balance)));
-
-    JsonNode tokens = call(network, "alchemy_getTokenBalances", List.of(address, "erc20"));
-    JsonNode list = tokens.get("tokenBalances");
-    if (list == null || !list.isArray()) {
-      throw invalid();
-    }
-    boolean partial = tokens.hasNonNull("pageKey");
-    Map<String, BigInteger> raw = new LinkedHashMap<>();
-    for (JsonNode item : list) {
-      JsonNode contract = item.get("contractAddress");
-      if (item.hasNonNull("error")
-          || contract == null
-          || !contract.isString()
-          || !EVM_CONTRACT.matcher(contract.asString()).matches()
-          || !item.hasNonNull("tokenBalance")) {
-        partial = true;
-        continue;
+    boolean partial = false;
+    Map<String, BigInteger> all = new LinkedHashMap<>();
+    String pageKey = null;
+    for (int page = 0; page < MAX_PAGES; page++) {
+      List<Object> params = new ArrayList<>(List.of(address, "erc20"));
+      if (pageKey != null) {
+        params.add(Map.of("pageKey", pageKey));
       }
-      BigInteger amount = wei(item.get("tokenBalance"));
-      if (amount.signum() == 0) {
-        continue;
+      JsonNode tokens = call(network, "alchemy_getTokenBalances", params);
+      JsonNode list = tokens.get("tokenBalances");
+      if (list == null || !list.isArray()) {
+        throw invalid();
       }
-      if (raw.size() == MAX_TOKENS) {
-        partial = true;
+      for (JsonNode item : list) {
+        JsonNode contract = item.get("contractAddress");
+        if (item.hasNonNull("error")
+            || contract == null
+            || !contract.isString()
+            || !EVM_CONTRACT.matcher(contract.asString()).matches()
+            || !item.hasNonNull("tokenBalance")) {
+          partial = true;
+          continue;
+        }
+        BigInteger amount = wei(item.get("tokenBalance"));
+        if (amount.signum() != 0) {
+          all.merge(contract.asString().toLowerCase(Locale.ROOT), amount, BigInteger::add);
+        }
+      }
+      pageKey = tokens.hasNonNull("pageKey") ? tokens.get("pageKey").asString() : null;
+      if (pageKey == null) {
         break;
       }
-      raw.merge(contract.asString().toLowerCase(Locale.ROOT), amount, BigInteger::add);
+    }
+    partial |= pageKey != null;
+
+    Map<String, BigInteger> raw = new LinkedHashMap<>();
+    Set<String> keep = vet(network, all.keySet());
+    if (keep == null) {
+      partial = true;
+    } else {
+      for (Map.Entry<String, BigInteger> entry : all.entrySet()) {
+        if (!keep.contains(entry.getKey())) {
+          continue;
+        }
+        if (raw.size() == MAX_TOKENS) {
+          partial = true;
+          break;
+        }
+        raw.put(entry.getKey(), entry.getValue());
+      }
     }
     if (!raw.isEmpty()) {
       partial |= addTokens(network, raw, holdings);
@@ -159,7 +201,8 @@ class AlchemyWalletIndexer implements WalletIndexer {
               contracts.get(i),
               symbol != null && symbol.isString() ? symbol.asString() : null,
               decimals.intValue(),
-              new BigDecimal(raw.get(contracts.get(i)), decimals.intValue())));
+              new BigDecimal(raw.get(contracts.get(i)), decimals.intValue()),
+              vetter != null));
     }
     return skipped;
   }
@@ -223,11 +266,79 @@ class AlchemyWalletIndexer implements WalletIndexer {
         decimalsByMint.put(mint.asString(), decimals.intValue());
       }
     }
+    Set<String> keep = vet(network, byMint.keySet());
+    if (keep == null) {
+      partial = true;
+      keep = Set.of();
+    }
     // O RPC do Solana não traz metadado: o símbolo fica nulo e o serviço usa o começo do mint.
-    byMint.forEach(
-        (mint, quantity) ->
-            holdings.add(new Holding(mint, null, decimalsByMint.get(mint), quantity)));
+    for (Map.Entry<String, BigDecimal> entry : byMint.entrySet()) {
+      if (keep.contains(entry.getKey())) {
+        holdings.add(
+            new Holding(
+                entry.getKey(),
+                null,
+                decimalsByMint.get(entry.getKey()),
+                entry.getValue(),
+                vetter != null));
+      }
+    }
     return new Reading(holdings, partial);
+  }
+
+  // Contratos que passam no filtro de preço. Sem vetter, todos. Nulo quando a fonte de preço
+  // falha: a leitura vira parcial e nada é zerado por engano.
+  private Set<String> vet(WalletNetwork network, Collection<String> contracts) {
+    if (vetter == null) {
+      return Set.copyOf(contracts);
+    }
+    try {
+      return vetter.priced(network, contracts);
+    } catch (RuntimeException e) {
+      log.warn("filtro de tokens indisponível: tipo={}", e.getClass().getSimpleName());
+      return null;
+    }
+  }
+
+  // Esplora: saldo confirmado é o que entrou menos o que saiu. O endereço vai na URL do provedor
+  // público; nenhuma exceção sai com ela, como no resto deste cliente.
+  private Reading readBitcoin(String address) {
+    String body;
+    try {
+      body =
+          clients
+              .get(WalletNetwork.BITCOIN)
+              .get()
+              .uri("/address/{address}", address)
+              .retrieve()
+              .body(String.class);
+    } catch (RestClientResponseException e) {
+      int status = e.getStatusCode().value();
+      log.warn("esplora respondeu erro: status={}", status);
+      throw new IndexerUnavailableException(reasonOf(status));
+    } catch (RuntimeException e) {
+      log.warn("esplora sem resposta: tipo={}", e.getClass().getSimpleName());
+      throw new IndexerUnavailableException(IndexerUnavailableException.Reason.UNAVAILABLE);
+    }
+    JsonNode stats;
+    try {
+      stats = JSON.readTree(body == null ? "" : body).path("chain_stats");
+    } catch (JacksonException e) {
+      throw invalid();
+    }
+    JsonNode funded = stats.get("funded_txo_sum");
+    JsonNode spent = stats.get("spent_txo_sum");
+    if (funded == null
+        || spent == null
+        || !funded.isIntegralNumber()
+        || !spent.isIntegralNumber()) {
+      throw invalid();
+    }
+    BigInteger satoshis = funded.bigIntegerValue().subtract(spent.bigIntegerValue());
+    if (satoshis.signum() < 0) {
+      throw invalid();
+    }
+    return new Reading(List.of(nativeHolding(WalletNetwork.BITCOIN, satoshis)), false);
   }
 
   private static Holding nativeHolding(WalletNetwork network, BigInteger smallestUnit) {

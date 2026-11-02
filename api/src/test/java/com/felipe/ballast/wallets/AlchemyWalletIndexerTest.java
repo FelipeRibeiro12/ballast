@@ -35,6 +35,7 @@ class AlchemyWalletIndexerTest {
   private static final String USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
   private MockRestServiceServer server;
+  private RestClient client;
   private AlchemyWalletIndexer indexer;
   private final ListAppender<ILoggingEvent> logs = new ListAppender<>();
   private Logger rootLogger;
@@ -44,7 +45,7 @@ class AlchemyWalletIndexerTest {
     RestClient.Builder builder = RestClient.builder().baseUrl("http://alchemy.test");
     server = MockRestServiceServer.bindTo(builder).build();
     Map<WalletNetwork, RestClient> clients = new EnumMap<>(WalletNetwork.class);
-    RestClient client = builder.build();
+    client = builder.build();
     for (WalletNetwork network : WalletNetwork.values()) {
       clients.put(network, client);
     }
@@ -96,6 +97,87 @@ class AlchemyWalletIndexerTest {
     assertThat(usdc.symbol()).isEqualTo("USDC");
     assertThat(usdc.quantity()).isEqualByComparingTo(new BigDecimal("1"));
     server.verify();
+  }
+
+  @Test
+  void dropsTokensThatNobodyPricesAndMarksTheRestAsVerified() {
+    String spam = "0x2222222222222222222222222222222222222222";
+    AlchemyWalletIndexer vetted =
+        new AlchemyWalletIndexer(
+            KEY, clientsOf(server), (network, contracts) -> java.util.Set.of(USDC));
+    server
+        .expect(requestTo(URL))
+        .andExpect(content().string(containsString("eth_getBalance")))
+        .andRespond(json("{\"id\":1,\"result\":\"0x0\"}"));
+    server
+        .expect(requestTo(URL))
+        .andExpect(content().string(containsString("alchemy_getTokenBalances")))
+        .andRespond(
+            json(
+                "{\"id\":1,\"result\":{\"tokenBalances\":[{\"contractAddress\":\""
+                    + spam
+                    + "\",\"tokenBalance\":\"0x1\"},{\"contractAddress\":\""
+                    + USDC
+                    + "\",\"tokenBalance\":\"0x0f4240\"}]}}"));
+    server
+        .expect(requestTo(URL))
+        .andExpect(content().string(not(containsString(spam))))
+        .andRespond(json("[{\"id\":0,\"result\":{\"decimals\":6,\"symbol\":\"USDC\"}}]"));
+
+    WalletIndexer.Reading reading = vetted.read(WalletNetwork.ARBITRUM, ADDRESS);
+
+    assertThat(reading.partial()).isFalse();
+    assertThat(reading.holdings())
+        .extracting(WalletIndexer.Holding::contract)
+        .containsExactly(null, USDC);
+    assertThat(reading.holdings().get(1).verified()).isTrue();
+    server.verify();
+  }
+
+  @Test
+  void priceSourceDownMakesTheReadingPartialInsteadOfZeroingEverything() {
+    AlchemyWalletIndexer vetted =
+        new AlchemyWalletIndexer(
+            KEY,
+            clientsOf(server),
+            (network, contracts) -> {
+              throw new IllegalStateException("fora do ar");
+            });
+    server.expect(requestTo(URL)).andRespond(json("{\"id\":1,\"result\":\"0x0\"}"));
+    server
+        .expect(requestTo(URL))
+        .andRespond(
+            json(
+                "{\"id\":1,\"result\":{\"tokenBalances\":[{\"contractAddress\":\""
+                    + USDC
+                    + "\",\"tokenBalance\":\"0x1\"}]}}"));
+
+    WalletIndexer.Reading reading = vetted.read(WalletNetwork.POLYGON, ADDRESS);
+
+    assertThat(reading.partial()).isTrue();
+    assertThat(reading.holdings()).hasSize(1);
+  }
+
+  @Test
+  void readsABitcoinBalanceFromEsploraWithoutTheAlchemyKey() {
+    AlchemyWalletIndexer noKey = new AlchemyWalletIndexer("", clientsOf(server));
+    server
+        .expect(requestTo("http://alchemy.test/address/bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"))
+        .andRespond(
+            json("{\"chain_stats\":{\"funded_txo_sum\":150000000,\"spent_txo_sum\":50000000}}"));
+
+    WalletIndexer.Reading reading =
+        noKey.read(WalletNetwork.BITCOIN, "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq");
+
+    assertThat(reading.holdings().get(0).quantity()).isEqualByComparingTo(new BigDecimal("1"));
+  }
+
+  private Map<WalletNetwork, RestClient> clientsOf(MockRestServiceServer ignored) {
+    Map<WalletNetwork, RestClient> clients = new EnumMap<>(WalletNetwork.class);
+    for (WalletNetwork network : WalletNetwork.values()) {
+      clients.put(network, client);
+    }
+    return clients;
   }
 
   @Test

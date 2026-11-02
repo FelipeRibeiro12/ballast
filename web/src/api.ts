@@ -1408,7 +1408,16 @@ export class CriptoInvalidoError extends ApiError {
   }
 }
 
-const REDES_CRIPTO: readonly string[] = ['bitcoin', 'ethereum', 'base', 'arbitrum', 'polygon', 'solana']
+const REDES_CRIPTO: readonly string[] = [
+  'bitcoin',
+  'ethereum',
+  'base',
+  'arbitrum',
+  'polygon',
+  'avalanche',
+  'robinhood',
+  'solana',
+]
 
 // Quantidade e preço chegam em texto e continuam texto: Number não guarda 18 casas (ADR-005).
 function eDecimalEmTexto(valor: unknown): boolean {
@@ -1693,7 +1702,16 @@ export type CarteiraRequest = components['schemas']['CarteiraRequest']
 export type SaldoCarteira = components['schemas']['SaldoCarteira']
 export type AtivoCriptoEdicao = components['schemas']['AtivoCriptoEdicao']
 
-const REDES_DA_CARTEIRA: readonly string[] = ['ethereum', 'base', 'solana']
+const REDES_DA_CARTEIRA: readonly string[] = [
+  'ethereum',
+  'base',
+  'arbitrum',
+  'polygon',
+  'avalanche',
+  'robinhood',
+  'solana',
+  'bitcoin',
+]
 
 const MOTIVOS_DE_LEITURA: readonly string[] = [
   'INDEXADOR_NAO_CONFIGURADO',
@@ -1724,6 +1742,44 @@ function isSaldoCarteira(valor: unknown): valor is SaldoCarteira {
     typeof valor.confiavel === 'boolean' &&
     'custoPendente' in valor &&
     typeof valor.custoPendente === 'boolean'
+  )
+}
+
+export type PosicaoCarteira = components['schemas']['PosicaoCarteira']
+
+const CATEGORIAS_DE_POSICAO: readonly string[] = [
+  'nft',
+  'liquidez',
+  'stake',
+  'deposito',
+  'emprestimo',
+  'rendimento',
+  'bloqueado',
+  'recompensa',
+  'outro',
+]
+
+function isPosicaoCarteira(valor: unknown): valor is PosicaoCarteira {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'tipo' in valor &&
+    (valor.tipo === 'nft' || valor.tipo === 'defi') &&
+    'categoria' in valor &&
+    typeof valor.categoria === 'string' &&
+    CATEGORIAS_DE_POSICAO.includes(valor.categoria) &&
+    'protocolo' in valor &&
+    textoOuNulo(valor.protocolo) &&
+    'nome' in valor &&
+    typeof valor.nome === 'string' &&
+    'detalhe' in valor &&
+    textoOuNulo(valor.detalhe) &&
+    'quantidade' in valor &&
+    (valor.quantidade === null || eDecimalEmTexto(valor.quantidade)) &&
+    'valorUsdCentavos' in valor &&
+    (valor.valorUsdCentavos === null || Number.isSafeInteger(valor.valorUsdCentavos))
   )
 }
 
@@ -1760,7 +1816,12 @@ function isCarteira(valor: unknown): valor is Carteira {
     typeof valor.sincronizacaoAutomatica === 'boolean' &&
     'saldos' in valor &&
     Array.isArray(valor.saldos) &&
-    valor.saldos.every(isSaldoCarteira)
+    valor.saldos.every(isSaldoCarteira) &&
+    'posicoes' in valor &&
+    Array.isArray(valor.posicoes) &&
+    valor.posicoes.every(isPosicaoCarteira) &&
+    'posicoesConfiguradas' in valor &&
+    typeof valor.posicoesConfiguradas === 'boolean'
   )
 }
 

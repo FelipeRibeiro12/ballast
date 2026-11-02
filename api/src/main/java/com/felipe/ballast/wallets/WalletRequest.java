@@ -19,9 +19,20 @@ public record WalletRequest(
     @JsonProperty("rede")
         @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
-            allowableValues = {"ethereum", "base", "solana"})
+            allowableValues = {
+              "ethereum",
+              "base",
+              "arbitrum",
+              "polygon",
+              "avalanche",
+              "robinhood",
+              "solana",
+              "bitcoin"
+            })
         @NotNull(message = NETWORK_MESSAGE)
-        @Pattern(regexp = "ethereum|base|solana", message = NETWORK_MESSAGE)
+        @Pattern(
+            regexp = "ethereum|base|arbitrum|polygon|avalanche|robinhood|solana|bitcoin",
+            message = NETWORK_MESSAGE)
         String network,
     @JsonProperty("endereco")
         @Schema(
@@ -39,7 +50,8 @@ public record WalletRequest(
         @NoControlCharacters(message = LABEL_MESSAGE)
         String label) {
 
-  static final String NETWORK_MESSAGE = "rede deve ser ethereum, base ou solana";
+  static final String NETWORK_MESSAGE =
+      "rede deve ser ethereum, base, arbitrum, polygon, avalanche, robinhood, solana ou bitcoin";
   static final String ADDRESS_MESSAGE = "endereco deve ter entre 1 e 100 caracteres";
   static final String LABEL_MESSAGE =
       "rotulo deve ter no máximo 60 caracteres e não pode ter caracteres de controle";

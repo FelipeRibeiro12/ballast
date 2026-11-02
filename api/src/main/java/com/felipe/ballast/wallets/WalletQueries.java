@@ -41,6 +41,16 @@ class WalletQueries {
       boolean trusted,
       boolean costPending) {}
 
+  record PositionRow(
+      UUID id,
+      String kind,
+      String category,
+      String protocol,
+      String name,
+      String detail,
+      BigDecimal quantity,
+      Long valueUsdCents) {}
+
   record LockedAccount(boolean crypto, boolean archived) {}
 
   record Ref(UUID userId, UUID walletId) {}
@@ -209,6 +219,58 @@ class WalletQueries {
         .list();
   }
 
+  List<PositionRow> positions(UUID userId, UUID walletId) {
+    return jdbc.sql(
+            "SELECT id, tipo, categoria, protocolo, nome, detalhe, quantidade, valor_usd_centavos"
+                + " FROM posicao_carteira WHERE usuario_id = :userId AND carteira_id = :walletId"
+                + " ORDER BY tipo, valor_usd_centavos DESC NULLS LAST, nome, id")
+        .param("userId", userId)
+        .param("walletId", walletId)
+        .query(
+            (rs, row) -> {
+              long cents = rs.getLong("valor_usd_centavos");
+              return new PositionRow(
+                  rs.getObject("id", UUID.class),
+                  rs.getString("tipo"),
+                  rs.getString("categoria"),
+                  rs.getString("protocolo"),
+                  rs.getString("nome"),
+                  rs.getString("detalhe"),
+                  rs.getBigDecimal("quantidade"),
+                  rs.wasNull() ? null : cents);
+            })
+        .list();
+  }
+
+  // Retrato novo no lugar do velho, na mesma transação do chamador.
+  void replacePositions(UUID userId, UUID walletId, List<PositionsProvider.Position> positions) {
+    jdbc.sql("DELETE FROM posicao_carteira WHERE usuario_id = :userId AND carteira_id = :walletId")
+        .param("userId", userId)
+        .param("walletId", walletId)
+        .update();
+    for (PositionsProvider.Position position : positions) {
+      jdbc.sql(
+              """
+              INSERT INTO posicao_carteira
+                (id, usuario_id, carteira_id, tipo, categoria, protocolo, nome, detalhe,
+                 quantidade, valor_usd_centavos)
+              VALUES (:id, :userId, :walletId, :kind, :category, :protocol, :name, :detail,
+                      :quantity, :value)
+              """)
+          .param("id", newId())
+          .param("userId", userId)
+          .param("walletId", walletId)
+          .param("kind", position.kind())
+          .param("category", position.category())
+          .param("protocol", position.protocol())
+          .param("name", position.name())
+          .param("detail", position.detail())
+          .param("quantity", position.quantity())
+          .param("value", position.valueUsdCents())
+          .update();
+    }
+  }
+
   Optional<Asset> findAsset(UUID userId, CryptoNetwork network, String contract) {
     return jdbc.sql(
             "SELECT id, confiavel FROM ativo_cripto WHERE usuario_id = :userId AND rede = :network"
@@ -218,6 +280,13 @@ class WalletQueries {
         .param("contract", contract)
         .query((rs, row) -> new Asset(rs.getObject("id", UUID.class), rs.getBoolean("confiavel")))
         .optional();
+  }
+
+  void trustAsset(UUID userId, UUID assetId) {
+    jdbc.sql("UPDATE ativo_cripto SET confiavel = true WHERE usuario_id = :userId AND id = :id")
+        .param("userId", userId)
+        .param("id", assetId)
+        .update();
   }
 
   // O nativo da rede nasce confiável (o contrato nulo não se forja); o resto nasce false, que é o
