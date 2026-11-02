@@ -13,7 +13,7 @@ import {
   putAtivoCripto,
   putCustoMovimento,
 } from './api'
-import type { AtivoCripto, Carteira, Conta, MovimentoCripto } from './api'
+import type { AtivoCripto, Carteira, Conta, MovimentoCripto, PosicaoCarteira } from './api'
 import { formatarDecimal } from './decimais'
 import { diaEmSaoPaulo, formatarDataCompleta, horaEmSaoPaulo } from './datas'
 import { lerValorPositivo } from './dinheiro'
@@ -64,6 +64,42 @@ function abreviarEndereco(endereco: string): string {
 
 function descreverInstante(instante: string): string {
   return `${formatarDataCompleta(diaEmSaoPaulo(instante))} às ${horaEmSaoPaulo(instante)}`
+}
+
+const ROTULO_DA_CATEGORIA: Record<PosicaoCarteira['categoria'], string> = {
+  nft: 'NFT',
+  liquidez: 'Pool de liquidez',
+  stake: 'Stake',
+  deposito: 'Depósito',
+  emprestimo: 'Empréstimo',
+  rendimento: 'Rendimento',
+  bloqueado: 'Bloqueado',
+  recompensa: 'Recompensa',
+  outro: 'Outro',
+}
+
+// Dólar em centavos inteiros: só a formatação usa Intl, nada de aritmética com decimal.
+function formatarDolar(centavos: number): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' }).format(centavos / 100)
+}
+
+function ListaDePosicoes({ titulo, posicoes }: { titulo: string; posicoes: PosicaoCarteira[] }): React.JSX.Element | null {
+  if (posicoes.length === 0) return null
+  return (
+    <ul aria-label={titulo}>
+      {posicoes.map((posicao) => (
+        <li key={posicao.id}>
+          <strong>{posicao.nome}</strong>{' '}
+          <span className="item-meta">
+            {ROTULO_DA_CATEGORIA[posicao.categoria]}
+            {posicao.protocolo !== null && ` · ${posicao.protocolo}`}
+          </span>
+          {posicao.quantidade !== null && <small> {formatarDecimal(posicao.quantidade)}</small>}
+          {posicao.valorUsdCentavos !== null && <small> · {formatarDolar(posicao.valorUsdCentavos)}</small>}
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 type Motivo = NonNullable<Carteira['motivo']>
@@ -575,7 +611,9 @@ function CartaoDaCarteira({
         {lendoPelaPrimeiraVez && motivo === null && carteira.sincronizadaEm === null && (
           <p role="status">Lendo a carteira pela primeira vez...</p>
         )}
-        {carteira.saldos.length === 0 && carteira.sincronizadaEm !== null && <small>Lida, sem saldo nesta rede</small>}
+        {carteira.saldos.length === 0 &&
+          carteira.posicoes.length === 0 &&
+          carteira.sincronizadaEm !== null && <small>Lida, sem saldo nesta rede</small>}
         {carteira.saldos.length > 0 && (
           <ul aria-label={`Saldos de ${titulo}`}>
             {carteira.saldos.map((saldo) => {
@@ -638,6 +676,17 @@ function CartaoDaCarteira({
               )
             })}
           </ul>
+        )}
+        <ListaDePosicoes
+          titulo={`DeFi de ${titulo}`}
+          posicoes={carteira.posicoes.filter((posicao) => posicao.tipo === 'defi')}
+        />
+        <ListaDePosicoes
+          titulo={`NFTs de ${titulo}`}
+          posicoes={carteira.posicoes.filter((posicao) => posicao.tipo === 'nft')}
+        />
+        {!carteira.posicoesConfiguradas && familiaDaRede(carteira.rede) === 'evm' && carteira.rede !== 'bitcoin' && (
+          <small>NFT e DeFi desligados: o dono precisa pôr ZERION_API_KEY no api.env do servidor.</small>
         )}
         {mensagem !== null && (
           <p role="alert" className="erro">

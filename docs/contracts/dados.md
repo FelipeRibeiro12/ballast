@@ -485,6 +485,22 @@ até D; sem nenhuma das duas, não há conversão e some só a moeda que depende
 dela. Vale para o custo de cada movimento, o valor das posições, o patrimônio
 (inclusive o mensal). A PTAX segue só na renda fixa e no IPCA.
 
+### Redes novas e posição de carteira (V43 e V44, ADR-080 e ADR-081)
+
+`V43` alarga `rede` em `ativo_cripto` e `carteira_observada` para `arbitrum`, `polygon`,
+`avalanche`, `robinhood` e (só na carteira) `bitcoin`, com o formato de endereço de cada uma.
+
+```
+posicao_carteira               -- retrato da última leitura, apagado e regravado a cada leitura
+  id uuid pk, usuario_id uuid, carteira_id uuid   -- FK composta com carteira_observada, CASCADE
+  tipo text                    -- nft | defi
+  categoria text               -- nft | liquidez | stake | deposito | emprestimo | rendimento | bloqueado | recompensa | outro
+  protocolo text null, nome text, detalhe text null     -- texto de terceiro, até 100
+  quantidade numeric(38,18) null       -- nulo em pool de liquidez
+  valor_usd_centavos bigint null       -- negativo em empréstimo
+  atualizado_em timestamptz
+```
+
 ### Carteira observada (V36, ADR-071)
 
 Endereço público ligado a uma conta `cripto`. Cadastrado digitando; a F25 só

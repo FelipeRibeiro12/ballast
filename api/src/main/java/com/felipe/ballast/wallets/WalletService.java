@@ -53,6 +53,8 @@ class WalletService {
   record View(
       WalletQueries.Wallet wallet,
       List<WalletQueries.Balance> balances,
+      List<WalletQueries.PositionRow> positions,
+      boolean positionsConfigured,
       boolean configured,
       boolean automatic,
       Instant nextReadAt,
@@ -81,6 +83,7 @@ class WalletService {
 
   private final WalletQueries queries;
   private final WalletIndexer indexer;
+  private final PositionsProvider positions;
   private final WriteTransaction transaction;
   private final UserLimits limits;
   private final Clock clock;
@@ -93,12 +96,14 @@ class WalletService {
   WalletService(
       WalletQueries queries,
       WalletIndexer indexer,
+      PositionsProvider positions,
       WriteTransaction transaction,
       UserLimits limits,
       Clock clock,
       WalletsProperties properties) {
     this.queries = queries;
     this.indexer = indexer;
+    this.positions = positions;
     this.transaction = transaction;
     this.limits = limits;
     this.clock = clock;
@@ -143,7 +148,7 @@ class WalletService {
             limits.checkRoom(userId, UserLimit.WALLETS);
             WalletQueries.Wallet saved =
                 queries.insertWallet(userId, accountId, network, normalized.get(), label);
-            return new CreateResult.Created(view(saved, List.of(), false));
+            return new CreateResult.Created(view(userId, saved, List.of(), false));
           });
     } catch (DataIntegrityViolationException e) {
       if (Constraints.isViolated(e, ADDRESS_UNIQUE)) {
@@ -209,7 +214,8 @@ class WalletService {
       case Claim.Archived archived -> SyncResult.Rejected.ACCOUNT_ARCHIVED;
       case Claim.TooSoon tooSoon ->
           new SyncResult.Done(
-              view(tooSoon.wallet(), queries.balances(userId, tooSoon.wallet().id()), true));
+              view(
+                  userId, tooSoon.wallet(), queries.balances(userId, tooSoon.wallet().id()), true));
       case Claim.Granted granted -> read(userId, granted.wallet());
     };
   }
@@ -225,7 +231,34 @@ class WalletService {
       log.warn("leitura da carteira falhou: carteira_id={} tipo={}", wallet.id(), type(e));
       return failed(userId, wallet, IndexerUnavailableException.Reason.UNAVAILABLE.code());
     }
-    return transaction.execute(status -> apply(userId, wallet.id(), reading));
+    SyncResult result = transaction.execute(status -> apply(userId, wallet.id(), reading));
+    if (result instanceof SyncResult.Done) {
+      refreshPositions(userId, wallet);
+      return new SyncResult.Done(find(userId, wallet.id()).orElseThrow());
+    }
+    return result;
+  }
+
+  // NFT e DeFi vêm de outro provedor e nunca derrubam a leitura do saldo: se a Zerion falhar, as
+  // posições antigas ficam como estavam. O log leva só o id da carteira e a classe do erro.
+  private void refreshPositions(UUID userId, WalletQueries.Wallet wallet) {
+    if (!positions.isConfigured()) {
+      return;
+    }
+    try {
+      Optional<List<PositionsProvider.Position>> read =
+          positions.read(wallet.network(), wallet.address());
+      if (read.isPresent()) {
+        transaction.execute(
+            status -> {
+              queries.replacePositions(userId, wallet.id(), read.get());
+              return null;
+            });
+      }
+    } catch (RuntimeException e) {
+      log.warn(
+          "posições da carteira não atualizadas: carteira_id={} tipo={}", wallet.id(), type(e));
+    }
   }
 
   private SyncResult failed(UUID userId, WalletQueries.Wallet wallet, String code) {
@@ -477,17 +510,28 @@ class WalletService {
   }
 
   private View view(UUID userId, WalletQueries.Wallet wallet) {
-    return view(wallet, queries.balances(userId, wallet.id()), false);
+    return view(userId, wallet, queries.balances(userId, wallet.id()), false);
   }
 
   private View view(
-      WalletQueries.Wallet wallet, List<WalletQueries.Balance> balances, boolean throttled) {
+      UUID userId,
+      WalletQueries.Wallet wallet,
+      List<WalletQueries.Balance> balances,
+      boolean throttled) {
     boolean configured = indexer.isConfigured();
     Instant next = wallet.attemptedAt() == null ? null : wallet.attemptedAt().plus(MIN_INTERVAL);
     if (next != null && !next.isAfter(clock.instant())) {
       next = null;
     }
-    return new View(wallet, balances, configured, configured && jobEnabled, next, throttled);
+    return new View(
+        wallet,
+        balances,
+        queries.positions(userId, wallet.id()),
+        positions.isConfigured(),
+        configured,
+        configured && jobEnabled,
+        next,
+        throttled);
   }
 
   // Tipo da exceção sem pacote: o nome simples basta no log.

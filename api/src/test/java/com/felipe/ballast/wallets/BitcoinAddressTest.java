@@ -11,7 +11,9 @@ class BitcoinAddressTest {
     assertThat(BitcoinAddress.isValid("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")).isTrue();
     assertThat(BitcoinAddress.isValid("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy")).isTrue();
     assertThat(BitcoinAddress.isValid("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")).isTrue();
-    assertThat(BitcoinAddress.isValid("bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0"))
+    assertThat(
+            BitcoinAddress.isValid(
+                "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0"))
         .isTrue();
   }
 

@@ -127,7 +127,8 @@ class AlchemyWalletIndexerTest {
     WalletIndexer.Reading reading = vetted.read(WalletNetwork.ARBITRUM, ADDRESS);
 
     assertThat(reading.partial()).isFalse();
-    assertThat(reading.holdings()).extracting(WalletIndexer.Holding::contract)
+    assertThat(reading.holdings())
+        .extracting(WalletIndexer.Holding::contract)
         .containsExactly(null, USDC);
     assertThat(reading.holdings().get(1).verified()).isTrue();
     server.verify();
@@ -142,9 +143,7 @@ class AlchemyWalletIndexerTest {
             (network, contracts) -> {
               throw new IllegalStateException("fora do ar");
             });
-    server
-        .expect(requestTo(URL))
-        .andRespond(json("{\"id\":1,\"result\":\"0x0\"}"));
+    server.expect(requestTo(URL)).andRespond(json("{\"id\":1,\"result\":\"0x0\"}"));
     server
         .expect(requestTo(URL))
         .andRespond(
@@ -165,8 +164,7 @@ class AlchemyWalletIndexerTest {
     server
         .expect(requestTo("http://alchemy.test/address/bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"))
         .andRespond(
-            json(
-                "{\"chain_stats\":{\"funded_txo_sum\":150000000,\"spent_txo_sum\":50000000}}"));
+            json("{\"chain_stats\":{\"funded_txo_sum\":150000000,\"spent_txo_sum\":50000000}}"));
 
     WalletIndexer.Reading reading =
         noKey.read(WalletNetwork.BITCOIN, "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq");

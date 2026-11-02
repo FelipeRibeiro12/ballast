@@ -62,6 +62,8 @@ const carteira = {
   proximaLeituraEm: null,
   indexadorConfigurado: true,
   sincronizacaoAutomatica: true,
+  posicoes: [],
+  posicoesConfiguradas: true,
   saldos: [
     { ativoId: 'a1', simbolo: 'ETH', contrato: null, quantidade: '1.5', confiavel: true, custoPendente: true },
     { ativoId: 'a2', simbolo: 'SCAM', contrato: golpe.contrato, quantidade: '1000000.000001', confiavel: false, custoPendente: false },
@@ -372,6 +374,28 @@ describe('Motivo da leitura', () => {
     mockFetch({ 'GET /carteiras': () => json([{ ...carteira, saldos: [] }]) })
     renderizar()
     expect(await screen.findByText('Lida, sem saldo nesta rede')).toBeVisible()
+  })
+
+  it('mostra DeFi e NFT da carteira, com o empréstimo em dólar negativo', async () => {
+    const posicoes = [
+      { id: 'p1', tipo: 'defi', categoria: 'liquidez', protocolo: 'Uniswap V2', nome: 'USDC / WETH', detalhe: null, quantidade: null, valorUsdCentavos: 150000 },
+      { id: 'p2', tipo: 'defi', categoria: 'emprestimo', protocolo: 'Aave V3', nome: 'DAI', detalhe: null, quantidade: '20', valorUsdCentavos: -2000 },
+      { id: 'p3', tipo: 'nft', categoria: 'nft', protocolo: 'Apes', nome: 'Ape #7', detalhe: 'erc721', quantidade: '1', valorUsdCentavos: null },
+    ]
+    mockFetch({ 'GET /carteiras': () => json([{ ...carteira, posicoes }]) })
+    renderizar()
+    const defi = await screen.findByRole('list', { name: /^DeFi de/ })
+    expect(within(defi).getByText('USDC / WETH')).toBeVisible()
+    expect(within(defi).getByText('Pool de liquidez · Uniswap V2')).toBeVisible()
+    expect(within(defi).getByText(/-US\$\s?20,00/)).toBeVisible()
+    const nfts = screen.getByRole('list', { name: /^NFTs de/ })
+    expect(within(nfts).getByText('Ape #7')).toBeVisible()
+  })
+
+  it('diz que NFT e DeFi estão desligados sem a chave da Zerion', async () => {
+    mockFetch({ 'GET /carteiras': () => json([{ ...carteira, posicoesConfiguradas: false }]) })
+    renderizar()
+    expect(await screen.findByText(/ZERION_API_KEY/)).toBeVisible()
   })
 
   it('avisa sem alarme quando a sincronização automática está desligada', async () => {

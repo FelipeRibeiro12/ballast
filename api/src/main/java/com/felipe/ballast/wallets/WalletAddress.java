@@ -32,7 +32,8 @@ final class WalletAddress {
         return Optional.empty();
       }
       // bech32 é sem caixa: o unique do banco não pode ver o mesmo endereço como dois.
-      return Optional.of(address.regionMatches(true, 0, "bc1", 0, 3) ? address.toLowerCase(Locale.ROOT) : address);
+      return Optional.of(
+          address.regionMatches(true, 0, "bc1", 0, 3) ? address.toLowerCase(Locale.ROOT) : address);
     }
     return isSolanaKey(address) ? Optional.of(address) : Optional.empty();
   }

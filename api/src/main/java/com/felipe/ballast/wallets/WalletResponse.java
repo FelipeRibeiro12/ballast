@@ -59,7 +59,56 @@ public record WalletResponse(
             requiredMode = Schema.RequiredMode.REQUIRED,
             description = "O servidor lê as carteiras sozinho de 6 em 6 horas")
         boolean sincronizacaoAutomatica,
-    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<Balance> saldos) {
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<Balance> saldos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "NFT e posição DeFi da última leitura; vazio sem chave da Zerion")
+        List<Position> posicoes,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            description = "O servidor tem ZERION_API_KEY; falso deixa NFT e DeFi desligados")
+        boolean posicoesConfiguradas) {
+
+  @Schema(name = "PosicaoCarteira")
+  public record Position(
+      @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID id,
+      @Schema(
+              requiredMode = Schema.RequiredMode.REQUIRED,
+              allowableValues = {"nft", "defi"})
+          String tipo,
+      @Schema(
+              requiredMode = Schema.RequiredMode.REQUIRED,
+              allowableValues = {
+                "nft",
+                "liquidez",
+                "stake",
+                "deposito",
+                "emprestimo",
+                "rendimento",
+                "bloqueado",
+                "recompensa",
+                "outro"
+              })
+          String categoria,
+      @Schema(
+              requiredMode = Schema.RequiredMode.REQUIRED,
+              nullable = true,
+              description = "Protocolo (DeFi) ou coleção (NFT)")
+          String protocolo,
+      @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "Texto de terceiro, limpo")
+          String nome,
+      @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) String detalhe,
+      @Schema(
+              requiredMode = Schema.RequiredMode.REQUIRED,
+              nullable = true,
+              description = "Em texto; nulo em pool de liquidez, que tem vários tokens")
+          String quantidade,
+      @Schema(
+              requiredMode = Schema.RequiredMode.REQUIRED,
+              nullable = true,
+              description =
+                  "Centavos de dólar inteiros; negativo em empréstimo; nulo se o provedor não sabe")
+          Long valorUsdCentavos) {}
 
   @Schema(name = "SaldoCarteira")
   public record Balance(
@@ -109,7 +158,23 @@ public record WalletResponse(
                         balance.quantity().stripTrailingZeros().toPlainString(),
                         balance.trusted(),
                         balance.costPending()))
-            .toList());
+            .toList(),
+        view.positions().stream()
+            .map(
+                row ->
+                    new Position(
+                        row.id(),
+                        row.kind(),
+                        row.category(),
+                        row.protocol(),
+                        row.name(),
+                        row.detail(),
+                        row.quantity() == null
+                            ? null
+                            : row.quantity().stripTrailingZeros().toPlainString(),
+                        row.valueUsdCents()))
+            .toList(),
+        view.positionsConfigured());
   }
 
   private static ReadingReason motivoOf(WalletService.View view) {

@@ -1745,6 +1745,44 @@ function isSaldoCarteira(valor: unknown): valor is SaldoCarteira {
   )
 }
 
+export type PosicaoCarteira = components['schemas']['PosicaoCarteira']
+
+const CATEGORIAS_DE_POSICAO: readonly string[] = [
+  'nft',
+  'liquidez',
+  'stake',
+  'deposito',
+  'emprestimo',
+  'rendimento',
+  'bloqueado',
+  'recompensa',
+  'outro',
+]
+
+function isPosicaoCarteira(valor: unknown): valor is PosicaoCarteira {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'tipo' in valor &&
+    (valor.tipo === 'nft' || valor.tipo === 'defi') &&
+    'categoria' in valor &&
+    typeof valor.categoria === 'string' &&
+    CATEGORIAS_DE_POSICAO.includes(valor.categoria) &&
+    'protocolo' in valor &&
+    textoOuNulo(valor.protocolo) &&
+    'nome' in valor &&
+    typeof valor.nome === 'string' &&
+    'detalhe' in valor &&
+    textoOuNulo(valor.detalhe) &&
+    'quantidade' in valor &&
+    (valor.quantidade === null || eDecimalEmTexto(valor.quantidade)) &&
+    'valorUsdCentavos' in valor &&
+    (valor.valorUsdCentavos === null || Number.isSafeInteger(valor.valorUsdCentavos))
+  )
+}
+
 function isCarteira(valor: unknown): valor is Carteira {
   return (
     typeof valor === 'object' &&
@@ -1778,7 +1816,12 @@ function isCarteira(valor: unknown): valor is Carteira {
     typeof valor.sincronizacaoAutomatica === 'boolean' &&
     'saldos' in valor &&
     Array.isArray(valor.saldos) &&
-    valor.saldos.every(isSaldoCarteira)
+    valor.saldos.every(isSaldoCarteira) &&
+    'posicoes' in valor &&
+    Array.isArray(valor.posicoes) &&
+    valor.posicoes.every(isPosicaoCarteira) &&
+    'posicoesConfiguradas' in valor &&
+    typeof valor.posicoesConfiguradas === 'boolean'
   )
 }
 

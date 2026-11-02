@@ -328,7 +328,10 @@ class AlchemyWalletIndexer implements WalletIndexer {
     }
     JsonNode funded = stats.get("funded_txo_sum");
     JsonNode spent = stats.get("spent_txo_sum");
-    if (funded == null || spent == null || !funded.isIntegralNumber() || !spent.isIntegralNumber()) {
+    if (funded == null
+        || spent == null
+        || !funded.isIntegralNumber()
+        || !spent.isIntegralNumber()) {
       throw invalid();
     }
     BigInteger satoshis = funded.bigIntegerValue().subtract(spent.bigIntegerValue());

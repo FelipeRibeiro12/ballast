@@ -246,7 +246,7 @@ barra no fim.
 
 - Carteiras observadas (ADR-071). Sem `ALCHEMY_API_KEY` no `api.env`, a carteira
   cadastrada não atualiza e a tela diz que o indexador não está configurado.
-  Crie um app em alchemy.com, habilite Ethereum, Base e Solana nele (rede não
+  Crie um app em alchemy.com, habilite Ethereum, Base, Arbitrum, Polygon PoS, Avalanche, Robinhood Chain e Solana nele (rede não
   habilitada devolve 403, que a tela mostra como chave recusada) e ponha a chave
   em `ALCHEMY_API_KEY`. As URLs de cada rede saem da chave; só defina
   `ALCHEMY_ETHEREUM_URL`, `ALCHEMY_BASE_URL` e `ALCHEMY_SOLANA_URL` para usar
@@ -258,7 +258,14 @@ barra no fim.
   (`docker compose logs api | grep carteira`): `carteira sincronizada` é
   sucesso; `leitura de carteiras desligada: ALCHEMY_API_KEY vazia` é chave que
   não chegou. O log nunca mostra a chave nem o endereço. O seed (passo 8) não
-  precisa da variável: o job de carteiras já nasce desligado.
+  precisa da variável: o job de carteiras já nasce desligado. Só entra token
+  que a CoinGecko cota (ADR-080); o Bitcoin é lido pela Blockstream, sem chave.
+
+- NFT e DeFi das carteiras (ADR-081). Crie uma chave gratuita em
+  dashboard.zerion.io e ponha em `ZERION_API_KEY` no `api.env`. Sem ela a tela
+  diz que NFT e DeFi estão desligados e o saldo segue normal. Confira a cota do
+  plano no painel da Zerion. No log, `posições da carteira não atualizadas` com
+  `tipo=` é falha da Zerion; o saldo não é afetado.
 
 ## 11. Restaurar um backup
 
