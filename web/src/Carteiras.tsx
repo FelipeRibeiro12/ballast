@@ -26,12 +26,32 @@ import { Carregando, EstadoVazio, Selo } from './ui'
 
 type RedeDaCarteira = Carteira['rede']
 
-const REDES_DA_CARTEIRA: RedeDaCarteira[] = ['ethereum', 'base', 'solana']
+const REDES_DA_CARTEIRA: RedeDaCarteira[] = [
+  'ethereum',
+  'base',
+  'arbitrum',
+  'polygon',
+  'avalanche',
+  'robinhood',
+  'solana',
+  'bitcoin',
+]
 
 const ROTULO_DA_REDE: Record<RedeDaCarteira, string> = {
   ethereum: 'Ethereum',
   base: 'Base',
+  arbitrum: 'Arbitrum',
+  polygon: 'Polygon',
+  avalanche: 'Avalanche',
+  robinhood: 'Robinhood Chain',
   solana: 'Solana',
+  bitcoin: 'Bitcoin',
+}
+
+// Bitcoin não assina mensagem pelo mesmo caminho e a Robinhood Chain não teve o chain id conferido:
+// nas duas a prova de posse não existe.
+function aceitaProvaDePosse(rede: RedeDaCarteira): boolean {
+  return rede !== 'bitcoin' && rede !== 'robinhood'
 }
 
 // Acima disso nenhum endereço das três redes cabe; o servidor valida o formato de verdade.
@@ -78,10 +98,10 @@ function familiaDaRede(rede: RedeDaCarteira): FamiliaDeCarteira {
   return rede === 'solana' ? 'solana' : 'evm'
 }
 
-// No EVM a mesma conta vale em Ethereum e Base: mantém a escolha do usuário entre as duas.
+// No EVM a mesma conta vale em todas as redes EVM: mantém a escolha do usuário entre elas.
 function redeAposConectar(familia: FamiliaDeCarteira, atual: RedeDaCarteira): RedeDaCarteira {
   if (familia === 'solana') return 'solana'
-  return atual === 'solana' ? 'ethereum' : atual
+  return familiaDaRede(atual) === 'evm' && atual !== 'bitcoin' ? atual : 'ethereum'
 }
 
 function mensagemDeFalha(erro: unknown, padrao: string): string {
@@ -492,7 +512,7 @@ function CartaoDaCarteira({
           >
             {completo ? 'Ocultar endereço' : 'Endereço completo'}
           </button>
-          {carteira.verificadaEm === null && (
+          {carteira.verificadaEm === null && aceitaProvaDePosse(carteira.rede) && (
             <button
               type="button"
               className="pequeno discreto"

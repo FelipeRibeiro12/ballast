@@ -387,7 +387,11 @@ class WalletService {
             holding,
             (a, b) ->
                 new WalletIndexer.Holding(
-                    a.contract(), a.symbol(), a.decimals(), a.quantity().add(b.quantity())));
+                    a.contract(),
+                    a.symbol(),
+                    a.decimals(),
+                    a.quantity().add(b.quantity()),
+                    a.verified() && b.verified()));
       }
       return byContract.values();
     }
@@ -415,7 +419,8 @@ class WalletService {
           || quantity.precision() - quantity.scale() > MAX_INTEGER_DIGITS) {
         return Optional.empty();
       }
-      return Optional.of(new WalletIndexer.Holding(contract, raw.symbol(), decimals, quantity));
+      return Optional.of(
+          new WalletIndexer.Holding(contract, raw.symbol(), decimals, quantity, raw.verified()));
     }
 
     // O ativo existente vale como está; o novo nasce não confiável, menos o nativo (ADR-071). Sem
@@ -424,6 +429,11 @@ class WalletService {
       Optional<WalletQueries.Asset> found =
           queries.findAsset(userId, wallet.network().asset(), holding.contract());
       if (found.isPresent()) {
+        // Token que o indexador achou cotado e que estava como não confiável (leitura antiga,
+        // antes do filtro de preço) passa a contar no patrimônio.
+        if (holding.verified() && !found.get().trusted()) {
+          queries.trustAsset(userId, found.get().id());
+        }
         return Optional.of(found.get().id());
       }
       if (holding.quantity().signum() == 0) {
@@ -443,7 +453,7 @@ class WalletService {
               isNative ? wallet.network().nativeSymbol() : symbolOf(holding),
               isNative ? wallet.network().nativeName() : null,
               holding.decimals(),
-              isNative));
+              isNative || holding.verified()));
     }
 
     // O Solana não traz metadado, então o símbolo é o começo do mint. No EVM o texto do indexador

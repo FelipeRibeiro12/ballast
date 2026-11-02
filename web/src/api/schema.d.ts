@@ -1658,7 +1658,7 @@ export interface components {
             id: string;
             nome: string | null;
             /** @enum {string} */
-            rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "solana";
+            rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "avalanche" | "robinhood" | "solana";
             simbolo: string;
         };
         AtivoCriptoEdicao: {
@@ -1676,7 +1676,7 @@ export interface components {
             decimais: number;
             nome?: string | null;
             /** @enum {string} */
-            rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "solana";
+            rede: "bitcoin" | "ethereum" | "base" | "arbitrum" | "polygon" | "avalanche" | "robinhood" | "solana";
             simbolo: string;
         };
         AtualizarCartaoRequest: {
@@ -1761,7 +1761,7 @@ export interface components {
              */
             proximaLeituraEm: string | null;
             /** @enum {string} */
-            rede: "ethereum" | "base" | "solana";
+            rede: "ethereum" | "base" | "arbitrum" | "polygon" | "avalanche" | "robinhood" | "solana" | "bitcoin";
             rotulo: string | null;
             saldos: components["schemas"]["SaldoCarteira"][];
             /** @description O servidor lê as carteiras sozinho de 6 em 6 horas */

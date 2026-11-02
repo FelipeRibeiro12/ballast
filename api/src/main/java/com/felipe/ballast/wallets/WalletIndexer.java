@@ -9,7 +9,14 @@ public interface WalletIndexer {
 
   // contrato nulo é o ativo nativo da rede. quantidade já vem dividida pelos decimais. simbolo é
   // texto de terceiro: quem recebe trunca e limpa.
-  record Holding(String contract, String symbol, int decimals, BigDecimal quantity) {}
+  // verified: o indexador confirmou o token numa fonte de preço (contrato com cotação). Só o
+  // verificado nasce confiável; o resto, quando o indexador devolve, segue o ADR-071.
+  record Holding(
+      String contract, String symbol, int decimals, BigDecimal quantity, boolean verified) {
+    public Holding(String contract, String symbol, int decimals, BigDecimal quantity) {
+      this(contract, symbol, decimals, quantity, false);
+    }
+  }
 
   // partial é verdadeiro quando o indexador deixou tokens de fora (teto por leitura). Num
   // resultado parcial, o ativo que não aparece não está zerado: só não foi visto.

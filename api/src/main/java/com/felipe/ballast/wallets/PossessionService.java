@@ -72,6 +72,10 @@ class PossessionService {
     if (wallet.isEmpty()) {
       return new ChallengeResult.No(Rejected.NOT_FOUND);
     }
+    // Bitcoin não assina mensagem pelo mesmo caminho e o chain id da Robinhood não foi conferido.
+    if (wallet.get().network().isBitcoin() || wallet.get().network() == WalletNetwork.ROBINHOOD) {
+      return new ChallengeResult.No(Rejected.NOT_FOUND);
+    }
     Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
     Instant expiresAt = now.plus(TTL);
     String nonce = newNonce();

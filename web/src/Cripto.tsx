@@ -25,7 +25,7 @@ import { Carregando, EstadoVazio, Selo } from './ui'
 
 type Rede = AtivoCripto['rede']
 
-const REDES: Rede[] = ['bitcoin', 'ethereum', 'base', 'arbitrum', 'polygon', 'solana']
+const REDES: Rede[] = ['bitcoin', 'ethereum', 'base', 'arbitrum', 'polygon', 'avalanche', 'robinhood', 'solana']
 
 const ROTULO_DA_REDE: Record<Rede, string> = {
   bitcoin: 'Bitcoin',
@@ -33,6 +33,8 @@ const ROTULO_DA_REDE: Record<Rede, string> = {
   base: 'Base',
   arbitrum: 'Arbitrum',
   polygon: 'Polygon',
+  avalanche: 'Avalanche',
+  robinhood: 'Robinhood Chain',
   solana: 'Solana',
 }
 
@@ -43,6 +45,8 @@ const DECIMAIS_DO_NATIVO: Record<Rede, number> = {
   base: 18,
   arbitrum: 18,
   polygon: 18,
+  avalanche: 18,
+  robinhood: 18,
   solana: 9,
 }
 

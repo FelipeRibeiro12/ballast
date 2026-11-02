@@ -12,6 +12,8 @@ public enum CryptoNetwork {
   BASE("base", Format.EVM),
   ARBITRUM("arbitrum", Format.EVM),
   POLYGON("polygon", Format.EVM),
+  AVALANCHE("avalanche", Format.EVM),
+  ROBINHOOD("robinhood", Format.EVM),
   SOLANA("solana", Format.SOLANA);
 
   // Base58 não tem 0, O, I e l.

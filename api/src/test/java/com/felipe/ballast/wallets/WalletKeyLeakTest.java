@@ -118,7 +118,7 @@ class WalletKeyLeakTest {
   private static AlchemyWalletIndexer indexerFor(HttpServer server) {
     String url = "http://127.0.0.1:" + server.getAddress().getPort();
     return new AlchemyWalletIndexer(
-        new WalletsProperties(KEY, url, url, url, false, false, null, null));
+        new WalletsProperties(KEY, url, url, url, false, false, null, null), null);
   }
 
   // Responde JSON-RPC mínimo: saldo zero e nenhum token.

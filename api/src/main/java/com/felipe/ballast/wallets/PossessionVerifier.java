@@ -36,7 +36,7 @@ final class PossessionVerifier {
   private PossessionVerifier() {}
 
   static boolean verify(WalletNetwork network, String address, String message, String signature) {
-    if (signature == null || message == null || address == null) {
+    if (signature == null || message == null || address == null || network.isBitcoin()) {
       return false;
     }
     try {

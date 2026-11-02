@@ -220,6 +220,13 @@ class WalletQueries {
         .optional();
   }
 
+  void trustAsset(UUID userId, UUID assetId) {
+    jdbc.sql("UPDATE ativo_cripto SET confiavel = true WHERE usuario_id = :userId AND id = :id")
+        .param("userId", userId)
+        .param("id", assetId)
+        .update();
+  }
+
   // O nativo da rede nasce confiável (o contrato nulo não se forja); o resto nasce false, que é o
   // DEFAULT da V13 (ADR-071).
   UUID insertAsset(

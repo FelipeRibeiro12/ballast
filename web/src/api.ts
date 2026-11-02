@@ -1408,7 +1408,16 @@ export class CriptoInvalidoError extends ApiError {
   }
 }
 
-const REDES_CRIPTO: readonly string[] = ['bitcoin', 'ethereum', 'base', 'arbitrum', 'polygon', 'solana']
+const REDES_CRIPTO: readonly string[] = [
+  'bitcoin',
+  'ethereum',
+  'base',
+  'arbitrum',
+  'polygon',
+  'avalanche',
+  'robinhood',
+  'solana',
+]
 
 // Quantidade e preço chegam em texto e continuam texto: Number não guarda 18 casas (ADR-005).
 function eDecimalEmTexto(valor: unknown): boolean {
@@ -1693,7 +1702,16 @@ export type CarteiraRequest = components['schemas']['CarteiraRequest']
 export type SaldoCarteira = components['schemas']['SaldoCarteira']
 export type AtivoCriptoEdicao = components['schemas']['AtivoCriptoEdicao']
 
-const REDES_DA_CARTEIRA: readonly string[] = ['ethereum', 'base', 'solana']
+const REDES_DA_CARTEIRA: readonly string[] = [
+  'ethereum',
+  'base',
+  'arbitrum',
+  'polygon',
+  'avalanche',
+  'robinhood',
+  'solana',
+  'bitcoin',
+]
 
 const MOTIVOS_DE_LEITURA: readonly string[] = [
   'INDEXADOR_NAO_CONFIGURADO',

@@ -6094,6 +6094,8 @@ components:
           - base
           - arbitrum
           - polygon
+          - avalanche
+          - robinhood
           - solana
         simbolo:
           type: string
@@ -6162,6 +6164,8 @@ components:
           - base
           - arbitrum
           - polygon
+          - avalanche
+          - robinhood
           - solana
         simbolo:
           type: string
@@ -6337,7 +6341,12 @@ components:
           enum:
           - ethereum
           - base
+          - arbitrum
+          - polygon
+          - avalanche
+          - robinhood
           - solana
+          - bitcoin
         rotulo:
           type:
           - string
