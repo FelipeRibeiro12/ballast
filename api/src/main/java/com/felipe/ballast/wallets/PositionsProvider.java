@@ -17,7 +17,8 @@ public interface PositionsProvider {
       String name,
       String detail,
       BigDecimal quantity,
-      Long valueUsdCents) {}
+      Long valueUsdCents,
+      Long change24hUsdCents) {}
 
   // Falso sem chave: nenhuma chamada acontece e a tela diz que a leitura está desligada.
   boolean isConfigured();

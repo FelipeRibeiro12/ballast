@@ -107,4 +107,69 @@ class ZerionPositionsProviderTest {
     assertThat(provider.read(WalletNetwork.BITCOIN, "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"))
         .contains(List.of());
   }
+
+  @Test
+  void readsTheDailyChangeSumsPoolLegsAndNegatesLoans() {
+    server
+        .expect(requestTo(org.hamcrest.Matchers.containsString("/positions/")))
+        .andRespond(
+            json(
+                """
+                {"data":[
+                 {"attributes":{"position_type":"deposit","protocol_module":"liquidity_pool",
+                  "protocol":"Uniswap V2","name":"Asset","group_id":"g1","value":10.0,
+                  "changes":{"absolute_1d":-0.333,"percent_1d":-3.3},
+                  "fungible_info":{"symbol":"USDC"},"flags":{"displayable":true}}},
+                 {"attributes":{"position_type":"deposit","protocol_module":"liquidity_pool",
+                  "protocol":"Uniswap V2","name":"Asset","group_id":"g1","value":5.0,
+                  "changes":{"absolute_1d":1.0},
+                  "fungible_info":{"symbol":"WETH"},"flags":{"displayable":true}}},
+                 {"attributes":{"position_type":"staked","protocol_module":"staked",
+                  "protocol":"Lido","name":"Staked","value":100.1,
+                  "changes":null,
+                  "fungible_info":{"symbol":"stETH"},"flags":{"displayable":true}}},
+                 {"attributes":{"position_type":"loan","protocol_module":"lending",
+                  "protocol":"Aave V3","name":"Borrowed","value":20,
+                  "changes":{"absolute_1d":0.5},
+                  "fungible_info":{"symbol":"DAI"},"flags":{"displayable":true}}},
+                 {"attributes":{"position_type":"deposit","protocol_module":"deposit",
+                  "name":"Enorme","value":1,"changes":{"absolute_1d":99999999999999999},
+                  "fungible_info":{"symbol":"BIG"},"flags":{"displayable":true}}}
+                ]}"""));
+    server
+        .expect(requestTo(org.hamcrest.Matchers.containsString("/nft-positions/")))
+        .andRespond(json("{\"data\":[]}"));
+
+    List<PositionsProvider.Position> all = provider.read(WalletNetwork.ETHEREUM, ADDRESS).get();
+
+    assertThat(all).hasSize(4);
+    assertThat(all.get(0).change24hUsdCents()).isEqualTo(67L);
+    assertThat(all.get(1).change24hUsdCents()).isNull();
+    assertThat(all.get(2).change24hUsdCents()).isEqualTo(-50L);
+    assertThat(all.get(3).change24hUsdCents()).isNull();
+  }
+
+  @Test
+  void readsSolanaAsAChainOfPositions() {
+    server
+        .expect(requestTo(org.hamcrest.Matchers.containsString("chain_ids%5D=solana")))
+        .andRespond(
+            json(
+                """
+                {"data":[
+                 {"attributes":{"position_type":"staked","protocol_module":"staked",
+                  "protocol":"Marinade","name":"Staked","value":42,
+                  "fungible_info":{"symbol":"mSOL"},"flags":{"displayable":true}}}
+                ]}"""));
+    server
+        .expect(requestTo(org.hamcrest.Matchers.containsString("/nft-positions/")))
+        .andRespond(json("{\"data\":[]}"));
+
+    List<PositionsProvider.Position> all =
+        provider.read(WalletNetwork.SOLANA, "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM").get();
+
+    assertThat(all).hasSize(1);
+    assertThat(all.get(0).valueUsdCents()).isEqualTo(4200L);
+    server.verify();
+  }
 }

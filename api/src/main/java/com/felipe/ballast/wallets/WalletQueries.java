@@ -49,7 +49,8 @@ class WalletQueries {
       String name,
       String detail,
       BigDecimal quantity,
-      Long valueUsdCents) {}
+      Long valueUsdCents,
+      Long change24hUsdCents) {}
 
   record LockedAccount(boolean crypto, boolean archived) {}
 
@@ -221,14 +222,17 @@ class WalletQueries {
 
   List<PositionRow> positions(UUID userId, UUID walletId) {
     return jdbc.sql(
-            "SELECT id, tipo, categoria, protocolo, nome, detalhe, quantidade, valor_usd_centavos"
-                + " FROM posicao_carteira WHERE usuario_id = :userId AND carteira_id = :walletId"
+            "SELECT id, tipo, categoria, protocolo, nome, detalhe, quantidade, valor_usd_centavos,"
+                + " variacao_24h_usd_centavos FROM posicao_carteira WHERE usuario_id = :userId AND carteira_id = :walletId"
                 + " ORDER BY tipo, valor_usd_centavos DESC NULLS LAST, nome, id")
         .param("userId", userId)
         .param("walletId", walletId)
         .query(
             (rs, row) -> {
               long cents = rs.getLong("valor_usd_centavos");
+              boolean noValue = rs.wasNull();
+              long change = rs.getLong("variacao_24h_usd_centavos");
+              boolean noChange = rs.wasNull();
               return new PositionRow(
                   rs.getObject("id", UUID.class),
                   rs.getString("tipo"),
@@ -237,7 +241,8 @@ class WalletQueries {
                   rs.getString("nome"),
                   rs.getString("detalhe"),
                   rs.getBigDecimal("quantidade"),
-                  rs.wasNull() ? null : cents);
+                  noValue ? null : cents,
+                  noChange ? null : change);
             })
         .list();
   }
@@ -253,9 +258,9 @@ class WalletQueries {
               """
               INSERT INTO posicao_carteira
                 (id, usuario_id, carteira_id, tipo, categoria, protocolo, nome, detalhe,
-                 quantidade, valor_usd_centavos)
+                 quantidade, valor_usd_centavos, variacao_24h_usd_centavos)
               VALUES (:id, :userId, :walletId, :kind, :category, :protocol, :name, :detail,
-                      :quantity, :value)
+                      :quantity, :value, :change)
               """)
           .param("id", newId())
           .param("userId", userId)
@@ -267,6 +272,7 @@ class WalletQueries {
           .param("detail", position.detail())
           .param("quantity", position.quantity())
           .param("value", position.valueUsdCents())
+          .param("change", position.change24hUsdCents())
           .update();
     }
   }

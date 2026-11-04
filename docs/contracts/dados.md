@@ -498,8 +498,12 @@ posicao_carteira               -- retrato da última leitura, apagado e regravad
   protocolo text null, nome text, detalhe text null     -- texto de terceiro, até 100
   quantidade numeric(38,18) null       -- nulo em pool de liquidez
   valor_usd_centavos bigint null       -- negativo em empréstimo
+  variacao_24h_usd_centavos bigint null -- V45, ADR-082: variação do valor em 24 h (soma das pernas
+                                        -- do pool); nula se a Zerion não informa e nas linhas antigas
   atualizado_em timestamptz
 ```
+
+O retrato é gravado completo. O corte de US$ 0,50 (`DustCutoff`, ADR-082) é aplicado só na leitura.
 
 ### Carteira observada (V36, ADR-071)
 
