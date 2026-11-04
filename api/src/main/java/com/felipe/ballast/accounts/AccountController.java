@@ -3,6 +3,7 @@ package com.felipe.ballast.accounts;
 import com.felipe.ballast.fixedincome.IndexUpdater;
 import com.felipe.ballast.identity.AuthenticatedUser;
 import com.felipe.ballast.identity.MfaGate;
+import com.felipe.ballast.savings.SavingsYieldOnOpen;
 import com.felipe.ballast.web.CanonicalUuid;
 import com.felipe.ballast.web.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,6 +24,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -116,7 +118,15 @@ class AccountController {
   private final IndexUpdater indexUpdater;
   private final AtomicReference<Instant> lastIndexRefresh = new AtomicReference<>(Instant.MIN);
 
-  AccountController(AccountService accounts, MfaGate mfaGate, IndexUpdater indexUpdater) {
+  // Ausente quando o job do cofrinho está desligado (flag e testes).
+  private final ObjectProvider<SavingsYieldOnOpen> savingsOnOpen;
+
+  AccountController(
+      AccountService accounts,
+      MfaGate mfaGate,
+      IndexUpdater indexUpdater,
+      ObjectProvider<SavingsYieldOnOpen> savingsOnOpen) {
+    this.savingsOnOpen = savingsOnOpen;
     this.accounts = accounts;
     this.mfaGate = mfaGate;
     this.indexUpdater = indexUpdater;
@@ -283,6 +293,10 @@ class AccountController {
       onlyArchived = true;
     } else {
       return ResponseEntity.badRequest().body(INVALID_ARCHIVED_FILTER);
+    }
+    if (!onlyArchived) {
+      // Antes da lista, para o saldo já trazer o rendimento do dia.
+      savingsOnOpen.ifAvailable(onOpen -> onOpen.run(user.id()));
     }
     List<AccountResponse> body =
         accounts.list(user.id(), onlyArchived).stream().map(AccountResponse::from).toList();
