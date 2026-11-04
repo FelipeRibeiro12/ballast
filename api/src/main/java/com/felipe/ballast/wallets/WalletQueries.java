@@ -120,6 +120,18 @@ class WalletQueries {
         .list();
   }
 
+  // Carteira de conta ativa: o resumo segue o patrimônio e ignora conta arquivada (ADR-082).
+  List<Wallet> listActiveWallets(UUID userId) {
+    return jdbc.sql(
+            WALLET_COLUMNS
+                + " WHERE usuario_id = :userId AND conta_id IN"
+                + " (SELECT id FROM conta WHERE usuario_id = :userId AND NOT arquivada)"
+                + " ORDER BY criado_em, id")
+        .param("userId", userId)
+        .query(WalletQueries::mapWallet)
+        .list();
+  }
+
   Optional<Wallet> lockWallet(UUID userId, UUID id) {
     return jdbc.sql(WALLET_COLUMNS + " WHERE usuario_id = :userId AND id = :id FOR UPDATE")
         .param("userId", userId)
@@ -275,6 +287,10 @@ class WalletQueries {
                      SUM(CASE tipo WHEN 'entrada' THEN quantidade ELSE -quantidade END) AS quantidade
               FROM movimento_cripto
               WHERE usuario_id = :userId AND carteira_id IS NOT NULL
+                AND carteira_id IN (
+                  SELECT w.id FROM carteira_observada w
+                  JOIN conta c ON c.id = w.conta_id AND c.usuario_id = w.usuario_id
+                  WHERE w.usuario_id = :userId AND NOT c.arquivada)
               GROUP BY carteira_id, ativo_id
             )
             SELECT s.carteira_id, s.quantidade,
@@ -311,9 +327,12 @@ class WalletQueries {
   // Posição DeFi com valor conhecido e fora da poeira, de todas as carteiras do usuário.
   List<SummaryDefi> summaryDefi(UUID userId) {
     return jdbc.sql(
-            "SELECT carteira_id, valor_usd_centavos, variacao_24h_usd_centavos"
-                + " FROM posicao_carteira WHERE usuario_id = :userId AND tipo = 'defi'"
-                + " AND valor_usd_centavos IS NOT NULL AND abs(valor_usd_centavos) >= :dust")
+            "SELECT p.carteira_id, p.valor_usd_centavos, p.variacao_24h_usd_centavos"
+                + " FROM posicao_carteira p"
+                + " JOIN carteira_observada w ON w.id = p.carteira_id AND w.usuario_id = p.usuario_id"
+                + " JOIN conta c ON c.id = w.conta_id AND c.usuario_id = w.usuario_id"
+                + " WHERE p.usuario_id = :userId AND p.tipo = 'defi' AND NOT c.arquivada"
+                + " AND p.valor_usd_centavos IS NOT NULL AND abs(p.valor_usd_centavos) >= :dust")
         .param("userId", userId)
         .param("dust", DustCutoff.CENTS)
         .query(

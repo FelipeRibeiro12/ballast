@@ -243,11 +243,14 @@ class NetWorthService {
     boolean defiCounts = withDefi && date.equals(today());
     if (!defiCounts) {
       defiUsd = BigDecimal.ZERO;
-    } else if (positions.dollar() != null) {
-      BigDecimal usd = BigDecimal.valueOf(queries.defiUsdCents(userId), 2);
-      defiUsd = usd;
-      // Uma vez, do valor cheio em dólar, como as posições (ADR-077).
-      defi = cents(usd.multiply(positions.dollar().value()));
+    } else {
+      // O DeFi em dólar não depende da cotação; só o valor em reais precisa dela. Sem dólar, o
+      // total em reais não soma o DeFi.
+      defiUsd = BigDecimal.valueOf(queries.defiUsdCents(userId), 2);
+      if (positions.dollar() != null) {
+        // Uma vez, do valor cheio em dólar, como as posições (ADR-077).
+        defi = cents(defiUsd.multiply(positions.dollar().value()));
+      }
     }
     BigDecimal total = accounts.add(crypto).add(titles.get().total()).add(defi);
     // O cofrinho marcado já está em accounts; aqui só se separa para a tela, sem somar de novo.

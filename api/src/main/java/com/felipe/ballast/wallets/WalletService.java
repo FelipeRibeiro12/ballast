@@ -195,7 +195,7 @@ class WalletService {
   // ar não mudam a resposta além de ela ficar com o último retrato e a última cotação.
   WalletSummary summary(UUID userId) {
     List<WalletSummary.Input> wallets =
-        queries.listWallets(userId).stream()
+        queries.listActiveWallets(userId).stream()
             .map(w -> new WalletSummary.Input(w.id(), w.network(), w.label()))
             .toList();
     Instant dayAgo = clock.instant().minus(Duration.ofHours(24));
