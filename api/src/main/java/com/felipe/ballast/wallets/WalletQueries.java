@@ -229,8 +229,14 @@ class WalletQueries {
   List<PositionRow> positions(UUID userId, UUID walletId) {
     return jdbc.sql(
             "SELECT id, tipo, categoria, protocolo, nome, detalhe, quantidade, valor_usd_centavos,"
-                + " variacao_24h_usd_centavos FROM posicao_carteira WHERE usuario_id = :userId AND carteira_id = :walletId"
+                + " variacao_24h_usd_centavos FROM posicao_carteira"
+                + " WHERE usuario_id = :userId AND carteira_id = :walletId"
+                // O corte é de leitura (ADR-082): DeFi abaixo dele fica gravado e some daqui. NFT e
+                // valor nulo não têm preço para cortar.
+                + " AND (tipo <> 'defi' OR valor_usd_centavos IS NULL"
+                + " OR abs(valor_usd_centavos) >= :dust)"
                 + " ORDER BY tipo, valor_usd_centavos DESC NULLS LAST, nome, id")
+        .param("dust", DustCutoff.CENTS)
         .param("userId", userId)
         .param("walletId", walletId)
         .query(
