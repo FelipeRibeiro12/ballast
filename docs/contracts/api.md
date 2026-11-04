@@ -873,7 +873,7 @@ Mudanças em rotas que já existiam (campos só acrescentados):
 
 ## Rendimento diário do cofrinho (ADR-074)
 
-- O job diário (03:30 em São Paulo) lança o rendimento estimado de cada cofrinho
+- O job diário (02:30 em São Paulo) lança o rendimento estimado de cada cofrinho
   com percentual como receita `realizado` na categoria Rendimento, título
   `Rendimento do cofrinho (estimado)`. Aparece no extrato e nos saldos como
   qualquer lançamento; o usuário edita ou apaga e o dia não volta.

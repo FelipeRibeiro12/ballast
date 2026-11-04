@@ -38,6 +38,7 @@ ADR-081 deixou o DeFi fora do patrimônio.
   redes de posição. Não foi possível testar com chave real nesta sessão. Bitcoin segue sem DeFi.
 - **Poeira no patrimônio por conta:** posição (conta e ativo) abaixo do corte, formada só por
   movimento sincronizado de carteira, sai do total do patrimônio. Posição manual nunca é cortada.
+- O resumo ignora conta arquivada, como o patrimônio.
 
 ## Consequências
 
