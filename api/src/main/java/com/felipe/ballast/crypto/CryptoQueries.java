@@ -72,6 +72,7 @@ class CryptoQueries {
   // Custos exatos nas duas moedas (nulo quando falta o dólar de algum movimento, ou o custo de uma
   // entrada ou saída sincronizada: costPending). price, quotedAt e quoteSource são nulos sem
   // cotação até a data; priceCurrency diz a moeda do preço. trusted é o confiavel do ativo.
+  // onlySynced: todo movimento da posição veio de leitura de carteira (sem nenhum digitado).
   record Position(
       UUID accountId,
       UUID assetId,
@@ -83,7 +84,8 @@ class CryptoQueries {
       Instant quotedAt,
       String quoteSource,
       boolean trusted,
-      boolean costPending) {}
+      boolean costPending,
+      boolean onlySynced) {}
 
   record LockedAccount(boolean crypto, boolean archived) {}
 
@@ -479,7 +481,7 @@ class CryptoQueries {
             "WITH movimento AS ("
                 + " SELECT m.conta_id, m.ativo_id, m.moeda,"
                 + " CASE WHEN m.tipo IN ('compra', 'entrada') THEN 1 ELSE -1 END AS sinal,"
-                + " m.quantidade, m.custo,"
+                + " m.quantidade, m.custo, m.origem,"
                 + String.format(DOLLAR_AT, "m.data")
                 + " AS dolar"
                 + " FROM movimento_cripto m"
@@ -488,6 +490,7 @@ class CryptoQueries {
                 + " SELECT conta_id, ativo_id,"
                 + " SUM(sinal * quantidade) AS quantidade,"
                 + " bool_or(custo IS NULL) AS custo_pendente,"
+                + " bool_and(origem = 'sincronizada') AS so_sincronizada,"
                 + " CASE WHEN bool_or(custo IS NULL OR (moeda = 'USD' AND dolar IS NULL))"
                 + "   THEN NULL ELSE"
                 + "   SUM(sinal * CASE moeda WHEN 'BRL' THEN custo ELSE custo * dolar END) END"
@@ -499,7 +502,8 @@ class CryptoQueries {
                 + " FROM movimento GROUP BY conta_id, ativo_id"
                 + ")"
                 + " SELECT p.conta_id, p.ativo_id, p.quantidade, p.custo_brl, p.custo_usd,"
-                + " q.preco, q.moeda, q.momento, q.fonte, a.confiavel, p.custo_pendente"
+                + " q.preco, q.moeda, q.momento, q.fonte, a.confiavel, p.custo_pendente,"
+                + " p.so_sincronizada"
                 + " FROM posicao p"
                 + " JOIN conta c ON c.id = p.conta_id AND c.usuario_id = :userId"
                 + " JOIN ativo_cripto a ON a.id = p.ativo_id AND a.usuario_id = :userId"
@@ -526,8 +530,28 @@ class CryptoQueries {
                     instantOrNull(rs, "momento"),
                     rs.getString("fonte"),
                     rs.getBoolean("confiavel"),
-                    rs.getBoolean("custo_pendente")))
+                    rs.getBoolean("custo_pendente"),
+                    rs.getBoolean("so_sincronizada")))
         .list();
+  }
+
+  // Centavos de dólar das posições DeFi do retrato atual, de carteiras de contas ativas, sem a
+  // poeira (ADR-082). Empréstimo entra negativo, NFT e valor desconhecido ficam fora. O retrato é
+  // sempre o da última leitura, então só vale para hoje.
+  long defiUsdCents(UUID userId) {
+    return jdbc.sql(
+            """
+            SELECT COALESCE(SUM(p.valor_usd_centavos), 0)
+            FROM posicao_carteira p
+            JOIN carteira_observada w ON w.id = p.carteira_id AND w.usuario_id = p.usuario_id
+            JOIN conta c ON c.id = w.conta_id AND c.usuario_id = w.usuario_id
+            WHERE p.usuario_id = :userId AND p.tipo = 'defi' AND NOT c.arquivada
+              AND p.valor_usd_centavos IS NOT NULL AND abs(p.valor_usd_centavos) >= :dust
+            """)
+        .param("userId", userId)
+        .param("dust", DustCutoff.CENTS)
+        .query(Long.class)
+        .single();
   }
 
   // O conflito na PK guarda a leitura que já estava no mesmo instante.

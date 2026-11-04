@@ -69,6 +69,25 @@ public record NetWorthResponse(
         List<Cofrinho> cofrinhos,
     @Schema(
             requiredMode = Schema.RequiredMode.REQUIRED,
+            description =
+                "DeFi das carteiras observadas em reais (USDC/BRL), com empréstimo negativo, sem"
+                    + " posição abaixo de US$ 0,50 e sem NFT. Soma no total só quando data é hoje em"
+                    + " America/Sao_Paulo (o retrato não tem histórico); nas outras datas e no"
+                    + " histórico mensal vale zero e fica fora. Zero sem cotação do dólar",
+            minimum = "-9007199254740991",
+            maximum = "9007199254740991")
+        long defiCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
+            nullable = true,
+            description =
+                "O mesmo DeFi em centavos de dólar; nulo quando falta a cotação do dólar. Zero"
+                    + " fora de hoje",
+            minimum = "-9007199254740991",
+            maximum = "9007199254740991")
+        Long defiUsdCentavos,
+    @Schema(
+            requiredMode = Schema.RequiredMode.REQUIRED,
             minimum = "-9007199254740991",
             maximum = "9007199254740991")
         long totalCentavos,
@@ -137,6 +156,8 @@ public record NetWorthResponse(
         netWorth.savingsPots().stream()
             .map(pot -> new Cofrinho(pot.id(), pot.name(), cents(pot.balance())))
             .toList(),
+        cents(netWorth.defi()),
+        nullableCents(netWorth.defiUsd()),
         cents(netWorth.total()),
         unquoted,
         netWorth.fixedIncomeExcluded().stream()
