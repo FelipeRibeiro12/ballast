@@ -2875,3 +2875,38 @@ button.relatorio-mes:hover:not(:disabled) {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+.resumo-carteiras {
+  margin-bottom: var(--esp-3);
+  overflow-wrap: anywhere;
+}
+
+.resumo-carteiras > .item-valor {
+  display: block;
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.resumo-carteira .item-lado {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.variacao {
+  margin: var(--esp-1) 0 0;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.variacao-alta strong {
+  color: var(--receita-texto);
+}
+
+.variacao-queda strong {
+  color: var(--despesa-texto);
+}
+
+.variacao-parcial {
+  font-style: italic;
+}

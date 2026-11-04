@@ -20,6 +20,7 @@ import { carregar, mensagemDeEscrita } from './leitura'
 import type { Estado } from './leitura'
 import Carteiras from './Carteiras'
 import Painel from './Painel'
+import ResumoDasCarteiras from './ResumoDasCarteiras'
 import { Carregando, EstadoVazio, Selo } from './ui'
 
 
@@ -740,6 +741,8 @@ export default function Cripto({
           })}
         </ul>
       )}
+
+      <ResumoDasCarteiras versao={versao} aoSessaoExpirar={aoSessaoExpirar} />
 
       <Carteiras
         contas={contas}
