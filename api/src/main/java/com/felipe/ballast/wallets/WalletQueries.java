@@ -1,6 +1,7 @@
 package com.felipe.ballast.wallets;
 
 import com.felipe.ballast.crypto.CryptoNetwork;
+import com.felipe.ballast.crypto.DustCutoff;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -51,6 +52,11 @@ class WalletQueries {
       BigDecimal quantity,
       Long valueUsdCents,
       Long change24hUsdCents) {}
+
+  record SummaryToken(
+      UUID walletId, BigDecimal quantity, BigDecimal priceUsd, BigDecimal priceAgoUsd) {}
+
+  record SummaryDefi(UUID walletId, long valueUsdCents, Long change24hUsdCents) {}
 
   record LockedAccount(boolean crypto, boolean archived) {}
 
@@ -245,6 +251,85 @@ class WalletQueries {
                   noChange ? null : change);
             })
         .list();
+  }
+
+  // Saldo sincronizado de ativo confiável por carteira, com o último preço e o último preço com
+  // pelo menos 24 h (anterior ao último), tudo em dólar. Cotação em real (legada) volta a dólar
+  // pelo dólar de hoje. Sem cotação os preços vêm nulos.
+  List<SummaryToken> summaryTokens(UUID userId, Instant dayAgo) {
+    return jdbc.sql(
+            """
+            WITH dolar AS (
+              SELECT COALESCE(
+                (SELECT preco FROM cotacao_usdc_brl ORDER BY momento DESC LIMIT 1),
+                (SELECT valor FROM indice WHERE serie = 'dolar' ORDER BY data DESC LIMIT 1)
+              ) AS valor
+            ), saldo AS (
+              SELECT carteira_id, ativo_id,
+                     SUM(CASE tipo WHEN 'entrada' THEN quantidade ELSE -quantidade END) AS quantidade
+              FROM movimento_cripto
+              WHERE usuario_id = :userId AND carteira_id IS NOT NULL
+              GROUP BY carteira_id, ativo_id
+            )
+            SELECT s.carteira_id, s.quantidade,
+                   CASE q.moeda WHEN 'USD' THEN q.preco ELSE q.preco / d.valor END AS preco_usd,
+                   CASE p.moeda WHEN 'USD' THEN p.preco ELSE p.preco / d.valor END AS anterior_usd
+            FROM saldo s
+            JOIN ativo_cripto a ON a.id = s.ativo_id AND a.usuario_id = :userId
+            CROSS JOIN dolar d
+            LEFT JOIN LATERAL (
+              SELECT preco, moeda, momento FROM cotacao
+              WHERE usuario_id = :userId AND ativo_id = s.ativo_id
+              ORDER BY momento DESC LIMIT 1
+            ) q ON true
+            LEFT JOIN LATERAL (
+              SELECT preco, moeda FROM cotacao
+              WHERE usuario_id = :userId AND ativo_id = s.ativo_id
+                AND momento <= :dayAgo AND momento < q.momento
+              ORDER BY momento DESC LIMIT 1
+            ) p ON true
+            WHERE a.confiavel AND s.quantidade <> 0
+            """)
+        .param("userId", userId)
+        .param("dayAgo", utc(dayAgo))
+        .query(
+            (rs, row) ->
+                new SummaryToken(
+                    rs.getObject("carteira_id", UUID.class),
+                    rs.getBigDecimal("quantidade"),
+                    rs.getBigDecimal("preco_usd"),
+                    rs.getBigDecimal("anterior_usd")))
+        .list();
+  }
+
+  // Posição DeFi com valor conhecido e fora da poeira, de todas as carteiras do usuário.
+  List<SummaryDefi> summaryDefi(UUID userId) {
+    return jdbc.sql(
+            "SELECT carteira_id, valor_usd_centavos, variacao_24h_usd_centavos"
+                + " FROM posicao_carteira WHERE usuario_id = :userId AND tipo = 'defi'"
+                + " AND valor_usd_centavos IS NOT NULL AND abs(valor_usd_centavos) >= :dust")
+        .param("userId", userId)
+        .param("dust", DustCutoff.CENTS)
+        .query(
+            (rs, row) -> {
+              long value = rs.getLong("valor_usd_centavos");
+              long change = rs.getLong("variacao_24h_usd_centavos");
+              boolean noChange = rs.wasNull();
+              return new SummaryDefi(
+                  rs.getObject("carteira_id", UUID.class), value, noChange ? null : change);
+            })
+        .list();
+  }
+
+  // O dólar de hoje: a última leitura do USDC em reais ou, sem ela, a última PTAX (ADR-077). Dado
+  // de mercado, sem usuario_id. Vazio se não há nenhuma das duas.
+  Optional<BigDecimal> latestDollar() {
+    return jdbc.sql(
+            "SELECT COALESCE("
+                + "(SELECT preco FROM cotacao_usdc_brl ORDER BY momento DESC LIMIT 1),"
+                + " (SELECT valor FROM indice WHERE serie = 'dolar' ORDER BY data DESC LIMIT 1))")
+        .query(BigDecimal.class)
+        .optional();
   }
 
   // Retrato novo no lugar do velho, na mesma transação do chamador.
