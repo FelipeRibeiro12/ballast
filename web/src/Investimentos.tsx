@@ -28,7 +28,7 @@ function ResumoDoPatrimonio({ estado }: { estado: Estado<Patrimonio> }) {
       <p className="destaque-rotulo">Investido em {formatarDataCompleta(dados.data)}</p>
       {/* Renda fixa, cofrinhos que o usuário marcou e cripto. O saldo das contas correntes e dos
           benefícios não é investimento, e o cofrinho só entra se for marcado (ADR-076). */}
-      <p className="destaque-valor">{formatarCentavos(rendaFixa + dados.criptoCentavos)}</p>
+      <p className="destaque-valor">{formatarCentavos(rendaFixa + dados.criptoCentavos + dados.defiCentavos)}</p>
       <dl className="destaque-detalhes">
         <div>
           <dt>Renda fixa</dt>
@@ -41,7 +41,19 @@ function ResumoDoPatrimonio({ estado }: { estado: Estado<Patrimonio> }) {
             {dados.criptoUsdCentavos !== null && <small>{formatarCentavosEmDolar(dados.criptoUsdCentavos)}</small>}
           </dd>
         </div>
+        {dados.defiCentavos !== 0 && (
+          <div>
+            <dt>DeFi</dt>
+            <dd>
+              {formatarCentavos(dados.defiCentavos)}
+              {dados.defiUsdCentavos !== null && <small>{formatarCentavosEmDolar(dados.defiUsdCentavos)}</small>}
+            </dd>
+          </div>
+        )}
       </dl>
+      {dados.defiCentavos !== 0 && (
+        <p>O DeFi é o retrato da última leitura das carteiras. O histórico mensal não inclui DeFi.</p>
+      )}
       {dados.criptoCentavos !== 0 && dados.criptoAportadoCentavos !== null && dados.criptoValorizacaoCentavos !== null && (
         <p>
           Na cripto, {formatarCentavos(dados.criptoAportadoCentavos)} de aporte e{' '}

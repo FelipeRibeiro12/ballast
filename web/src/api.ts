@@ -1617,6 +1617,10 @@ function isPatrimonio(valor: unknown): valor is Patrimonio {
     'cofrinhos' in valor &&
     Array.isArray(valor.cofrinhos) &&
     valor.cofrinhos.every(isCofrinhoEmInvestimentos) &&
+    'defiCentavos' in valor &&
+    Number.isSafeInteger(valor.defiCentavos) &&
+    'defiUsdCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.defiUsdCentavos) &&
     'totalCentavos' in valor &&
     Number.isSafeInteger(valor.totalCentavos) &&
     'semCotacao' in valor &&
@@ -1831,6 +1835,69 @@ export async function fetchCarteiras(): Promise<Carteira[]> {
   if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, '/carteiras')
   const corpo: unknown = await resposta.json()
   if (!Array.isArray(corpo) || !corpo.every(isCarteira)) throw new ApiError('/carteiras com formato inesperado')
+  return corpo
+}
+
+export type ResumoCarteira = components['schemas']['ResumoCarteira']
+export type ResumoCarteirasTotal = components['schemas']['ResumoCarteirasTotal']
+export type ResumoCarteiras = components['schemas']['ResumoCarteiras']
+
+// Percentual vem como texto com 2 casas ("9.73", "-10.00") ou nulo; nunca passa por Number.
+const FORMATO_VARIACAO_PERCENTUAL = /^-?\d+\.\d{2}$/
+
+function temValorEVariacao(valor: object): boolean {
+  return (
+    'valorUsdCentavos' in valor &&
+    Number.isSafeInteger(valor.valorUsdCentavos) &&
+    'valorBrlCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.valorBrlCentavos) &&
+    'variacao24hUsdCentavos' in valor &&
+    Number.isSafeInteger(valor.variacao24hUsdCentavos) &&
+    'variacao24hBrlCentavos' in valor &&
+    inteiroSeguroOuNulo(valor.variacao24hBrlCentavos) &&
+    'variacao24hPercentual' in valor &&
+    (valor.variacao24hPercentual === null ||
+      (typeof valor.variacao24hPercentual === 'string' &&
+        FORMATO_VARIACAO_PERCENTUAL.test(valor.variacao24hPercentual))) &&
+    'variacaoParcial' in valor &&
+    typeof valor.variacaoParcial === 'boolean'
+  )
+}
+
+function isResumoCarteira(valor: unknown): valor is ResumoCarteira {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'id' in valor &&
+    typeof valor.id === 'string' &&
+    'rede' in valor &&
+    typeof valor.rede === 'string' &&
+    REDES_DA_CARTEIRA.includes(valor.rede) &&
+    'rotulo' in valor &&
+    textoOuNulo(valor.rotulo) &&
+    temValorEVariacao(valor)
+  )
+}
+
+function isResumoCarteiras(valor: unknown): valor is ResumoCarteiras {
+  return (
+    typeof valor === 'object' &&
+    valor !== null &&
+    'carteiras' in valor &&
+    Array.isArray(valor.carteiras) &&
+    valor.carteiras.every(isResumoCarteira) &&
+    'total' in valor &&
+    typeof valor.total === 'object' &&
+    valor.total !== null &&
+    temValorEVariacao(valor.total)
+  )
+}
+
+export async function fetchResumoCarteiras(): Promise<ResumoCarteiras> {
+  const resposta = await fetch(`${baseUrl}/carteiras/resumo`, { credentials: 'same-origin' })
+  if (!resposta.ok) return recusarRespostaDeInvestimento(resposta, '/carteiras/resumo')
+  const corpo: unknown = await resposta.json()
+  if (!isResumoCarteiras(corpo)) throw new ApiError('/carteiras/resumo com formato inesperado')
   return corpo
 }
 

@@ -209,6 +209,30 @@ class SavingsYieldService {
     return new Summary(accounts, launched, skipped, failures);
   }
 
+  // Catch-up de um usuário só, chamado na primeira abertura do app no dia. Falha de uma conta não
+  // sobe: quem abre o app não pode ficar sem a lista por causa do rendimento.
+  int catchUpUser(UUID userId) {
+    LocalDate today = today();
+    if (!BusinessDays.isBusinessDay(today)) {
+      return 0;
+    }
+    int launched = 0;
+    for (SavingsYieldQueries.PotRef ref : queries.userPots(userId)) {
+      try {
+        launched += catchUp(ref, today);
+      } catch (RuntimeException e) {
+        if (!LockTimeouts.isLockTimeout(e)) {
+          UnexpectedErrorLog.error(
+              log,
+              "falha ao lançar rendimento do cofrinho usuario_id=%s conta_id=%s"
+                  .formatted(ref.userId(), ref.accountId()),
+              e);
+        }
+      }
+    }
+    return launched;
+  }
+
   // Conta sem marcador só faz hoje. Com marcador, vai de max(L + 1, hoje - 7) até hoje, nos dias
   // úteis. Cada dia leva a janela desde o último crédito, então o dia pulado não se perde.
   private int catchUp(SavingsYieldQueries.PotRef ref, LocalDate today) {

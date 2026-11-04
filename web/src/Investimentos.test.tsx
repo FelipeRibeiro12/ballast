@@ -12,6 +12,8 @@ const patrimonio = {
   criptoUsdCentavos: 864_000,
   criptoAportadoCentavos: 4_000_000,
   criptoValorizacaoCentavos: 320_000,
+  defiCentavos: 0,
+  defiUsdCentavos: 0,
   rendaFixaCentavos: 1_050_000,
   cofrinhosCentavos: 0,
   cofrinhos: [],
@@ -21,12 +23,14 @@ const patrimonio = {
 
 const vazio = { data: '2026-10-22', indices: { cdiAte: '2026-10-21', ipcaAte: '2026-09-01' }, titulos: [] }
 
-function mockFetch(): void {
+function mockFetch(defi: { defiCentavos: number; defiUsdCentavos: number | null } = { defiCentavos: 0, defiUsdCentavos: 0 }): void {
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string) => {
-      if (url.startsWith('/patrimonio?')) return Promise.resolve(jsonResponse({ ...patrimonio, data: url.slice(-10) }, 200))
+      if (url.startsWith('/patrimonio?')) return Promise.resolve(jsonResponse({ ...patrimonio, ...defi, data: url.slice(-10) }, 200))
       if (url.startsWith('/titulos-renda-fixa?')) return Promise.resolve(jsonResponse(vazio, 200))
+      if (url === '/carteiras') return Promise.resolve(jsonResponse([], 200))
+      if (url === '/carteiras/resumo') return Promise.resolve(jsonResponse({ carteiras: [], total: { valorUsdCentavos: 0, valorBrlCentavos: 0, variacao24hUsdCentavos: 0, variacao24hBrlCentavos: 0, variacao24hPercentual: null, variacaoParcial: false } }, 200))
       if (url === '/ativos-cripto' || url === '/movimentos-cripto') return Promise.resolve(jsonResponse([], 200))
       if (url.startsWith('/posicoes-cripto?')) return Promise.resolve(jsonResponse({ data: '2026-10-22', dolar: null, posicoes: [], contas: [] }, 200))
       return Promise.reject(new Error(`rota sem mock: ${url}`))
@@ -52,6 +56,27 @@ afterEach(() => {
 })
 
 describe('Investimentos', () => {
+  it('soma o DeFi ao total, mostra o valor e avisa que o histórico mensal não o inclui', async () => {
+    mockFetch({ defiCentavos: 550_000, defiUsdCentavos: 100_000 })
+    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} cofrinhosAtivos={[]} aoMudarCofrinho={vi.fn()} aoSessaoExpirar={vi.fn()} />)
+
+    const resumo = await screen.findByRole('region', { name: 'Total investido' })
+    expect(within(resumo).getByText(texto('R$ 59.200,00'))).toBeVisible()
+    expect(within(resumo).getByText('DeFi')).toBeVisible()
+    expect(within(resumo).getByText(texto('R$ 5.500,00'))).toBeVisible()
+    expect(within(resumo).getByText(texto('US$ 1.000,00'))).toBeVisible()
+    expect(within(resumo).getByText(/histórico mensal não inclui DeFi/)).toBeVisible()
+  })
+
+  it('sem DeFi não mostra a linha nem o aviso', async () => {
+    mockFetch()
+    render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} cofrinhosAtivos={[]} aoMudarCofrinho={vi.fn()} aoSessaoExpirar={vi.fn()} />)
+
+    const resumo = await screen.findByRole('region', { name: 'Total investido' })
+    expect(within(resumo).queryByText('DeFi')).toBeNull()
+    expect(within(resumo).queryByText(/histórico mensal/)).toBeNull()
+  })
+
   it('mostra só renda fixa e cripto no total, sem o saldo das contas, e o aviso das sem cotação', async () => {
     mockFetch()
     render(<Investimentos contasDeInvestimento={[]} contasCripto={[]} cofrinhosAtivos={[]} aoMudarCofrinho={vi.fn()} aoSessaoExpirar={vi.fn()} />)

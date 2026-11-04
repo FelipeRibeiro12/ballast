@@ -101,8 +101,8 @@ ballast:
     # Liga o job que lança o rendimento diário do cofrinho (ADR-074). Os testes de integração
     # desligam; para desligar fora deles, BALLAST_COFRINHO_JOB_ENABLED=false.
     job-enabled: true
-    # 03:30 em America/Sao_Paulo, trinta minutos depois do crédito do banco.
-    cron: "0 30 3 * * *"
+    # 02:30 em America/Sao_Paulo, no horário do crédito do banco.
+    cron: "0 30 2 * * *"
   indices:
     # API pública do SGS do Banco Central, sem chave (ADR-037).
     base-url: https://api.bcb.gov.br

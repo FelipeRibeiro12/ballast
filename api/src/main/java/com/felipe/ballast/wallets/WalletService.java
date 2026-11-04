@@ -191,6 +191,29 @@ class WalletService {
     return queries.listWallets(userId).stream().map(wallet -> view(userId, wallet)).toList();
   }
 
+  // Só leitura do que já está gravado: nenhuma chamada de rede, então Zerion ou CoinGecko fora do
+  // ar não mudam a resposta além de ela ficar com o último retrato e a última cotação.
+  WalletSummary summary(UUID userId) {
+    List<WalletSummary.Input> wallets =
+        queries.listActiveWallets(userId).stream()
+            .map(w -> new WalletSummary.Input(w.id(), w.network(), w.label()))
+            .toList();
+    Instant dayAgo = clock.instant().minus(Duration.ofHours(24));
+    List<WalletSummary.Token> tokens =
+        queries.summaryTokens(userId, dayAgo).stream()
+            .map(
+                t ->
+                    new WalletSummary.Token(
+                        t.walletId(), t.quantity(), t.priceUsd(), t.priceAgoUsd()))
+            .toList();
+    List<WalletSummary.Defi> defi =
+        queries.summaryDefi(userId).stream()
+            .map(
+                d -> new WalletSummary.Defi(d.walletId(), d.valueUsdCents(), d.change24hUsdCents()))
+            .toList();
+    return WalletSummary.compute(wallets, tokens, defi, queries.latestDollar().orElse(null));
+  }
+
   // Os movimentos sincronizados saem em cascata (V36). A conta é travada antes, na ordem de todo
   // mundo: conta, depois carteira.
   boolean delete(UUID userId, UUID id) {

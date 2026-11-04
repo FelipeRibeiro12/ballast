@@ -1002,6 +1002,36 @@ paths:
       summary: Cadastra um endereço público numa conta cripto
       tags:
       - carteiras
+  /carteiras/resumo:
+    get:
+      description: "Centavos inteiros em dólar e em real (USDC/BRL). Soma os tokens\
+        \ confiáveis com cotação e as posições DeFi, sem o que vale menos de US$ 0,50\
+        \ em módulo. NFT fica fora. Só lê o que está gravado: não chama a rede."
+      operationId: getCarteirasResumo
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumoCarteiras"
+          description: Resumo
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Sem sessão válida
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Erro"
+          description: Banco indisponível
+      security:
+      - cookieAuth: []
+      summary: Valor e variação de 24 h de cada carteira e do total
+      tags:
+      - carteiras
   /carteiras/{id}:
     delete:
       description: Os movimentos digitados na conta ficam.
@@ -8411,6 +8441,25 @@ components:
         data:
           type: string
           format: date
+        defiCentavos:
+          type: integer
+          format: int64
+          description: "DeFi das carteiras observadas em reais (USDC/BRL), com empré\
+            stimo negativo, sem posição abaixo de US$ 0,50 e sem NFT. Soma no total\
+            \ só quando data é hoje em America/Sao_Paulo (o retrato não tem histó\
+            rico); nas outras datas e no histórico mensal vale zero e fica fora. Zero\
+            \ sem cotação do dólar"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        defiUsdCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: O mesmo DeFi em centavos de dólar; nulo quando falta a cotação
+            do dólar. Zero fora de hoje
+          maximum: 9007199254740991
+          minimum: -9007199254740991
         rendaFixaCentavos:
           type: integer
           format: int64
@@ -8443,6 +8492,8 @@ components:
       - criptoUsdCentavos
       - criptoValorizacaoCentavos
       - data
+      - defiCentavos
+      - defiUsdCentavos
       - rendaFixaCentavos
       - semCotacao
       - totalCentavos
@@ -9161,6 +9212,132 @@ components:
       required:
       - situacao
       - valor
+    ResumoCarteira:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        rede:
+          type: string
+          enum:
+          - ethereum
+          - base
+          - arbitrum
+          - polygon
+          - avalanche
+          - robinhood
+          - solana
+          - bitcoin
+        rotulo:
+          type:
+          - string
+          - "null"
+          maxLength: 60
+        valorBrlCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: Centavos de real pelo USDC/BRL; nulo sem cotação do dólar
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        valorUsdCentavos:
+          type: integer
+          format: int64
+          description: "Centavos de dólar inteiros: tokens confiáveis com cotação\
+            \ mais DeFi (empréstimo negativo), sem o que está abaixo de US$ 0,50"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        variacao24hBrlCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          description: Variação em 24 h em centavos de real; nulo sem cotação do dólar
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        variacao24hPercentual:
+          type:
+          - string
+          - "null"
+          description: "Variação sobre o valor de 24 h atrás (valor menos variaçã\
+            o), em texto com 2 casas; nulo quando essa base é zero ou negativa"
+        variacao24hUsdCentavos:
+          type: integer
+          format: int64
+          description: "Variação do valor em 24 h, em centavos de dólar"
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        variacaoParcial:
+          type: boolean
+          description: "Algum ativo ficou fora da variação por não ter cotação com\
+            \ 24 h de idade, ou posição DeFi sem variação gravada"
+      required:
+      - id
+      - rede
+      - rotulo
+      - valorBrlCentavos
+      - valorUsdCentavos
+      - variacao24hBrlCentavos
+      - variacao24hPercentual
+      - variacao24hUsdCentavos
+      - variacaoParcial
+    ResumoCarteiras:
+      type: object
+      properties:
+        carteiras:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResumoCarteira"
+        total:
+          $ref: "#/components/schemas/ResumoCarteirasTotal"
+          description: Soma dos valores já arredondados de cada carteira
+      required:
+      - carteiras
+      - total
+    ResumoCarteirasTotal:
+      type: object
+      properties:
+        valorBrlCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        valorUsdCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        variacao24hBrlCentavos:
+          type:
+          - integer
+          - "null"
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        variacao24hPercentual:
+          type:
+          - string
+          - "null"
+          description: "Variação sobre o valor de 24 h atrás (valor menos variaçã\
+            o), em texto com 2 casas; nulo quando essa base é zero ou negativa"
+        variacao24hUsdCentavos:
+          type: integer
+          format: int64
+          maximum: 9007199254740991
+          minimum: -9007199254740991
+        variacaoParcial:
+          type: boolean
+      required:
+      - valorBrlCentavos
+      - valorUsdCentavos
+      - variacao24hBrlCentavos
+      - variacao24hPercentual
+      - variacao24hUsdCentavos
+      - variacaoParcial
     ResumoExclusaoConta:
       type: object
       properties:

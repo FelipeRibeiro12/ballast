@@ -557,3 +557,12 @@ Dívida registrada: 7 linhas no backlog (limite global da primeira leitura, teto
 Achados do revisor: reviewer não rodou; security 0 bloqueante, 2 médios e 5 baixos, todos no backlog
 Pipeline: local verde (api verify 2302 testes, web 1155 testes, tsc, build); CI a preencher no PR
 Em aberto: abrir o PR (sem push feito). O dono precisa pôr ALCHEMY_API_KEY e BALLAST_CARTEIRAS_JOB_ENABLED=true no api.env da VM. Migrations V40 e V41 entram com a V39 reservada por outro trabalho: sem outOfOrder, a ordem de merge importa (V39 antes de aplicar V40 em produção).
+
+## 2026-11-04 — Cripto: valor por carteira, corte de poeira e variação de 24 h
+
+O que entrou: rendimento do cofrinho lançado na primeira abertura do app (commit à parte). `GET /carteiras/resumo` com valor em dólar e real e variação de 24 h por carteira e no total; corte de US$ 0,50 na leitura; DeFi (empréstimo negativo) no patrimônio de hoje; Solana na leitura de posições da Zerion; aba Cripto com total, valor por carteira e variação.
+Decisões: ADR-082
+Dívida registrada: poeira ainda visível em `/posicoes-cripto`; catch-up do cofrinho na requisição sem teto; marcador do dia antes do sucesso; teto de expoente no parser da Zerion; Solana sem teste com chave real; DeFi fora do histórico mensal (docs/backlog.md)
+Achados do revisor: sem reviewer. Security: 0 bloqueantes, 2 médios e 2 baixos viraram dívida. QA: 2 bugs bloqueantes (dólar do DeFi nulo sem cotação; resumo ignorava conta arquivada), corrigidos na fatia.
+Pipeline: sem CI (nada foi enviado); verify local com Docker ligado.
+Em aberto: verificação visual em 360px; Solana e Zerion com chave real; GET /contas sem teste HTTP do rendimento na abertura.

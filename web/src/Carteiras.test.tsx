@@ -89,6 +89,7 @@ function mockFetch(rotas: Rotas = {}): void {
       if (chave === 'GET /ativos-cripto') return Promise.resolve(json([eth, golpe]))
       if (chave === 'GET /movimentos-cripto') return Promise.resolve(json([entradaSemCusto]))
       if (chave === 'GET /carteiras') return Promise.resolve(json([carteira]))
+      if (chave === 'GET /carteiras/resumo') return Promise.resolve(json({ carteiras: [], total: { valorUsdCentavos: 0, valorBrlCentavos: 0, variacao24hUsdCentavos: 0, variacao24hBrlCentavos: 0, variacao24hPercentual: null, variacaoParcial: false } }))
       if (chave.startsWith('GET /posicoes-cripto?')) return Promise.resolve(json(posicoesVazias))
       return Promise.reject(new Error(`rota sem mock: ${chave}`))
     }),

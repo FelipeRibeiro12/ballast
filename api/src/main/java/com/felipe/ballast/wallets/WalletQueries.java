@@ -1,6 +1,7 @@
 package com.felipe.ballast.wallets;
 
 import com.felipe.ballast.crypto.CryptoNetwork;
+import com.felipe.ballast.crypto.DustCutoff;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -49,7 +50,13 @@ class WalletQueries {
       String name,
       String detail,
       BigDecimal quantity,
-      Long valueUsdCents) {}
+      Long valueUsdCents,
+      Long change24hUsdCents) {}
+
+  record SummaryToken(
+      UUID walletId, BigDecimal quantity, BigDecimal priceUsd, BigDecimal priceAgoUsd) {}
+
+  record SummaryDefi(UUID walletId, long valueUsdCents, Long change24hUsdCents) {}
 
   record LockedAccount(boolean crypto, boolean archived) {}
 
@@ -108,6 +115,18 @@ class WalletQueries {
 
   List<Wallet> listWallets(UUID userId) {
     return jdbc.sql(WALLET_COLUMNS + " WHERE usuario_id = :userId ORDER BY criado_em, id")
+        .param("userId", userId)
+        .query(WalletQueries::mapWallet)
+        .list();
+  }
+
+  // Carteira de conta ativa: o resumo segue o patrimônio e ignora conta arquivada (ADR-082).
+  List<Wallet> listActiveWallets(UUID userId) {
+    return jdbc.sql(
+            WALLET_COLUMNS
+                + " WHERE usuario_id = :userId AND conta_id IN"
+                + " (SELECT id FROM conta WHERE usuario_id = :userId AND NOT arquivada)"
+                + " ORDER BY criado_em, id")
         .param("userId", userId)
         .query(WalletQueries::mapWallet)
         .list();
@@ -221,14 +240,23 @@ class WalletQueries {
 
   List<PositionRow> positions(UUID userId, UUID walletId) {
     return jdbc.sql(
-            "SELECT id, tipo, categoria, protocolo, nome, detalhe, quantidade, valor_usd_centavos"
-                + " FROM posicao_carteira WHERE usuario_id = :userId AND carteira_id = :walletId"
+            "SELECT id, tipo, categoria, protocolo, nome, detalhe, quantidade, valor_usd_centavos,"
+                + " variacao_24h_usd_centavos FROM posicao_carteira"
+                + " WHERE usuario_id = :userId AND carteira_id = :walletId"
+                // O corte é de leitura (ADR-082): DeFi abaixo dele fica gravado e some daqui. NFT e
+                // valor nulo não têm preço para cortar.
+                + " AND (tipo <> 'defi' OR valor_usd_centavos IS NULL"
+                + " OR abs(valor_usd_centavos) >= :dust)"
                 + " ORDER BY tipo, valor_usd_centavos DESC NULLS LAST, nome, id")
+        .param("dust", DustCutoff.CENTS)
         .param("userId", userId)
         .param("walletId", walletId)
         .query(
             (rs, row) -> {
               long cents = rs.getLong("valor_usd_centavos");
+              boolean noValue = rs.wasNull();
+              long change = rs.getLong("variacao_24h_usd_centavos");
+              boolean noChange = rs.wasNull();
               return new PositionRow(
                   rs.getObject("id", UUID.class),
                   rs.getString("tipo"),
@@ -237,9 +265,96 @@ class WalletQueries {
                   rs.getString("nome"),
                   rs.getString("detalhe"),
                   rs.getBigDecimal("quantidade"),
-                  rs.wasNull() ? null : cents);
+                  noValue ? null : cents,
+                  noChange ? null : change);
             })
         .list();
+  }
+
+  // Saldo sincronizado de ativo confiável por carteira, com o último preço e o último preço com
+  // pelo menos 24 h (anterior ao último), tudo em dólar. Cotação em real (legada) volta a dólar
+  // pelo dólar de hoje. Sem cotação os preços vêm nulos.
+  List<SummaryToken> summaryTokens(UUID userId, Instant dayAgo) {
+    return jdbc.sql(
+            """
+            WITH dolar AS (
+              SELECT COALESCE(
+                (SELECT preco FROM cotacao_usdc_brl ORDER BY momento DESC LIMIT 1),
+                (SELECT valor FROM indice WHERE serie = 'dolar' ORDER BY data DESC LIMIT 1)
+              ) AS valor
+            ), saldo AS (
+              SELECT carteira_id, ativo_id,
+                     SUM(CASE tipo WHEN 'entrada' THEN quantidade ELSE -quantidade END) AS quantidade
+              FROM movimento_cripto
+              WHERE usuario_id = :userId AND carteira_id IS NOT NULL
+                AND carteira_id IN (
+                  SELECT w.id FROM carteira_observada w
+                  JOIN conta c ON c.id = w.conta_id AND c.usuario_id = w.usuario_id
+                  WHERE w.usuario_id = :userId AND NOT c.arquivada)
+              GROUP BY carteira_id, ativo_id
+            )
+            SELECT s.carteira_id, s.quantidade,
+                   CASE q.moeda WHEN 'USD' THEN q.preco ELSE q.preco / d.valor END AS preco_usd,
+                   CASE p.moeda WHEN 'USD' THEN p.preco ELSE p.preco / d.valor END AS anterior_usd
+            FROM saldo s
+            JOIN ativo_cripto a ON a.id = s.ativo_id AND a.usuario_id = :userId
+            CROSS JOIN dolar d
+            LEFT JOIN LATERAL (
+              SELECT preco, moeda, momento FROM cotacao
+              WHERE usuario_id = :userId AND ativo_id = s.ativo_id
+              ORDER BY momento DESC LIMIT 1
+            ) q ON true
+            LEFT JOIN LATERAL (
+              SELECT preco, moeda FROM cotacao
+              WHERE usuario_id = :userId AND ativo_id = s.ativo_id
+                AND momento <= :dayAgo AND momento < q.momento
+              ORDER BY momento DESC LIMIT 1
+            ) p ON true
+            WHERE a.confiavel AND s.quantidade <> 0
+            """)
+        .param("userId", userId)
+        .param("dayAgo", utc(dayAgo))
+        .query(
+            (rs, row) ->
+                new SummaryToken(
+                    rs.getObject("carteira_id", UUID.class),
+                    rs.getBigDecimal("quantidade"),
+                    rs.getBigDecimal("preco_usd"),
+                    rs.getBigDecimal("anterior_usd")))
+        .list();
+  }
+
+  // Posição DeFi com valor conhecido e fora da poeira, de todas as carteiras do usuário.
+  List<SummaryDefi> summaryDefi(UUID userId) {
+    return jdbc.sql(
+            "SELECT p.carteira_id, p.valor_usd_centavos, p.variacao_24h_usd_centavos"
+                + " FROM posicao_carteira p"
+                + " JOIN carteira_observada w ON w.id = p.carteira_id AND w.usuario_id = p.usuario_id"
+                + " JOIN conta c ON c.id = w.conta_id AND c.usuario_id = w.usuario_id"
+                + " WHERE p.usuario_id = :userId AND p.tipo = 'defi' AND NOT c.arquivada"
+                + " AND p.valor_usd_centavos IS NOT NULL AND abs(p.valor_usd_centavos) >= :dust")
+        .param("userId", userId)
+        .param("dust", DustCutoff.CENTS)
+        .query(
+            (rs, row) -> {
+              long value = rs.getLong("valor_usd_centavos");
+              long change = rs.getLong("variacao_24h_usd_centavos");
+              boolean noChange = rs.wasNull();
+              return new SummaryDefi(
+                  rs.getObject("carteira_id", UUID.class), value, noChange ? null : change);
+            })
+        .list();
+  }
+
+  // O dólar de hoje: a última leitura do USDC em reais ou, sem ela, a última PTAX (ADR-077). Dado
+  // de mercado, sem usuario_id. Vazio se não há nenhuma das duas.
+  Optional<BigDecimal> latestDollar() {
+    return jdbc.sql(
+            "SELECT COALESCE("
+                + "(SELECT preco FROM cotacao_usdc_brl ORDER BY momento DESC LIMIT 1),"
+                + " (SELECT valor FROM indice WHERE serie = 'dolar' ORDER BY data DESC LIMIT 1))")
+        .query(BigDecimal.class)
+        .optional();
   }
 
   // Retrato novo no lugar do velho, na mesma transação do chamador.
@@ -253,9 +368,9 @@ class WalletQueries {
               """
               INSERT INTO posicao_carteira
                 (id, usuario_id, carteira_id, tipo, categoria, protocolo, nome, detalhe,
-                 quantidade, valor_usd_centavos)
+                 quantidade, valor_usd_centavos, variacao_24h_usd_centavos)
               VALUES (:id, :userId, :walletId, :kind, :category, :protocol, :name, :detail,
-                      :quantity, :value)
+                      :quantity, :value, :change)
               """)
           .param("id", newId())
           .param("userId", userId)
@@ -267,6 +382,7 @@ class WalletQueries {
           .param("detail", position.detail())
           .param("quantity", position.quantity())
           .param("value", position.valueUsdCents())
+          .param("change", position.change24hUsdCents())
           .update();
     }
   }

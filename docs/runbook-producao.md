@@ -236,7 +236,7 @@ barra no fim.
 - No log da API (`API_TAG="$(cat .api_tag)" docker compose logs api`), uma
   senha errada aparece com o seu IP, não com o do Caddy.
 - Rode o `backup` à mão uma vez e faça a restauração do passo 11.
-- Rendimento do cofrinho (ADR-074): o job roda às 03:30 de São Paulo e lança uma
+- Rendimento do cofrinho (ADR-074): o job roda às 02:30 de São Paulo e também na primeira abertura do app no dia e lança uma
   receita "Rendimento do cofrinho (estimado)" por conta, só em dia útil. No log,
   procure `rendimento do cofrinho`. Para desligar, `BALLAST_COFRINHO_JOB_ENABLED=false`
   no `api.env`. É estimativa: o banco pode diferir em centavos, e o usuário edita

@@ -62,3 +62,14 @@ Saldo e extrato passam a conter receita automática. Gráfico por categoria most
 Rendimento do cofrinho. O saldo base do dia ignora o crédito do próprio `L`, o
 que subestima o juro sobre juro em um dia (para baixo, de propósito). Marcador
 só some com a conta (`ON DELETE CASCADE`).
+
+## Emenda de 2026-11-04: lançar na abertura do app
+
+O dono esperava o rendimento do dia já na primeira abertura do app, e o banco credita às 02:30.
+
+- O cron padrão passa a `0 30 2 * * *`.
+- O primeiro `GET /contas` (sem `arquivadas=true`) de cada usuário no dia roda o mesmo catch-up do
+  job só para os cofrinhos dele (`SavingsYieldOnOpen`). O marcador do banco continua sendo a
+  garantia contra duplicar; o mapa em memória só evita travar a conta a cada GET.
+- Falha ou trava ocupada não derruba a listagem de contas.
+- Segue a flag `ballast.cofrinho.job-enabled`: desligada, nada roda na abertura.

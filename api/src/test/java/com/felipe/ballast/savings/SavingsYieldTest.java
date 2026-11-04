@@ -98,6 +98,19 @@ class SavingsYieldTest {
   }
 
   @Test
+  void openingTheAppLaunchesTheDayOnlyForThatUserAndOnlyOnce() throws Exception {
+    UUID mine = support.pot(actor, "100000.00", "100");
+    SavingsSupport.Actor other = support.newActor();
+    UUID theirs = support.pot(other, "100000.00", "100");
+
+    assertThat(service.catchUpUser(actor.user().id())).isEqualTo(1);
+    assertThat(service.catchUpUser(actor.user().id())).isZero();
+
+    assertThat(support.yields(mine)).hasSize(1);
+    assertThat(support.yields(theirs)).isEmpty();
+  }
+
+  @Test
   void aSecondRunOnTheSameDayDoesNotDuplicate() {
     UUID pot = support.pot(actor, "100000.00", "100");
 

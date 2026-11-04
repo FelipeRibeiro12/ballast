@@ -314,6 +314,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/carteiras/resumo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Valor e variação de 24 h de cada carteira e do total
+         * @description Centavos inteiros em dólar e em real (USDC/BRL). Soma os tokens confiáveis com cotação e as posições DeFi, sem o que vale menos de US$ 0,50 em módulo. NFT fica fora. Só lê o que está gravado: não chama a rede.
+         */
+        get: operations["getCarteirasResumo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/carteiras/{id}": {
         parameters: {
             query?: never;
@@ -2781,6 +2801,16 @@ export interface components {
             data: string;
             /**
              * Format: int64
+             * @description DeFi das carteiras observadas em reais (USDC/BRL), com empréstimo negativo, sem posição abaixo de US$ 0,50 e sem NFT. Soma no total só quando data é hoje em America/Sao_Paulo (o retrato não tem histórico); nas outras datas e no histórico mensal vale zero e fica fora. Zero sem cotação do dólar
+             */
+            defiCentavos: number;
+            /**
+             * Format: int64
+             * @description O mesmo DeFi em centavos de dólar; nulo quando falta a cotação do dólar. Zero fora de hoje
+             */
+            defiUsdCentavos: number | null;
+            /**
+             * Format: int64
              * @description Soma do líquido estimado dos títulos de renda fixa na data
              */
             rendaFixaCentavos: number;
@@ -3142,6 +3172,55 @@ export interface components {
              * @description Rendimento lançado, em centavos; nulo quando não lançou
              */
             valor: number | null;
+        };
+        ResumoCarteira: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            rede: "ethereum" | "base" | "arbitrum" | "polygon" | "avalanche" | "robinhood" | "solana" | "bitcoin";
+            rotulo: string | null;
+            /**
+             * Format: int64
+             * @description Centavos de real pelo USDC/BRL; nulo sem cotação do dólar
+             */
+            valorBrlCentavos: number | null;
+            /**
+             * Format: int64
+             * @description Centavos de dólar inteiros: tokens confiáveis com cotação mais DeFi (empréstimo negativo), sem o que está abaixo de US$ 0,50
+             */
+            valorUsdCentavos: number;
+            /**
+             * Format: int64
+             * @description Variação em 24 h em centavos de real; nulo sem cotação do dólar
+             */
+            variacao24hBrlCentavos: number | null;
+            /** @description Variação sobre o valor de 24 h atrás (valor menos variação), em texto com 2 casas; nulo quando essa base é zero ou negativa */
+            variacao24hPercentual: string | null;
+            /**
+             * Format: int64
+             * @description Variação do valor em 24 h, em centavos de dólar
+             */
+            variacao24hUsdCentavos: number;
+            /** @description Algum ativo ficou fora da variação por não ter cotação com 24 h de idade, ou posição DeFi sem variação gravada */
+            variacaoParcial: boolean;
+        };
+        ResumoCarteiras: {
+            carteiras: components["schemas"]["ResumoCarteira"][];
+            /** @description Soma dos valores já arredondados de cada carteira */
+            total: components["schemas"]["ResumoCarteirasTotal"];
+        };
+        ResumoCarteirasTotal: {
+            /** Format: int64 */
+            valorBrlCentavos: number | null;
+            /** Format: int64 */
+            valorUsdCentavos: number;
+            /** Format: int64 */
+            variacao24hBrlCentavos: number | null;
+            /** @description Variação sobre o valor de 24 h atrás (valor menos variação), em texto com 2 casas; nulo quando essa base é zero ou negativa */
+            variacao24hPercentual: string | null;
+            /** Format: int64 */
+            variacao24hUsdCentavos: number;
+            variacaoParcial: boolean;
         };
         ResumoExclusaoConta: {
             /**
@@ -4596,6 +4675,44 @@ export interface operations {
                 };
             };
             /** @description Banco indisponível ou conta travada por mais de 2 s */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+        };
+    };
+    getCarteirasResumo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumoCarteiras"];
+                };
+            };
+            /** @description Sem sessão válida */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Erro"];
+                };
+            };
+            /** @description Banco indisponível */
             503: {
                 headers: {
                     [name: string]: unknown;

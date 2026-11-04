@@ -135,4 +135,20 @@ class SavingsYieldQueries {
                 new PotRef(rs.getObject("usuario_id", UUID.class), rs.getObject("id", UUID.class)))
         .list();
   }
+
+  // Os cofrinhos com percentual de um usuário, para o catch-up na abertura do app.
+  List<PotRef> userPots(UUID userId) {
+    return jdbc.sql(
+            """
+            SELECT usuario_id, id FROM conta
+            WHERE usuario_id = :userId AND tipo = 'cofrinho' AND NOT arquivada
+              AND percentual_cdi IS NOT NULL
+            ORDER BY id
+            """)
+        .param("userId", userId)
+        .query(
+            (rs, row) ->
+                new PotRef(rs.getObject("usuario_id", UUID.class), rs.getObject("id", UUID.class)))
+        .list();
+  }
 }

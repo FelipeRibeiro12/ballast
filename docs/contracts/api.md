@@ -873,7 +873,7 @@ Mudanças em rotas que já existiam (campos só acrescentados):
 
 ## Rendimento diário do cofrinho (ADR-074)
 
-- O job diário (03:30 em São Paulo) lança o rendimento estimado de cada cofrinho
+- O job diário (02:30 em São Paulo) lança o rendimento estimado de cada cofrinho
   com percentual como receita `realizado` na categoria Rendimento, título
   `Rendimento do cofrinho (estimado)`. Aparece no extrato e nos saldos como
   qualquer lançamento; o usuário edita ou apaga e o dia não volta.
@@ -1408,3 +1408,37 @@ data do movimento ou da posição (antes do histórico de 364 dias).
   posição, com a regra acima. Sem nenhuma cotação, só o campo em reais fica
   `null`, como antes.
 - Formatos não mudam: reais e dólares em centavos inteiros, quantidade em texto.
+
+## Valor por carteira, variação de 24 h e DeFi no patrimônio (ADR-082)
+
+- `GET /carteiras/resumo` responde 200 com `{carteiras, total}`, só leitura do que
+  está gravado (nenhuma chamada de rede). Rota do usuário da sessão: nunca traz
+  carteira de outro.
+  - `carteiras` é `[{id, rede, rotulo, valorUsdCentavos, valorBrlCentavos,
+    variacao24hUsdCentavos, variacao24hBrlCentavos, variacao24hPercentual,
+    variacaoParcial}]`, na ordem de `GET /carteiras`. `total` leva os mesmos
+    campos de valor e variação, sem `id`, `rede` e `rotulo`.
+  - Valor = tokens confiáveis com cotação (quantidade x última cotação) mais
+    posição DeFi, com empréstimo negativo. Sem NFT e sem o que vale menos de
+    US$ 0,50 em módulo (0,50 fica). Todos em centavos inteiros;
+    `valorBrlCentavos` e `variacao24hBrlCentavos` são `null` sem cotação do
+    dólar (USDC/BRL ou PTAX).
+  - Reais saem do valor cheio em dólar x dólar, arredondado uma vez por carteira
+    com `HALF_EVEN`. `total` soma os valores já arredondados das carteiras.
+  - Variação de token: preço atual contra a última cotação com 24 h ou mais de
+    idade, sobre a quantidade de hoje. DeFi: variação da Zerion (soma das pernas
+    do pool). `variacaoParcial` é `true` quando algum ativo ou posição ficou fora
+    por não ter essa base.
+  - `variacao24hPercentual` é texto com 2 casas (`"9.73"`, `"-10.00"`), variação
+    sobre (valor menos variação); `null` quando essa base é zero ou negativa.
+    Calculado a partir dos centavos em dólar.
+- `GET /carteiras` e `GET /carteiras/{id}`: `posicoes` deixa de trazer posição
+  DeFi com valor abaixo de US$ 0,50 em módulo. NFT e valor `null` seguem. O
+  retrato gravado continua completo. `saldos` não muda.
+- `GET /patrimonio` ganha `defiCentavos` (inteiro, reais) e `defiUsdCentavos`
+  (inteiro ou `null`, dólar). `null` e zero em reais quando falta a cotação do
+  dólar. Entram em `totalCentavos` só quando `data` é hoje em America/Sao_Paulo;
+  em outra data valem `0` e ficam fora. `GET /patrimonio/mensal` não leva DeFi.
+  NFT fica fora. `criptoCentavos` não muda de significado, mas saldo que só veio
+  de leitura de carteira e vale menos de US$ 0,50 sai dele e do total; posição
+  com qualquer movimento digitado nunca é cortada.

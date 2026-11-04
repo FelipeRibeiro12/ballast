@@ -30,6 +30,8 @@ const patrimonio = {
   criptoUsdCentavos: null,
   criptoAportadoCentavos: null,
   criptoValorizacaoCentavos: null,
+  defiCentavos: 0,
+  defiUsdCentavos: 0,
   rendaFixaCentavos: 1_050_000,
   cofrinhosCentavos: 200_000,
   cofrinhos: [{ contaId: 'k1', nome: 'Cofrinho MP', saldoCentavos: 200_000 }],

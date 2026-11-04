@@ -4,6 +4,7 @@ import com.felipe.ballast.fixedincome.FixedIncomeService;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -29,10 +30,12 @@ class NetWorthService {
 
   private final CryptoQueries queries;
   private final FixedIncomeService fixedIncome;
+  private final Clock clock;
 
-  NetWorthService(CryptoQueries queries, FixedIncomeService fixedIncome) {
+  NetWorthService(CryptoQueries queries, FixedIncomeService fixedIncome, Clock clock) {
     this.queries = queries;
     this.fixedIncome = fixedIncome;
+    this.clock = clock;
   }
 
   // Valores já em centavos. Nulos sem cotação, e o da outra moeda também nulo sem dólar. Custo da
@@ -100,6 +103,8 @@ class NetWorthService {
   // posições que entram em crypto, e
   // cryptoAppreciation o resto do valor delas. Os dois nulos sem a cotação do dólar de algum
   // movimento.
+  // defi e defiUsd são o DeFi das carteiras em reais e em dólar, só hoje (ADR-082); zero nas outras
+  // datas, e nulos os dois sem cotação do dólar. Já estão em total quando valem.
   record NetWorth(
       BigDecimal accounts,
       BigDecimal crypto,
@@ -107,6 +112,8 @@ class NetWorthService {
       BigDecimal cryptoContribution,
       BigDecimal cryptoAppreciation,
       BigDecimal fixedIncome,
+      BigDecimal defi,
+      BigDecimal defiUsd,
       BigDecimal total,
       List<CryptoQueries.SavingsPot> savingsPots,
       List<Unquoted> unquoted,
@@ -189,6 +196,12 @@ class NetWorthService {
   }
 
   Optional<NetWorth> netWorth(UUID userId, LocalDate date) {
+    return netWorth(userId, date, true);
+  }
+
+  // withDefi falso é o histórico mensal: o retrato do DeFi não tem histórico, então nenhum ponto
+  // da série o leva (ADR-082).
+  private Optional<NetWorth> netWorth(UUID userId, LocalDate date, boolean withDefi) {
     Positions positions = positions(userId, date);
     // Sem cotação, sem o dólar que leva a cotação em USD para reais, ou com o valor fora da faixa,
     // a posição fica de fora.
@@ -198,7 +211,7 @@ class NetWorthService {
     List<Unquoted> unquoted = new ArrayList<>();
     for (ValuedPosition valued : positions.positions()) {
       // Ativo não confiável (spam de uma leitura de carteira) não entra em nada até ser promovido.
-      if (!valued.position().trusted()) {
+      if (!valued.position().trusted() || isSyncedDust(valued)) {
         continue;
       }
       if (valued.valueUsd() != null) {
@@ -225,7 +238,21 @@ class NetWorthService {
     if (titles.isEmpty()) {
       return Optional.empty();
     }
-    BigDecimal total = accounts.add(crypto).add(titles.get().total());
+    BigDecimal defiUsd = null;
+    BigDecimal defi = BigDecimal.ZERO;
+    boolean defiCounts = withDefi && date.equals(today());
+    if (!defiCounts) {
+      defiUsd = BigDecimal.ZERO;
+    } else {
+      // O DeFi em dólar não depende da cotação; só o valor em reais precisa dela. Sem dólar, o
+      // total em reais não soma o DeFi.
+      defiUsd = BigDecimal.valueOf(queries.defiUsdCents(userId), 2);
+      if (positions.dollar() != null) {
+        // Uma vez, do valor cheio em dólar, como as posições (ADR-077).
+        defi = cents(defiUsd.multiply(positions.dollar().value()));
+      }
+    }
+    BigDecimal total = accounts.add(crypto).add(titles.get().total()).add(defi);
     // O cofrinho marcado já está em accounts; aqui só se separa para a tela, sem somar de novo.
     List<CryptoQueries.SavingsPot> savingsPots = queries.investedSavingsPots(userId, date);
     BigDecimal savingsTotal =
@@ -240,6 +267,8 @@ class NetWorthService {
         || !fits(cryptoUsd)
         || !fits(contribution)
         || !fits(appreciation)
+        || !fits(defi)
+        || !fits(defiUsd)
         || !fits(total)) {
       return Optional.empty();
     }
@@ -251,6 +280,8 @@ class NetWorthService {
             contribution,
             appreciation,
             titles.get().total(),
+            defi,
+            defiUsd,
             total,
             savingsPots,
             unquoted,
@@ -265,7 +296,7 @@ class NetWorthService {
         !month.isAfter(last) && !month.isAfter(YearMonth.from(today));
         month = month.plusMonths(1)) {
       LocalDate end = month.atEndOfMonth().isAfter(today) ? today : month.atEndOfMonth();
-      Optional<NetWorth> found = netWorth(userId, end);
+      Optional<NetWorth> found = netWorth(userId, end, false);
       if (found.isEmpty()) {
         return Optional.empty();
       }
@@ -275,6 +306,18 @@ class NetWorthService {
   }
 
   record MonthEnd(YearMonth month, LocalDate date, NetWorth netWorth) {}
+
+  private LocalDate today() {
+    return clock.instant().atZone(ZONE).toLocalDate();
+  }
+
+  // Saldo que só veio de leitura de carteira e vale menos de US$ 0,50 é poeira e sai do total.
+  // Posição com qualquer movimento digitado nunca é cortada. Sem valor em dólar não dá para medir.
+  private static boolean isSyncedDust(ValuedPosition valued) {
+    return valued.position().onlySynced()
+        && valued.fullUsd() != null
+        && DustCutoff.isDust(valued.fullUsd());
+  }
 
   // Um custo médio por posição e moeda, com os movimentos já na ordem certa. O movimento em
   // reais sem o dólar da data deixa o lado em dólar sem custo, e o contrário também.

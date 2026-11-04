@@ -135,6 +135,31 @@ class WalletController {
   }
 
   @Operation(
+      operationId = "getCarteirasResumo",
+      summary = "Valor e variação de 24 h de cada carteira e do total",
+      description =
+          "Centavos inteiros em dólar e em real (USDC/BRL). Soma os tokens confiáveis com cotação"
+              + " e as posições DeFi, sem o que vale menos de US$ 0,50 em módulo. NFT fica fora."
+              + " Só lê o que está gravado: não chama a rede.",
+      security = @SecurityRequirement(name = "cookieAuth"))
+  @ApiResponse(
+      responseCode = "200",
+      description = "Resumo",
+      content = @Content(schema = @Schema(implementation = WalletSummaryResponse.class)))
+  @ApiResponse(
+      responseCode = "401",
+      description = "Sem sessão válida",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "Banco indisponível",
+      content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+  @GetMapping(path = "/carteiras/resumo", produces = MediaType.APPLICATION_JSON_VALUE)
+  ResponseEntity<?> summary(@AuthenticationPrincipal AuthenticatedUser user) {
+    return ResponseEntity.ok(WalletSummaryResponse.from(wallets.summary(user.id())));
+  }
+
+  @Operation(
       operationId = "getCarteirasById",
       summary = "Detalha uma carteira",
       security = @SecurityRequirement(name = "cookieAuth"))

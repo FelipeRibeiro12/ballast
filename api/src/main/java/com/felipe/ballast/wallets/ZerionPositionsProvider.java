@@ -45,7 +45,8 @@ class ZerionPositionsProvider implements PositionsProvider {
           WalletNetwork.ARBITRUM, "arbitrum",
           WalletNetwork.POLYGON, "polygon",
           WalletNetwork.AVALANCHE, "avalanche",
-          WalletNetwork.ROBINHOOD, "robinhood");
+          WalletNetwork.ROBINHOOD, "robinhood",
+          WalletNetwork.SOLANA, "solana");
 
   // O valor chega como número JSON: nunca double.
   private static final JsonMapper JSON =
@@ -160,11 +161,21 @@ class ZerionPositionsProvider implements PositionsProvider {
       Group group =
           groups.computeIfAbsent(
               key, k -> new Group(categoryOf(module, type), clean(text(attrs.get("protocol")))));
+      BigDecimal change = number(attrs.path("changes").get("absolute_1d"));
+      // Empréstimo tem valor negativo no app, então a variação troca de sinal junto: dívida que
+      // sobe é patrimônio que cai.
+      if ("loan".equals(type) && change != null) {
+        change = change.negate();
+      }
       group.symbols.add(symbol != null ? symbol : name);
       group.detail = group.detail == null ? name : group.detail;
       group.quantity = pool ? null : number(attrs.path("quantity").get("numeric"));
       if (value != null) {
         group.value = group.value == null ? value : group.value.add(value);
+      }
+      // Soma das pernas do pool; perna sem variação não zera a das outras.
+      if (change != null) {
+        group.change = group.change == null ? change : group.change.add(change);
       }
     }
     List<Position> out = new ArrayList<>();
@@ -182,7 +193,8 @@ class ZerionPositionsProvider implements PositionsProvider {
               label,
               label.equals(group.detail) ? null : group.detail,
               fitQuantity(group.quantity),
-              toCents(group.value)));
+              toCents(group.value),
+              toCents(group.change)));
       if (out.size() == MAX_POSITIONS) {
         break;
       }
@@ -218,7 +230,8 @@ class ZerionPositionsProvider implements PositionsProvider {
               name,
               clean(text(info.get("interface"))),
               fitQuantity(amount),
-              toCents(value)));
+              toCents(value),
+              null));
       if (out.size() == MAX_POSITIONS) {
         break;
       }
@@ -233,6 +246,7 @@ class ZerionPositionsProvider implements PositionsProvider {
     String detail;
     BigDecimal quantity;
     BigDecimal value;
+    BigDecimal change;
 
     Group(String category, String protocol) {
       this.category = category;
