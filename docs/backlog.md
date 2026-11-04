@@ -43,7 +43,7 @@ Notificação no PWA. No iOS só funciona se instalado na tela inicial.
 
 ## Mais adiante
 
-- Somar DeFi e NFT (ADR-081) no patrimônio em dólar e real, com a data do retrato. Hoje só aparecem na carteira. Dono: backend e frontend.
+- ~~Somar DeFi no patrimônio~~ — Feito no ADR-082 (só na data de hoje). NFT segue fora do total; DeFi no histórico mensal depende de guardar retrato por dia. Dono: backend.
 - Símbolo de token Solana: o RPC não traz metadado e a tela mostra o começo do mint. Buscar o símbolo na CoinGecko só na criação do ativo. Dono: backend.
 - Robinhood Chain: conferir o chain id (prova de posse) e se a CoinGecko ganhou plataforma para cotar token ERC-20 (ADR-080). Dono: backend.
 
@@ -135,3 +135,12 @@ entre pessoas, saldo automático de corretora. Motivos em `visao.md`.
 - **DÍVIDA** — A lista `GET /lancamentos?por=competencia` (ADR-059, na `feat/onda7-front`) filtra pela data gravada e mostra a parcela no mês da compra, enquanto relatório e orçamento a mostram no mês dela (ADR-075). Ao integrar a branch, usar `AggregationCompetence.DATE` na lista por competência. Dono: backend. Fatia: a que integrar a onda 7.
 - **DÍVIDA** — A consulta por categoria não usa o índice da V18 para a expressão da parcela (ADR-075): 51 ms com 200 mil lançamentos de um usuário. Se o histórico crescer, índice parcial em `parcela_num IS NOT NULL`. Dono: dba.
 - **DÍVIDA** — A barra do topo (`.topo-acoes`) passa 22px da largura de 1280px no Linux do CI (scrollWidth 1302, `button.pequeno` e `span.topo-rotulo` à direita); no macOS não aparece. Provável efeito da fonte do sistema. Reproduzir com a fonte do CI e dar `min-width: 0` ou quebra ao grupo de ações. Dono: frontend.
+
+### Dívidas da fatia ADR-082 (valor, corte e variação da carteira)
+
+- **DÍVIDA** — A poeira sincronizada (abaixo de US$ 0,50) sai só do total do patrimônio; `/posicoes-cripto` e o valor por conta cripto ainda a mostram. Dono: backend.
+- **DÍVIDA** — `GET /contas` roda o catch-up do cofrinho na requisição, sem teto de cofrinhos por usuário (N contas x até 7 dias, uma transação cada). Limitar cofrinhos ativos ou mover o catch-up para fora da requisição. Dono: backend.
+- **DÍVIDA** — `SavingsYieldOnOpen` marca o dia antes de rodar: falha ou ausência de CDI só se corrige no dia seguinte ou no job das 02:30. Marcar só após sucesso. Dono: backend.
+- **DÍVIDA** — `ZerionPositionsProvider.number()` aceita expoente enorme em `BigDecimal`; rejeitar escala/precisão acima de um teto antes de comparar com `MAX_USD`. Dono: backend.
+- **DÍVIDA** — Testar Solana na Zerion com chave real e confirmar teto de bytes da resposta no cliente HTTP. Dono: devops e backend.
+- **DÍVIDA** — Primeiro histórico de DeFi: sem retrato diário, o patrimônio mensal não inclui DeFi. Dono: backend.
